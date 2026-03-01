@@ -13,7 +13,7 @@ export function Header() {
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
 
   return (
-    <header className="sticky top-0 z-50 bg-primary text-white px-4 py-3 shadow-md">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-primary text-white px-4 py-3 shadow-md">
       <div className="max-w-[600px] mx-auto flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold tracking-tight">🏓 PickleJ</h1>

@@ -351,76 +351,86 @@ export default function PlayersPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{p.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold truncate">{p.name}</span>
-                      {p.role === "admin" && (
-                        <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
-                          Admin
-                        </span>
-                      )}
-                      {isUnclaimed(p) && (
-                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-                          Unclaimed
-                        </span>
-                      )}
-                      {p.gender && (
-                        <span className="text-[10px] text-muted">{p.gender === "M" ? "♂" : "♀"}</span>
-                      )}
-                    </div>
-                    {p.email && (
-                      <div className="text-xs text-muted truncate">{p.email}</div>
-                    )}
-                    <div className="text-sm text-muted">
-                      Rating: {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{p.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold">{p.name}</span>
+                        {p.role === "admin" && (
+                          <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                            Admin
+                          </span>
+                        )}
+                        {isUnclaimed(p) && (
+                          <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                            Unclaimed
+                          </span>
+                        )}
+                        {p.gender && (
+                          <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                            {p.gender === "M" ? "♂" : "♀"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted">
+                        {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
+                        {p.email && <span className="ml-1.5 text-xs">· {p.email}</span>}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    {isAdmin && isUnclaimed(p) && (
-                      <button
-                        onClick={() => invitePlayer(p)}
-                        disabled={invitingId === p.id}
-                        className="text-primary text-sm px-2 py-1 rounded hover:bg-primary/10 transition-colors disabled:opacity-50"
-                      >
-                        {copiedId === p.id ? "Copied!" : invitingId === p.id ? "..." : "Invite"}
-                      </button>
-                    )}
-                    {isAdmin && !isUnclaimed(p) && (
-                      <button
-                        onClick={() => resetPlayer(p)}
-                        disabled={resettingId === p.id}
-                        className="text-amber-600 text-xs px-2 py-1 rounded hover:bg-amber-50 transition-colors disabled:opacity-50"
-                      >
-                        {copiedId === p.id ? "Copied!" : resettingId === p.id ? "..." : "Reset PW"}
-                      </button>
-                    )}
-                    {isAdmin && (p.wins > 0 || p.losses > 0 || p.rating !== 1000) && (
-                      <button
-                        onClick={() => resetRating(p)}
-                        className="text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                      >
-                        Reset ELO
-                      </button>
-                    )}
-                    {(isAdmin || session?.user?.id === p.id) && (
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 mt-2 ml-12 flex-wrap">
+                      {isUnclaimed(p) && (
+                        <button
+                          onClick={() => invitePlayer(p)}
+                          disabled={invitingId === p.id}
+                          className="text-primary text-xs px-2 py-1 rounded hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        >
+                          {copiedId === p.id ? "Copied!" : invitingId === p.id ? "..." : "Invite"}
+                        </button>
+                      )}
+                      {!isUnclaimed(p) && (
+                        <button
+                          onClick={() => resetPlayer(p)}
+                          disabled={resettingId === p.id}
+                          className="text-amber-600 text-xs px-2 py-1 rounded hover:bg-amber-50 transition-colors disabled:opacity-50"
+                        >
+                          {copiedId === p.id ? "Copied!" : resettingId === p.id ? "..." : "Reset PW"}
+                        </button>
+                      )}
+                      {(p.wins > 0 || p.losses > 0 || p.rating !== 1000) && (
+                        <button
+                          onClick={() => resetRating(p)}
+                          className="text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                        >
+                          Reset ELO
+                        </button>
+                      )}
                       <button
                         onClick={() => startEdit(p)}
-                        className="text-muted text-sm px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                        className="text-muted text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
                       >
                         Edit
                       </button>
-                    )}
-                    {isAdmin && (
                       <button
                         onClick={() => voidPlayer(p.id, p.name)}
-                        className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                        className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors"
                       >
                         {(p._count?.matchPlayers ?? 0) > 0 ? "Void" : "Delete"}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  {!isAdmin && session?.user?.id === p.id && (
+                    <div className="mt-2 ml-12">
+                      <button
+                        onClick={() => startEdit(p)}
+                        className="text-muted text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

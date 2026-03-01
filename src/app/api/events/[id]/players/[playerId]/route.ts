@@ -18,6 +18,20 @@ export async function DELETE(
     );
   }
 
+  // Check player is not in any match for this event
+  const inMatch = await prisma.matchPlayer.findFirst({
+    where: {
+      playerId,
+      match: { eventId: id },
+    },
+  });
+  if (inMatch) {
+    return NextResponse.json(
+      { error: "Cannot remove: player is in a match. Delete the match first." },
+      { status: 400 }
+    );
+  }
+
   await prisma.eventPlayer.delete({
     where: { eventId_playerId: { eventId: id, playerId } },
   });

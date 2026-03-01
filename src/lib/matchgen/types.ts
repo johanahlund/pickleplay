@@ -11,7 +11,7 @@ export type MatchResult = {
   team2: PlayerInfo[];
 };
 
-export type PairingMode = "random" | "skill_balanced" | "mixed_gender" | "skill_mixed_gender" | "king_of_court" | "swiss";
+export type PairingMode = "random" | "skill_balanced" | "mixed_gender" | "skill_mixed_gender" | "king_of_court" | "swiss" | "manual";
 
 export interface CompletedMatch {
   id: string;

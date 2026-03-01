@@ -78,7 +78,7 @@ export async function PATCH(
     data.timedMinutes = timedMinutes; // null or positive integer
   }
   if (pairingMode !== undefined) {
-    const valid = ["random", "skill_balanced", "mixed_gender", "skill_mixed_gender", "king_of_court", "swiss"];
+    const valid = ["random", "skill_balanced", "mixed_gender", "skill_mixed_gender", "king_of_court", "swiss", "manual"];
     if (!valid.includes(pairingMode)) {
       return NextResponse.json({ error: "Invalid pairing mode" }, { status: 400 });
     }

@@ -70,11 +70,17 @@ export default function EventDetailPage() {
   const [managingPlayers, setManagingPlayers] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [editNumSets, setEditNumSets] = useState(1);
   const [editScoringType, setEditScoringType] = useState("normal_11");
   const [editTimedMinutes, setEditTimedMinutes] = useState(10);
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [resetting, setResetting] = useState(false);
+  const [showAddMatch, setShowAddMatch] = useState(false);
+  const [manualTeam1, setManualTeam1] = useState<string[]>([]);
+  const [manualTeam2, setManualTeam2] = useState<string[]>([]);
+  const [manualCourt, setManualCourt] = useState(1);
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -158,6 +164,52 @@ export default function EventDetailPage() {
     }));
   };
 
+  const fetchAllPlayers = async () => {
+    const r = await fetch("/api/players");
+    const data = await r.json();
+    setAllPlayers(data);
+  };
+
+  const signupForEvent = async () => {
+    await fetch(`/api/events/${id}/signup`, { method: "POST" });
+    await fetchEvent();
+  };
+
+  const unsignFromEvent = async () => {
+    if (!confirm("Leave this event?")) return;
+    const r = await fetch(`/api/events/${id}/signup`, { method: "DELETE" });
+    if (!r.ok) {
+      const data = await r.json();
+      alert(data.error || "Cannot leave event");
+      return;
+    }
+    await fetchEvent();
+  };
+
+  const addPlayerToEvent = async (playerId: string) => {
+    await fetch(`/api/events/${id}/players`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    await fetchEvent();
+  };
+
+  const swapMatchPlayer = async (matchId: string, oldPlayerId: string, newPlayerId: string) => {
+    await fetch(`/api/matches/${matchId}/players`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oldPlayerId, newPlayerId }),
+    });
+    await fetchEvent();
+  };
+
+  const deleteMatch = async (matchId: string) => {
+    if (!confirm("Delete this match?")) return;
+    await fetch(`/api/matches/${matchId}/players`, { method: "DELETE" });
+    await fetchEvent();
+  };
+
   const removePlayer = async (playerId: string, playerName: string) => {
     if (!confirm(`Remove ${playerName} from this event?`)) return;
     await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
@@ -225,6 +277,39 @@ export default function EventDetailPage() {
     await fetch(`/api/events/${id}/reset`, { method: "POST" });
     await fetchEvent();
     setResetting(false);
+  };
+
+  const addManualMatch = async () => {
+    if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
+    await fetch(`/api/events/${id}/matches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        team1PlayerIds: manualTeam1,
+        team2PlayerIds: manualTeam2,
+        courtNum: manualCourt,
+      }),
+    });
+    setShowAddMatch(false);
+    setManualTeam1([]);
+    setManualTeam2([]);
+    setManualCourt(1);
+    await fetchEvent();
+  };
+
+  const toggleManualPlayer = (playerId: string, team: 1 | 2) => {
+    if (team === 1) {
+      setManualTeam1((prev) =>
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+      );
+      // Remove from other team
+      setManualTeam2((prev) => prev.filter((id) => id !== playerId));
+    } else {
+      setManualTeam2((prev) =>
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+      );
+      setManualTeam1((prev) => prev.filter((id) => id !== playerId));
+    }
   };
 
   if (loading || !event) {
@@ -348,6 +433,7 @@ export default function EventDetailPage() {
                 { value: "skill_mixed_gender", label: "📊👫 Skill+Mix" },
                 { value: "king_of_court", label: "👑 King" },
                 { value: "swiss", label: "🏆 Swiss" },
+                { value: "manual", label: "✏️ Manual" },
               ].map((m) => (
                 <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
                   className={`py-2 rounded-lg font-medium transition-all text-sm ${editPairingMode === m.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
@@ -392,7 +478,7 @@ export default function EventDetailPage() {
             <p className="text-xs text-muted mt-0.5">
               {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
               {event.scoringType === "normal_11" ? "To 11" : event.scoringType === "normal_15" ? "To 15" : event.scoringType === "rally_21" ? "Rally 21" : `Timed ${event.timedMinutes}min`} &middot;{" "}
-              {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : "Swiss"}
+              {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -434,6 +520,25 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+        {session?.user && !isAdmin && (
+          <div className="mb-2">
+            {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
+              <button
+                onClick={unsignFromEvent}
+                className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50"
+              >
+                Leave Event
+              </button>
+            ) : (
+              <button
+                onClick={signupForEvent}
+                className="text-xs bg-primary text-white px-3 py-1 rounded-lg font-medium"
+              >
+                Join Event
+              </button>
+            )}
+          </div>
+        )}
         {event.players.length > 6 && (
           <input
             type="text"
@@ -469,10 +574,37 @@ export default function EventDetailPage() {
             </span>
           ))}
         </div>
+        {managingPlayers && isAdmin && (
+          <div className="mt-2 pt-2 border-t border-border">
+            <button
+              onClick={() => { setShowAddPlayer(!showAddPlayer); if (!showAddPlayer) fetchAllPlayers(); }}
+              className="text-xs text-primary font-medium"
+            >
+              {showAddPlayer ? "Close" : "+ Add Player"}
+            </button>
+            {showAddPlayer && (
+              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                {allPlayers
+                  .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => addPlayerToEvent(p.id)}
+                      className="w-full text-left text-xs py-1.5 px-2 rounded hover:bg-gray-50 flex items-center gap-1.5"
+                    >
+                      <span>{p.emoji}</span>
+                      <span>{p.name}</span>
+                      <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Generate button */}
-      {!hasMatches && isAdmin && (
+      {!hasMatches && isAdmin && event.pairingMode !== "manual" && (
         <button
           onClick={generateMatches}
           disabled={generating || event.players.length < minPlayers}
@@ -483,7 +615,7 @@ export default function EventDetailPage() {
       )}
 
       {/* Regenerate button if all matches are done */}
-      {allCompleted && isAdmin && (
+      {allCompleted && isAdmin && event.pairingMode !== "manual" && (
         <button
           onClick={generateMatches}
           disabled={generating}
@@ -491,6 +623,95 @@ export default function EventDetailPage() {
         >
           {generating ? "Generating..." : "🔄 Generate Next Rounds"}
         </button>
+      )}
+
+      {isAdmin && (
+        <div>
+          <button
+            onClick={() => setShowAddMatch(!showAddMatch)}
+            className="w-full bg-card text-foreground border border-border py-2.5 rounded-xl font-medium text-sm active:bg-gray-50 transition-colors"
+          >
+            {showAddMatch ? "Cancel" : "➕ Add Match Manually"}
+          </button>
+          {showAddMatch && event && (
+            <div className="mt-2 bg-card rounded-xl border border-border p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Court</label>
+                <div className="flex gap-2">
+                  {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setManualCourt(n)}
+                      className={`flex-1 py-1.5 rounded-lg font-medium text-sm transition-all ${
+                        manualCourt === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted mb-1">
+                    Team 1 ({manualTeam1.length})
+                  </label>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {event.players.map((ep) => (
+                      <button
+                        key={ep.player.id}
+                        type="button"
+                        onClick={() => toggleManualPlayer(ep.player.id, 1)}
+                        className={`w-full text-left text-xs py-1.5 px-2 rounded transition-all ${
+                          manualTeam1.includes(ep.player.id)
+                            ? "bg-blue-100 text-blue-800 font-medium"
+                            : manualTeam2.includes(ep.player.id)
+                            ? "opacity-30"
+                            : "hover:bg-gray-50"
+                        }`}
+                        disabled={manualTeam2.includes(ep.player.id)}
+                      >
+                        {ep.player.emoji} {ep.player.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted mb-1">
+                    Team 2 ({manualTeam2.length})
+                  </label>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {event.players.map((ep) => (
+                      <button
+                        key={ep.player.id}
+                        type="button"
+                        onClick={() => toggleManualPlayer(ep.player.id, 2)}
+                        className={`w-full text-left text-xs py-1.5 px-2 rounded transition-all ${
+                          manualTeam2.includes(ep.player.id)
+                            ? "bg-red-100 text-red-800 font-medium"
+                            : manualTeam1.includes(ep.player.id)
+                            ? "opacity-30"
+                            : "hover:bg-gray-50"
+                        }`}
+                        disabled={manualTeam1.includes(ep.player.id)}
+                      >
+                        {ep.player.emoji} {ep.player.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={addManualMatch}
+                disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
+                className="w-full bg-primary text-white py-2 rounded-lg font-medium text-sm disabled:opacity-50"
+              >
+                Create Match
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {hasMatches && isAdmin && (
@@ -549,6 +770,14 @@ export default function EventDetailPage() {
                         <span className="text-xs text-amber-600 font-medium">
                           Editing...
                         </span>
+                      )}
+                      {!isCompleted && isAdmin && (
+                        <button
+                          onClick={() => deleteMatch(match.id)}
+                          className="text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"
+                        >
+                          Delete
+                        </button>
                       )}
                     </div>
                   </div>

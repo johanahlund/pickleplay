@@ -30,7 +30,15 @@ export async function POST(
     | "mixed_gender"
     | "skill_mixed_gender"
     | "king_of_court"
-    | "swiss";
+    | "swiss"
+    | "manual";
+
+  if (pairingMode === "manual") {
+    return NextResponse.json(
+      { error: "Manual mode: add matches individually using the + button" },
+      { status: 400 }
+    );
+  }
 
   const playerInfos: PlayerInfo[] = event.players.map((ep) => ({
     id: ep.player.id,

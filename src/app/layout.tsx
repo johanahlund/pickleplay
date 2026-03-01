@@ -38,7 +38,7 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <Header />
-          <main className="px-4 py-4 max-w-[600px] mx-auto pb-20">{children}</main>
+          <main className="px-4 pt-16 pb-20 max-w-[600px] mx-auto">{children}</main>
           <BottomNav />
         </Providers>
         <ServiceWorkerRegister />

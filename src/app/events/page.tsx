@@ -165,7 +165,7 @@ export default function EventsPage() {
                       </span>
                       {event.pairingMode !== "random" && (
                         <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
-                          {event.pairingMode === "skill_balanced" ? "Skill" : event.pairingMode === "mixed_gender" ? "Mixed" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mix" : event.pairingMode === "king_of_court" ? "King" : "Swiss"}
+                          {event.pairingMode === "skill_balanced" ? "Skill" : event.pairingMode === "mixed_gender" ? "Mixed" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mix" : event.pairingMode === "king_of_court" ? "King" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
                         </span>
                       )}
                     </div>

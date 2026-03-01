@@ -261,6 +261,7 @@ export default function NewEventPage() {
                 { value: "skill_mixed_gender", label: "\ud83d\udcca\ud83d\udc6b Skill + Mixed", desc: "Balanced ratings with M + F teams" },
                 { value: "king_of_court", label: "\ud83d\udc51 King of Court", desc: "Winners stay, losers rotate" },
                 { value: "swiss", label: "\ud83c\udfc6 Swiss", desc: "Pair by win/loss record" },
+                { value: "manual", label: "\u270f\ufe0f Manual", desc: "Add matches one by one" },
               ].map((m) => (
                 <button
                   key={m.value}
