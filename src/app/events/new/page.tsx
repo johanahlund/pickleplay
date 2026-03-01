@@ -8,6 +8,7 @@ interface Player {
   name: string;
   emoji: string;
   rating: number;
+  gender?: string;
 }
 
 function getDefaultDate() {
@@ -35,6 +36,10 @@ export default function NewEventPage() {
   const [time, setTime] = useState(getDefaultTime);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [numSets, setNumSets] = useState(1);
+  const [scoringType, setScoringType] = useState("normal_11");
+  const [timedMinutes, setTimedMinutes] = useState(10);
+  const [pairingMode, setPairingMode] = useState("random");
 
   const minPlayers = format === "singles" ? 2 : 4;
 
@@ -78,6 +83,10 @@ export default function NewEventPage() {
         numCourts,
         format,
         date: eventDate.toISOString(),
+        numSets,
+        scoringType,
+        ...(scoringType === "timed" ? { timedMinutes } : {}),
+        pairingMode,
       }),
     });
     const event = await r.json();
@@ -176,6 +185,99 @@ export default function NewEventPage() {
               ))}
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">
+              Sets per Match
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setNumSets(n)}
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${
+                    numSets === n
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  {n === 1 ? "1 Set" : `Best of ${n}`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">
+              Scoring
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "normal_11", label: "To 11", desc: "First to 11, win by 2" },
+                { value: "normal_15", label: "To 15", desc: "First to 15, win by 2" },
+                { value: "rally_21", label: "Rally 21", desc: "Rally scoring to 21" },
+                { value: "timed", label: "Timed", desc: "Highest score wins" },
+              ].map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setScoringType(s.value)}
+                  className={`py-2.5 px-3 rounded-lg font-medium transition-all text-sm ${
+                    scoringType === s.value
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {scoringType === "timed" && (
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-sm text-muted">Minutes:</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={60}
+                  value={timedMinutes}
+                  onChange={(e) => setTimedMinutes(parseInt(e.target.value) || 10)}
+                  className="w-20 border border-border rounded-lg px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">
+              Pairing Mode
+            </label>
+            <div className="space-y-1.5">
+              {[
+                { value: "random", label: "\ud83c\udfb2 Random", desc: "Random matchups, everyone plays" },
+                { value: "skill_balanced", label: "\ud83d\udcca Skill Balanced", desc: "Similar ratings play each other" },
+                { value: "mixed_gender", label: "\ud83d\udc6b Mixed Gender", desc: "Each team has M + F" },
+                { value: "skill_mixed_gender", label: "\ud83d\udcca\ud83d\udc6b Skill + Mixed", desc: "Balanced ratings with M + F teams" },
+                { value: "king_of_court", label: "\ud83d\udc51 King of Court", desc: "Winners stay, losers rotate" },
+                { value: "swiss", label: "\ud83c\udfc6 Swiss", desc: "Pair by win/loss record" },
+              ].map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setPairingMode(m.value)}
+                  className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
+                    pairingMode === m.value
+                      ? "bg-primary/10 border border-primary/30"
+                      : "bg-gray-50 border border-transparent hover:bg-gray-100"
+                  }`}
+                >
+                  <div className="font-medium text-sm">{m.label}</div>
+                  <div className="text-xs text-muted">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-4 space-y-3">
@@ -220,6 +322,11 @@ export default function NewEventPage() {
                   </span>
                   <span className="text-xl">{p.emoji}</span>
                   <span className="font-medium flex-1 text-left">{p.name}</span>
+                  {p.gender && (
+                    <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                      {p.gender === "M" ? "\u2642" : "\u2640"}
+                    </span>
+                  )}
                   <span className="text-sm text-muted">
                     {Math.round(p.rating)}
                   </span>

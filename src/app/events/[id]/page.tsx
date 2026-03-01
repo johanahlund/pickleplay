@@ -35,6 +35,10 @@ interface Event {
   status: string;
   numCourts: number;
   format: string;
+  numSets: number;
+  scoringType: string;
+  timedMinutes: number | null;
+  pairingMode: string;
   players: { player: Player; checkedIn: boolean }[];
   matches: Match[];
 }
@@ -66,6 +70,11 @@ export default function EventDetailPage() {
   const [managingPlayers, setManagingPlayers] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
+  const [editNumSets, setEditNumSets] = useState(1);
+  const [editScoringType, setEditScoringType] = useState("normal_11");
+  const [editTimedMinutes, setEditTimedMinutes] = useState(10);
+  const [editPairingMode, setEditPairingMode] = useState("random");
+  const [resetting, setResetting] = useState(false);
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -161,6 +170,10 @@ export default function EventDetailPage() {
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
+    setEditNumSets(event.numSets);
+    setEditScoringType(event.scoringType);
+    setEditTimedMinutes(event.timedMinutes || 10);
+    setEditPairingMode(event.pairingMode);
     setEditingEvent(true);
   };
 
@@ -174,6 +187,10 @@ export default function EventDetailPage() {
         name: editName.trim(),
         numCourts: editCourts,
         date: eventDate.toISOString(),
+        numSets: editNumSets,
+        scoringType: editScoringType,
+        ...(editScoringType === "timed" ? { timedMinutes: editTimedMinutes } : { timedMinutes: null }),
+        pairingMode: editPairingMode,
       }),
     });
     setEditingEvent(false);
@@ -200,6 +217,14 @@ export default function EventDetailPage() {
       });
     }
     setEditingMatchId(null);
+  };
+
+  const resetEvent = async () => {
+    if (!confirm("Reset this event? This will delete ALL matches and reverse all ELO changes. This cannot be undone.")) return;
+    setResetting(true);
+    await fetch(`/api/events/${id}/reset`, { method: "POST" });
+    await fetchEvent();
+    setResetting(false);
   };
 
   if (loading || !event) {
@@ -278,6 +303,59 @@ export default function EventDetailPage() {
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Sets</label>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((n) => (
+                <button key={n} type="button" onClick={() => setEditNumSets(n)}
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editNumSets === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
+                  {n === 1 ? "1 Set" : `Best of ${n}`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "normal_11", label: "To 11" },
+                { value: "normal_15", label: "To 15" },
+                { value: "rally_21", label: "Rally 21" },
+                { value: "timed", label: "Timed" },
+              ].map((s) => (
+                <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
+                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {editScoringType === "timed" && (
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-sm text-muted">Minutes:</label>
+                <input type="number" inputMode="numeric" min={1} max={60} value={editTimedMinutes}
+                  onChange={(e) => setEditTimedMinutes(parseInt(e.target.value) || 10)}
+                  className="w-20 border border-border rounded-lg px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "random", label: "🎲 Random" },
+                { value: "skill_balanced", label: "📊 Skill" },
+                { value: "mixed_gender", label: "👫 Mixed" },
+                { value: "skill_mixed_gender", label: "📊👫 Skill+Mix" },
+                { value: "king_of_court", label: "👑 King" },
+                { value: "swiss", label: "🏆 Swiss" },
+              ].map((m) => (
+                <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
+                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editPairingMode === m.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex gap-2">
             <button
               onClick={saveEditEvent}
@@ -310,6 +388,11 @@ export default function EventDetailPage() {
               })}{" "}
               &middot; {event.numCourts} court
               {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
+              {event.scoringType === "normal_11" ? "To 11" : event.scoringType === "normal_15" ? "To 15" : event.scoringType === "rally_21" ? "Rally 21" : `Timed ${event.timedMinutes}min`} &middot;{" "}
+              {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : "Swiss"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -407,6 +490,16 @@ export default function EventDetailPage() {
           className="w-full bg-accent text-foreground py-3 rounded-xl font-semibold shadow-md active:opacity-80 transition-colors disabled:opacity-50"
         >
           {generating ? "Generating..." : "🔄 Generate Next Rounds"}
+        </button>
+      )}
+
+      {hasMatches && isAdmin && (
+        <button
+          onClick={resetEvent}
+          disabled={resetting}
+          className="w-full bg-red-50 text-danger border border-red-200 py-2.5 rounded-xl font-medium text-sm active:bg-red-100 transition-colors disabled:opacity-50"
+        >
+          {resetting ? "Resetting..." : "🗑️ Reset Event (Delete All Matches)"}
         </button>
       )}
 

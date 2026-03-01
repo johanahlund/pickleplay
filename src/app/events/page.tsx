@@ -10,6 +10,10 @@ interface Event {
   status: string;
   numCourts: number;
   format: string;
+  numSets: number;
+  scoringType: string;
+  timedMinutes: number | null;
+  pairingMode: string;
   players: { player: { name: string; emoji: string } }[];
   _count: { matches: number };
 }
@@ -152,6 +156,19 @@ export default function EventsPage() {
                       &middot; {event.numCourts} court
                       {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
                     </p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
+                        {event.numSets === 1 ? "1 set" : `Bo${event.numSets}`}
+                      </span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
+                        {event.scoringType === "normal_11" ? "To 11" : event.scoringType === "normal_15" ? "To 15" : event.scoringType === "rally_21" ? "Rally 21" : `${event.timedMinutes}min`}
+                      </span>
+                      {event.pairingMode !== "random" && (
+                        <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
+                          {event.pairingMode === "skill_balanced" ? "Skill" : event.pairingMode === "mixed_gender" ? "Mixed" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mix" : event.pairingMode === "king_of_court" ? "King" : "Swiss"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <span
                     className={`text-xs font-medium px-2 py-1 rounded-full ${statusBadge(
