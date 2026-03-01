@@ -1,12 +1,9 @@
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  // Root layout already renders <Header/> (which hides user info on auth pages)
+  // and hides <BottomNav/> on auth pages — so this layout just adds vertical centering.
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-primary text-white px-4 py-3 text-center sticky top-0 z-50">
-        <h1 className="text-lg font-bold">🏓 PicklePlay</h1>
-      </header>
-      <main className="flex-1 max-w-[600px] mx-auto w-full px-4 py-6">
-        {children}
-      </main>
+    <div className="flex-1 flex flex-col justify-center py-8">
+      {children}
     </div>
   );
 }
