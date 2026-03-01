@@ -44,6 +44,10 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
+  const [editingEvent, setEditingEvent] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editCourts, setEditCourts] = useState(2);
+  const [managingPlayers, setManagingPlayers] = useState(false);
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -102,6 +106,30 @@ export default function EventDetailPage() {
     }));
   };
 
+  const removePlayer = async (playerId: string, playerName: string) => {
+    if (!confirm(`Remove ${playerName} from this event?`)) return;
+    await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
+    await fetchEvent();
+  };
+
+  const startEditEvent = () => {
+    if (!event) return;
+    setEditName(event.name);
+    setEditCourts(event.numCourts);
+    setEditingEvent(true);
+  };
+
+  const saveEditEvent = async () => {
+    if (!editName.trim()) return;
+    await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName.trim(), numCourts: editCourts }),
+    });
+    setEditingEvent(false);
+    await fetchEvent();
+  };
+
   if (loading || !event) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
@@ -121,35 +149,103 @@ export default function EventDetailPage() {
     event.matches.length > 0 &&
     event.matches.every((m) => m.status === "completed");
 
+  const hasMatches = event.matches.length > 0;
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-xl font-bold">{event.name}</h2>
-          <p className="text-sm text-muted">
-            {new Date(event.date).toLocaleDateString()} &middot;{" "}
-            {event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
-          </p>
+      {editingEvent ? (
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Courts</label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setEditCourts(n)}
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${
+                    editCourts === n
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveEditEvent}
+              className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-sm"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditingEvent(false)}
+              className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-        <span
-          className={`text-xs font-medium px-2 py-1 rounded-full ${
-            event.status === "active"
-              ? "bg-green-100 text-green-700"
-              : event.status === "completed"
-              ? "bg-gray-100 text-gray-600"
-              : "bg-blue-100 text-blue-700"
-          }`}
-        >
-          {event.status}
-        </span>
-      </div>
+      ) : (
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-bold">{event.name}</h2>
+            <p className="text-sm text-muted">
+              {new Date(event.date).toLocaleDateString()} &middot;{" "}
+              {event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={startEditEvent}
+              className="text-xs text-muted px-2 py-1 rounded hover:bg-gray-100"
+            >
+              Edit
+            </button>
+            <span
+              className={`text-xs font-medium px-2 py-1 rounded-full ${
+                event.status === "active"
+                  ? "bg-green-100 text-green-700"
+                  : event.status === "completed"
+                  ? "bg-gray-100 text-gray-600"
+                  : "bg-blue-100 text-blue-700"
+              }`}
+            >
+              {event.status}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Players */}
       <div className="bg-card rounded-xl border border-border p-3">
-        <h3 className="text-sm font-medium text-muted mb-2">
-          Players ({event.players.length})
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium text-muted">
+            Players ({event.players.length})
+          </h3>
+          {!hasMatches && (
+            <button
+              onClick={() => setManagingPlayers(!managingPlayers)}
+              className="text-xs text-primary font-medium"
+            >
+              {managingPlayers ? "Done" : "Manage"}
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {event.players.map((ep) => (
             <span
@@ -158,13 +254,21 @@ export default function EventDetailPage() {
             >
               <span>{ep.player.emoji}</span>
               <span>{ep.player.name}</span>
+              {managingPlayers && !hasMatches && (
+                <button
+                  onClick={() => removePlayer(ep.player.id, ep.player.name)}
+                  className="ml-0.5 text-danger hover:bg-red-100 rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                >
+                  ✕
+                </button>
+              )}
             </span>
           ))}
         </div>
       </div>
 
       {/* Generate button */}
-      {event.matches.length === 0 && (
+      {!hasMatches && (
         <button
           onClick={generateMatches}
           disabled={generating || event.players.length < 4}
