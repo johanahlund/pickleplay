@@ -1,4 +1,4 @@
-const CACHE_NAME = "picklej-v1.0.0";
+const CACHE_NAME = "picklej-v1.0.1";
 
 // Install: cache app shell
 self.addEventListener("install", (event) => {
