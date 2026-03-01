@@ -5,9 +5,27 @@ export async function GET() {
   const players = await prisma.player.findMany({
     where: { status: "active" },
     orderBy: { rating: "desc" },
-    include: { _count: { select: { matchPlayers: true } } },
+    select: {
+      id: true,
+      name: true,
+      emoji: true,
+      email: true,
+      rating: true,
+      wins: true,
+      losses: true,
+      photoUrl: true,
+      passwordHash: true, // only used to derive hasAccount below
+      _count: { select: { matchPlayers: true } },
+    },
   });
-  return NextResponse.json(players);
+
+  // Strip passwordHash, add hasAccount flag
+  const safe = players.map(({ passwordHash, ...rest }) => ({
+    ...rest,
+    hasAccount: !!passwordHash,
+  }));
+
+  return NextResponse.json(safe);
 }
 
 export async function POST(req: Request) {

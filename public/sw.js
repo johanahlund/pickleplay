@@ -1,4 +1,4 @@
-const CACHE_NAME = "pickleplay-v1";
+const CACHE_NAME = "pickleplay-v1.0.0";
 
 // Install: cache app shell
 self.addEventListener("install", (event) => {
@@ -7,6 +7,7 @@ self.addEventListener("install", (event) => {
       return cache.addAll(["/", "/manifest.json"]);
     })
   );
+  // Activate immediately — don't wait for old tabs to close
   self.skipWaiting();
 });
 
@@ -19,6 +20,7 @@ self.addEventListener("activate", (event) => {
       );
     })
   );
+  // Take control of all open tabs immediately
   self.clients.claim();
 });
 

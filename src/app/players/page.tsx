@@ -8,7 +8,7 @@ interface Player {
   name: string;
   emoji: string;
   email?: string | null;
-  passwordHash?: boolean; // API returns hasPassword boolean
+  hasAccount: boolean;
   rating: number;
   wins: number;
   losses: number;
@@ -124,7 +124,7 @@ export default function PlayersPage() {
     }
   };
 
-  const isUnclaimed = (p: Player) => !p.email;
+  const isUnclaimed = (p: Player) => !p.hasAccount;
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
