@@ -10,13 +10,13 @@ const tabs = [
   { href: "/leaderboard", label: "Rankings", icon: "🏆" },
 ];
 
-const AUTH_PATHS = ["/signin", "/register"];
+const HIDDEN_PATHS = ["/signin", "/register", "/claim"];
 
 export function BottomNav() {
   const pathname = usePathname();
 
-  // Hide nav on auth pages
-  if (AUTH_PATHS.includes(pathname)) return null;
+  // Hide nav on auth/claim pages
+  if (HIDDEN_PATHS.some((p) => pathname.startsWith(p))) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border">

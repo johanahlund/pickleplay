@@ -3,13 +3,13 @@
 import { useSession, signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 
-const AUTH_PATHS = ["/signin", "/register"];
+const HIDDEN_PATHS = ["/signin", "/register", "/claim"];
 
 export function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
 
-  const isAuthPage = AUTH_PATHS.includes(pathname);
+  const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
 
   return (
     <header className="sticky top-0 z-50 bg-primary text-white px-4 py-3 shadow-md">

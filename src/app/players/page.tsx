@@ -7,6 +7,8 @@ interface Player {
   id: string;
   name: string;
   emoji: string;
+  email?: string | null;
+  passwordHash?: boolean; // API returns hasPassword boolean
   rating: number;
   wins: number;
   losses: number;
@@ -26,6 +28,8 @@ export default function PlayersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === "admin";
 
@@ -82,6 +86,45 @@ export default function PlayersPage() {
     cancelEdit();
     fetchPlayers();
   };
+
+  const invitePlayer = async (player: Player) => {
+    setInvitingId(player.id);
+    try {
+      const res = await fetch(`/api/players/${player.id}/invite`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to generate invite");
+        return;
+      }
+
+      const claimUrl = `${window.location.origin}/claim/${data.token}`;
+      const shareText = `Hey ${player.name}! You've been added to PicklePlay 🏓 Claim your account to track your stats: ${claimUrl}`;
+
+      // Try Web Share API first (mobile native share sheet)
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "Join PicklePlay",
+            text: shareText,
+          });
+          return;
+        } catch {
+          // User cancelled or share failed — fall through to clipboard
+        }
+      }
+
+      // Fallback: copy to clipboard
+      await navigator.clipboard.writeText(shareText);
+      setCopiedId(player.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
+  const isUnclaimed = (p: Player) => !p.email;
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -200,27 +243,48 @@ export default function PlayersPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{p.emoji}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{p.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold truncate">{p.name}</span>
+                      {isUnclaimed(p) && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                          Unclaimed
+                        </span>
+                      )}
+                    </div>
+                    {p.email && (
+                      <div className="text-xs text-muted truncate">{p.email}</div>
+                    )}
                     <div className="text-sm text-muted">
                       Rating: {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
                     </div>
                   </div>
-                  {(isAdmin || session?.user?.id === p.id) && (
-                    <button
-                      onClick={() => startEdit(p)}
-                      className="text-muted text-sm px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                    >
-                      Edit
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <button
-                      onClick={() => voidPlayer(p.id, p.name)}
-                      className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                    >
-                      {(p._count?.matchPlayers ?? 0) > 0 ? "Void" : "Delete"}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {isAdmin && isUnclaimed(p) && (
+                      <button
+                        onClick={() => invitePlayer(p)}
+                        disabled={invitingId === p.id}
+                        className="text-primary text-sm px-2 py-1 rounded hover:bg-primary/10 transition-colors disabled:opacity-50"
+                      >
+                        {copiedId === p.id ? "Copied!" : invitingId === p.id ? "..." : "Invite"}
+                      </button>
+                    )}
+                    {(isAdmin || session?.user?.id === p.id) && (
+                      <button
+                        onClick={() => startEdit(p)}
+                        className="text-muted text-sm px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => voidPlayer(p.id, p.name)}
+                        className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                      >
+                        {(p._count?.matchPlayers ?? 0) > 0 ? "Void" : "Delete"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

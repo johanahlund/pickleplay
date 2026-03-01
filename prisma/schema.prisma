@@ -22,6 +22,7 @@ model Player {
   passwordHash String?
   role         String   @default("user") // "admin" | "user"
   status       String   @default("active") // "active" | "voided"
+  inviteToken  String?  @unique // for claim-account flow
 
   // Profile
   photoUrl     String?
