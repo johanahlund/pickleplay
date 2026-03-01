@@ -6,7 +6,7 @@ import { Header } from "@/components/Header";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
-  title: "PicklePlay",
+  title: "PickleJ",
   description: "Pickleball matchmaking & scoring app",
   manifest: "/manifest.json",
   icons: {
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "PicklePlay",
+    title: "PickleJ",
   },
 };
 

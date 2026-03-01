@@ -1,6 +1,6 @@
 {
-  "name": "PicklePlay",
-  "short_name": "PicklePlay",
+  "name": "PickleJ",
+  "short_name": "PickleJ",
   "description": "Pickleball matchmaking & scoring app",
   "start_url": "/",
   "display": "standalone",

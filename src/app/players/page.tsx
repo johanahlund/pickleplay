@@ -100,13 +100,13 @@ export default function PlayersPage() {
       }
 
       const claimUrl = `${window.location.origin}/claim/${data.token}`;
-      const shareText = `Hey ${player.name}! You've been added to PicklePlay 🏓 Claim your account to track your stats: ${claimUrl}`;
+      const shareText = `Hey ${player.name}! You've been added to PickleJ 🏓 Claim your account to track your stats: ${claimUrl}`;
 
       // Try Web Share API first (mobile native share sheet)
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "Join PicklePlay",
+            title: "Join PickleJ",
             text: shareText,
           });
           return;

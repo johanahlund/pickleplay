@@ -16,7 +16,7 @@ export function Header() {
     <header className="sticky top-0 z-50 bg-primary text-white px-4 py-3 shadow-md">
       <div className="max-w-[600px] mx-auto flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold tracking-tight">🏓 PicklePlay</h1>
+          <h1 className="text-xl font-bold tracking-tight">🏓 PickleJ</h1>
           <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
         </div>
         {!isAuthPage && session?.user && (

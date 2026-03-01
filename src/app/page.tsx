@@ -22,7 +22,7 @@ export default function Home() {
     <div className="space-y-6">
       <div className="text-center py-6">
         <div className="text-6xl mb-3">🏓</div>
-        <h2 className="text-2xl font-bold">Welcome to PicklePlay</h2>
+        <h2 className="text-2xl font-bold">Welcome to PickleJ</h2>
         <p className="text-muted mt-1">Organize games, track scores, climb the ranks!</p>
       </div>
 

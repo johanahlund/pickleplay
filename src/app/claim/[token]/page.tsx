@@ -89,7 +89,7 @@ export default function ClaimPage() {
         <div className="text-5xl mb-2">🏓</div>
         <h2 className="text-2xl font-bold">Claim Your Account</h2>
         <p className="text-muted text-sm mt-1">
-          Set up your email and password to start using PicklePlay
+          Set up your email and password to start using PickleJ
         </p>
       </div>
 

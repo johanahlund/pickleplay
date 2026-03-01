@@ -73,7 +73,7 @@ export default function RegisterPage() {
       <div className="text-center">
         <div className="text-5xl mb-2">🏓</div>
         <h2 className="text-2xl font-bold">Create Account</h2>
-        <p className="text-muted text-sm mt-1">Join PicklePlay to start tracking your games</p>
+        <p className="text-muted text-sm mt-1">Join PickleJ to start tracking your games</p>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-border p-4 space-y-4">
