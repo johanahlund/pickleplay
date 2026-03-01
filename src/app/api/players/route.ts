@@ -14,6 +14,8 @@ export async function GET() {
       wins: true,
       losses: true,
       photoUrl: true,
+      gender: true,
+      role: true,
       passwordHash: true, // only used to derive hasAccount below
       _count: { select: { matchPlayers: true } },
     },
@@ -29,12 +31,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { name, emoji } = await req.json();
+  const { name, emoji, gender } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
   const player = await prisma.player.create({
-    data: { name: name.trim(), emoji: emoji || "🏓" },
+    data: { name: name.trim(), emoji: emoji || "🏓", ...(gender ? { gender } : {}) },
   });
   return NextResponse.json(player);
 }

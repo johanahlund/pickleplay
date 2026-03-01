@@ -9,6 +9,7 @@ interface Player {
   rating: number;
   wins: number;
   losses: number;
+  role?: string;
 }
 
 export default function LeaderboardPage() {
@@ -71,7 +72,14 @@ export default function LeaderboardPage() {
               </span>
               <span className="text-2xl">{p.emoji}</span>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{p.name}</div>
+                <div className="flex items-center gap-1">
+                  <span className="font-semibold truncate">{p.name}</span>
+                  {p.role === "admin" && (
+                    <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                      Admin
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-muted">
                   {p.wins}W / {p.losses}L &middot;{" "}
                   {p.wins + p.losses > 0
@@ -105,7 +113,14 @@ export default function LeaderboardPage() {
                 <span className="text-2xl w-10 text-center">-</span>
                 <span className="text-2xl">{p.emoji}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{p.name}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold truncate">{p.name}</span>
+                    {p.role === "admin" && (
+                      <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                        Admin
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm text-muted">No games played</div>
                 </div>
                 <div className="text-right">

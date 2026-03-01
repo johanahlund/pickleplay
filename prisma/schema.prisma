@@ -26,6 +26,7 @@ model Player {
   resetToken   String?  @unique // for password reset flow
 
   // Profile
+  gender       String?  // "M" | "F"
   photoUrl     String?
 
   eventPlayers EventPlayer[]
@@ -33,13 +34,17 @@ model Player {
 }
 
 model Event {
-  id        String   @id @default(cuid())
-  name      String
-  date      DateTime @default(now())
-  status    String   @default("setup") // setup, active, completed
-  numCourts Int      @default(2)
-  format    String   @default("doubles") // doubles, singles
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  date         DateTime @default(now())
+  status       String   @default("setup") // setup, active, completed
+  numCourts    Int      @default(2)
+  format       String   @default("doubles") // doubles, singles
+  numSets      Int      @default(1) // 1, 2, or 3
+  scoringType  String   @default("normal_11") // normal_11, normal_15, rally_21, timed
+  timedMinutes Int?     // only when scoringType = "timed"
+  pairingMode  String   @default("random") // random, skill_balanced, mixed_gender, skill_mixed_gender, king_of_court, swiss
+  createdAt    DateTime @default(now())
 
   players EventPlayer[]
   matches Match[]

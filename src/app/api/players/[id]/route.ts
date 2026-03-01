@@ -15,9 +15,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, emoji } = await req.json();
+  const { name, emoji, gender } = await req.json();
 
-  const data: { name?: string; emoji?: string } = {};
+  const data: { name?: string; emoji?: string; gender?: string | null } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -26,6 +26,12 @@ export async function PATCH(
   }
   if (emoji !== undefined) {
     data.emoji = emoji;
+  }
+  if (gender !== undefined) {
+    if (gender !== null && gender !== "M" && gender !== "F") {
+      return NextResponse.json({ error: "Gender must be M, F, or null" }, { status: 400 });
+    }
+    data.gender = gender;
   }
 
   if (Object.keys(data).length === 0) {

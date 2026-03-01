@@ -9,6 +9,7 @@ interface Player {
   name: string;
   emoji: string;
   rating: number;
+  role?: string;
 }
 
 interface MatchPlayer {
@@ -64,6 +65,7 @@ export default function EventDetailPage() {
   const [editTime, setEditTime] = useState("");
   const [managingPlayers, setManagingPlayers] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const [playerSearch, setPlayerSearch] = useState("");
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -349,14 +351,30 @@ export default function EventDetailPage() {
             </button>
           )}
         </div>
+        {event.players.length > 6 && (
+          <input
+            type="text"
+            value={playerSearch}
+            onChange={(e) => setPlayerSearch(e.target.value)}
+            placeholder="Search players..."
+            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm mb-2"
+          />
+        )}
         <div className="flex flex-wrap gap-2">
-          {event.players.map((ep) => (
+          {event.players
+            .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+            .map((ep) => (
             <span
               key={ep.player.id}
               className="inline-flex items-center gap-1 bg-gray-50 rounded-full px-2.5 py-1 text-sm"
             >
               <span>{ep.player.emoji}</span>
               <span>{ep.player.name}</span>
+              {ep.player.role === "admin" && (
+                <span className="text-[9px] bg-purple-100 text-purple-700 px-1 py-0 rounded-full font-medium">
+                  Admin
+                </span>
+              )}
               {managingPlayers && !hasMatches && isAdmin && (
                 <button
                   onClick={() => removePlayer(ep.player.id, ep.player.name)}

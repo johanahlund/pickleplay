@@ -17,6 +17,8 @@ interface Event {
 export default function EventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState<string>("all");
 
   useEffect(() => {
     fetch("/api/events")
@@ -46,6 +48,30 @@ export default function EventsPage() {
     }
   };
 
+  const matchesDateFilter = (dateStr: string, filter: string) => {
+    if (filter === "all") return true;
+    const eventDate = new Date(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (filter === "today") {
+      return eventDate >= today && eventDate < new Date(today.getTime() + 86400000);
+    }
+    if (filter === "this_week") {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+      return eventDate >= weekStart && eventDate < weekEnd;
+    }
+    if (filter === "this_month") {
+      return eventDate.getMonth() === now.getMonth() && eventDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+  };
+
+  const filteredEvents = events
+    .filter((e) => e.name.toLowerCase().includes(searchQuery.toLowerCase()) && matchesDateFilter(e.date, dateFilter))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
@@ -62,7 +88,41 @@ export default function EventsPage() {
         </Link>
       </div>
 
-      {events.length === 0 ? (
+      <div className="space-y-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search events..."
+          className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+        />
+        <div className="flex gap-1.5">
+          {[
+            { value: "all", label: "All" },
+            { value: "today", label: "Today" },
+            { value: "this_week", label: "This Week" },
+            { value: "this_month", label: "This Month" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setDateFilter(f.value)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                dateFilter === f.value
+                  ? "bg-primary text-white"
+                  : "bg-gray-100 text-muted hover:bg-gray-200"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filteredEvents.length === 0 && events.length > 0 ? (
+        <div className="text-center py-8">
+          <p className="text-muted">No events match your search.</p>
+        </div>
+      ) : filteredEvents.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">🏸</div>
           <p className="text-muted">No events yet.</p>
@@ -72,7 +132,7 @@ export default function EventsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {events.map((event) => (
+          {filteredEvents.map((event) => (
             <div key={event.id} className="bg-card rounded-xl border border-border overflow-hidden">
               <Link href={`/events/${event.id}`} className="block p-4">
                 <div className="flex items-start justify-between">

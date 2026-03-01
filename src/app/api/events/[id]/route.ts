@@ -36,9 +36,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, numCourts, date } = await req.json();
+  const { name, numCourts, date, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
 
-  const data: { name?: string; numCourts?: number; date?: Date } = {};
+  const data: { name?: string; numCourts?: number; date?: Date; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -60,6 +60,29 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
     }
     data.date = parsed;
+  }
+  if (numSets !== undefined) {
+    if (![1, 2, 3].includes(numSets)) {
+      return NextResponse.json({ error: "numSets must be 1, 2, or 3" }, { status: 400 });
+    }
+    data.numSets = numSets;
+  }
+  if (scoringType !== undefined) {
+    const valid = ["normal_11", "normal_15", "rally_21", "timed"];
+    if (!valid.includes(scoringType)) {
+      return NextResponse.json({ error: "Invalid scoring type" }, { status: 400 });
+    }
+    data.scoringType = scoringType;
+  }
+  if (timedMinutes !== undefined) {
+    data.timedMinutes = timedMinutes; // null or positive integer
+  }
+  if (pairingMode !== undefined) {
+    const valid = ["random", "skill_balanced", "mixed_gender", "skill_mixed_gender", "king_of_court", "swiss"];
+    if (!valid.includes(pairingMode)) {
+      return NextResponse.json({ error: "Invalid pairing mode" }, { status: 400 });
+    }
+    data.pairingMode = pairingMode;
   }
 
   if (Object.keys(data).length === 0) {

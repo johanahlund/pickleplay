@@ -13,7 +13,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { name, numCourts, format, playerIds, date } = await req.json();
+  const { name, numCourts, format, playerIds, date, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -24,6 +24,10 @@ export async function POST(req: Request) {
       numCourts: numCourts || 2,
       format: format || "doubles",
       ...(date ? { date: new Date(date) } : {}),
+      ...(numSets ? { numSets } : {}),
+      ...(scoringType ? { scoringType } : {}),
+      ...(timedMinutes !== undefined && timedMinutes !== null ? { timedMinutes } : {}),
+      ...(pairingMode ? { pairingMode } : {}),
       players: {
         create: (playerIds || []).map((pid: string) => ({
           playerId: pid,

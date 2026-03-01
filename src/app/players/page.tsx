@@ -13,6 +13,8 @@ interface Player {
   wins: number;
   losses: number;
   photoUrl?: string | null;
+  gender?: string | null;
+  role?: string;
   _count?: { matchPlayers: number };
 }
 
@@ -31,6 +33,9 @@ export default function PlayersPage() {
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [gender, setGender] = useState<string | null>(null);
+  const [editGender, setEditGender] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === "admin";
 
@@ -51,10 +56,11 @@ export default function PlayersPage() {
     await fetch("/api/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), emoji }),
+      body: JSON.stringify({ name: name.trim(), emoji, ...(gender ? { gender } : {}) }),
     });
     setName("");
     setEmoji("🏓");
+    setGender(null);
     setShowForm(false);
     fetchPlayers();
   };
@@ -69,6 +75,7 @@ export default function PlayersPage() {
     setEditingId(p.id);
     setEditName(p.name);
     setEditEmoji(p.emoji);
+    setEditGender(p.gender || null);
   };
 
   const cancelEdit = () => {
@@ -82,7 +89,7 @@ export default function PlayersPage() {
     await fetch(`/api/players/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName.trim(), emoji: editEmoji }),
+      body: JSON.stringify({ name: editName.trim(), emoji: editEmoji, gender: editGender }),
     });
     cancelEdit();
     fetchPlayers();
@@ -176,10 +183,14 @@ export default function PlayersPage() {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
 
+  const filteredPlayers = players.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Players ({players.length})</h2>
+        <h2 className="text-xl font-bold">Players ({searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})</h2>
         {isAdmin && (
           <button
             onClick={() => setShowForm(!showForm)}
@@ -189,6 +200,14 @@ export default function PlayersPage() {
           </button>
         )}
       </div>
+
+      <input
+        type="text"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        placeholder="Search players..."
+        className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+      />
 
       {showForm && isAdmin && (
         <form onSubmit={addPlayer} className="bg-card rounded-xl border border-border p-4 space-y-3">
@@ -222,6 +241,29 @@ export default function PlayersPage() {
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Gender (optional)</label>
+            <div className="flex gap-2">
+              {[
+                { value: null, label: "Skip" },
+                { value: "M", label: "♂ Male" },
+                { value: "F", label: "♀ Female" },
+              ].map((g) => (
+                <button
+                  key={g.label}
+                  type="button"
+                  onClick={() => setGender(g.value)}
+                  className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+                    gender === g.value
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             type="submit"
             className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold active:bg-primary-dark transition-colors"
@@ -238,7 +280,7 @@ export default function PlayersPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {players.map((p) => (
+          {filteredPlayers.map((p) => (
             <div
               key={p.id}
               className="bg-card rounded-xl border border-border p-3"
@@ -270,6 +312,29 @@ export default function PlayersPage() {
                     className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                     autoFocus
                   />
+                  <div>
+                    <label className="block text-sm font-medium text-muted mb-1">Gender (optional)</label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: null, label: "Skip" },
+                        { value: "M", label: "♂ Male" },
+                        { value: "F", label: "♀ Female" },
+                      ].map((g) => (
+                        <button
+                          key={g.label}
+                          type="button"
+                          onClick={() => setEditGender(g.value)}
+                          className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+                            editGender === g.value
+                              ? "bg-primary text-white"
+                              : "bg-gray-100 text-foreground hover:bg-gray-200"
+                          }`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={saveEdit}
@@ -291,10 +356,18 @@ export default function PlayersPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold truncate">{p.name}</span>
+                      {p.role === "admin" && (
+                        <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                          Admin
+                        </span>
+                      )}
                       {isUnclaimed(p) && (
                         <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
                           Unclaimed
                         </span>
+                      )}
+                      {p.gender && (
+                        <span className="text-[10px] text-muted">{p.gender === "M" ? "♂" : "♀"}</span>
                       )}
                     </div>
                     {p.email && (
