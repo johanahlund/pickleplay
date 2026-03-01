@@ -37,7 +37,6 @@ interface Event {
   format: string;
   numSets: number;
   scoringType: string;
-  timedMinutes: number | null;
   pairingMode: string;
   players: { player: Player; checkedIn: boolean }[];
   matches: Match[];
@@ -74,7 +73,6 @@ export default function EventDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [editNumSets, setEditNumSets] = useState(1);
   const [editScoringType, setEditScoringType] = useState("normal_11");
-  const [editTimedMinutes, setEditTimedMinutes] = useState(10);
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [resetting, setResetting] = useState(false);
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -224,7 +222,6 @@ export default function EventDetailPage() {
     setEditTime(toTimeInput(event.date));
     setEditNumSets(event.numSets);
     setEditScoringType(event.scoringType);
-    setEditTimedMinutes(event.timedMinutes || 10);
     setEditPairingMode(event.pairingMode);
     setEditingEvent(true);
   };
@@ -241,7 +238,6 @@ export default function EventDetailPage() {
         date: eventDate.toISOString(),
         numSets: editNumSets,
         scoringType: editScoringType,
-        ...(editScoringType === "timed" ? { timedMinutes: editTimedMinutes } : { timedMinutes: null }),
         pairingMode: editPairingMode,
       }),
     });
@@ -391,10 +387,10 @@ export default function EventDetailPage() {
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Sets</label>
             <div className="flex gap-2">
-              {[1, 2, 3].map((n) => (
+              {[1, 3].map((n) => (
                 <button key={n} type="button" onClick={() => setEditNumSets(n)}
                   className={`flex-1 py-2 rounded-lg font-medium transition-all ${editNumSets === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
-                  {n === 1 ? "1 Set" : `Best of ${n}`}
+                  {n === 1 ? "1 Set" : "Best of 3"}
                 </button>
               ))}
             </div>
@@ -403,10 +399,10 @@ export default function EventDetailPage() {
             <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { value: "normal_11", label: "To 11" },
-                { value: "normal_15", label: "To 15" },
-                { value: "rally_21", label: "Rally 21" },
-                { value: "timed", label: "Timed" },
+                { value: "normal_11", label: "11" },
+                { value: "normal_15", label: "15" },
+                { value: "rally_21", label: "R21" },
+                { value: "timed", label: "Time" },
               ].map((s) => (
                 <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
                   className={`py-2 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
@@ -414,14 +410,6 @@ export default function EventDetailPage() {
                 </button>
               ))}
             </div>
-            {editScoringType === "timed" && (
-              <div className="mt-2 flex items-center gap-2">
-                <label className="text-sm text-muted">Minutes:</label>
-                <input type="number" inputMode="numeric" min={1} max={60} value={editTimedMinutes}
-                  onChange={(e) => setEditTimedMinutes(parseInt(e.target.value) || 10)}
-                  className="w-20 border border-border rounded-lg px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-primary/50" />
-              </div>
-            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
@@ -477,7 +465,7 @@ export default function EventDetailPage() {
             </p>
             <p className="text-xs text-muted mt-0.5">
               {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
-              {event.scoringType === "normal_11" ? "To 11" : event.scoringType === "normal_15" ? "To 15" : event.scoringType === "rally_21" ? "Rally 21" : `Timed ${event.timedMinutes}min`} &middot;{" "}
+              {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
               {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
             </p>
           </div>

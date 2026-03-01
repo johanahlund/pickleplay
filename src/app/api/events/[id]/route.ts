@@ -62,8 +62,8 @@ export async function PATCH(
     data.date = parsed;
   }
   if (numSets !== undefined) {
-    if (![1, 2, 3].includes(numSets)) {
-      return NextResponse.json({ error: "numSets must be 1, 2, or 3" }, { status: 400 });
+    if (![1, 3].includes(numSets)) {
+      return NextResponse.json({ error: "numSets must be 1 or 3" }, { status: 400 });
     }
     data.numSets = numSets;
   }

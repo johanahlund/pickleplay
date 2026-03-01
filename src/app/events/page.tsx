@@ -161,7 +161,7 @@ export default function EventsPage() {
                         {event.numSets === 1 ? "1 set" : `Bo${event.numSets}`}
                       </span>
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
-                        {event.scoringType === "normal_11" ? "To 11" : event.scoringType === "normal_15" ? "To 15" : event.scoringType === "rally_21" ? "Rally 21" : `${event.timedMinutes}min`}
+                        {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"}
                       </span>
                       {event.pairingMode !== "random" && (
                         <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">

@@ -38,7 +38,6 @@ export default function NewEventPage() {
   const [creating, setCreating] = useState(false);
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
-  const [timedMinutes, setTimedMinutes] = useState(10);
   const [pairingMode, setPairingMode] = useState("random");
 
   const minPlayers = format === "singles" ? 2 : 4;
@@ -85,7 +84,6 @@ export default function NewEventPage() {
         date: eventDate.toISOString(),
         numSets,
         scoringType,
-        ...(scoringType === "timed" ? { timedMinutes } : {}),
         pairingMode,
       }),
     });
@@ -191,7 +189,7 @@ export default function NewEventPage() {
               Sets per Match
             </label>
             <div className="flex gap-2">
-              {[1, 2, 3].map((n) => (
+              {[1, 3].map((n) => (
                 <button
                   key={n}
                   type="button"
@@ -202,7 +200,7 @@ export default function NewEventPage() {
                       : "bg-gray-100 text-foreground hover:bg-gray-200"
                   }`}
                 >
-                  {n === 1 ? "1 Set" : `Best of ${n}`}
+                  {n === 1 ? "1 Set" : "Best of 3"}
                 </button>
               ))}
             </div>
@@ -214,10 +212,10 @@ export default function NewEventPage() {
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { value: "normal_11", label: "To 11", desc: "First to 11, win by 2" },
-                { value: "normal_15", label: "To 15", desc: "First to 15, win by 2" },
-                { value: "rally_21", label: "Rally 21", desc: "Rally scoring to 21" },
-                { value: "timed", label: "Timed", desc: "Highest score wins" },
+                { value: "normal_11", label: "11" },
+                { value: "normal_15", label: "15" },
+                { value: "rally_21", label: "R21" },
+                { value: "timed", label: "Time" },
               ].map((s) => (
                 <button
                   key={s.value}
@@ -233,20 +231,6 @@ export default function NewEventPage() {
                 </button>
               ))}
             </div>
-            {scoringType === "timed" && (
-              <div className="mt-2 flex items-center gap-2">
-                <label className="text-sm text-muted">Minutes:</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={60}
-                  value={timedMinutes}
-                  onChange={(e) => setTimedMinutes(parseInt(e.target.value) || 10)}
-                  className="w-20 border border-border rounded-lg px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
-            )}
           </div>
 
           <div>
