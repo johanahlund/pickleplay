@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String
+  emoji     String   @default("🏓")
+  rating    Float    @default(1000)
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  eventPlayers EventPlayer[]
+  matchPlayers MatchPlayer[]
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  date      DateTime @default(now())
+  status    String   @default("setup") // setup, active, completed
+  numCourts Int      @default(2)
+  format    String   @default("doubles") // doubles, singles
+  createdAt DateTime @default(now())
+
+  players EventPlayer[]
+  matches Match[]
+}
+
+model EventPlayer {
+  id        String  @id @default(cuid())
+  eventId   String
+  playerId  String
+  checkedIn Boolean @default(true)
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerId])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  eventId   String
+  courtNum  Int
+  round     Int
+  status    String   @default("pending") // pending, active, completed
+  createdAt DateTime @default(now())
+
+  event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  players MatchPlayer[]
+}
+
+model MatchPlayer {
+  id       String @id @default(cuid())
+  matchId  String
+  playerId String
+  team     Int    // 1 or 2
+  score    Int    @default(0)
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+}
