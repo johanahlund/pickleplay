@@ -17,7 +17,7 @@ export function Header() {
       <div className="max-w-[600px] mx-auto flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold tracking-tight">🏓 PickleJ</h1>
-          <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
+          <span className="text-xs opacity-80 font-mono">v{APP_VERSION}</span>
         </div>
         {!isAuthPage && session?.user && (
           <div className="flex items-center gap-2">
