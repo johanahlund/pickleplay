@@ -23,6 +23,7 @@ model Player {
   role         String   @default("user") // "admin" | "user"
   status       String   @default("active") // "active" | "voided"
   inviteToken  String?  @unique // for claim-account flow
+  resetToken   String?  @unique // for password reset flow
 
   // Profile
   photoUrl     String?

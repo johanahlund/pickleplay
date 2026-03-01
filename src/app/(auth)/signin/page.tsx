@@ -86,6 +86,10 @@ export default function SignInPage() {
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
+
+        <p className="text-center text-xs text-muted pt-1">
+          Forgot password? Ask your admin for a reset link.
+        </p>
       </form>
 
       <p className="text-center text-sm text-muted">

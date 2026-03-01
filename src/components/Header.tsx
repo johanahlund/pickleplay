@@ -4,7 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 
 const APP_VERSION = "1.0.0";
-const HIDDEN_PATHS = ["/signin", "/register", "/claim"];
+const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
 
 export function Header() {
   const { data: session } = useSession();

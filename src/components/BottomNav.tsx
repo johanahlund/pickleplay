@@ -10,7 +10,7 @@ const tabs = [
   { href: "/leaderboard", label: "Rankings", icon: "🏆" },
 ];
 
-const HIDDEN_PATHS = ["/signin", "/register", "/claim"];
+const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
 
 export function BottomNav() {
   const pathname = usePathname();

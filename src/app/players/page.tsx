@@ -29,6 +29,7 @@ export default function PlayersPage() {
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === "admin";
@@ -121,6 +122,41 @@ export default function PlayersPage() {
       setTimeout(() => setCopiedId(null), 2000);
     } finally {
       setInvitingId(null);
+    }
+  };
+
+  const resetPlayer = async (player: Player) => {
+    setResettingId(player.id);
+    try {
+      const res = await fetch(`/api/players/${player.id}/reset`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to generate reset link");
+        return;
+      }
+
+      const resetUrl = `${window.location.origin}/reset/${data.token}`;
+      const shareText = `Reset your PickleJ password here: ${resetUrl}`;
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "PickleJ Password Reset",
+            text: shareText,
+          });
+          return;
+        } catch {
+          // Fall through to clipboard
+        }
+      }
+
+      await navigator.clipboard.writeText(shareText);
+      setCopiedId(player.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } finally {
+      setResettingId(null);
     }
   };
 
@@ -266,6 +302,15 @@ export default function PlayersPage() {
                         className="text-primary text-sm px-2 py-1 rounded hover:bg-primary/10 transition-colors disabled:opacity-50"
                       >
                         {copiedId === p.id ? "Copied!" : invitingId === p.id ? "..." : "Invite"}
+                      </button>
+                    )}
+                    {isAdmin && !isUnclaimed(p) && (
+                      <button
+                        onClick={() => resetPlayer(p)}
+                        disabled={resettingId === p.id}
+                        className="text-amber-600 text-xs px-2 py-1 rounded hover:bg-amber-50 transition-colors disabled:opacity-50"
+                      >
+                        {copiedId === p.id ? "Copied!" : resettingId === p.id ? "..." : "Reset PW"}
                       </button>
                     )}
                     {(isAdmin || session?.user?.id === p.id) && (
