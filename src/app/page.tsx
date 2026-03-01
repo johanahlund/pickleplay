@@ -27,14 +27,14 @@ export default function Home() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-card rounded-xl border border-border p-4 text-center">
+        <Link href="/players" className="bg-card rounded-xl border border-border p-4 text-center hover:shadow-md transition-shadow">
           <div className="text-3xl font-bold text-primary">{stats.players}</div>
           <div className="text-sm text-muted mt-1">Players</div>
-        </div>
-        <div className="bg-card rounded-xl border border-border p-4 text-center">
+        </Link>
+        <Link href="/events" className="bg-card rounded-xl border border-border p-4 text-center hover:shadow-md transition-shadow">
           <div className="text-3xl font-bold text-primary">{stats.events}</div>
           <div className="text-sm text-muted mt-1">Events</div>
-        </div>
+        </Link>
       </div>
 
       <div className="space-y-3">

@@ -63,6 +63,7 @@ model Match {
   courtNum  Int
   round     Int
   status    String   @default("pending") // pending, active, completed
+  eloChange Float    @default(0) // stored for score edit reversal
   createdAt DateTime @default(now())
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)

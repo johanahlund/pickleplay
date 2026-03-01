@@ -160,6 +160,16 @@ export default function PlayersPage() {
     }
   };
 
+  const resetRating = async (player: Player) => {
+    if (!confirm(`Reset ${player.name}'s rating to 1000 and clear W/L record?`)) return;
+    const res = await fetch(`/api/players/${player.id}/reset-rating`, { method: "POST" });
+    if (!res.ok) {
+      alert("Failed to reset rating");
+      return;
+    }
+    fetchPlayers();
+  };
+
   const isUnclaimed = (p: Player) => !p.hasAccount;
 
   if (loading) {
@@ -311,6 +321,14 @@ export default function PlayersPage() {
                         className="text-amber-600 text-xs px-2 py-1 rounded hover:bg-amber-50 transition-colors disabled:opacity-50"
                       >
                         {copiedId === p.id ? "Copied!" : resettingId === p.id ? "..." : "Reset PW"}
+                      </button>
+                    )}
+                    {isAdmin && (p.wins > 0 || p.losses > 0 || p.rating !== 1000) && (
+                      <button
+                        onClick={() => resetRating(p)}
+                        className="text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                      >
+                        Reset ELO
                       </button>
                     )}
                     {(isAdmin || session?.user?.id === p.id) && (
