@@ -1,11 +1,10 @@
 "use client";
 
 import { signIn, useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 
 export default function ClaimPage() {
-  const router = useRouter();
   const params = useParams();
   const token = params.token as string;
   const { data: session, status: sessionStatus } = useSession();
@@ -20,9 +19,9 @@ export default function ClaimPage() {
   // If already signed in, redirect to home
   useEffect(() => {
     if (sessionStatus === "authenticated" && session?.user) {
-      router.replace("/");
+      window.location.href = "/";
     }
-  }, [sessionStatus, session, router]);
+  }, [sessionStatus, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,8 +69,8 @@ export default function ClaimPage() {
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    // Full page reload to properly initialize session
+    window.location.href = "/";
   };
 
   if (success && !error) {

@@ -2,11 +2,9 @@
 
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
 export default function SignInPage() {
-  const router = useRouter();
   const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,9 +14,9 @@ export default function SignInPage() {
   // If already signed in, redirect to home
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
-      router.replace("/");
+      window.location.href = "/";
     }
-  }, [status, session, router]);
+  }, [status, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,8 +35,8 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    // Full page reload to properly initialize session
+    window.location.href = "/";
   };
 
   return (
