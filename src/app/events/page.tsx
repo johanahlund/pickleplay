@@ -79,9 +79,18 @@ export default function EventsPage() {
                   <div>
                     <h3 className="font-semibold text-lg">{event.name}</h3>
                     <p className="text-sm text-muted mt-0.5">
-                      {new Date(event.date).toLocaleDateString()} &middot;{" "}
-                      {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot;{" "}
-                      {event.format}
+                      {new Date(event.date).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      at{" "}
+                      {new Date(event.date).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      &middot; {event.numCourts} court
+                      {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
                     </p>
                   </div>
                   <span

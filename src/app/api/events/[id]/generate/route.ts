@@ -7,6 +7,86 @@ interface PlayerInfo {
   rating: number;
 }
 
+type MatchResult = { court: number; team1: PlayerInfo[]; team2: PlayerInfo[] };
+
+/**
+ * Generate round-robin singles matches.
+ * Each match is 1v1. Balances opponent freshness and rating closeness.
+ */
+function generateSinglesRounds(
+  players: PlayerInfo[],
+  numCourts: number
+): MatchResult[][] {
+  const n = players.length;
+  const matchesPerRound = Math.min(numCourts, Math.floor(n / 2));
+  if (matchesPerRound === 0) return [];
+
+  const sorted = [...players].sort((a, b) => b.rating - a.rating);
+  const rounds: MatchResult[][] = [];
+  const gamesPlayed = new Map<string, number>();
+  const opponentCount = new Map<string, number>();
+  players.forEach((p) => gamesPlayed.set(p.id, 0));
+  const pairKey = (a: string, b: string) =>
+    a < b ? `${a}:${b}` : `${b}:${a}`;
+
+  const targetRounds = Math.min(n - 1, 8);
+
+  for (let r = 0; r < targetRounds; r++) {
+    const available = [...sorted].sort((a, b) => {
+      const diff = (gamesPlayed.get(a.id) || 0) - (gamesPlayed.get(b.id) || 0);
+      if (diff !== 0) return diff;
+      return Math.random() - 0.5;
+    });
+
+    const roundMatches: MatchResult[] = [];
+    const usedThisRound = new Set<string>();
+
+    for (let court = 0; court < matchesPerRound; court++) {
+      const pool = available.filter((p) => !usedThisRound.has(p.id));
+      if (pool.length < 2) break;
+
+      let bestPair = [pool[0], pool[1]];
+      let bestScore = Infinity;
+      const limit = Math.min(pool.length, 6);
+
+      for (let i = 0; i < limit; i++) {
+        for (let j = i + 1; j < limit; j++) {
+          const repeats =
+            opponentCount.get(pairKey(pool[i].id, pool[j].id)) || 0;
+          const ratingDiff = Math.abs(pool[i].rating - pool[j].rating);
+          const score = repeats * 500 + ratingDiff * 0.3;
+          if (score < bestScore) {
+            bestScore = score;
+            bestPair = [pool[i], pool[j]];
+          }
+        }
+      }
+
+      usedThisRound.add(bestPair[0].id);
+      usedThisRound.add(bestPair[1].id);
+      bestPair.forEach((p) =>
+        gamesPlayed.set(p.id, (gamesPlayed.get(p.id) || 0) + 1)
+      );
+      opponentCount.set(
+        pairKey(bestPair[0].id, bestPair[1].id),
+        (opponentCount.get(pairKey(bestPair[0].id, bestPair[1].id)) || 0) + 1
+      );
+
+      roundMatches.push({
+        court: court + 1,
+        team1: [bestPair[0]],
+        team2: [bestPair[1]],
+      });
+    }
+
+    if (roundMatches.length > 0) {
+      rounds.push(roundMatches);
+    }
+  }
+
+  return rounds;
+}
+
 /**
  * Generate round-robin doubles matches.
  * Goal: every player partners with different people and plays against different people.
@@ -15,7 +95,7 @@ interface PlayerInfo {
 function generateDoublesRounds(
   players: PlayerInfo[],
   numCourts: number
-): { court: number; team1: PlayerInfo[]; team2: PlayerInfo[] }[][] {
+): MatchResult[][] {
   const n = players.length;
   const playersPerMatch = 4;
   const matchesPerRound = Math.min(numCourts, Math.floor(n / playersPerMatch));
@@ -158,14 +238,18 @@ export async function POST(
     rating: ep.player.rating,
   }));
 
-  if (event.format === "doubles" && playerInfos.length < 4) {
+  const minPlayers = event.format === "singles" ? 2 : 4;
+  if (playerInfos.length < minPlayers) {
     return NextResponse.json(
-      { error: "Need at least 4 players for doubles" },
+      { error: `Need at least ${minPlayers} players for ${event.format}` },
       { status: 400 }
     );
   }
 
-  const rounds = generateDoublesRounds(playerInfos, event.numCourts);
+  const rounds =
+    event.format === "singles"
+      ? generateSinglesRounds(playerInfos, event.numCourts)
+      : generateDoublesRounds(playerInfos, event.numCourts);
 
   // Save matches to DB
   for (let roundIdx = 0; roundIdx < rounds.length; roundIdx++) {

@@ -9,13 +9,22 @@ datasource db {
 }
 
 model Player {
-  id        String   @id @default(cuid())
-  name      String
-  emoji     String   @default("🏓")
-  rating    Float    @default(1000)
-  wins      Int      @default(0)
-  losses    Int      @default(0)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  emoji        String   @default("🏓")
+  rating       Float    @default(1000)
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  // Auth
+  email        String?  @unique
+  passwordHash String?
+  role         String   @default("user") // "admin" | "user"
+  status       String   @default("active") // "active" | "voided"
+
+  // Profile
+  photoUrl     String?
 
   eventPlayers EventPlayer[]
   matchPlayers MatchPlayer[]

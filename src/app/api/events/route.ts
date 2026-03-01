@@ -13,7 +13,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { name, numCourts, format, playerIds } = await req.json();
+  const { name, numCourts, format, playerIds, date } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -23,6 +23,7 @@ export async function POST(req: Request) {
       name: name.trim(),
       numCourts: numCourts || 2,
       format: format || "doubles",
+      ...(date ? { date: new Date(date) } : {}),
       players: {
         create: (playerIds || []).map((pid: string) => ({
           playerId: pid,

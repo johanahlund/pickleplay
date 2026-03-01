@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function GET() {
   const players = await prisma.player.findMany({
+    where: { status: "active" },
     orderBy: { rating: "desc" },
     include: { _count: { select: { matchPlayers: true } } },
   });

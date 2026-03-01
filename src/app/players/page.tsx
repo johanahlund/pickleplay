@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 
 interface Player {
   id: string;
@@ -9,11 +10,14 @@ interface Player {
   rating: number;
   wins: number;
   losses: number;
+  photoUrl?: string | null;
+  _count?: { matchPlayers: number };
 }
 
 const EMOJIS = ["🏓", "🎯", "⚡", "🔥", "🌟", "💪", "🦅", "🐉", "🎪", "🍕", "🌊", "🎸"];
 
 export default function PlayersPage() {
+  const { data: session } = useSession();
   const [players, setPlayers] = useState<Player[]>([]);
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🏓");
@@ -22,6 +26,8 @@ export default function PlayersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
+
+  const isAdmin = session?.user?.role === "admin";
 
   const fetchPlayers = async () => {
     const r = await fetch("/api/players");
@@ -48,9 +54,9 @@ export default function PlayersPage() {
     fetchPlayers();
   };
 
-  const deletePlayer = async (id: string) => {
-    if (!confirm("Remove this player? Their match history will be lost.")) return;
-    await fetch(`/api/players/${id}`, { method: "DELETE" });
+  const voidPlayer = async (id: string, playerName: string) => {
+    if (!confirm(`Remove ${playerName}? If they have match history, they'll be voided (hidden but data preserved).`)) return;
+    await fetch(`/api/players/${id}/void`, { method: "POST" });
     fetchPlayers();
   };
 
@@ -85,15 +91,17 @@ export default function PlayersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Players ({players.length})</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-primary-dark transition-colors"
-        >
-          {showForm ? "Cancel" : "+ Add"}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-primary-dark transition-colors"
+          >
+            {showForm ? "Cancel" : "+ Add"}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && isAdmin && (
         <form onSubmit={addPlayer} className="bg-card rounded-xl border border-border p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Name</label>
@@ -197,18 +205,22 @@ export default function PlayersPage() {
                       Rating: {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
                     </div>
                   </div>
-                  <button
-                    onClick={() => startEdit(p)}
-                    className="text-muted text-sm px-2 py-1 rounded hover:bg-gray-100 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => deletePlayer(p.id)}
-                    className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                  >
-                    ✕
-                  </button>
+                  {(isAdmin || session?.user?.id === p.id) && (
+                    <button
+                      onClick={() => startEdit(p)}
+                      className="text-muted text-sm px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => voidPlayer(p.id, p.name)}
+                      className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                    >
+                      {(p._count?.matchPlayers ?? 0) > 0 ? "Void" : "Delete"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

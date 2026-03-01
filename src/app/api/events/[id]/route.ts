@@ -36,9 +36,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, numCourts } = await req.json();
+  const { name, numCourts, date } = await req.json();
 
-  const data: { name?: string; numCourts?: number } = {};
+  const data: { name?: string; numCourts?: number; date?: Date } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -53,6 +53,13 @@ export async function PATCH(
       );
     }
     data.numCourts = numCourts;
+  }
+  if (date !== undefined) {
+    const parsed = new Date(date);
+    if (isNaN(parsed.getTime())) {
+      return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    }
+    data.date = parsed;
   }
 
   if (Object.keys(data).length === 0) {

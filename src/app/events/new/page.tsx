@@ -10,14 +10,33 @@ interface Player {
   rating: number;
 }
 
+function getDefaultDate() {
+  const now = new Date();
+  return now.toISOString().split("T")[0]; // YYYY-MM-DD
+}
+
+function getDefaultTime() {
+  const now = new Date();
+  // Round up to next 30 min
+  const mins = now.getMinutes();
+  const roundedMins = mins < 30 ? 30 : 0;
+  const hours = mins < 30 ? now.getHours() : now.getHours() + 1;
+  return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
+}
+
 export default function NewEventPage() {
   const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
   const [numCourts, setNumCourts] = useState(2);
+  const [format, setFormat] = useState<"doubles" | "singles">("doubles");
+  const [date, setDate] = useState(getDefaultDate);
+  const [time, setTime] = useState(getDefaultTime);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+
+  const minPlayers = format === "singles" ? 2 : 4;
 
   useEffect(() => {
     fetch("/api/players")
@@ -47,8 +66,9 @@ export default function NewEventPage() {
 
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || selectedIds.size < 4) return;
+    if (!name.trim() || selectedIds.size < minPlayers) return;
     setCreating(true);
+    const eventDate = new Date(`${date}T${time}`);
     const r = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -56,6 +76,8 @@ export default function NewEventPage() {
         name: name.trim(),
         playerIds: Array.from(selectedIds),
         numCourts,
+        format,
+        date: eventDate.toISOString(),
       }),
     });
     const event = await r.json();
@@ -84,6 +106,53 @@ export default function NewEventPage() {
               className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
               autoFocus
             />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">
+                Date
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">
+                Time
+              </label>
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">
+              Format
+            </label>
+            <div className="flex gap-2">
+              {(["doubles", "singles"] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormat(f)}
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all capitalize ${
+                    format === f
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>
@@ -160,15 +229,15 @@ export default function NewEventPage() {
           )}
         </div>
 
-        {selectedIds.size > 0 && selectedIds.size < 4 && (
+        {selectedIds.size > 0 && selectedIds.size < minPlayers && (
           <p className="text-sm text-danger text-center">
-            Need at least 4 players for doubles
+            Need at least {minPlayers} players for {format}
           </p>
         )}
 
         <button
           type="submit"
-          disabled={!name.trim() || selectedIds.size < 4 || creating}
+          disabled={!name.trim() || selectedIds.size < minPlayers || creating}
           className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {creating ? "Creating..." : "Create Event"}

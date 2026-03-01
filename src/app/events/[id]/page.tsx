@@ -37,6 +37,15 @@ interface Event {
   matches: Match[];
 }
 
+function toDateInput(iso: string) {
+  return new Date(iso).toISOString().split("T")[0];
+}
+
+function toTimeInput(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -47,6 +56,8 @@ export default function EventDetailPage() {
   const [editingEvent, setEditingEvent] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCourts, setEditCourts] = useState(2);
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
   const [managingPlayers, setManagingPlayers] = useState(false);
 
   const fetchEvent = useCallback(async () => {
@@ -116,15 +127,22 @@ export default function EventDetailPage() {
     if (!event) return;
     setEditName(event.name);
     setEditCourts(event.numCourts);
+    setEditDate(toDateInput(event.date));
+    setEditTime(toTimeInput(event.date));
     setEditingEvent(true);
   };
 
   const saveEditEvent = async () => {
     if (!editName.trim()) return;
+    const eventDate = new Date(`${editDate}T${editTime}`);
     await fetch(`/api/events/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName.trim(), numCourts: editCourts }),
+      body: JSON.stringify({
+        name: editName.trim(),
+        numCourts: editCourts,
+        date: eventDate.toISOString(),
+      }),
     });
     setEditingEvent(false);
     await fetchEvent();
@@ -150,6 +168,7 @@ export default function EventDetailPage() {
     event.matches.every((m) => m.status === "completed");
 
   const hasMatches = event.matches.length > 0;
+  const minPlayers = event.format === "singles" ? 2 : 4;
 
   return (
     <div className="space-y-4">
@@ -165,6 +184,26 @@ export default function EventDetailPage() {
               className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
               autoFocus
             />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">Date</label>
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">Time</label>
+              <input
+                type="time"
+                value={editTime}
+                onChange={(e) => setEditTime(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Courts</label>
@@ -205,8 +244,18 @@ export default function EventDetailPage() {
           <div>
             <h2 className="text-xl font-bold">{event.name}</h2>
             <p className="text-sm text-muted">
-              {new Date(event.date).toLocaleDateString()} &middot;{" "}
-              {event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
+              {new Date(event.date).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              at{" "}
+              {new Date(event.date).toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              &middot; {event.numCourts} court
+              {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -271,7 +320,7 @@ export default function EventDetailPage() {
       {!hasMatches && (
         <button
           onClick={generateMatches}
-          disabled={generating || event.players.length < 4}
+          disabled={generating || event.players.length < minPlayers}
           className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50"
         >
           {generating ? "Generating..." : "🎲 Generate Matches"}
