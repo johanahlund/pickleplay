@@ -135,7 +135,7 @@ export default function EventDetailPage() {
       alert("Scores cannot be tied!");
       return;
     }
-    if (!confirm("Edit this score? This will recalculate ELO ratings.")) return;
+    if (!confirm("Are you sure you want to edit this score? This will recalculate ELO ratings.")) return;
     await fetch(`/api/matches/${matchId}/score`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -174,7 +174,7 @@ export default function EventDetailPage() {
   };
 
   const unsignFromEvent = async () => {
-    if (!confirm("Leave this event?")) return;
+    if (!confirm("Are you sure you want to leave this event?")) return;
     const r = await fetch(`/api/events/${id}/signup`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json();
@@ -203,13 +203,18 @@ export default function EventDetailPage() {
   };
 
   const deleteMatch = async (matchId: string) => {
-    if (!confirm("Delete this match?")) return;
+    const match = event?.matches.find((m) => m.id === matchId);
+    const isScored = match?.status === "completed";
+    const msg = isScored
+      ? "Are you sure you want to delete this scored match? ELO changes will be reversed."
+      : "Are you sure you want to delete this match?";
+    if (!confirm(msg)) return;
     await fetch(`/api/matches/${matchId}/players`, { method: "DELETE" });
     await fetchEvent();
   };
 
   const removePlayer = async (playerId: string, playerName: string) => {
-    if (!confirm(`Remove ${playerName} from this event?`)) return;
+    if (!confirm(`Are you sure you want to remove ${playerName} from this event?`)) return;
     await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
     await fetchEvent();
   };
@@ -268,7 +273,7 @@ export default function EventDetailPage() {
   };
 
   const resetEvent = async () => {
-    if (!confirm("Reset this event? This will delete ALL matches and reverse all ELO changes. This cannot be undone.")) return;
+    if (!confirm("Are you sure you want to reset this event? This will delete ALL matches and reverse all ELO changes. This cannot be undone.")) return;
     setResetting(true);
     await fetch(`/api/events/${id}/reset`, { method: "POST" });
     await fetchEvent();
@@ -729,7 +734,9 @@ export default function EventDetailPage() {
               const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
               const team1Won = team1Score !== null && team2Score !== null && team1Score > team2Score;
               const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
-              const showInputs = isAdmin && (!isCompleted || isEditing);
+              const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
+              const canScore = isAdmin || isMatchPlayer;
+              const showInputs = canScore && (!isCompleted || isEditing);
 
               return (
                 <div
@@ -739,6 +746,12 @@ export default function EventDetailPage() {
                   <div className="px-3 py-1.5 bg-gray-50 border-b border-border flex items-center justify-between">
                     <span className="text-xs font-medium text-muted">
                       Court {match.courtNum}
+                      {event.pairingMode === "king_of_court" && match.courtNum === 1 && (
+                        <span className="ml-1 text-amber-500">👑</span>
+                      )}
+                      {event.pairingMode === "king_of_court" && match.courtNum === event.numCourts && event.numCourts > 1 && (
+                        <span className="ml-1 text-gray-400">🔰</span>
+                      )}
                     </span>
                     <div className="flex items-center gap-2">
                       {isCompleted && !isEditing && (
@@ -759,7 +772,7 @@ export default function EventDetailPage() {
                           Editing...
                         </span>
                       )}
-                      {!isCompleted && isAdmin && (
+                      {isAdmin && (
                         <button
                           onClick={() => deleteMatch(match.id)}
                           className="text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"

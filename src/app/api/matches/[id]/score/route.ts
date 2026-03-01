@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // ELO rating update for doubles
@@ -12,15 +12,16 @@ function eloChange(
   return Math.round(K * (1 - expected));
 }
 
-// POST: Submit initial score for a pending match (admin only)
+// POST: Submit initial score for a pending match (admin or match player)
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user;
   try {
-    await requireAdmin();
+    user = await requireAuth();
   } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { id } = await params;
@@ -40,6 +41,12 @@ export async function POST(
 
   if (!match) {
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  }
+
+  // Allow admin or any player in this match
+  const isMatchPlayer = match.players.some((mp) => mp.playerId === user.id);
+  if (user.role !== "admin" && !isMatchPlayer) {
+    return NextResponse.json({ error: "Only match participants or admins can submit scores" }, { status: 403 });
   }
 
   // Update match player scores

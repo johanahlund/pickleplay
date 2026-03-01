@@ -34,7 +34,7 @@ export default function EventsPage() {
   }, []);
 
   const deleteEvent = async (id: string) => {
-    if (!confirm("Delete this event and all its matches?")) return;
+    if (!confirm("Are you sure you want to delete this event and all its matches?")) return;
     await fetch(`/api/events/${id}`, { method: "DELETE" });
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };

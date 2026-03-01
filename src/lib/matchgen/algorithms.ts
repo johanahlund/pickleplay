@@ -452,7 +452,8 @@ function skillMixedGenderDoubles(players: PlayerInfo[], numCourts: number): Matc
 }
 
 // ─── KING OF COURT ───
-// Round 1: random. Next rounds: winners stay on court, losers rotate.
+// Ranked courts: Court 1 = experts, Court 2 = intermediate, ..., Court N = beginners.
+// Round 1: sort by rating (best on Court 1). Next rounds: winners move up, losers move down.
 // Generates ONE round at a time based on completed matches.
 
 function kingOfCourtRound(
@@ -465,26 +466,28 @@ function kingOfCourtRound(
   const matchesPerRound = Math.min(numCourts, Math.floor(players.length / playersPerMatch));
   if (matchesPerRound === 0) return [];
 
+  const playerMap = new Map(players.map((p) => [p.id, p]));
+
   if (completedMatches.length === 0) {
-    // Round 1: random assignment
-    const shuffled = [...players].sort(() => Math.random() - 0.5);
+    // Round 1: sort by rating — best players on Court 1 (experts), worst on highest court (beginners)
+    const sorted = [...players].sort((a, b) => b.rating - a.rating);
     const matches: MatchResult[] = [];
 
     for (let court = 0; court < matchesPerRound; court++) {
       const start = court * playersPerMatch;
-      if (start + playersPerMatch > shuffled.length) break;
+      if (start + playersPerMatch > sorted.length) break;
 
       if (format === "singles") {
         matches.push({
           court: court + 1,
-          team1: [shuffled[start]],
-          team2: [shuffled[start + 1]],
+          team1: [sorted[start]],
+          team2: [sorted[start + 1]],
         });
       } else {
         matches.push({
           court: court + 1,
-          team1: [shuffled[start], shuffled[start + 1]],
-          team2: [shuffled[start + 2], shuffled[start + 3]],
+          team1: [sorted[start], sorted[start + 1]],
+          team2: [sorted[start + 2], sorted[start + 3]],
         });
       }
     }
@@ -496,9 +499,8 @@ function kingOfCourtRound(
   const maxRound = Math.max(...completedMatches.map((m) => m.round));
   const lastRoundMatches = completedMatches.filter((m) => m.round === maxRound);
 
-  // Determine winners (stay) and losers (rotate) from last round
-  const winners: { courtNum: number; playerIds: string[] }[] = [];
-  const loserIds: string[] = [];
+  // Determine winners and losers per court
+  const courtResults: { courtNum: number; winnerIds: string[]; loserIds: string[] }[] = [];
   const playersInLastRound = new Set<string>();
 
   for (const match of lastRoundMatches) {
@@ -510,63 +512,90 @@ function kingOfCourtRound(
     match.players.forEach((p) => playersInLastRound.add(p.playerId));
 
     if (team1Score >= team2Score) {
-      winners.push({ courtNum: match.courtNum, playerIds: team1.map((p) => p.playerId) });
-      team2.forEach((p) => loserIds.push(p.playerId));
+      courtResults.push({
+        courtNum: match.courtNum,
+        winnerIds: team1.map((p) => p.playerId),
+        loserIds: team2.map((p) => p.playerId),
+      });
     } else {
-      winners.push({ courtNum: match.courtNum, playerIds: team2.map((p) => p.playerId) });
-      team1.forEach((p) => loserIds.push(p.playerId));
+      courtResults.push({
+        courtNum: match.courtNum,
+        winnerIds: team2.map((p) => p.playerId),
+        loserIds: team1.map((p) => p.playerId),
+      });
     }
   }
 
-  // Players not in last round (sat out)
-  const satOut = players.filter((p) => !playersInLastRound.has(p.id));
-  const playerMap = new Map(players.map((p) => [p.id, p]));
+  // Build new court assignments
+  // courtSlots[courtNum] = list of player IDs assigned to that court
+  const courtSlots = new Map<number, string[]>();
+  for (let c = 1; c <= matchesPerRound; c++) {
+    courtSlots.set(c, []);
+  }
 
-  // Available losers + sat-out players to rotate in
-  const rotatingPool = [...loserIds.map((id) => playerMap.get(id)!), ...satOut].filter(Boolean);
-  const shuffledPool = rotatingPool.sort(() => Math.random() - 0.5);
+  for (const result of courtResults) {
+    const court = result.courtNum;
 
+    // Winners move up (lower court number = better), except Court 1 stays
+    const winnerDest = court === 1 ? 1 : court - 1;
+    // Losers move down (higher court number = worse), except last court stays
+    const loserDest = court === matchesPerRound ? matchesPerRound : court + 1;
+
+    for (const id of result.winnerIds) {
+      if (winnerDest >= 1 && winnerDest <= matchesPerRound) {
+        courtSlots.get(winnerDest)!.push(id);
+      }
+    }
+    for (const id of result.loserIds) {
+      if (loserDest >= 1 && loserDest <= matchesPerRound) {
+        courtSlots.get(loserDest)!.push(id);
+      }
+    }
+  }
+
+  // Sat-out players fill remaining spots, starting from lowest courts (beginners)
+  const satOut = players
+    .filter((p) => !playersInLastRound.has(p.id))
+    .sort(() => Math.random() - 0.5);
+  let satIdx = 0;
+
+  // Fill courts from highest number (beginners) to lowest (experts)
+  for (let c = matchesPerRound; c >= 1; c--) {
+    const slots = courtSlots.get(c)!;
+    while (slots.length < playersPerMatch && satIdx < satOut.length) {
+      slots.push(satOut[satIdx++].id);
+    }
+  }
+
+  // If any court is overfull, move overflow players down
+  for (let c = 1; c <= matchesPerRound; c++) {
+    const slots = courtSlots.get(c)!;
+    while (slots.length > playersPerMatch) {
+      const overflow = slots.pop()!;
+      // Push to next court down
+      if (c < matchesPerRound) {
+        courtSlots.get(c + 1)!.push(overflow);
+      }
+    }
+  }
+
+  // Build matches
   const matches: MatchResult[] = [];
-  let poolIdx = 0;
+  for (let c = 1; c <= matchesPerRound; c++) {
+    const ids = courtSlots.get(c)!;
+    if (ids.length < playersPerMatch) continue;
 
-  for (let court = 0; court < matchesPerRound; court++) {
-    const winnerGroup = winners.find((w) => w.courtNum === court + 1);
+    const courtPlayers = ids.slice(0, playersPerMatch).map((id) => playerMap.get(id)!).filter(Boolean);
+    if (courtPlayers.length < playersPerMatch) continue;
 
-    if (winnerGroup) {
-      // Winners stay, need opponents from pool
-      const winnerPlayers = winnerGroup.playerIds.map((id) => playerMap.get(id)!).filter(Boolean);
-      const needed = playersPerMatch - winnerPlayers.length;
-      const opponents: PlayerInfo[] = [];
-
-      for (let i = 0; i < needed && poolIdx < shuffledPool.length; i++) {
-        opponents.push(shuffledPool[poolIdx++]);
-      }
-
-      if (opponents.length === needed) {
-        if (format === "singles") {
-          matches.push({ court: court + 1, team1: winnerPlayers, team2: opponents });
-        } else {
-          matches.push({ court: court + 1, team1: winnerPlayers, team2: opponents });
-        }
-      }
+    if (format === "singles") {
+      matches.push({ court: c, team1: [courtPlayers[0]], team2: [courtPlayers[1]] });
     } else {
-      // Extra court: fill from pool
-      const needed = playersPerMatch;
-      const courtPlayers: PlayerInfo[] = [];
-      for (let i = 0; i < needed && poolIdx < shuffledPool.length; i++) {
-        courtPlayers.push(shuffledPool[poolIdx++]);
-      }
-      if (courtPlayers.length === needed) {
-        if (format === "singles") {
-          matches.push({ court: court + 1, team1: [courtPlayers[0]], team2: [courtPlayers[1]] });
-        } else {
-          matches.push({
-            court: court + 1,
-            team1: [courtPlayers[0], courtPlayers[1]],
-            team2: [courtPlayers[2], courtPlayers[3]],
-          });
-        }
-      }
+      matches.push({
+        court: c,
+        team1: [courtPlayers[0], courtPlayers[1]],
+        team2: [courtPlayers[2], courtPlayers[3]],
+      });
     }
   }
 

@@ -52,7 +52,7 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-// Admin deletes a match (only pending/active, not completed)
+// Admin deletes a match — reverses ELO if completed
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -65,13 +65,41 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const match = await prisma.match.findUnique({ where: { id } });
+  const match = await prisma.match.findUnique({
+    where: { id },
+    include: { players: { include: { player: true } } },
+  });
   if (!match) {
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
-  if (match.status === "completed") {
-    return NextResponse.json({ error: "Cannot delete completed match. Use event reset instead." }, { status: 400 });
+  // If completed, reverse ELO changes before deleting
+  if (match.status === "completed" && match.eloChange > 0) {
+    const team1 = match.players.filter((p) => p.team === 1);
+    const team2 = match.players.filter((p) => p.team === 2);
+    const team1Score = team1[0]?.score ?? 0;
+    const team2Score = team2[0]?.score ?? 0;
+    const winners = team1Score > team2Score ? team1 : team2;
+    const losers = team1Score > team2Score ? team2 : team1;
+
+    for (const mp of winners) {
+      await prisma.player.update({
+        where: { id: mp.playerId },
+        data: {
+          rating: { decrement: match.eloChange },
+          wins: { decrement: 1 },
+        },
+      });
+    }
+    for (const mp of losers) {
+      await prisma.player.update({
+        where: { id: mp.playerId },
+        data: {
+          rating: { increment: match.eloChange },
+          losses: { decrement: 1 },
+        },
+      });
+    }
   }
 
   await prisma.match.delete({ where: { id } });

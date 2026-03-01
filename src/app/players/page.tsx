@@ -66,7 +66,7 @@ export default function PlayersPage() {
   };
 
   const voidPlayer = async (id: string, playerName: string) => {
-    if (!confirm(`Remove ${playerName}? If they have match history, they'll be voided (hidden but data preserved).`)) return;
+    if (!confirm(`Are you sure you want to remove ${playerName}? If they have match history, they'll be voided (hidden but data preserved).`)) return;
     await fetch(`/api/players/${id}/void`, { method: "POST" });
     fetchPlayers();
   };
@@ -168,7 +168,7 @@ export default function PlayersPage() {
   };
 
   const resetRating = async (player: Player) => {
-    if (!confirm(`Reset ${player.name}'s rating to 1000 and clear W/L record?`)) return;
+    if (!confirm(`Are you sure you want to reset ${player.name}'s rating to 1000 and clear W/L record?`)) return;
     const res = await fetch(`/api/players/${player.id}/reset-rating`, { method: "POST" });
     if (!res.ok) {
       alert("Failed to reset rating");
