@@ -686,7 +686,8 @@ export default function EventDetailPage() {
           />
         )}
         <div className="space-y-0">
-          {event.players
+          {[...event.players]
+            .sort((a, b) => a.player.name.localeCompare(b.player.name))
             .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
             .map((ep) => (
             <SwipeablePlayerRow
