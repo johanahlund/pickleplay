@@ -107,6 +107,12 @@ function SwipeablePlayerRow({
   const swipeOffset = useRef(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
+  const [localPaused, setLocalPaused] = useState(!ep.checkedIn);
+
+  // Sync with prop when it changes (after API response)
+  useEffect(() => {
+    setLocalPaused(!ep.checkedIn);
+  }, [ep.checkedIn]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!isAdmin) return;
@@ -116,9 +122,11 @@ function SwipeablePlayerRow({
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      onPause();
-      // Haptic feedback if available
+      // Instantly toggle visual state
+      setLocalPaused((prev) => !prev);
       if (navigator.vibrate) navigator.vibrate(50);
+      // Then fire the API call
+      onPause();
     }, 600);
   };
 
@@ -160,15 +168,15 @@ function SwipeablePlayerRow({
   return (
     <div
       ref={rowRef}
-      className={`flex items-center gap-2 rounded-lg px-3 py-1 transition-transform select-none ${
-        !ep.checkedIn ? "opacity-40 bg-gray-100" : ""
+      className={`flex items-center gap-2 rounded-lg px-3 py-1 transition-all select-none ${
+        localPaused ? "opacity-40 bg-gray-100" : ""
       }`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       <span className="text-2xl">{ep.player.emoji}</span>
-      <span className={`text-lg font-medium flex-1 ${!ep.checkedIn ? "line-through text-muted" : ""}`}>
+      <span className={`text-lg font-medium flex-1 ${localPaused ? "line-through text-muted" : ""}`}>
         {ep.player.name}
       </span>
       {ep.player.role === "admin" && (
@@ -176,7 +184,7 @@ function SwipeablePlayerRow({
           Admin
         </span>
       )}
-      {!ep.checkedIn && (
+      {localPaused && (
         <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
           Paused
         </span>
@@ -715,18 +723,20 @@ export default function EventDetailPage() {
         <div className="space-y-3">
           {!isIncremental && (
             <div className="flex items-center gap-3">
-              <label className="text-base font-medium text-foreground">Rounds:</label>
-              <div className="flex items-center gap-2">
+              <label className="text-lg font-medium text-foreground">Rounds:</label>
+              <div className="flex items-center gap-0">
                 <button
                   onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
-                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                  className="w-14 h-14 rounded-l-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300"
                 >
-                  -
+                  −
                 </button>
-                <span className="text-xl font-bold min-w-[2rem] text-center">{numRounds}</span>
+                <div className="w-14 h-14 bg-primary text-white font-bold text-3xl flex items-center justify-center">
+                  {numRounds}
+                </div>
                 <button
                   onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
-                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                  className="w-14 h-14 rounded-r-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300"
                 >
                   +
                 </button>
@@ -748,18 +758,20 @@ export default function EventDetailPage() {
         <div className="space-y-3">
           {!isIncremental && (
             <div className="flex items-center gap-3">
-              <label className="text-base font-medium text-foreground">Rounds:</label>
-              <div className="flex items-center gap-2">
+              <label className="text-lg font-medium text-foreground">Rounds:</label>
+              <div className="flex items-center gap-0">
                 <button
                   onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
-                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                  className="w-14 h-14 rounded-l-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300"
                 >
-                  -
+                  −
                 </button>
-                <span className="text-xl font-bold min-w-[2rem] text-center">{numRounds}</span>
+                <div className="w-14 h-14 bg-primary text-white font-bold text-3xl flex items-center justify-center">
+                  {numRounds}
+                </div>
                 <button
                   onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
-                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                  className="w-14 h-14 rounded-r-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300"
                 >
                   +
                 </button>
