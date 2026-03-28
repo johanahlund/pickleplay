@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 
 interface Player {
@@ -88,6 +88,103 @@ function speakRound(matches: Match[], event: Event) {
   speechSynthesis.speak(utterance);
 }
 
+function SwipeablePlayerRow({
+  ep,
+  isAdmin,
+  hasMatches,
+  onPause,
+  onRemove,
+}: {
+  ep: { player: Player; checkedIn: boolean };
+  isAdmin: boolean;
+  hasMatches: boolean;
+  onPause: () => void;
+  onRemove: () => void;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const swipeOffset = useRef(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPress = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isAdmin) return;
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    swipeOffset.current = 0;
+    isLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      onPause();
+      // Haptic feedback if available
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 600);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isAdmin) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    // If scrolling vertically, cancel gestures
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      return;
+    }
+    // Cancel long-press if finger moves
+    if (Math.abs(dx) > 10) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    }
+    if (dx < 0 && !hasMatches) {
+      swipeOffset.current = dx;
+      if (rowRef.current) {
+        rowRef.current.style.transform = `translateX(${Math.max(dx, -100)}px)`;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (isLongPress.current) return;
+    if (swipeOffset.current < -80 && !hasMatches && isAdmin) {
+      if (confirm(`Remove ${ep.player.name} from this event?`)) {
+        onRemove();
+      }
+    }
+    if (rowRef.current) {
+      rowRef.current.style.transform = "";
+    }
+    swipeOffset.current = 0;
+  };
+
+  return (
+    <div
+      ref={rowRef}
+      className={`flex items-center gap-2 rounded-lg px-3 py-1 transition-transform select-none ${
+        !ep.checkedIn ? "opacity-40 bg-gray-100" : ""
+      }`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <span className="text-2xl">{ep.player.emoji}</span>
+      <span className={`text-lg font-medium flex-1 ${!ep.checkedIn ? "line-through text-muted" : ""}`}>
+        {ep.player.name}
+      </span>
+      {ep.player.role === "admin" && (
+        <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+          Admin
+        </span>
+      )}
+      {!ep.checkedIn && (
+        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+          Paused
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -103,7 +200,6 @@ export default function EventDetailPage() {
   const [editCourts, setEditCourts] = useState(2);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
-  const [managingPlayers, setManagingPlayers] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -524,27 +620,14 @@ export default function EventDetailPage() {
               {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <button
-                onClick={startEditEvent}
-                className="text-sm text-muted px-3 py-1.5 rounded hover:bg-gray-100"
-              >
-                Edit
-              </button>
-            )}
-            <span
-              className={`text-sm font-medium px-2.5 py-1 rounded-full ${
-                event.status === "active"
-                  ? "bg-green-100 text-green-700"
-                  : event.status === "completed"
-                  ? "bg-gray-100 text-gray-600"
-                  : "bg-blue-100 text-blue-700"
-              }`}
+          {isAdmin && (
+            <button
+              onClick={startEditEvent}
+              className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors"
             >
-              {event.status}
-            </span>
-          </div>
+              Edit
+            </button>
+          )}
         </div>
       )}
 
@@ -556,13 +639,16 @@ export default function EventDetailPage() {
           </h3>
           {isAdmin && (
             <button
-              onClick={() => setManagingPlayers(!managingPlayers)}
-              className="text-base text-primary font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors"
+              onClick={() => { setShowAddPlayer(!showAddPlayer); if (!showAddPlayer) fetchAllPlayers(); }}
+              className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors"
             >
-              {managingPlayers ? "Done" : "Manage"}
+              {showAddPlayer ? "Done" : "+ Add"}
             </button>
           )}
         </div>
+        {isAdmin && (
+          <p className="text-xs text-muted mb-2">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""}</p>
+        )}
         {session?.user && !isAdmin && (
           <div className="mb-3">
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
@@ -591,81 +677,35 @@ export default function EventDetailPage() {
             className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-3"
           />
         )}
-        <div className="space-y-1">
+        <div className="space-y-0">
           {event.players
             .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
             .map((ep) => (
-            <div
+            <SwipeablePlayerRow
               key={ep.player.id}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
-                !ep.checkedIn ? "opacity-50 bg-gray-50" : ""
-              }`}
-            >
-              <span className="text-2xl">{ep.player.emoji}</span>
-              <span className={`text-lg font-medium flex-1 ${!ep.checkedIn ? "line-through" : ""}`}>
-                {ep.player.name}
-              </span>
-              {ep.player.role === "admin" && (
-                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
-                  Admin
-                </span>
-              )}
-              {!ep.checkedIn && (
-                <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-                  Paused
-                </span>
-              )}
-              {managingPlayers && isAdmin && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => togglePausePlayer(ep.player.id)}
-                    className={`text-sm px-2 py-1 rounded transition-colors ${
-                      ep.checkedIn
-                        ? "text-amber-600 hover:bg-amber-50"
-                        : "text-green-600 hover:bg-green-50"
-                    }`}
-                    title={ep.checkedIn ? "Pause player" : "Unpause player"}
-                  >
-                    {ep.checkedIn ? "Pause" : "Resume"}
-                  </button>
-                  {!hasMatches && (
-                    <button
-                      onClick={() => removePlayer(ep.player.id, ep.player.name)}
-                      className="text-sm text-danger hover:bg-red-100 rounded px-2 py-1 transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+              ep={ep}
+              isAdmin={isAdmin}
+              hasMatches={hasMatches}
+              onPause={() => togglePausePlayer(ep.player.id)}
+              onRemove={() => removePlayer(ep.player.id, ep.player.name)}
+            />
           ))}
         </div>
-        {managingPlayers && isAdmin && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <button
-              onClick={() => { setShowAddPlayer(!showAddPlayer); if (!showAddPlayer) fetchAllPlayers(); }}
-              className="text-base text-primary font-semibold"
-            >
-              {showAddPlayer ? "Close" : "+ Add Player"}
-            </button>
-            {showAddPlayer && (
-              <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                {allPlayers
-                  .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => addPlayerToEvent(p.id)}
-                      className="w-full text-left text-base py-2 px-3 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <span className="text-xl">{p.emoji}</span>
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
-                    </button>
-                  ))}
-              </div>
-            )}
+        {showAddPlayer && isAdmin && (
+          <div className="mt-3 pt-3 border-t border-border space-y-1 max-h-48 overflow-y-auto">
+            {allPlayers
+              .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
+              .map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => addPlayerToEvent(p.id)}
+                  className="w-full text-left text-base py-2 px-3 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <span className="text-xl">{p.emoji}</span>
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
+                </button>
+              ))}
           </div>
         )}
       </div>
@@ -838,18 +878,9 @@ export default function EventDetailPage() {
       {/* Matches by round */}
       {rounds.map((round) => (
         <div key={round} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-muted uppercase tracking-wider">
-              Round {round}
-            </h3>
-            <button
-              onClick={() => speakRound(matchesByRound[round], event)}
-              className="text-sm text-primary px-2 py-1 rounded hover:bg-primary/10 transition-colors"
-              title="Announce round"
-            >
-              🔊 Announce
-            </button>
-          </div>
+          <h3 className="text-base font-semibold text-muted uppercase tracking-wider">
+            Round {round}
+          </h3>
           {matchesByRound[round]
             .sort((a, b) => a.courtNum - b.courtNum)
             .map((match) => {
@@ -883,7 +914,7 @@ export default function EventDetailPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => speakMatch(match, event)}
-                        className="text-sm text-primary px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors"
+                        className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors"
                         title="Announce match"
                       >
                         🔊
@@ -909,9 +940,10 @@ export default function EventDetailPage() {
                       {isAdmin && (
                         <button
                           onClick={() => deleteMatch(match.id)}
-                          className="text-sm text-danger px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"
+                          className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors"
+                          title="Delete match"
                         >
-                          Delete
+                          🗑️
                         </button>
                       )}
                     </div>
