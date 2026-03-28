@@ -190,7 +190,7 @@ export default function PlayersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Players ({searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})</h2>
+        <h2 className="text-2xl font-bold">Players ({searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})</h2>
         {isAdmin && (
           <button
             onClick={() => setShowForm(!showForm)}
@@ -206,7 +206,7 @@ export default function PlayersPage() {
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         placeholder="Search players..."
-        className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+        className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
       />
 
       {showForm && isAdmin && (
@@ -356,7 +356,7 @@ export default function PlayersPage() {
                     <span className="text-3xl">{p.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold">{p.name}</span>
+                        <span className="font-semibold text-lg">{p.name}</span>
                         {p.role === "admin" && (
                           <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
                             Admin
@@ -373,7 +373,7 @@ export default function PlayersPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-muted">
+                      <div className="text-base text-muted">
                         {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
                         {p.email && <span className="ml-1.5 text-xs">· {p.email}</span>}
                       </div>

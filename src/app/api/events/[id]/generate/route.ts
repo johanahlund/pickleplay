@@ -3,10 +3,12 @@ import { NextResponse } from "next/server";
 import { generateRounds, PlayerInfo, CompletedMatch } from "@/lib/matchgen";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const numRounds = Math.max(1, Math.min(20, parseInt(body.numRounds) || 1));
 
   const event = await prisma.event.findUnique({
     where: { id },
@@ -40,12 +42,14 @@ export async function POST(
     );
   }
 
-  const playerInfos: PlayerInfo[] = event.players.map((ep) => ({
-    id: ep.player.id,
-    name: ep.player.name,
-    rating: ep.player.rating,
-    gender: ep.player.gender,
-  }));
+  const playerInfos: PlayerInfo[] = event.players
+    .filter((ep) => ep.checkedIn)
+    .map((ep) => ({
+      id: ep.player.id,
+      name: ep.player.name,
+      rating: ep.player.rating,
+      gender: ep.player.gender,
+    }));
 
   const minPlayers = format === "singles" ? 2 : 4;
   if (playerInfos.length < minPlayers) {
@@ -102,7 +106,8 @@ export async function POST(
     event.numCourts,
     format,
     pairingMode,
-    completedMatches
+    completedMatches,
+    numRounds
   );
 
   if (rounds.length === 0) {

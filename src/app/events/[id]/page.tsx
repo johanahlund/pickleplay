@@ -51,6 +51,43 @@ function toTimeInput(iso: string) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function speakMatch(match: Match, event: Event) {
+  if (!("speechSynthesis" in window)) return;
+  const team1 = match.players.filter((p) => p.team === 1);
+  const team2 = match.players.filter((p) => p.team === 2);
+  const team1Names = team1.map((p) => p.player.name).join(" and ");
+  const team2Names = team2.map((p) => p.player.name).join(" and ");
+  const courtLabel = event.pairingMode === "king_of_court" && match.courtNum === 1
+    ? "King Court"
+    : `Court ${match.courtNum}`;
+  const text = `${courtLabel}: ${team1Names} versus ${team2Names}`;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.9;
+  utterance.lang = "en-US";
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utterance);
+}
+
+function speakRound(matches: Match[], event: Event) {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const parts: string[] = [];
+  for (const match of matches.sort((a, b) => a.courtNum - b.courtNum)) {
+    const team1 = match.players.filter((p) => p.team === 1);
+    const team2 = match.players.filter((p) => p.team === 2);
+    const team1Names = team1.map((p) => p.player.name).join(" and ");
+    const team2Names = team2.map((p) => p.player.name).join(" and ");
+    const courtLabel = event.pairingMode === "king_of_court" && match.courtNum === 1
+      ? "King Court"
+      : `Court ${match.courtNum}`;
+    parts.push(`${courtLabel}: ${team1Names} versus ${team2Names}`);
+  }
+  const utterance = new SpeechSynthesisUtterance(parts.join(". "));
+  utterance.rate = 0.9;
+  utterance.lang = "en-US";
+  speechSynthesis.speak(utterance);
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -79,6 +116,7 @@ export default function EventDetailPage() {
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
+  const [numRounds, setNumRounds] = useState(3);
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -97,7 +135,11 @@ export default function EventDetailPage() {
 
   const generateMatches = async () => {
     setGenerating(true);
-    await fetch(`/api/events/${id}/generate`, { method: "POST" });
+    await fetch(`/api/events/${id}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ numRounds }),
+    });
     await fetchEvent();
     setGenerating(false);
   };
@@ -190,6 +232,11 @@ export default function EventDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
+    await fetchEvent();
+  };
+
+  const togglePausePlayer = async (playerId: string) => {
+    await fetch(`/api/events/${id}/players/${playerId}/pause`, { method: "POST" });
     await fetchEvent();
   };
 
@@ -314,7 +361,7 @@ export default function EventDetailPage() {
   };
 
   if (loading || !event) {
-    return <div className="text-center py-12 text-muted">Loading...</div>;
+    return <div className="text-center py-12 text-muted text-lg">Loading...</div>;
   }
 
   // Group matches by round
@@ -334,6 +381,9 @@ export default function EventDetailPage() {
 
   const hasMatches = event.matches.length > 0;
   const minPlayers = event.format === "singles" ? 2 : 4;
+  const activePlayers = event.players.filter((ep) => ep.checkedIn);
+  const pausedPlayers = event.players.filter((ep) => !ep.checkedIn);
+  const isIncremental = event.pairingMode === "king_of_court" || event.pairingMode === "swiss";
 
   return (
     <div className="space-y-4">
@@ -453,8 +503,8 @@ export default function EventDetailPage() {
       ) : (
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold">{event.name}</h2>
-            <p className="text-sm text-muted">
+            <h2 className="text-2xl font-bold">{event.name}</h2>
+            <p className="text-base text-muted">
               {new Date(event.date).toLocaleDateString(undefined, {
                 weekday: "short",
                 month: "short",
@@ -468,7 +518,7 @@ export default function EventDetailPage() {
               &middot; {event.numCourts} court
               {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
             </p>
-            <p className="text-xs text-muted mt-0.5">
+            <p className="text-sm text-muted mt-0.5">
               {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
               {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
               {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
@@ -478,13 +528,13 @@ export default function EventDetailPage() {
             {isAdmin && (
               <button
                 onClick={startEditEvent}
-                className="text-xs text-muted px-2 py-1 rounded hover:bg-gray-100"
+                className="text-sm text-muted px-3 py-1.5 rounded hover:bg-gray-100"
               >
                 Edit
               </button>
             )}
             <span
-              className={`text-xs font-medium px-2 py-1 rounded-full ${
+              className={`text-sm font-medium px-2.5 py-1 rounded-full ${
                 event.status === "active"
                   ? "bg-green-100 text-green-700"
                   : event.status === "completed"
@@ -499,33 +549,33 @@ export default function EventDetailPage() {
       )}
 
       {/* Players */}
-      <div className="bg-card rounded-xl border border-border p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-muted">
-            Players ({event.players.length})
+      <div className="bg-card rounded-xl border border-border p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold text-foreground">
+            Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
           </h3>
-          {!hasMatches && isAdmin && (
+          {isAdmin && (
             <button
               onClick={() => setManagingPlayers(!managingPlayers)}
-              className="text-xs text-primary font-medium"
+              className="text-base text-primary font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors"
             >
               {managingPlayers ? "Done" : "Manage"}
             </button>
           )}
         </div>
         {session?.user && !isAdmin && (
-          <div className="mb-2">
+          <div className="mb-3">
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
               <button
                 onClick={unsignFromEvent}
-                className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50"
+                className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50"
               >
                 Leave Event
               </button>
             ) : (
               <button
                 onClick={signupForEvent}
-                className="text-xs bg-primary text-white px-3 py-1 rounded-lg font-medium"
+                className="text-sm bg-primary text-white px-4 py-1.5 rounded-lg font-medium"
               >
                 Join Event
               </button>
@@ -538,55 +588,79 @@ export default function EventDetailPage() {
             value={playerSearch}
             onChange={(e) => setPlayerSearch(e.target.value)}
             placeholder="Search players..."
-            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm mb-2"
+            className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-3"
           />
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="space-y-1">
           {event.players
             .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
             .map((ep) => (
-            <span
+            <div
               key={ep.player.id}
-              className="inline-flex items-center gap-1 bg-gray-50 rounded-full px-2.5 py-1 text-sm"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                !ep.checkedIn ? "opacity-50 bg-gray-50" : ""
+              }`}
             >
-              <span>{ep.player.emoji}</span>
-              <span>{ep.player.name}</span>
+              <span className="text-2xl">{ep.player.emoji}</span>
+              <span className={`text-lg font-medium flex-1 ${!ep.checkedIn ? "line-through" : ""}`}>
+                {ep.player.name}
+              </span>
               {ep.player.role === "admin" && (
-                <span className="text-[9px] bg-purple-100 text-purple-700 px-1 py-0 rounded-full font-medium">
+                <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
                   Admin
                 </span>
               )}
-              {managingPlayers && !hasMatches && isAdmin && (
-                <button
-                  onClick={() => removePlayer(ep.player.id, ep.player.name)}
-                  className="ml-0.5 text-danger hover:bg-red-100 rounded-full w-4 h-4 flex items-center justify-center text-xs"
-                >
-                  ✕
-                </button>
+              {!ep.checkedIn && (
+                <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                  Paused
+                </span>
               )}
-            </span>
+              {managingPlayers && isAdmin && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => togglePausePlayer(ep.player.id)}
+                    className={`text-sm px-2 py-1 rounded transition-colors ${
+                      ep.checkedIn
+                        ? "text-amber-600 hover:bg-amber-50"
+                        : "text-green-600 hover:bg-green-50"
+                    }`}
+                    title={ep.checkedIn ? "Pause player" : "Unpause player"}
+                  >
+                    {ep.checkedIn ? "Pause" : "Resume"}
+                  </button>
+                  {!hasMatches && (
+                    <button
+                      onClick={() => removePlayer(ep.player.id, ep.player.name)}
+                      className="text-sm text-danger hover:bg-red-100 rounded px-2 py-1 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           ))}
         </div>
         {managingPlayers && isAdmin && (
-          <div className="mt-2 pt-2 border-t border-border">
+          <div className="mt-3 pt-3 border-t border-border">
             <button
               onClick={() => { setShowAddPlayer(!showAddPlayer); if (!showAddPlayer) fetchAllPlayers(); }}
-              className="text-xs text-primary font-medium"
+              className="text-base text-primary font-semibold"
             >
               {showAddPlayer ? "Close" : "+ Add Player"}
             </button>
             {showAddPlayer && (
-              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+              <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
                 {allPlayers
                   .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
                   .map((p) => (
                     <button
                       key={p.id}
                       onClick={() => addPlayerToEvent(p.id)}
-                      className="w-full text-left text-xs py-1.5 px-2 rounded hover:bg-gray-50 flex items-center gap-1.5"
+                      className="w-full text-left text-base py-2 px-3 rounded-lg hover:bg-gray-50 flex items-center gap-2"
                     >
-                      <span>{p.emoji}</span>
-                      <span>{p.name}</span>
+                      <span className="text-xl">{p.emoji}</span>
+                      <span className="font-medium">{p.name}</span>
                       <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
                     </button>
                   ))}
@@ -598,45 +672,89 @@ export default function EventDetailPage() {
 
       {/* Generate button */}
       {!hasMatches && isAdmin && event.pairingMode !== "manual" && (
-        <button
-          onClick={generateMatches}
-          disabled={generating || event.players.length < minPlayers}
-          className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50"
-        >
-          {generating ? "Generating..." : "🎲 Generate Matches"}
-        </button>
+        <div className="space-y-3">
+          {!isIncremental && (
+            <div className="flex items-center gap-3">
+              <label className="text-base font-medium text-foreground">Rounds:</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
+                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                >
+                  -
+                </button>
+                <span className="text-xl font-bold min-w-[2rem] text-center">{numRounds}</span>
+                <button
+                  onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
+                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={generateMatches}
+            disabled={generating || activePlayers.length < minPlayers}
+            className="w-full bg-primary text-white py-3.5 rounded-xl font-semibold text-xl shadow-md active:bg-primary-dark transition-colors disabled:opacity-50"
+          >
+            {generating ? "Generating..." : `🎲 Generate ${isIncremental ? "Next Round" : `${numRounds} Round${numRounds > 1 ? "s" : ""}`}`}
+          </button>
+        </div>
       )}
 
       {/* Regenerate button if all matches are done */}
       {allCompleted && isAdmin && event.pairingMode !== "manual" && (
-        <button
-          onClick={generateMatches}
-          disabled={generating}
-          className="w-full bg-accent text-foreground py-3 rounded-xl font-semibold shadow-md active:opacity-80 transition-colors disabled:opacity-50"
-        >
-          {generating ? "Generating..." : "🔄 Generate Next Rounds"}
-        </button>
+        <div className="space-y-3">
+          {!isIncremental && (
+            <div className="flex items-center gap-3">
+              <label className="text-base font-medium text-foreground">Rounds:</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
+                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                >
+                  -
+                </button>
+                <span className="text-xl font-bold min-w-[2rem] text-center">{numRounds}</span>
+                <button
+                  onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
+                  className="w-10 h-10 rounded-lg bg-gray-100 text-foreground font-bold text-xl flex items-center justify-center hover:bg-gray-200"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+          <button
+            onClick={generateMatches}
+            disabled={generating}
+            className="w-full bg-accent text-foreground py-3.5 rounded-xl font-semibold text-lg shadow-md active:opacity-80 transition-colors disabled:opacity-50"
+          >
+            {generating ? "Generating..." : "🔄 Generate Next Rounds"}
+          </button>
+        </div>
       )}
 
       {isAdmin && (
         <div>
           <button
             onClick={() => setShowAddMatch(!showAddMatch)}
-            className="w-full bg-card text-foreground border border-border py-2.5 rounded-xl font-medium text-sm active:bg-gray-50 transition-colors"
+            className="w-full bg-card text-foreground border border-border py-3 rounded-xl font-medium text-base active:bg-gray-50 transition-colors"
           >
             {showAddMatch ? "Cancel" : "➕ Add Match Manually"}
           </button>
           {showAddMatch && event && (
             <div className="mt-2 bg-card rounded-xl border border-border p-4 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-muted mb-1">Court</label>
+                <label className="block text-base font-medium text-muted mb-1">Court</label>
                 <div className="flex gap-2">
                   {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
                     <button
                       key={n}
                       type="button"
                       onClick={() => setManualCourt(n)}
-                      className={`flex-1 py-1.5 rounded-lg font-medium text-sm transition-all ${
+                      className={`flex-1 py-2 rounded-lg font-medium text-base transition-all ${
                         manualCourt === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"
                       }`}
                     >
@@ -647,16 +765,16 @@ export default function EventDetailPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-muted mb-1">
+                  <label className="block text-sm font-medium text-muted mb-1">
                     Team 1 ({manualTeam1.length})
                   </label>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {event.players.map((ep) => (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {event.players.filter((ep) => ep.checkedIn).map((ep) => (
                       <button
                         key={ep.player.id}
                         type="button"
                         onClick={() => toggleManualPlayer(ep.player.id, 1)}
-                        className={`w-full text-left text-xs py-1.5 px-2 rounded transition-all ${
+                        className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
                           manualTeam1.includes(ep.player.id)
                             ? "bg-blue-100 text-blue-800 font-medium"
                             : manualTeam2.includes(ep.player.id)
@@ -671,16 +789,16 @@ export default function EventDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted mb-1">
+                  <label className="block text-sm font-medium text-muted mb-1">
                     Team 2 ({manualTeam2.length})
                   </label>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {event.players.map((ep) => (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {event.players.filter((ep) => ep.checkedIn).map((ep) => (
                       <button
                         key={ep.player.id}
                         type="button"
                         onClick={() => toggleManualPlayer(ep.player.id, 2)}
-                        className={`w-full text-left text-xs py-1.5 px-2 rounded transition-all ${
+                        className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
                           manualTeam2.includes(ep.player.id)
                             ? "bg-red-100 text-red-800 font-medium"
                             : manualTeam1.includes(ep.player.id)
@@ -698,7 +816,7 @@ export default function EventDetailPage() {
               <button
                 onClick={addManualMatch}
                 disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
-                className="w-full bg-primary text-white py-2 rounded-lg font-medium text-sm disabled:opacity-50"
+                className="w-full bg-primary text-white py-2.5 rounded-lg font-medium text-base disabled:opacity-50"
               >
                 Create Match
               </button>
@@ -711,7 +829,7 @@ export default function EventDetailPage() {
         <button
           onClick={resetEvent}
           disabled={resetting}
-          className="w-full bg-red-50 text-danger border border-red-200 py-2.5 rounded-xl font-medium text-sm active:bg-red-100 transition-colors disabled:opacity-50"
+          className="w-full bg-red-50 text-danger border border-red-200 py-3 rounded-xl font-medium text-base active:bg-red-100 transition-colors disabled:opacity-50"
         >
           {resetting ? "Resetting..." : "🗑️ Reset Event (Delete All Matches)"}
         </button>
@@ -720,9 +838,18 @@ export default function EventDetailPage() {
       {/* Matches by round */}
       {rounds.map((round) => (
         <div key={round} className="space-y-2">
-          <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
-            Round {round}
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-muted uppercase tracking-wider">
+              Round {round}
+            </h3>
+            <button
+              onClick={() => speakRound(matchesByRound[round], event)}
+              className="text-sm text-primary px-2 py-1 rounded hover:bg-primary/10 transition-colors"
+              title="Announce round"
+            >
+              🔊 Announce
+            </button>
+          </div>
           {matchesByRound[round]
             .sort((a, b) => a.courtNum - b.courtNum)
             .map((match) => {
@@ -743,8 +870,8 @@ export default function EventDetailPage() {
                   key={match.id}
                   className="bg-card rounded-xl border border-border overflow-hidden"
                 >
-                  <div className="px-3 py-1.5 bg-gray-50 border-b border-border flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted">
                       Court {match.courtNum}
                       {event.pairingMode === "king_of_court" && match.courtNum === 1 && (
                         <span className="ml-1 text-amber-500">👑</span>
@@ -754,28 +881,35 @@ export default function EventDetailPage() {
                       )}
                     </span>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => speakMatch(match, event)}
+                        className="text-sm text-primary px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors"
+                        title="Announce match"
+                      >
+                        🔊
+                      </button>
                       {isCompleted && !isEditing && (
-                        <span className="text-xs text-green-600 font-medium">
+                        <span className="text-sm text-green-600 font-medium">
                           ✓ Final
                         </span>
                       )}
                       {isCompleted && isAdmin && !isEditing && (
                         <button
                           onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
-                          className="text-xs text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors"
+                          className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors"
                         >
                           Edit
                         </button>
                       )}
                       {isEditing && (
-                        <span className="text-xs text-amber-600 font-medium">
+                        <span className="text-sm text-amber-600 font-medium">
                           Editing...
                         </span>
                       )}
                       {isAdmin && (
                         <button
                           onClick={() => deleteMatch(match.id)}
-                          className="text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"
+                          className="text-sm text-danger px-1.5 py-0.5 rounded hover:bg-red-100 transition-colors"
                         >
                           Delete
                         </button>
@@ -790,18 +924,18 @@ export default function EventDetailPage() {
                       }`}
                     >
                       <div className="flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {team1.map((mp) => (
-                            <span key={mp.id} className="inline-flex items-center gap-0.5 text-sm">
+                            <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
                               <span>{mp.player.emoji}</span>
-                              <span className={team1Won && !isEditing ? "font-semibold" : ""}>{mp.player.name}</span>
+                              <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                             </span>
                           ))}
                         </div>
                       </div>
                       {isCompleted && !isEditing ? (
                         <span
-                          className={`text-xl font-bold min-w-[2rem] text-center ${
+                          className={`text-2xl font-bold min-w-[2.5rem] text-center ${
                             team1Won ? "text-green-600" : "text-gray-400"
                           }`}
                         >
@@ -815,15 +949,15 @@ export default function EventDetailPage() {
                           onChange={(e) =>
                             setMatchScore(match.id, "team1", e.target.value)
                           }
-                          className="w-14 text-center border border-border rounded-lg py-1 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
                           placeholder="-"
                         />
                       ) : (
-                        <span className="text-xl font-bold min-w-[2rem] text-center text-gray-400">-</span>
+                        <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
                       )}
                     </div>
 
-                    <div className="text-center text-xs text-muted font-medium my-1">
+                    <div className="text-center text-sm text-muted font-medium my-1">
                       vs
                     </div>
 
@@ -834,18 +968,18 @@ export default function EventDetailPage() {
                       }`}
                     >
                       <div className="flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {team2.map((mp) => (
-                            <span key={mp.id} className="inline-flex items-center gap-0.5 text-sm">
+                            <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
                               <span>{mp.player.emoji}</span>
-                              <span className={team2Won && !isEditing ? "font-semibold" : ""}>{mp.player.name}</span>
+                              <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                             </span>
                           ))}
                         </div>
                       </div>
                       {isCompleted && !isEditing ? (
                         <span
-                          className={`text-xl font-bold min-w-[2rem] text-center ${
+                          className={`text-2xl font-bold min-w-[2.5rem] text-center ${
                             team2Won ? "text-green-600" : "text-gray-400"
                           }`}
                         >
@@ -859,11 +993,11 @@ export default function EventDetailPage() {
                           onChange={(e) =>
                             setMatchScore(match.id, "team2", e.target.value)
                           }
-                          className="w-14 text-center border border-border rounded-lg py-1 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50"
                           placeholder="-"
                         />
                       ) : (
-                        <span className="text-xl font-bold min-w-[2rem] text-center text-gray-400">-</span>
+                        <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
                       )}
                     </div>
 
@@ -871,7 +1005,7 @@ export default function EventDetailPage() {
                     {showInputs && !isEditing && scores[match.id]?.team1 && scores[match.id]?.team2 && (
                       <button
                         onClick={() => submitScore(match.id)}
-                        className="w-full mt-2 bg-primary text-white py-2 rounded-lg font-medium text-sm active:bg-primary-dark transition-colors"
+                        className="w-full mt-2 bg-primary text-white py-2.5 rounded-lg font-medium text-base active:bg-primary-dark transition-colors"
                       >
                         Submit Score
                       </button>
@@ -881,13 +1015,13 @@ export default function EventDetailPage() {
                         <button
                           onClick={() => editScore(match.id)}
                           disabled={!scores[match.id]?.team1 || !scores[match.id]?.team2}
-                          className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-sm disabled:opacity-50"
+                          className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-base disabled:opacity-50"
                         >
                           Save Edit
                         </button>
                         <button
                           onClick={cancelEditMatch}
-                          className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm"
+                          className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-base"
                         >
                           Cancel
                         </button>

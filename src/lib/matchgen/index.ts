@@ -23,27 +23,32 @@ export function generateRounds(
   numCourts: number,
   format: "singles" | "doubles",
   pairingMode: PairingMode,
-  completedMatches?: CompletedMatch[]
+  completedMatches?: CompletedMatch[],
+  numRounds?: number
 ): MatchResult[][] {
+  const genBatch = (genFn: (p: PlayerInfo[], c: number) => MatchResult[][]) => {
+    const all = genFn(players, numCourts);
+    return numRounds ? all.slice(0, numRounds) : all;
+  };
+
   switch (pairingMode) {
     case "random":
       return format === "singles"
-        ? randomSingles(players, numCourts)
-        : randomDoubles(players, numCourts);
+        ? genBatch(randomSingles)
+        : genBatch(randomDoubles);
 
     case "skill_balanced":
       return format === "singles"
-        ? skillSingles(players, numCourts)
-        : skillDoubles(players, numCourts);
+        ? genBatch(skillSingles)
+        : genBatch(skillDoubles);
 
     case "mixed_gender":
-      // Mixed gender only makes sense for doubles; fall back to random for singles
-      if (format === "singles") return randomSingles(players, numCourts);
-      return mixedGenderDoubles(players, numCourts);
+      if (format === "singles") return genBatch(randomSingles);
+      return genBatch(mixedGenderDoubles);
 
     case "skill_mixed_gender":
-      if (format === "singles") return skillSingles(players, numCourts);
-      return skillMixedGenderDoubles(players, numCourts);
+      if (format === "singles") return genBatch(skillSingles);
+      return genBatch(skillMixedGenderDoubles);
 
     case "king_of_court": {
       const round = kingOfCourtRound(players, numCourts, format, completedMatches || []);
@@ -57,7 +62,7 @@ export function generateRounds(
 
     default:
       return format === "singles"
-        ? randomSingles(players, numCourts)
-        : randomDoubles(players, numCourts);
+        ? genBatch(randomSingles)
+        : genBatch(randomDoubles);
   }
 }
