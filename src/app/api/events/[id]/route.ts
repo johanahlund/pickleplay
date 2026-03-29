@@ -36,9 +36,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, numCourts, date, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
+  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
 
-  const data: { name?: string; numCourts?: number; date?: Date; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string } = {};
+  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -60,6 +60,17 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid date" }, { status: 400 });
     }
     data.date = parsed;
+  }
+  if (endDate !== undefined) {
+    if (endDate === null) {
+      data.endDate = null;
+    } else {
+      const parsed = new Date(endDate);
+      if (isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: "Invalid end date" }, { status: 400 });
+      }
+      data.endDate = parsed;
+    }
   }
   if (numSets !== undefined) {
     if (![1, 3].includes(numSets)) {

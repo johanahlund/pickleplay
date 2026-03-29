@@ -183,9 +183,12 @@ export default function PlayersPage() {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
 
-  const filteredPlayers = players.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [genderFilter, setGenderFilter] = useState<string | null>(null);
+
+  const filteredPlayers = players
+    .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((p) => !genderFilter || p.gender === genderFilter)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-4">
@@ -208,6 +211,23 @@ export default function PlayersPage() {
         placeholder="Search players..."
         className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
       />
+      <div className="flex gap-2">
+        {[
+          { value: null, label: "All" },
+          { value: "M", label: "♂ Male" },
+          { value: "F", label: "♀ Female" },
+        ].map((g) => (
+          <button
+            key={g.label}
+            onClick={() => setGenderFilter(g.value)}
+            className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+              genderFilter === g.value ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+            }`}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
 
       {showForm && isAdmin && (
         <form onSubmit={addPlayer} className="bg-card rounded-xl border border-border p-4 space-y-3">

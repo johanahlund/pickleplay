@@ -32,6 +32,7 @@ interface Event {
   id: string;
   name: string;
   date: string;
+  endDate: string | null;
   status: string;
   numCourts: number;
   format: string;
@@ -208,6 +209,7 @@ export default function EventDetailPage() {
   const [editCourts, setEditCourts] = useState(2);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -221,7 +223,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "players" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "details" | "players" | "rounds" | "manual">("overview");
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -380,12 +382,22 @@ export default function EventDetailPage() {
     setEditNumSets(event.numSets);
     setEditScoringType(event.scoringType);
     setEditPairingMode(event.pairingMode);
+    if (event.endDate) {
+      setEditEndTime(toTimeInput(event.endDate));
+    } else {
+      // Default: 2 hours after start
+      const end = new Date(event.date);
+      end.setHours(end.getHours() + 2);
+      setEditEndTime(toTimeInput(end.toISOString()));
+    }
     setEditingEvent(true);
   };
 
   const saveEditEvent = async () => {
     if (!editName.trim()) return;
     const eventDate = new Date(`${editDate}T${editTime}`);
+    const eventEndDate = new Date(`${editDate}T${editEndTime}`);
+    if (eventEndDate <= eventDate) eventEndDate.setDate(eventEndDate.getDate() + 1);
     await fetch(`/api/events/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -393,6 +405,7 @@ export default function EventDetailPage() {
         name: editName.trim(),
         numCourts: editCourts,
         date: eventDate.toISOString(),
+        endDate: eventEndDate.toISOString(),
         numSets: editNumSets,
         scoringType: editScoringType,
         pairingMode: editPairingMode,
@@ -451,15 +464,15 @@ export default function EventDetailPage() {
   };
 
   const toggleManualPlayer = (playerId: string, team: 1 | 2) => {
+    const maxPerTeam = event?.format === "singles" ? 1 : 2;
     if (team === 1) {
       setManualTeam1((prev) =>
-        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : prev.length >= maxPerTeam ? prev : [...prev, playerId]
       );
-      // Remove from other team
       setManualTeam2((prev) => prev.filter((id) => id !== playerId));
     } else {
       setManualTeam2((prev) =>
-        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
+        prev.includes(playerId) ? prev.filter((id) => id !== playerId) : prev.length >= maxPerTeam ? prev : [...prev, playerId]
       );
       setManualTeam1((prev) => prev.filter((id) => id !== playerId));
     }
@@ -507,17 +520,22 @@ export default function EventDetailPage() {
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
             <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" autoFocus />
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Date</label>
+            <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
           </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">Date</label>
-              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
+              <label className="block text-sm font-medium text-muted mb-1">From</label>
+              <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)}
                 className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">Time</label>
-              <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)}
+              <label className="block text-sm font-medium text-muted mb-1">To</label>
+              <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)}
                 className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
           </div>
@@ -570,27 +588,19 @@ export default function EventDetailPage() {
         </div>
       ) : (
         <div>
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">{event.name}</h2>
-              <p className="text-base text-muted">
-                {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
-                at {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}{" "}
-                &middot; {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
-              </p>
-              <p className="text-sm text-muted mt-0.5">
-                {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
-                {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
-                {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
-              </p>
-            </div>
-            {isAdmin && (
-              <button onClick={startEditEvent}
-                className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors">Edit</button>
-            )}
-          </div>
+          <h2 className="text-2xl font-bold">{event.name}</h2>
+          <p className="text-base text-muted">
+            {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
+            at {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}{" "}
+            &middot; {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
+          </p>
+          <p className="text-sm text-muted mt-0.5">
+            {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
+            {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
+            {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
+          </p>
           {hasMatches && isAdmin && (
-            <button onClick={resetEvent} disabled={resetting}
+            <button onClick={(e) => { e.stopPropagation(); resetEvent(); }} disabled={resetting}
               className="w-full mt-4 bg-red-50 text-danger border border-red-200 py-3 rounded-xl font-medium text-base active:bg-red-100 transition-colors disabled:opacity-50">
               {resetting ? "Resetting..." : "🗑️ Reset Event (Delete All Matches)"}
             </button>
@@ -839,6 +849,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {backButton}
+        {activeSection === "details" && renderDetails()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
@@ -849,10 +860,19 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-4">
       {/* 1. Event Details */}
-      <div className="bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors cursor-pointer"
-        onClick={() => !editingEvent && setActiveSection("overview")}>
-        {renderDetails()}
-      </div>
+      <button onClick={() => { startEditEvent(); setActiveSection("details"); }}
+        className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-xl font-bold text-foreground">{event.name}</span>
+            <p className="text-base text-muted mt-1">
+              {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
+              &middot; {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
+            </p>
+          </div>
+          <span className="text-2xl text-muted">›</span>
+        </div>
+      </button>
 
       {/* 2. Players */}
       <button onClick={() => setActiveSection("players")}

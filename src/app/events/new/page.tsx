@@ -34,6 +34,11 @@ export default function NewEventPage() {
   const [format, setFormat] = useState<"doubles" | "singles">("doubles");
   const [date, setDate] = useState(getDefaultDate);
   const [time, setTime] = useState(getDefaultTime);
+  const [endTime, setEndTime] = useState(() => {
+    const t = getDefaultTime();
+    const [h, m] = t.split(":").map(Number);
+    return `${String((h + 2) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  });
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [numSets, setNumSets] = useState(1);
@@ -73,6 +78,8 @@ export default function NewEventPage() {
     if (!name.trim() || selectedIds.size < minPlayers) return;
     setCreating(true);
     const eventDate = new Date(`${date}T${time}`);
+    const eventEndDate = new Date(`${date}T${endTime}`);
+    if (eventEndDate <= eventDate) eventEndDate.setDate(eventEndDate.getDate() + 1);
     const r = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,6 +89,7 @@ export default function NewEventPage() {
         numCourts,
         format,
         date: eventDate.toISOString(),
+        endDate: eventEndDate.toISOString(),
         numSets,
         scoringType,
         pairingMode,
@@ -115,28 +123,21 @@ export default function NewEventPage() {
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          </div>
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">
-                Date
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
+              <label className="block text-sm font-medium text-muted mb-1">From</label>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
             <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">
-                Time
-              </label>
-              <input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
+              <label className="block text-sm font-medium text-muted mb-1">To</label>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
           </div>
 
