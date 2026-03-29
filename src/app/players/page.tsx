@@ -36,6 +36,7 @@ export default function PlayersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [editGender, setEditGender] = useState<string | null>(null);
+  const [genderFilter, setGenderFilter] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === "admin";
 
@@ -182,8 +183,6 @@ export default function PlayersPage() {
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
-
-  const [genderFilter, setGenderFilter] = useState<string | null>(null);
 
   const filteredPlayers = players
     .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
