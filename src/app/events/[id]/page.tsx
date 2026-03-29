@@ -799,26 +799,19 @@ export default function EventDetailPage() {
           </button>
           {showAddMatch && event && (
             <div className="mt-2 bg-card rounded-xl border border-border p-4 space-y-3">
-              <div>
-                <label className="block text-base font-medium text-muted mb-1">Court</label>
-                <div className="flex gap-2">
-                  {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setManualCourt(n)}
-                      className={`flex-1 py-2 rounded-lg font-medium text-base transition-all ${
-                        manualCourt === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-semibold text-foreground">Court</span>
+                <button
+                  type="button"
+                  onClick={() => setManualCourt(manualCourt >= event.numCourts ? 1 : manualCourt + 1)}
+                  className="w-14 h-14 rounded-xl bg-primary text-white font-bold text-3xl flex items-center justify-center active:opacity-80"
+                >
+                  {manualCourt}
+                </button>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-muted mb-1">
+                  <label className="block text-lg font-semibold text-foreground mb-1">
                     Team 1 ({manualTeam1.length})
                   </label>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -842,7 +835,7 @@ export default function EventDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-muted mb-1">
+                  <label className="block text-lg font-semibold text-foreground mb-1">
                     Team 2 ({manualTeam2.length})
                   </label>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
