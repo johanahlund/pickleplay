@@ -118,11 +118,11 @@ export default function EventsPage() {
         <div className="flex flex-wrap gap-1.5">
           {[
             { value: "all", label: "All" },
-            { value: "past7", label: "Past 7d" },
+            { value: "past7", label: "P7" },
             { value: "today", label: "Today" },
             { value: "tomorrow", label: "Tomorrow" },
-            { value: "next7", label: "Next 7d" },
-            { value: "next30", label: "Next 30d" },
+            { value: "next7", label: "N7" },
+            { value: "next30", label: "N30" },
           ].map((f) => (
             <button
               key={f.value}
