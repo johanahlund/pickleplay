@@ -57,17 +57,22 @@ export default function EventsPage() {
     const eventDate = new Date(dateStr);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const DAY = 86400000;
+    if (filter === "past7") {
+      return eventDate >= new Date(today.getTime() - 7 * DAY) && eventDate < today;
+    }
     if (filter === "today") {
-      return eventDate >= today && eventDate < new Date(today.getTime() + 86400000);
+      return eventDate >= today && eventDate < new Date(today.getTime() + DAY);
     }
-    if (filter === "this_week") {
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay());
-      const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
-      return eventDate >= weekStart && eventDate < weekEnd;
+    if (filter === "tomorrow") {
+      const tmr = new Date(today.getTime() + DAY);
+      return eventDate >= tmr && eventDate < new Date(tmr.getTime() + DAY);
     }
-    if (filter === "this_month") {
-      return eventDate.getMonth() === now.getMonth() && eventDate.getFullYear() === now.getFullYear();
+    if (filter === "next7") {
+      return eventDate >= today && eventDate < new Date(today.getTime() + 7 * DAY);
+    }
+    if (filter === "next30") {
+      return eventDate >= today && eventDate < new Date(today.getTime() + 30 * DAY);
     }
     return true;
   };
@@ -100,12 +105,14 @@ export default function EventsPage() {
           placeholder="Search events..."
           className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
         />
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {[
             { value: "all", label: "All" },
+            { value: "past7", label: "Past 7d" },
             { value: "today", label: "Today" },
-            { value: "this_week", label: "This Week" },
-            { value: "this_month", label: "This Month" },
+            { value: "tomorrow", label: "Tomorrow" },
+            { value: "next7", label: "Next 7d" },
+            { value: "next30", label: "Next 30d" },
           ].map((f) => (
             <button
               key={f.value}
