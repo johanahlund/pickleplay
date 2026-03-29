@@ -7,6 +7,7 @@ interface Event {
   id: string;
   name: string;
   date: string;
+  endDate: string | null;
   status: string;
   numCourts: number;
   format: string;
@@ -16,6 +17,15 @@ interface Event {
   pairingMode: string;
   players: { player: { name: string; emoji: string } }[];
   _count: { matches: number };
+}
+
+function getTimeStatus(event: Event): "past" | "active" | "upcoming" {
+  const now = new Date();
+  const start = new Date(event.date);
+  const end = event.endDate ? new Date(event.endDate) : new Date(start.getTime() + 2 * 60 * 60 * 1000);
+  if (now > end) return "past";
+  if (now >= start && now <= end) return "active";
+  return "upcoming";
 }
 
 export default function EventsPage() {
@@ -143,12 +153,19 @@ export default function EventsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredEvents.map((event) => (
-            <div key={event.id} className="bg-card rounded-xl border border-border overflow-hidden">
+          {filteredEvents.map((event) => {
+            const timeStatus = getTimeStatus(event);
+            const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "upcoming" ? "border-l-blue-400" : "border-l-gray-300";
+            const cardOpacity = timeStatus === "past" ? "opacity-60" : "";
+            return (
+            <div key={event.id} className={`bg-card rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
               <Link href={`/events/${event.id}`} className="block p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-semibold text-lg">{event.name}</h3>
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      {event.name}
+                      {timeStatus === "active" && <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />}
+                    </h3>
                     <p className="text-sm text-muted mt-0.5">
                       {new Date(event.date).toLocaleDateString(undefined, {
                         weekday: "short",
@@ -207,7 +224,7 @@ export default function EventsPage() {
                 </button>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
     </div>
