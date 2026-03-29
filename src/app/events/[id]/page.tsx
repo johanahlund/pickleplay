@@ -10,6 +10,7 @@ interface Player {
   emoji: string;
   rating: number;
   role?: string;
+  gender?: string | null;
 }
 
 interface MatchPlayer {
@@ -214,6 +215,8 @@ export default function EventDetailPage() {
   const [playerSearch, setPlayerSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
   const [editNumSets, setEditNumSets] = useState(1);
   const [editScoringType, setEditScoringType] = useState("normal_11");
   const [editPairingMode, setEditPairingMode] = useState("random");
@@ -611,59 +614,98 @@ export default function EventDetailPage() {
   );
 
   // ── Section: Players ──
-  const renderPlayers = () => (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-foreground">
-          Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
-        </h3>
-        {isAdmin && (
-          <button onClick={() => { setShowAddPlayer(!showAddPlayer); if (!showAddPlayer) fetchAllPlayers(); }}
-            className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors">
-            {showAddPlayer ? "Done" : "+ Add"}
-          </button>
-        )}
-      </div>
-      {isAdmin && (
-        <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""}</p>
-      )}
-      {session?.user && !isAdmin && (
-        <div>
-          {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
-            <button onClick={unsignFromEvent} className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave Event</button>
-          ) : (
-            <button onClick={signupForEvent} className="text-sm bg-primary text-white px-4 py-1.5 rounded-lg font-medium">Join Event</button>
-          )}
-        </div>
-      )}
-      {event.players.length > 6 && (
-        <input type="text" value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)}
-          placeholder="Search players..."
+  const renderAddPlayers = () => {
+    const available = allPlayers
+      .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
+      .filter((p) => p.name.toLowerCase().includes(addPlayerSearch.toLowerCase()))
+      .filter((p) => !addPlayerGender || p.gender === addPlayerGender)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    return (
+      <div className="space-y-3">
+        <button onClick={() => { setShowAddPlayer(false); setAddPlayerSearch(""); setAddPlayerGender(null); }}
+          className="flex items-center gap-1 text-lg text-primary font-semibold active:opacity-70">
+          ← Players
+        </button>
+        <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
+        <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
+          placeholder="Search by name..."
           className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base" />
-      )}
-      <div className="space-y-0">
-        {[...event.players]
-          .sort((a, b) => a.player.name.localeCompare(b.player.name))
-          .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
-          .map((ep) => (
-          <SwipeablePlayerRow key={ep.player.id} ep={ep} isAdmin={isAdmin} hasMatches={hasMatches}
-            onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
-        ))}
-      </div>
-      {showAddPlayer && isAdmin && (
-        <div className="pt-3 border-t border-border space-y-1 max-h-48 overflow-y-auto">
-          {allPlayers.filter((p) => !event.players.some((ep) => ep.player.id === p.id)).map((p) => (
+        <div className="flex gap-2">
+          {[
+            { value: null, label: "All" },
+            { value: "M", label: "♂ Male" },
+            { value: "F", label: "♀ Female" },
+          ].map((g) => (
+            <button key={g.label} onClick={() => setAddPlayerGender(g.value)}
+              className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+                addPlayerGender === g.value ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>{g.label}</button>
+          ))}
+        </div>
+        <div className="space-y-1">
+          {available.map((p) => (
             <button key={p.id} onClick={() => addPlayerToEvent(p.id)}
-              className="w-full text-left text-base py-2 px-3 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-              <span className="text-xl">{p.emoji}</span>
-              <span className="font-medium">{p.name}</span>
+              className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
+              <span className="text-2xl">{p.emoji}</span>
+              <span className="text-lg font-medium">{p.name}</span>
+              {p.gender && <span className={`text-sm ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{p.gender === "M" ? "♂" : "♀"}</span>}
               <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
             </button>
           ))}
+          {available.length === 0 && (
+            <p className="text-center py-6 text-muted text-base">No players to add</p>
+          )}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
+
+  const renderPlayers = () => {
+    if (showAddPlayer && isAdmin) return renderAddPlayers();
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-foreground">
+            Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
+          </h3>
+          {isAdmin && (
+            <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
+              className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors">
+              + Add
+            </button>
+          )}
+        </div>
+        {isAdmin && (
+          <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""}</p>
+        )}
+        {session?.user && !isAdmin && (
+          <div>
+            {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
+              <button onClick={unsignFromEvent} className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave Event</button>
+            ) : (
+              <button onClick={signupForEvent} className="text-sm bg-primary text-white px-4 py-1.5 rounded-lg font-medium">Join Event</button>
+            )}
+          </div>
+        )}
+        {event.players.length > 6 && (
+          <input type="text" value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)}
+            placeholder="Search players..."
+            className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base" />
+        )}
+        <div className="space-y-0">
+          {[...event.players]
+            .sort((a, b) => a.player.name.localeCompare(b.player.name))
+            .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+            .map((ep) => (
+            <SwipeablePlayerRow key={ep.player.id} ep={ep} isAdmin={isAdmin} hasMatches={hasMatches}
+              onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   // ── Section: Rounds ──
   const renderRounds = () => (
