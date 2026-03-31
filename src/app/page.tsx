@@ -56,6 +56,20 @@ export default function Home() {
         >
           View Rankings
         </Link>
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/register`;
+            if (navigator.share) {
+              navigator.share({ title: "Join PickleJ!", text: "Sign up and play pickleball with us!", url });
+            } else {
+              navigator.clipboard.writeText(url);
+              alert("Invite link copied to clipboard!");
+            }
+          }}
+          className="block w-full bg-card text-foreground text-center py-3 rounded-xl font-semibold border border-border active:bg-gray-50 transition-colors"
+        >
+          Invite Friends
+        </button>
       </div>
     </div>
   );
