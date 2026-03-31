@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { generateRounds, PlayerInfo, CompletedMatch } from "@/lib/matchgen";
 
@@ -7,6 +8,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  try {
+    await requireEventManager(id);
+  } catch {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({}));
   const numRounds = Math.max(1, Math.min(20, parseInt(body.numRounds) || 1));
 

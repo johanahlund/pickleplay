@@ -1,18 +1,17 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAdmin();
-  } catch {
-    return NextResponse.json({ error: "Admin required" }, { status: 403 });
-  }
-
   const { id } = await params;
+  try {
+    await requireEventManager(id);
+  } catch {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
 
   const event = await prisma.event.findUnique({
     where: { id },

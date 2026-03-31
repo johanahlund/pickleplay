@@ -29,8 +29,10 @@ model Player {
   gender       String?  // "M" | "F"
   photoUrl     String?
 
-  eventPlayers EventPlayer[]
-  matchPlayers MatchPlayer[]
+  eventPlayers  EventPlayer[]
+  matchPlayers  MatchPlayer[]
+  createdEvents Event[]       @relation("createdEvents")
+  eventHelpers  EventHelper[]
 }
 
 model Event {
@@ -45,10 +47,16 @@ model Event {
   scoringType  String   @default("normal_11") // normal_11, normal_15, rally_21, timed
   timedMinutes Int?     // only when scoringType = "timed"
   pairingMode  String   @default("random") // random, skill_balanced, mixed_gender, skill_mixed_gender, king_of_court, swiss
+  openSignup   Boolean  @default(true)  // true = anyone can join, false = only manager can add players
+  visibility   String   @default("visible") // "visible" | "hidden" (hidden only shown to owner/helpers/players)
   createdAt    DateTime @default(now())
+
+  createdById  String?
+  createdBy    Player?  @relation("createdEvents", fields: [createdById], references: [id])
 
   players EventPlayer[]
   matches Match[]
+  helpers EventHelper[]
 }
 
 model EventPlayer {
@@ -56,6 +64,17 @@ model EventPlayer {
   eventId   String
   playerId  String
   checkedIn Boolean @default(true)
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerId])
+}
+
+model EventHelper {
+  id       String @id @default(cuid())
+  eventId  String
+  playerId String
 
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)

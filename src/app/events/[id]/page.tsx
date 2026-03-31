@@ -29,6 +29,11 @@ interface Match {
   players: MatchPlayer[];
 }
 
+interface EventHelper {
+  playerId: string;
+  player: Player;
+}
+
 interface Event {
   id: string;
   name: string;
@@ -40,8 +45,12 @@ interface Event {
   numSets: number;
   scoringType: string;
   pairingMode: string;
+  openSignup: boolean;
+  visibility: string;
+  createdById: string | null;
   players: { player: Player; checkedIn: boolean }[];
   matches: Match[];
+  helpers: EventHelper[];
 }
 
 function toDateInput(iso: string) {
@@ -92,13 +101,13 @@ function speakRound(matches: Match[], event: Event) {
 
 function SwipeablePlayerRow({
   ep,
-  isAdmin,
+  canManage,
   hasMatches,
   onPause,
   onRemove,
 }: {
   ep: { player: Player; checkedIn: boolean };
-  isAdmin: boolean;
+  canManage: boolean;
   hasMatches: boolean;
   onPause: () => void;
   onRemove: () => void;
@@ -117,7 +126,7 @@ function SwipeablePlayerRow({
   }, [ep.checkedIn]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swipeOffset.current = 0;
@@ -133,7 +142,7 @@ function SwipeablePlayerRow({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
     // If scrolling vertically, cancel gestures
@@ -156,7 +165,7 @@ function SwipeablePlayerRow({
   const handleTouchEnd = () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     if (isLongPress.current) return;
-    if (swipeOffset.current < -80 && !hasMatches && isAdmin) {
+    if (swipeOffset.current < -80 && !hasMatches && canManage) {
       if (confirm(`Remove ${ep.player.name} from this event?`)) {
         onRemove();
       }
@@ -200,6 +209,7 @@ export default function EventDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
+  const userId = (session?.user as { id?: string } | undefined)?.id;
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
@@ -221,12 +231,19 @@ export default function EventDetailPage() {
   const [editScoringType, setEditScoringType] = useState("normal_11");
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [resetting, setResetting] = useState(false);
+  const [editOpenSignup, setEditOpenSignup] = useState(true);
+  const [editVisibility, setEditVisibility] = useState("visible");
   const [showAddMatch, setShowAddMatch] = useState(false);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "details" | "players" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "rounds" | "manual">("overview");
+  const [adminSearch, setAdminSearch] = useState("");
+
+  const isOwner = !!(event && userId && event.createdById === userId);
+  const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId));
+  const canManage = isAdmin || isOwner || isHelper;
 
   const fetchEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -385,6 +402,8 @@ export default function EventDetailPage() {
     setEditNumSets(event.numSets);
     setEditScoringType(event.scoringType);
     setEditPairingMode(event.pairingMode);
+    setEditOpenSignup(event.openSignup);
+    setEditVisibility(event.visibility);
     if (event.endDate) {
       setEditEndTime(toTimeInput(event.endDate));
     } else {
@@ -412,6 +431,8 @@ export default function EventDetailPage() {
         numSets: editNumSets,
         scoringType: editScoringType,
         pairingMode: editPairingMode,
+        openSignup: editOpenSignup,
+        visibility: editVisibility,
       }),
     });
     setEditingEvent(false);
@@ -446,6 +467,24 @@ export default function EventDetailPage() {
     await fetch(`/api/events/${id}/reset`, { method: "POST" });
     await fetchEvent();
     setResetting(false);
+  };
+
+  const addHelper = async (playerId: string) => {
+    await fetch(`/api/events/${id}/helpers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    await fetchEvent();
+  };
+
+  const removeHelper = async (playerId: string) => {
+    await fetch(`/api/events/${id}/helpers`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    await fetchEvent();
   };
 
   const addManualMatch = async () => {
@@ -584,6 +623,31 @@ export default function EventDetailPage() {
               ))}
             </div>
           </div>
+          {canManage && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Signup</label>
+                <div className="flex gap-2">
+                  {[{ value: true, label: "Open (anyone can join)" }, { value: false, label: "Closed (invite only)" }].map((o) => (
+                    <button key={String(o.value)} type="button" onClick={() => setEditOpenSignup(o.value)}
+                      className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editOpenSignup === o.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
+              {!editOpenSignup && (
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">Visibility</label>
+                  <div className="flex gap-2">
+                    {[{ value: "visible", label: "Visible to all" }, { value: "hidden", label: "Hidden" }].map((v) => (
+                      <button key={v.value} type="button" onClick={() => setEditVisibility(v.value)}
+                        className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editVisibility === v.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{v.label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted mt-1">Hidden events are only visible to the organizer, helpers, and added players</p>
+                </div>
+              )}
+            </>
+          )}
           <div className="flex gap-2">
             <button onClick={saveEditEvent} className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-sm">Save</button>
             <button onClick={() => setEditingEvent(false)} className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm">Cancel</button>
@@ -602,7 +666,23 @@ export default function EventDetailPage() {
             {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
             {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
           </p>
-          {hasMatches && isAdmin && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${event.openSignup ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+              {event.openSignup ? "Open" : "Closed"}
+            </span>
+            {!event.openSignup && event.visibility === "hidden" && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-200 text-gray-600">Hidden</span>
+            )}
+            {(isOwner || isAdmin) && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
+                {isOwner ? "You are the owner" : "Admin"}
+              </span>
+            )}
+            {isHelper && !isOwner && !isAdmin && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Helper</span>
+            )}
+          </div>
+          {hasMatches && canManage && (
             <button onClick={(e) => { e.stopPropagation(); resetEvent(); }} disabled={resetting}
               className="w-full mt-4 bg-red-50 text-danger border border-red-200 py-3 rounded-xl font-medium text-base active:bg-red-100 transition-colors disabled:opacity-50">
               {resetting ? "Resetting..." : "🗑️ Reset Event (Delete All Matches)"}
@@ -612,6 +692,86 @@ export default function EventDetailPage() {
       )}
     </>
   );
+
+  // ── Section: Administrators ──
+  const renderAdmins = () => {
+    const availablePlayers = allPlayers
+      .filter((p) => p.id !== event.createdById && !event.helpers.some((h) => h.playerId === p.id))
+      .filter((p) => p.name.toLowerCase().includes(adminSearch.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const owner = event.createdById
+      ? event.players.find((ep) => ep.player.id === event.createdById)?.player
+        ?? allPlayers.find((p) => p.id === event.createdById)
+      : null;
+
+    return (
+      <div className="space-y-3">
+        {/* Owner */}
+        {owner && (
+          <div>
+            <h4 className="text-sm font-medium text-muted mb-1">Owner</h4>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-purple-50">
+              <span className="text-2xl">{owner.emoji}</span>
+              <span className="text-lg font-medium">{owner.name}</span>
+              <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Owner</span>
+            </div>
+          </div>
+        )}
+
+        {/* Current helpers */}
+        <div>
+          <h4 className="text-sm font-medium text-muted mb-1">Helpers ({event.helpers.length})</h4>
+          {event.helpers.length > 0 ? (
+            <div className="space-y-1">
+              {event.helpers.map((h) => (
+                <div key={h.playerId} className="flex items-center gap-2 rounded-lg px-3 py-2">
+                  <span className="text-2xl">{h.player.emoji}</span>
+                  <span className="text-lg font-medium flex-1">{h.player.name}</span>
+                  {(isOwner || isAdmin) && (
+                    <button onClick={() => removeHelper(h.playerId)}
+                      className="text-sm text-danger px-3 py-1.5 rounded-lg hover:bg-red-50 font-medium">Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted py-2">No helpers added yet</p>
+          )}
+        </div>
+
+        {/* Add helper — owner/admin only */}
+        {(isOwner || isAdmin) && (
+          <div>
+            <h4 className="text-sm font-medium text-muted mb-1">Add Helper</h4>
+            {allPlayers.length === 0 ? (
+              <p className="text-sm text-muted py-2">Loading players...</p>
+            ) : (
+              <>
+                {availablePlayers.length > 6 && (
+                  <input type="text" value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)}
+                    placeholder="Search by name..."
+                    className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-2" />
+                )}
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {availablePlayers.map((p) => (
+                    <button key={p.id} onClick={() => addHelper(p.id)}
+                      className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
+                      <span className="text-2xl">{p.emoji}</span>
+                      <span className="text-lg font-medium">{p.name}</span>
+                    </button>
+                  ))}
+                  {availablePlayers.length === 0 && (
+                    <p className="text-center py-4 text-muted text-sm">No players available to add</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ── Section: Players ──
   const renderAddPlayers = () => {
@@ -662,7 +822,7 @@ export default function EventDetailPage() {
   };
 
   const renderPlayers = () => {
-    if (showAddPlayer && isAdmin) return renderAddPlayers();
+    if (showAddPlayer && canManage) return renderAddPlayers();
 
     return (
       <div className="space-y-3">
@@ -670,17 +830,17 @@ export default function EventDetailPage() {
           <h3 className="text-xl font-bold text-foreground">
             Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
           </h3>
-          {isAdmin && (
+          {canManage && (
             <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
               className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors">
               + Add
             </button>
           )}
         </div>
-        {isAdmin && (
+        {canManage && (
           <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""}</p>
         )}
-        {session?.user && !isAdmin && (
+        {session?.user && !canManage && event.openSignup && (
           <div>
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
               <button onClick={unsignFromEvent} className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave Event</button>
@@ -699,7 +859,7 @@ export default function EventDetailPage() {
             .sort((a, b) => a.player.name.localeCompare(b.player.name))
             .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
             .map((ep) => (
-            <SwipeablePlayerRow key={ep.player.id} ep={ep} isAdmin={isAdmin} hasMatches={hasMatches}
+            <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
               onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
           ))}
         </div>
@@ -711,7 +871,7 @@ export default function EventDetailPage() {
   const renderRounds = () => (
     <div className="space-y-4">
       {/* Generate / Regenerate */}
-      {((!hasMatches && isAdmin && event.pairingMode !== "manual") || (allCompleted && isAdmin && event.pairingMode !== "manual")) && (
+      {((!hasMatches && canManage && event.pairingMode !== "manual") || (allCompleted && canManage && event.pairingMode !== "manual")) && (
         <div className="space-y-3">
           {!isIncremental && (
             <div className="flex items-center gap-3">
@@ -749,7 +909,7 @@ export default function EventDetailPage() {
             const team1Won = team1Score !== null && team2Score !== null && team1Score > team2Score;
             const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
             const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
-            const canScore = isAdmin || isMatchPlayer;
+            const canScore = canManage || isMatchPlayer;
             const showInputs = canScore && (!isCompleted || isEditing);
 
             return (
@@ -764,12 +924,12 @@ export default function EventDetailPage() {
                     <button onClick={() => speakMatch(match, event)}
                       className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
                     {isCompleted && !isEditing && <span className="text-sm text-green-600 font-medium">✓ Final</span>}
-                    {isCompleted && isAdmin && !isEditing && (
+                    {isCompleted && canManage && !isEditing && (
                       <button onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
                         className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
                     )}
                     {isEditing && <span className="text-sm text-amber-600 font-medium">Editing...</span>}
-                    {isAdmin && (
+                    {canManage && (
                       <button onClick={() => deleteMatch(match.id)}
                         className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors" title="Delete match">🗑️</button>
                     )}
@@ -892,6 +1052,7 @@ export default function EventDetailPage() {
       <div className="space-y-2">
         {backButton}
         {activeSection === "details" && renderDetails()}
+        {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
@@ -916,7 +1077,28 @@ export default function EventDetailPage() {
         </div>
       </button>
 
-      {/* 2. Players */}
+      {/* 2. Administrators */}
+      {canManage && (
+        <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }}
+          className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-xl font-bold text-foreground">
+                Administrators
+              </span>
+              <p className="text-sm text-muted mt-0.5">
+                {1 + event.helpers.length} {1 + event.helpers.length === 1 ? "person" : "people"}
+                {event.helpers.length > 0 && (
+                  <span> &middot; {event.helpers.map((h) => h.player.name).join(", ")}</span>
+                )}
+              </p>
+            </div>
+            <span className="text-2xl text-muted">›</span>
+          </div>
+        </button>
+      )}
+
+      {/* 3. Players */}
       <button onClick={() => setActiveSection("players")}
         className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
         <div className="flex items-center justify-between">
@@ -939,7 +1121,7 @@ export default function EventDetailPage() {
       </button>
 
       {/* 4. Add Match Manually */}
-      {isAdmin && (
+      {canManage && (
         <button onClick={() => setActiveSection("manual")}
           className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
           <div className="flex items-center justify-between">

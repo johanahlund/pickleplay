@@ -22,6 +22,11 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
+  // Check if event allows open signup
+  if (!event.openSignup) {
+    return NextResponse.json({ error: "This event is closed — only the organizer can add players" }, { status: 403 });
+  }
+
   // Check not already signed up
   const existing = await prisma.eventPlayer.findUnique({
     where: { eventId_playerId: { eventId: id, playerId: user.id } },

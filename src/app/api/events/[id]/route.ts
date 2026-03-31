@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireEventOwner, requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -14,6 +15,7 @@ export async function GET(
         include: { players: { include: { player: true } } },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
+      helpers: { include: { player: true } },
     },
   });
   if (!event) {
@@ -27,6 +29,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  try {
+    await requireEventOwner(id);
+  } catch {
+    return NextResponse.json({ error: "Only the event owner or admin can delete" }, { status: 403 });
+  }
   await prisma.event.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
@@ -36,9 +43,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
 
-  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string } = {};
+  try {
+    await requireEventManager(id);
+  } catch {
+    return NextResponse.json({ error: "Not authorized to edit this event" }, { status: 403 });
+  }
+
+  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, openSignup, visibility } = await req.json();
+
+  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; openSignup?: boolean; visibility?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -94,6 +108,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid pairing mode" }, { status: 400 });
     }
     data.pairingMode = pairingMode;
+  }
+  if (openSignup !== undefined) {
+    data.openSignup = !!openSignup;
+  }
+  if (visibility !== undefined) {
+    if (!["visible", "hidden"].includes(visibility)) {
+      return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+    }
+    data.visibility = visibility;
   }
 
   if (Object.keys(data).length === 0) {

@@ -79,3 +79,36 @@ export async function requireAdmin() {
   }
   return user;
 }
+
+/** Check if the current user can manage the given event (admin, owner, or helper) */
+export async function requireEventManager(eventId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { createdById: true },
+  });
+  if (event?.createdById === user.id) return user;
+
+  const helper = await prisma.eventHelper.findUnique({
+    where: { eventId_playerId: { eventId, playerId: user.id } },
+  });
+  if (helper) return user;
+
+  throw new Error("Forbidden");
+}
+
+/** Check if the current user is the event owner (not just a helper) */
+export async function requireEventOwner(eventId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { createdById: true },
+  });
+  if (event?.createdById === user.id) return user;
+
+  throw new Error("Forbidden");
+}

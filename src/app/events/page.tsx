@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 
 interface Event {
   id: string;
@@ -15,7 +16,11 @@ interface Event {
   scoringType: string;
   timedMinutes: number | null;
   pairingMode: string;
-  players: { player: { name: string; emoji: string } }[];
+  openSignup: boolean;
+  visibility: string;
+  createdById: string | null;
+  players: { player: { name: string; emoji: string }; playerId: string }[];
+  helpers: { playerId: string }[];
   _count: { matches: number };
 }
 
@@ -29,6 +34,9 @@ function getTimeStatus(event: Event): "past" | "active" | "upcoming" {
 }
 
 export default function EventsPage() {
+  const { data: session } = useSession();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -215,14 +223,16 @@ export default function EventsPage() {
                   </span>
                 </div>
               </Link>
-              <div className="border-t border-border px-4 py-2 flex justify-end">
-                <button
-                  onClick={() => deleteEvent(event.id)}
-                  className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50"
-                >
-                  Delete
-                </button>
-              </div>
+              {(isAdmin || event.createdById === userId) && (
+                <div className="border-t border-border px-4 py-2 flex justify-end">
+                  <button
+                    onClick={() => deleteEvent(event.id)}
+                    className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
           );})}
         </div>

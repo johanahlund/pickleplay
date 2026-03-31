@@ -1,19 +1,18 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// Admin adds a player to the event
+// Event manager adds a player to the event
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAdmin();
-  } catch {
-    return NextResponse.json({ error: "Admin required" }, { status: 403 });
-  }
-
   const { id } = await params;
+  try {
+    await requireEventManager(id);
+  } catch {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
   const { playerId } = await req.json();
 
   if (!playerId) {
