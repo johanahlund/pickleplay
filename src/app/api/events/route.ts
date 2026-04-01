@@ -11,6 +11,7 @@ export async function GET() {
     include: {
       players: { include: { player: true } },
       helpers: { include: { player: true } },
+      club: { select: { id: true, name: true, emoji: true } },
       _count: { select: { matches: true } },
     },
   });
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, numCourts, format, playerIds, date, endDate, numSets, scoringType, timedMinutes, pairingMode } = await req.json();
+  const { name, numCourts, format, playerIds, date, endDate, numSets, scoringType, timedMinutes, pairingMode, clubId } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
       numCourts: numCourts || 2,
       format: format || "doubles",
       createdById: user.id,
+      ...(clubId ? { clubId } : {}),
       ...(date ? { date: new Date(date) } : {}),
       ...(endDate ? { endDate: new Date(endDate) } : {}),
       ...(numSets ? { numSets } : {}),

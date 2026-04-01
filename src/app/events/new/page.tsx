@@ -61,14 +61,20 @@ export default function NewEventPage() {
   const [playerSearch, setPlayerSearch] = useState("");
   const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
   const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [showClubPlayers, setShowClubPlayers] = useState(false);
   const [returnToReview, setReturnToReview] = useState(false);
+  const [clubs, setClubs] = useState<{ id: string; name: string; emoji: string; memberIds: string[] }[]>([]);
+  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
+  // Same for helper tier
+  const [showClubHelpers, setShowClubHelpers] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/players").then((r) => r.ok ? r.json() : []),
       fetch("/api/events").then((r) => r.ok ? r.json() : []),
       fetch("/api/whatsapp-groups").then((r) => r.ok ? r.json() : []),
-    ]).then(([playersData, eventsData, waGroupsData]) => {
+      fetch("/api/clubs").then((r) => r.ok ? r.json() : []),
+    ]).then(([playersData, eventsData, waGroupsData, clubsData]) => {
       if (Array.isArray(playersData)) setPlayers(playersData);
       if (userId && Array.isArray(eventsData)) {
         const myEvents = eventsData
@@ -83,6 +89,26 @@ export default function NewEventPage() {
         setRecentPlayerIds(ids);
       }
       if (Array.isArray(waGroupsData)) setAllWaGroups(waGroupsData);
+      if (Array.isArray(clubsData)) {
+        // Fetch member IDs for each club
+        const clubList = clubsData.map((c: { id: string; name: string; emoji: string }) => ({
+          id: c.id, name: c.name, emoji: c.emoji, memberIds: [] as string[],
+        }));
+        setClubs(clubList);
+        // Auto-select first club if only one
+        if (clubList.length === 1) setSelectedClubId(clubList[0].id);
+        // Fetch members for each club
+        Promise.all(
+          clubList.map((c: { id: string }) =>
+            fetch(`/api/clubs/${c.id}`).then((r) => r.ok ? r.json() : null)
+          )
+        ).then((details) => {
+          setClubs(clubList.map((c: { id: string; name: string; emoji: string }, i: number) => ({
+            ...c,
+            memberIds: details[i]?.members?.map((m: { playerId: string }) => m.playerId) || [],
+          })));
+        });
+      }
       setLoading(false);
     }).catch(() => {
       setLoading(false);
@@ -126,12 +152,39 @@ export default function NewEventPage() {
     });
   };
 
+  const selectedClub = clubs.find((c) => c.id === selectedClubId);
+  const clubMemberIds = selectedClub?.memberIds || [];
+
   const getFilteredPlayers = () => {
     return players
       .filter((p) => {
-        if (!showAllPlayers && recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
+        // Tier: recent → club → all
+        if (!showAllPlayers && !showClubPlayers) {
+          // Show recent only (if we have recent data)
+          if (recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
+        } else if (showClubPlayers && !showAllPlayers) {
+          // Show club members
+          if (clubMemberIds.length > 0 && !clubMemberIds.includes(p.id)) return false;
+        }
+        // showAllPlayers = no pool filter
         if (playerSearch && !p.name.toLowerCase().includes(playerSearch.toLowerCase())) return false;
         if (playerGenderFilter && p.gender !== playerGenderFilter) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const getFilteredHelperCandidates = () => {
+    return players
+      .filter((p) => p.id !== userId)
+      .filter((p) => {
+        if (!showAllHelpers && !showClubHelpers) {
+          if (recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
+        } else if (showClubHelpers && !showAllHelpers) {
+          if (clubMemberIds.length > 0 && !clubMemberIds.includes(p.id)) return false;
+        }
+        if (helperSearch && !p.name.toLowerCase().includes(helperSearch.toLowerCase())) return false;
+        if (helperGenderFilter && p.gender !== helperGenderFilter) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -163,6 +216,7 @@ export default function NewEventPage() {
       body: JSON.stringify({
         name: name.trim(),
         playerIds: Array.from(selectedIds),
+        ...(selectedClubId ? { clubId: selectedClubId } : {}),
         numCourts,
         format,
         date: eventDate.toISOString(),
@@ -317,6 +371,38 @@ export default function NewEventPage() {
               />
             </div>
 
+            {clubs.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Club</label>
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClubId(null)}
+                    className={`w-full text-left p-2.5 rounded-lg transition-all text-sm ${
+                      !selectedClubId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
+                    }`}
+                  >
+                    No club
+                  </button>
+                  {clubs.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedClubId(c.id)}
+                      className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-all text-sm ${
+                        selectedClubId === c.id
+                          ? "bg-primary/10 border border-primary/30"
+                          : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      <span className="text-xl">{c.emoji}</span>
+                      <span className="font-medium">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-muted mb-1">WhatsApp Groups</label>
               {allWaGroups.length > 0 && (
@@ -422,15 +508,8 @@ export default function NewEventPage() {
 
         {/* Step 2: Helper */}
         {step === 2 && (() => {
-          const helperCandidates = players
-            .filter((p) => p.id !== userId)
-            .filter((p) => {
-              if (!showAllHelpers && recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
-              if (helperSearch && !p.name.toLowerCase().includes(helperSearch.toLowerCase())) return false;
-              if (helperGenderFilter && p.gender !== helperGenderFilter) return false;
-              return true;
-            })
-            .sort((a, b) => a.name.localeCompare(b.name));
+          const helperCandidates = getFilteredHelperCandidates();
+          const helperTier = showAllHelpers ? "all" : showClubHelpers ? "club" : "recent";
           return (
             <>
               {helperPlayer && (
@@ -472,10 +551,12 @@ export default function NewEventPage() {
                 ))}
               </div>
 
-              {/* Context label */}
-              {recentPlayerIds.size > 0 && !showAllHelpers && (
-                <p className="text-xs text-muted">Showing players from your last 2 events</p>
-              )}
+              {/* Tier label */}
+              <p className="text-xs text-muted">
+                {helperTier === "recent" ? "Showing players from your last 2 events" :
+                 helperTier === "club" ? `Showing ${selectedClub?.name || "club"} members` :
+                 "Showing all players"}
+              </p>
 
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {helperCandidates.length === 0 ? (
@@ -513,25 +594,36 @@ export default function NewEventPage() {
                 )}
               </div>
 
-              {/* Search All / Show Recent */}
-              {recentPlayerIds.size > 0 && !showAllHelpers && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllHelpers(true)}
-                  className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all mt-1"
-                >
-                  Search All Players
-                </button>
-              )}
-              {showAllHelpers && recentPlayerIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => { setShowAllHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
-                  className="w-full py-2.5 rounded-lg text-sm font-medium text-muted border border-border hover:bg-gray-50 transition-all mt-1"
-                >
-                  Show Recent Only
-                </button>
-              )}
+              {/* Tier navigation */}
+              <div className="flex gap-2 mt-1">
+                {helperTier !== "recent" && recentPlayerIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowAllHelpers(false); setShowClubHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
+                  >
+                    Recent
+                  </button>
+                )}
+                {helperTier !== "club" && selectedClubId && clubMemberIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowClubHelpers(true); setShowAllHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                  >
+                    Club Members
+                  </button>
+                )}
+                {helperTier !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowAllHelpers(true); setShowClubHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                  >
+                    All Players
+                  </button>
+                )}
+              </div>
 
               <p className="text-xs text-muted">Can manage this event alongside you</p>
             </>
@@ -705,9 +797,12 @@ export default function NewEventPage() {
               </div>
 
               {/* Context label */}
-              {recentPlayerIds.size > 0 && !showAllPlayers && (
-                <p className="text-xs text-muted">Showing players from your last 2 events</p>
-              )}
+              <p className="text-xs text-muted">
+                {showAllPlayers ? "Showing all players" :
+                 showClubPlayers ? `Showing ${selectedClub?.name || "club"} members` :
+                 recentPlayerIds.size > 0 ? "Showing players from your last 2 events" :
+                 "Showing all players"}
+              </p>
 
               {players.length === 0 ? (
                 <p className="text-sm text-muted py-4 text-center">
@@ -752,25 +847,41 @@ export default function NewEventPage() {
                 </div>
               )}
 
-              {/* Search All / Show Recent */}
-              {recentPlayerIds.size > 0 && !showAllPlayers && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllPlayers(true)}
-                  className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all mt-1"
-                >
-                  Search All Players
-                </button>
-              )}
-              {showAllPlayers && recentPlayerIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => { setShowAllPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
-                  className="w-full py-2.5 rounded-lg text-sm font-medium text-muted border border-border hover:bg-gray-50 transition-all mt-1"
-                >
-                  Show Recent Only
-                </button>
-              )}
+              {/* Tier navigation */}
+              {(() => {
+                const playerTier = showAllPlayers ? "all" : showClubPlayers ? "club" : "recent";
+                return (
+                  <div className="flex gap-2 mt-1">
+                    {playerTier !== "recent" && recentPlayerIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowAllPlayers(false); setShowClubPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
+                        className="flex-1 py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
+                      >
+                        Recent
+                      </button>
+                    )}
+                    {playerTier !== "club" && selectedClubId && clubMemberIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowClubPlayers(true); setShowAllPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
+                        className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                      >
+                        Club Members
+                      </button>
+                    )}
+                    {playerTier !== "all" && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowAllPlayers(true); setShowClubPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
+                        className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+                      >
+                        All Players
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </>
           );
         })()}
@@ -789,6 +900,12 @@ export default function NewEventPage() {
                 <span className="text-sm text-muted">Name</span>
                 <span className="text-sm font-medium">{name}</span>
               </button>
+              {selectedClub && (
+                <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+                  <span className="text-sm text-muted">Club</span>
+                  <span className="text-sm font-medium">{selectedClub.emoji} {selectedClub.name}</span>
+                </button>
+              )}
               <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Helper</span>
                 <span className="text-sm font-medium">{helperPlayer ? `${helperPlayer.emoji} ${helperPlayer.name}` : "None"}</span>

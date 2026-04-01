@@ -19,6 +19,8 @@ interface Event {
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
+  clubId: string | null;
+  club?: { id: string; name: string; emoji: string } | null;
   players: { player: { name: string; emoji: string }; playerId: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
@@ -173,6 +175,11 @@ export default function EventsPage() {
                     <h3 className="font-semibold text-lg flex items-center gap-2">
                       {event.name}
                       {timeStatus === "active" && <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />}
+                      {event.club && (
+                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
+                          {event.club.emoji} {event.club.name}
+                        </span>
+                      )}
                     </h3>
                     <p className="text-sm text-muted mt-0.5">
                       {new Date(event.date).toLocaleDateString(undefined, {

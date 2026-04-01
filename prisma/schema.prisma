@@ -34,6 +34,34 @@ model Player {
   matchPlayers  MatchPlayer[]
   createdEvents Event[]       @relation("createdEvents")
   eventHelpers  EventHelper[]
+  clubMembers   ClubMember[]
+  createdClubs  Club[]        @relation("createdClubs")
+}
+
+model Club {
+  id          String   @id @default(cuid())
+  name        String
+  emoji       String   @default("🏓")
+  createdAt   DateTime @default(now())
+
+  createdById String?
+  createdBy   Player?  @relation("createdClubs", fields: [createdById], references: [id])
+
+  members        ClubMember[]
+  events         Event[]
+  whatsappGroups WhatsAppGroup[]
+}
+
+model ClubMember {
+  id       String @id @default(cuid())
+  clubId   String
+  playerId String
+  role     String @default("member") // "owner" | "admin" | "member"
+
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, playerId])
 }
 
 model Event {
@@ -54,6 +82,9 @@ model Event {
 
   createdById  String?
   createdBy    Player?  @relation("createdEvents", fields: [createdById], references: [id])
+
+  clubId       String?
+  club         Club?    @relation(fields: [clubId], references: [id])
 
   players        EventPlayer[]
   matches        Match[]
@@ -114,6 +145,9 @@ model WhatsAppGroup {
   id        String   @id @default(cuid())
   name      String   // e.g. "Tuesday Crew", "Mixed Doubles"
   createdAt DateTime @default(now())
+
+  clubId    String?
+  club      Club?    @relation(fields: [clubId], references: [id])
 
   events EventWhatsAppGroup[]
 }
