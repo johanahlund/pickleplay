@@ -252,6 +252,10 @@ export default function EventDetailPage() {
   const [numRounds, setNumRounds] = useState(3);
   const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
+  const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
+  const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
 
   const isOwner = !!(event && userId && event.createdById === userId);
   const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId));
@@ -268,9 +272,56 @@ export default function EventDetailPage() {
     setLoading(false);
   }, [id, router]);
 
+  const fetchWaGroups = useCallback(async () => {
+    const [linked, all] = await Promise.all([
+      fetch(`/api/events/${id}/whatsapp-groups`).then((r) => r.json()),
+      fetch("/api/whatsapp-groups").then((r) => r.json()),
+    ]);
+    if (Array.isArray(linked)) setWaGroups(linked);
+    if (Array.isArray(all)) setAllWaGroups(all);
+  }, [id]);
+
   useEffect(() => {
     fetchEvent();
-  }, [fetchEvent]);
+    fetchWaGroups();
+  }, [fetchEvent, fetchWaGroups]);
+
+  const buildWhatsAppMessage = () => {
+    if (!event) return "";
+    const date = new Date(event.date).toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
+    const time = new Date(event.date).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const endTime = event.endDate
+      ? new Date(event.endDate).toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+    const playerList = event.players
+      .filter((ep) => ep.checkedIn)
+      .map((ep) => `${ep.player.emoji} ${ep.player.name}`)
+      .join("\n");
+    const checkedInCount = event.players.filter((ep) => ep.checkedIn).length;
+
+    return `🏓 *${event.name}*\n📅 ${date}\n⏰ ${time}${endTime ? ` – ${endTime}` : ""}\n🏟️ ${event.numCourts} court${event.numCourts > 1 ? "s" : ""} · ${event.format}\n\n👥 Players (${checkedInCount}):\n${playerList}`;
+  };
+
+  const sendToWhatsApp = (groupName: string) => {
+    const text = buildWhatsAppMessage();
+    const encoded = encodeURIComponent(text);
+    // Copy to clipboard as fallback
+    navigator.clipboard.writeText(text);
+    setCopiedGroupId(groupName);
+    setTimeout(() => setCopiedGroupId(null), 2000);
+    // Open WhatsApp with pre-filled text
+    window.open(`https://wa.me/?text=${encoded}`, "_blank");
+  };
 
   const generateMatches = async () => {
     setGenerating(true);
@@ -779,6 +830,113 @@ export default function EventDetailPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+        {/* WhatsApp Groups */}
+        <div>
+          <h4 className="text-sm font-medium text-muted mb-1">WhatsApp Groups ({waGroups.length})</h4>
+          {waGroups.length > 0 ? (
+            <div className="space-y-1">
+              {waGroups.map((g) => (
+                <div key={g.id} className="flex items-center gap-2 rounded-lg px-3 py-2">
+                  <span className="text-lg">💬</span>
+                  <span className="text-sm font-medium flex-1">{g.name}</span>
+                  <button
+                    onClick={() => sendToWhatsApp(g.id)}
+                    className="text-xs bg-green-500 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-600 transition-colors"
+                  >
+                    {copiedGroupId === g.id ? "Copied!" : "Send"}
+                  </button>
+                  {canManage && (
+                    <button
+                      onClick={async () => {
+                        await fetch(`/api/events/${id}/whatsapp-groups`, {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ whatsappGroupId: g.id }),
+                        });
+                        fetchWaGroups();
+                      }}
+                      className="text-xs text-danger px-2 py-1.5 rounded-lg hover:bg-red-50 font-medium"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted py-2">No groups linked</p>
+          )}
+        </div>
+
+        {/* Link / Create WhatsApp Group */}
+        {canManage && (
+          <div>
+            <h4 className="text-sm font-medium text-muted mb-1">Link Group</h4>
+            {(() => {
+              const unlinked = allWaGroups.filter(
+                (g) => !waGroups.some((wg) => wg.id === g.id)
+              );
+              return (
+                <div className="space-y-2">
+                  {unlinked.length > 0 && (
+                    <div className="space-y-1">
+                      {unlinked.map((g) => (
+                        <button
+                          key={g.id}
+                          onClick={async () => {
+                            await fetch(`/api/events/${id}/whatsapp-groups`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ whatsappGroupId: g.id }),
+                            });
+                            fetchWaGroups();
+                          }}
+                          className="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 text-sm transition-colors"
+                        >
+                          <span>💬</span>
+                          <span className="font-medium">{g.name}</span>
+                          <span className="ml-auto text-xs text-primary">+ Link</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="New group name..."
+                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!newGroupName.trim()) return;
+                        const r = await fetch("/api/whatsapp-groups", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: newGroupName.trim() }),
+                        });
+                        const group = await r.json();
+                        // Auto-link to this event
+                        await fetch(`/api/events/${id}/whatsapp-groups`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ whatsappGroupId: group.id }),
+                        });
+                        setNewGroupName("");
+                        fetchWaGroups();
+                      }}
+                      disabled={!newGroupName.trim()}
+                      className="bg-primary text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
