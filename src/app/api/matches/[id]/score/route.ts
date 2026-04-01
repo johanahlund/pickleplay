@@ -229,7 +229,7 @@ export async function PUT(
 
   return NextResponse.json({
     ok: true,
-    winnerTeam: newWinnerTeam,
+    winnerTeam: team1Score > team2Score ? 1 : 2,
     eloChange: newChange,
     edited: true,
   });
