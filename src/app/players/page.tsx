@@ -416,7 +416,7 @@ export default function PlayersPage() {
                             {p.gender === "M" ? "♂" : "♀"}
                           </span>
                         )}
-                        {p.phone && (
+                        {p.phone && (isAdmin || session?.user?.id === p.id) && (
                           <a
                             href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
                             target="_blank"
@@ -431,7 +431,7 @@ export default function PlayersPage() {
                       </div>
                       <div className="text-base text-muted">
                         {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
-                        {p.email && <span className="ml-1.5 text-xs">· {p.email}</span>}
+                        {p.email && (isAdmin || session?.user?.id === p.id) && <span className="ml-1.5 text-xs">· {p.email}</span>}
                       </div>
                     </div>
                   </div>

@@ -104,12 +104,14 @@ function SwipeablePlayerRow({
   ep,
   canManage,
   hasMatches,
+  showContact,
   onPause,
   onRemove,
 }: {
   ep: { player: Player; checkedIn: boolean };
   canManage: boolean;
   hasMatches: boolean;
+  showContact: boolean;
   onPause: () => void;
   onRemove: () => void;
 }) {
@@ -196,7 +198,7 @@ function SwipeablePlayerRow({
           Admin
         </span>
       )}
-      {ep.player.phone && (
+      {ep.player.phone && showContact && (
         <a
           href={`https://wa.me/${ep.player.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
           target="_blank"
@@ -1054,6 +1056,7 @@ export default function EventDetailPage() {
             .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
             .map((ep) => (
             <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
+              showContact={isAdmin || ep.player.id === userId}
               onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
           ))}
         </div>

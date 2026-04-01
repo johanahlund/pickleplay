@@ -188,7 +188,7 @@ export default function ClubDetailPage() {
             <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-lg">
               <span className="text-xl">{m.player.emoji}</span>
               <span className="font-medium flex-1">{m.player.name}</span>
-              {m.player.phone && (
+              {m.player.phone && (session?.user?.role === "admin" || m.playerId === userId) && (
                 <a
                   href={`https://wa.me/${m.player.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
                   target="_blank"
