@@ -50,9 +50,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized to edit this event" }, { status: 403 });
   }
 
-  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, openSignup, visibility } = await req.json();
+  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, ranked, openSignup, visibility } = await req.json();
 
-  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; openSignup?: boolean; visibility?: string } = {};
+  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; ranked?: boolean; openSignup?: boolean; visibility?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -108,6 +108,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid pairing mode" }, { status: 400 });
     }
     data.pairingMode = pairingMode;
+  }
+  if (ranked !== undefined) {
+    data.ranked = !!ranked;
   }
   if (openSignup !== undefined) {
     data.openSignup = !!openSignup;

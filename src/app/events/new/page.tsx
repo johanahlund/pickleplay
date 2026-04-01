@@ -49,6 +49,7 @@ export default function NewEventPage() {
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
+  const [ranked, setRanked] = useState(true);
   const [helperId, setHelperId] = useState<string | null>(null);
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
@@ -224,6 +225,7 @@ export default function NewEventPage() {
         numSets,
         scoringType,
         pairingMode,
+        ranked,
       }),
     });
     const event = await r.json();
@@ -720,6 +722,30 @@ export default function NewEventPage() {
                 ))}
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRanked(true)}
+                  className={`flex-1 py-3 rounded-lg font-medium transition-all text-sm ${
+                    ranked ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  Ranked
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRanked(false)}
+                  className={`flex-1 py-3 rounded-lg font-medium transition-all text-sm ${
+                    !ranked ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}
+                >
+                  Unranked
+                </button>
+              </div>
+              <p className="text-xs text-muted mt-1">Unranked matches won't affect player ratings</p>
+            </div>
           </>
         )}
 
@@ -941,6 +967,10 @@ export default function NewEventPage() {
               <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Scoring</span>
                 <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Rankings</span>
+                <span className="text-sm font-medium">{ranked ? "Ranked" : "Unranked"}</span>
               </button>
               <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Pairing</span>

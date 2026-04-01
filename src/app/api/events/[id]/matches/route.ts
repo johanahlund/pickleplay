@@ -39,6 +39,7 @@ export async function POST(
       courtNum: courtNum || 1,
       round,
       status: "pending",
+      ranked: event.ranked,
       players: {
         create: [
           ...team1PlayerIds.map((pid: string) => ({ playerId: pid, team: 1 })),

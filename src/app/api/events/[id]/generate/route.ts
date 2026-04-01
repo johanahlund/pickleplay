@@ -131,6 +131,7 @@ export async function POST(
           eventId: id,
           courtNum: match.court,
           round: isIncremental ? nextRound + roundIdx : roundIdx + 1,
+          ranked: event.ranked,
           players: {
             create: [
               ...match.team1.map((p) => ({

@@ -66,41 +66,44 @@ export async function POST(
     });
   }
 
-  // Calculate ELO changes
-  const team1AvgRating =
-    team1Players.reduce((s, mp) => s + mp.player.rating, 0) /
-    team1Players.length;
-  const team2AvgRating =
-    team2Players.reduce((s, mp) => s + mp.player.rating, 0) /
-    team2Players.length;
-
   const winnerTeam = team1Score > team2Score ? 1 : 2;
-  const winnerRating = winnerTeam === 1 ? team1AvgRating : team2AvgRating;
-  const loserRating = winnerTeam === 1 ? team2AvgRating : team1AvgRating;
-  const change = eloChange(winnerRating, loserRating);
+  let change = 0;
 
-  // Update player ratings and win/loss counts
-  const winners = winnerTeam === 1 ? team1Players : team2Players;
-  const losers = winnerTeam === 1 ? team2Players : team1Players;
+  // Only apply ELO if match is ranked
+  if (match.ranked) {
+    const team1AvgRating =
+      team1Players.reduce((s, mp) => s + mp.player.rating, 0) /
+      team1Players.length;
+    const team2AvgRating =
+      team2Players.reduce((s, mp) => s + mp.player.rating, 0) /
+      team2Players.length;
 
-  for (const mp of winners) {
-    await prisma.player.update({
-      where: { id: mp.playerId },
-      data: {
-        rating: { increment: change },
-        wins: { increment: 1 },
-      },
-    });
-  }
+    const winnerRating = winnerTeam === 1 ? team1AvgRating : team2AvgRating;
+    const loserRating = winnerTeam === 1 ? team2AvgRating : team1AvgRating;
+    change = eloChange(winnerRating, loserRating);
 
-  for (const mp of losers) {
-    await prisma.player.update({
-      where: { id: mp.playerId },
-      data: {
-        rating: { decrement: change },
-        losses: { increment: 1 },
-      },
-    });
+    const winners = winnerTeam === 1 ? team1Players : team2Players;
+    const losers = winnerTeam === 1 ? team2Players : team1Players;
+
+    for (const mp of winners) {
+      await prisma.player.update({
+        where: { id: mp.playerId },
+        data: {
+          rating: { increment: change },
+          wins: { increment: 1 },
+        },
+      });
+    }
+
+    for (const mp of losers) {
+      await prisma.player.update({
+        where: { id: mp.playerId },
+        data: {
+          rating: { decrement: change },
+          losses: { increment: 1 },
+        },
+      });
+    }
   }
 
   // Update match status and store eloChange for future edit reversal
@@ -113,6 +116,7 @@ export async function POST(
     ok: true,
     winnerTeam,
     eloChange: change,
+    ranked: match.ranked,
   });
 }
 
@@ -152,80 +156,71 @@ export async function PUT(
   const team1Players = match.players.filter((mp) => mp.team === 1);
   const team2Players = match.players.filter((mp) => mp.team === 2);
 
-  // --- REVERSE OLD ELO ---
-  const oldTeam1Score = team1Players[0]?.score ?? 0;
-  const oldTeam2Score = team2Players[0]?.score ?? 0;
-  const oldWinnerTeam = oldTeam1Score > oldTeam2Score ? 1 : 2;
-  const oldWinners = oldWinnerTeam === 1 ? team1Players : team2Players;
-  const oldLosers = oldWinnerTeam === 1 ? team2Players : team1Players;
   const oldChange = match.eloChange;
+  let newChange = 0;
 
-  // Only reverse if we have a stored eloChange (post-migration matches)
-  if (oldChange > 0) {
-    for (const mp of oldWinners) {
+  // Only handle ELO if match is ranked
+  if (match.ranked) {
+    // --- REVERSE OLD ELO ---
+    const oldTeam1Score = team1Players[0]?.score ?? 0;
+    const oldTeam2Score = team2Players[0]?.score ?? 0;
+    const oldWinnerTeam = oldTeam1Score > oldTeam2Score ? 1 : 2;
+    const oldWinners = oldWinnerTeam === 1 ? team1Players : team2Players;
+    const oldLosers = oldWinnerTeam === 1 ? team2Players : team1Players;
+
+    if (oldChange > 0) {
+      for (const mp of oldWinners) {
+        await prisma.player.update({
+          where: { id: mp.playerId },
+          data: { rating: { decrement: oldChange }, wins: { decrement: 1 } },
+        });
+      }
+      for (const mp of oldLosers) {
+        await prisma.player.update({
+          where: { id: mp.playerId },
+          data: { rating: { increment: oldChange }, losses: { decrement: 1 } },
+        });
+      }
+    }
+
+    // --- APPLY NEW ELO ---
+    const freshMatch = await prisma.match.findUnique({
+      where: { id },
+      include: { players: { include: { player: true } } },
+    });
+    const freshT1 = freshMatch!.players.filter((mp) => mp.team === 1);
+    const freshT2 = freshMatch!.players.filter((mp) => mp.team === 2);
+
+    const t1Avg = freshT1.reduce((s, mp) => s + mp.player.rating, 0) / freshT1.length;
+    const t2Avg = freshT2.reduce((s, mp) => s + mp.player.rating, 0) / freshT2.length;
+
+    const newWinnerTeam = team1Score > team2Score ? 1 : 2;
+    const winnerRating = newWinnerTeam === 1 ? t1Avg : t2Avg;
+    const loserRating = newWinnerTeam === 1 ? t2Avg : t1Avg;
+    newChange = eloChange(winnerRating, loserRating);
+
+    const newWinners = newWinnerTeam === 1 ? freshT1 : freshT2;
+    const newLosers = newWinnerTeam === 1 ? freshT2 : freshT1;
+
+    for (const mp of newWinners) {
       await prisma.player.update({
         where: { id: mp.playerId },
-        data: {
-          rating: { decrement: oldChange },
-          wins: { decrement: 1 },
-        },
+        data: { rating: { increment: newChange }, wins: { increment: 1 } },
       });
     }
-    for (const mp of oldLosers) {
+    for (const mp of newLosers) {
       await prisma.player.update({
         where: { id: mp.playerId },
-        data: {
-          rating: { increment: oldChange },
-          losses: { decrement: 1 },
-        },
+        data: { rating: { decrement: newChange }, losses: { increment: 1 } },
       });
     }
-  }
-
-  // --- APPLY NEW ELO ---
-  // Re-fetch players to get restored (pre-match) ratings
-  const freshMatch = await prisma.match.findUnique({
-    where: { id },
-    include: { players: { include: { player: true } } },
-  });
-  const freshT1 = freshMatch!.players.filter((mp) => mp.team === 1);
-  const freshT2 = freshMatch!.players.filter((mp) => mp.team === 2);
-
-  const t1Avg = freshT1.reduce((s, mp) => s + mp.player.rating, 0) / freshT1.length;
-  const t2Avg = freshT2.reduce((s, mp) => s + mp.player.rating, 0) / freshT2.length;
-
-  const newWinnerTeam = team1Score > team2Score ? 1 : 2;
-  const winnerRating = newWinnerTeam === 1 ? t1Avg : t2Avg;
-  const loserRating = newWinnerTeam === 1 ? t2Avg : t1Avg;
-  const newChange = eloChange(winnerRating, loserRating);
-
-  const newWinners = newWinnerTeam === 1 ? freshT1 : freshT2;
-  const newLosers = newWinnerTeam === 1 ? freshT2 : freshT1;
-
-  for (const mp of newWinners) {
-    await prisma.player.update({
-      where: { id: mp.playerId },
-      data: {
-        rating: { increment: newChange },
-        wins: { increment: 1 },
-      },
-    });
-  }
-  for (const mp of newLosers) {
-    await prisma.player.update({
-      where: { id: mp.playerId },
-      data: {
-        rating: { decrement: newChange },
-        losses: { increment: 1 },
-      },
-    });
   }
 
   // Update MatchPlayer scores
-  for (const mp of freshT1) {
+  for (const mp of team1Players) {
     await prisma.matchPlayer.update({ where: { id: mp.id }, data: { score: team1Score } });
   }
-  for (const mp of freshT2) {
+  for (const mp of team2Players) {
     await prisma.matchPlayer.update({ where: { id: mp.id }, data: { score: team2Score } });
   }
 
