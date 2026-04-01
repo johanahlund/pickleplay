@@ -52,6 +52,7 @@ export default function NewEventPage() {
   const [helperId, setHelperId] = useState<string | null>(null);
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
+  const [showAllHelpers, setShowAllHelpers] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [selectedWaGroupIds, setSelectedWaGroupIds] = useState<Set<string>>(new Set());
@@ -420,82 +421,122 @@ export default function NewEventPage() {
         )}
 
         {/* Step 2: Helper */}
-        {step === 2 && (
-          <>
-            {helperPlayer ? (
-              <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg">
-                <span className="text-xl">{helperPlayer.emoji}</span>
-                <span className="font-medium flex-1">{helperPlayer.name}</span>
-                <button
-                  type="button"
-                  onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
-                  className="text-xs text-muted hover:text-foreground px-2 py-1 rounded bg-gray-100"
-                >
-                  Change
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={helperSearch}
-                    onChange={(e) => setHelperSearch(e.target.value)}
-                    placeholder="Search by name..."
-                    className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  {(["M", "F"] as const).map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                        helperGenderFilter === g
-                          ? "bg-primary text-white"
-                          : "bg-gray-100 text-foreground hover:bg-gray-200"
-                      }`}
-                    >
-                      {g === "M" ? "♂" : "♀"}
-                    </button>
-                  ))}
-                </div>
-                <div className="space-y-1 max-h-64 overflow-y-auto">
+        {step === 2 && (() => {
+          const helperCandidates = players
+            .filter((p) => p.id !== userId)
+            .filter((p) => {
+              if (!showAllHelpers && recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
+              if (helperSearch && !p.name.toLowerCase().includes(helperSearch.toLowerCase())) return false;
+              if (helperGenderFilter && p.gender !== helperGenderFilter) return false;
+              return true;
+            })
+            .sort((a, b) => a.name.localeCompare(b.name));
+          return (
+            <>
+              {helperPlayer && (
+                <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg mb-2">
+                  <span className="text-xl">{helperPlayer.emoji}</span>
+                  <span className="font-medium flex-1">{helperPlayer.name}</span>
                   <button
                     type="button"
-                    onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
-                    className={`w-full text-left p-2.5 rounded-lg transition-all text-sm text-muted ${
-                      !helperId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
+                    onClick={() => setHelperId(null)}
+                    className="text-xs text-danger hover:text-foreground px-2 py-1 rounded bg-gray-100"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              {/* Filters */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={helperSearch}
+                  onChange={(e) => setHelperSearch(e.target.value)}
+                  placeholder="Search by name..."
+                  className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                {(["M", "F"] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      helperGenderFilter === g
+                        ? "bg-primary text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
-                    None
+                    {g === "M" ? "♂" : "♀"}
                   </button>
-                  {players
-                    .filter((p) => p.id !== userId)
-                    .filter((p) => !helperSearch || p.name.toLowerCase().includes(helperSearch.toLowerCase()))
-                    .filter((p) => !helperGenderFilter || p.gender === helperGenderFilter)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => { setHelperId(p.id); setHelperSearch(""); setHelperGenderFilter(null); }}
-                        className="w-full flex items-center gap-3 p-2.5 rounded-lg transition-all hover:bg-gray-50 border border-transparent"
+                ))}
+              </div>
+
+              {/* Context label */}
+              {recentPlayerIds.size > 0 && !showAllHelpers && (
+                <p className="text-xs text-muted">Showing players from your last 2 events</p>
+              )}
+
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {helperCandidates.length === 0 ? (
+                  <p className="text-sm text-muted py-4 text-center">No players match your filters</p>
+                ) : (
+                  helperCandidates.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setHelperId(helperId === p.id ? null : p.id)}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
+                        helperId === p.id
+                          ? "bg-primary/10 border border-primary/30"
+                          : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
+                          helperId === p.id
+                            ? "bg-primary border-primary text-white"
+                            : "border-gray-300"
+                        }`}
                       >
-                        <span className="text-xl">{p.emoji}</span>
-                        <span className="font-medium flex-1 text-left text-sm">{p.name}</span>
-                        {p.gender && (
-                          <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                            {p.gender === "M" ? "♂" : "♀"}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                </div>
-              </>
-            )}
-            <p className="text-xs text-muted">Can manage this event alongside you</p>
-          </>
-        )}
+                        {helperId === p.id ? "✓" : ""}
+                      </span>
+                      <span className="text-xl">{p.emoji}</span>
+                      <span className="font-medium flex-1 text-left">{p.name}</span>
+                      {p.gender && (
+                        <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                          {p.gender === "M" ? "♂" : "♀"}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* Search All / Show Recent */}
+              {recentPlayerIds.size > 0 && !showAllHelpers && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllHelpers(true)}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all mt-1"
+                >
+                  Search All Players
+                </button>
+              )}
+              {showAllHelpers && recentPlayerIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setShowAllHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium text-muted border border-border hover:bg-gray-50 transition-all mt-1"
+                >
+                  Show Recent Only
+                </button>
+              )}
+
+              <p className="text-xs text-muted">Can manage this event alongside you</p>
+            </>
+          );
+        })()}
 
         {/* Step 3: Format */}
         {step === 3 && (
