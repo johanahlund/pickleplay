@@ -50,16 +50,37 @@ export default function NewEventPage() {
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
   const [helperId, setHelperId] = useState<string | null>(null);
+  const [helperSearch, setHelperSearch] = useState("");
+  const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
+  const [recentPlayerIds, setRecentPlayerIds] = useState<Set<string>>(new Set());
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
+  const [showAllPlayers, setShowAllPlayers] = useState(false);
+  const [returnToReview, setReturnToReview] = useState(false);
 
   useEffect(() => {
-    fetch("/api/players")
-      .then((r) => r.json())
-      .then((data) => {
-        setPlayers(data);
-        setLoading(false);
-      });
-  }, []);
+    Promise.all([
+      fetch("/api/players").then((r) => r.json()),
+      fetch("/api/events").then((r) => r.json()),
+    ]).then(([playersData, eventsData]) => {
+      setPlayers(playersData);
+      // Get player IDs from the last 2 events created by current user
+      if (userId && Array.isArray(eventsData)) {
+        const myEvents = eventsData
+          .filter((e: { createdById?: string }) => e.createdById === userId)
+          .slice(0, 2);
+        const ids = new Set<string>();
+        for (const ev of myEvents) {
+          for (const ep of ev.players || []) {
+            ids.add(ep.playerId || ep.player?.id);
+          }
+        }
+        setRecentPlayerIds(ids);
+      }
+      setLoading(false);
+    });
+  }, [userId]);
 
   // Auto-select owner + helper as players once data is ready
   useEffect(() => {
@@ -98,12 +119,29 @@ export default function NewEventPage() {
     });
   };
 
+  const getFilteredPlayers = () => {
+    return players
+      .filter((p) => {
+        if (!showAllPlayers && recentPlayerIds.size > 0 && !recentPlayerIds.has(p.id)) return false;
+        if (playerSearch && !p.name.toLowerCase().includes(playerSearch.toLowerCase())) return false;
+        if (playerGenderFilter && p.gender !== playerGenderFilter) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
   const selectAll = () => {
-    if (selectedIds.size === players.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(players.map((p) => p.id)));
-    }
+    const visible = getFilteredPlayers();
+    const allVisible = visible.every((p) => selectedIds.has(p.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisible) {
+        visible.forEach((p) => next.delete(p.id));
+      } else {
+        visible.forEach((p) => next.add(p.id));
+      }
+      return next;
+    });
   };
 
   const createEvent = async () => {
@@ -218,20 +256,77 @@ export default function NewEventPage() {
 
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Event Helper</label>
-              <select
-                value={helperId || ""}
-                onChange={(e) => setHelperId(e.target.value || null)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
-              >
-                <option value="">None</option>
-                {players
-                  .filter((p) => p.id !== userId)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.emoji} {p.name}
-                    </option>
-                  ))}
-              </select>
+              {helperPlayer ? (
+                <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg">
+                  <span className="text-xl">{helperPlayer.emoji}</span>
+                  <span className="font-medium flex-1">{helperPlayer.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
+                    className="text-xs text-muted hover:text-foreground px-2 py-1 rounded bg-gray-100"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={helperSearch}
+                      onChange={(e) => setHelperSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    {(["M", "F"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          helperGenderFilter === g
+                            ? "bg-primary text-white"
+                            : "bg-gray-100 text-foreground hover:bg-gray-200"
+                        }`}
+                      >
+                        {g === "M" ? "♂" : "♀"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
+                      className={`w-full text-left p-2.5 rounded-lg transition-all text-sm text-muted ${
+                        !helperId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      None
+                    </button>
+                    {players
+                      .filter((p) => p.id !== userId)
+                      .filter((p) => !helperSearch || p.name.toLowerCase().includes(helperSearch.toLowerCase()))
+                      .filter((p) => !helperGenderFilter || p.gender === helperGenderFilter)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setHelperId(p.id); setHelperSearch(""); setHelperGenderFilter(null); }}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-lg transition-all hover:bg-gray-50 border border-transparent"
+                        >
+                          <span className="text-xl">{p.emoji}</span>
+                          <span className="font-medium flex-1 text-left text-sm">{p.name}</span>
+                          {p.gender && (
+                            <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                              {p.gender === "M" ? "♂" : "♀"}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
               <p className="text-xs text-muted mt-1">Can manage this event alongside you</p>
             </div>
 
@@ -390,141 +485,218 @@ export default function NewEventPage() {
         )}
 
         {/* Step 5: Players */}
-        {step === 5 && (
-          <>
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-muted">
-                Select Players ({selectedIds.size} selected)
-              </label>
-              <button
-                type="button"
-                onClick={selectAll}
-                className="text-primary text-sm font-medium"
-              >
-                {selectedIds.size === players.length ? "Deselect All" : "Select All"}
-              </button>
-            </div>
+        {step === 5 && (() => {
+          const filtered = getFilteredPlayers();
+          const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
+          return (
+            <>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-muted">
+                  Select Players ({selectedIds.size} selected)
+                </label>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  className="text-primary text-sm font-medium"
+                >
+                  {allVisibleSelected ? "Deselect All" : "Select All"}
+                </button>
+              </div>
 
-            {players.length === 0 ? (
-              <p className="text-sm text-muted py-4 text-center">
-                No players registered yet. Add players first!
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {players.map((p) => (
+              {/* Filters */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={playerSearch}
+                  onChange={(e) => setPlayerSearch(e.target.value)}
+                  placeholder="Search by name..."
+                  className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                {(["M", "F"] as const).map((g) => (
                   <button
-                    key={p.id}
+                    key={g}
                     type="button"
-                    onClick={() => togglePlayer(p.id)}
-                    className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
-                      selectedIds.has(p.id)
-                        ? "bg-primary/10 border border-primary/30"
-                        : "hover:bg-gray-50 border border-transparent"
+                    onClick={() => setPlayerGenderFilter(playerGenderFilter === g ? null : g)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      playerGenderFilter === g
+                        ? "bg-primary text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
-                    <span
-                      className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
-                        selectedIds.has(p.id)
-                          ? "bg-primary border-primary text-white"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      {selectedIds.has(p.id) ? "✓" : ""}
-                    </span>
-                    <span className="text-xl">{p.emoji}</span>
-                    <span className="font-medium flex-1 text-left">{p.name}</span>
-                    {p.gender && (
-                      <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                        {p.gender === "M" ? "♂" : "♀"}
-                      </span>
-                    )}
-                    <span className="text-sm text-muted">{Math.round(p.rating)}</span>
+                    {g === "M" ? "♂" : "♀"}
                   </button>
                 ))}
               </div>
-            )}
-          </>
-        )}
+
+              {/* Show label for context */}
+              {recentPlayerIds.size > 0 && !showAllPlayers && (
+                <p className="text-xs text-muted">Showing players from your last 2 events</p>
+              )}
+
+              {players.length === 0 ? (
+                <p className="text-sm text-muted py-4 text-center">
+                  No players registered yet. Add players first!
+                </p>
+              ) : filtered.length === 0 ? (
+                <p className="text-sm text-muted py-4 text-center">
+                  No players match your filters
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-80 overflow-y-auto">
+                  {filtered.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => togglePlayer(p.id)}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
+                        selectedIds.has(p.id)
+                          ? "bg-primary/10 border border-primary/30"
+                          : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
+                          selectedIds.has(p.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        {selectedIds.has(p.id) ? "✓" : ""}
+                      </span>
+                      <span className="text-xl">{p.emoji}</span>
+                      <span className="font-medium flex-1 text-left">{p.name}</span>
+                      {p.gender && (
+                        <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                          {p.gender === "M" ? "♂" : "♀"}
+                        </span>
+                      )}
+                      <span className="text-sm text-muted">{Math.round(p.rating)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Search All button */}
+              {recentPlayerIds.size > 0 && !showAllPlayers && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllPlayers(true)}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all mt-1"
+                >
+                  Search All Players
+                </button>
+              )}
+              {showAllPlayers && recentPlayerIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setShowAllPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium text-muted border border-border hover:bg-gray-50 transition-all mt-1"
+                >
+                  Show Recent Only
+                </button>
+              )}
+            </>
+          );
+        })()}
 
         {/* Step 6: Review */}
-        {step === 6 && (
-          <div className="space-y-3">
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Name</span>
-              <span className="text-sm font-medium">{name}</span>
-            </div>
-            {helperPlayer && (
-              <div className="flex justify-between py-1.5 border-b border-border">
+        {step === 6 && (() => {
+          const goEdit = (targetStep: number) => {
+            setReturnToReview(true);
+            setStep(targetStep);
+          };
+          const rowClass = "flex justify-between items-center py-2.5 px-2 -mx-2 border-b border-border rounded-lg hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors";
+          return (
+            <div className="space-y-1">
+              <p className="text-xs text-muted mb-2">Tap any row to edit</p>
+              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Name</span>
+                <span className="text-sm font-medium">{name}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Helper</span>
-                <span className="text-sm font-medium">{helperPlayer.emoji} {helperPlayer.name}</span>
-              </div>
-            )}
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Date</span>
-              <span className="text-sm font-medium">{new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+                <span className="text-sm font-medium">{helperPlayer ? `${helperPlayer.emoji} ${helperPlayer.name}` : "None"}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Date</span>
+                <span className="text-sm font-medium">{new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Time</span>
+                <span className="text-sm font-medium">{time} – {endTime}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Format</span>
+                <span className="text-sm font-medium capitalize">{format}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Courts</span>
+                <span className="text-sm font-medium">{numCourts}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Sets</span>
+                <span className="text-sm font-medium">{numSets === 1 ? "1 Set" : "Best of 3"}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Scoring</span>
+                <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Pairing</span>
+                <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full border-b-0"}>
+                <span className="text-sm text-muted">Players</span>
+                <span className="text-sm font-medium">{selectedIds.size} selected</span>
+              </button>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Time</span>
-              <span className="text-sm font-medium">{time} – {endTime}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Format</span>
-              <span className="text-sm font-medium capitalize">{format}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Courts</span>
-              <span className="text-sm font-medium">{numCourts}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Sets</span>
-              <span className="text-sm font-medium">{numSets === 1 ? "1 Set" : "Best of 3"}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Scoring</span>
-              <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-sm text-muted">Pairing</span>
-              <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-sm text-muted">Players</span>
-              <span className="text-sm font-medium">{selectedIds.size} selected</span>
-            </div>
-          </div>
+          );
+        })()}
         )}
       </div>
 
       {/* Navigation buttons */}
       <div className="flex gap-3">
-        {step > 1 && (
+        {returnToReview && step !== 6 ? (
           <button
             type="button"
-            onClick={() => setStep(step - 1)}
-            className="flex-1 py-3 rounded-xl font-semibold text-lg border border-border text-foreground active:bg-gray-100 transition-colors"
+            onClick={() => { setReturnToReview(false); setStep(6); }}
+            className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors"
           >
-            Back
-          </button>
-        )}
-
-        {step < TOTAL_STEPS ? (
-          <button
-            type="button"
-            onClick={() => canAdvance() && setStep(step + 1)}
-            disabled={!canAdvance()}
-            className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
+            Back to Review
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={createEvent}
-            disabled={!name.trim() || creating}
-            className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {creating ? "Creating..." : "Create Event"}
-          </button>
+          <>
+            {step > 1 && (
+              <button
+                type="button"
+                onClick={() => setStep(step - 1)}
+                className="flex-1 py-3 rounded-xl font-semibold text-lg border border-border text-foreground active:bg-gray-100 transition-colors"
+              >
+                Back
+              </button>
+            )}
+
+            {step < TOTAL_STEPS ? (
+              <button
+                type="button"
+                onClick={() => canAdvance() && setStep(step + 1)}
+                disabled={!canAdvance()}
+                className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={createEvent}
+                disabled={!name.trim() || creating}
+                className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creating ? "Creating..." : "Create Event"}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
