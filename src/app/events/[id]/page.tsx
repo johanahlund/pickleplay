@@ -323,6 +323,12 @@ export default function EventDetailPage() {
     window.open(`https://wa.me/?text=${encoded}`, "_blank");
   };
 
+  const deleteEvent = async () => {
+    if (!confirm("Are you sure you want to delete this event? This cannot be undone.")) return;
+    await fetch(`/api/events/${id}`, { method: "DELETE" });
+    router.push("/events");
+  };
+
   const generateMatches = async () => {
     setGenerating(true);
     await fetch(`/api/events/${id}/generate`, {
@@ -1298,6 +1304,16 @@ export default function EventDetailPage() {
             <span className="text-xl font-bold text-foreground">➕ Add Match Manually</span>
             <span className="text-2xl text-muted">›</span>
           </div>
+        </button>
+      )}
+
+      {/* Delete Event */}
+      {(isOwner || isAdmin) && (
+        <button
+          onClick={deleteEvent}
+          className="w-full py-3 text-sm text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors"
+        >
+          🗑️ Delete Event
         </button>
       )}
     </div>

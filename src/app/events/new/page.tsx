@@ -53,6 +53,9 @@ export default function NewEventPage() {
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
+  const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
+  const [selectedWaGroupIds, setSelectedWaGroupIds] = useState<Set<string>>(new Set());
+  const [newGroupName, setNewGroupName] = useState("");
   const [recentPlayerIds, setRecentPlayerIds] = useState<Set<string>>(new Set());
   const [playerSearch, setPlayerSearch] = useState("");
   const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
@@ -63,7 +66,8 @@ export default function NewEventPage() {
     Promise.all([
       fetch("/api/players").then((r) => r.json()),
       fetch("/api/events").then((r) => r.json()),
-    ]).then(([playersData, eventsData]) => {
+      fetch("/api/whatsapp-groups").then((r) => r.json()),
+    ]).then(([playersData, eventsData, waGroupsData]) => {
       setPlayers(playersData);
       // Get player IDs from the last 2 events created by current user
       if (userId && Array.isArray(eventsData)) {
@@ -78,6 +82,7 @@ export default function NewEventPage() {
         }
         setRecentPlayerIds(ids);
       }
+      if (Array.isArray(waGroupsData)) setAllWaGroups(waGroupsData);
       setLoading(false);
     });
   }, [userId]);
@@ -173,6 +178,15 @@ export default function NewEventPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId: helperId }),
+      });
+    }
+
+    // Link WhatsApp groups
+    for (const gid of selectedWaGroupIds) {
+      await fetch(`/api/events/${event.id}/whatsapp-groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whatsappGroupId: gid }),
       });
     }
 
@@ -328,6 +342,78 @@ export default function NewEventPage() {
                 </>
               )}
               <p className="text-xs text-muted mt-1">Can manage this event alongside you</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">WhatsApp Groups</label>
+              {allWaGroups.length > 0 && (
+                <div className="space-y-1 mb-2">
+                  {allWaGroups.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWaGroupIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(g.id)) next.delete(g.id);
+                          else next.add(g.id);
+                          return next;
+                        });
+                      }}
+                      className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-all text-sm ${
+                        selectedWaGroupIds.has(g.id)
+                          ? "bg-primary/10 border border-primary/30"
+                          : "hover:bg-gray-50 border border-transparent"
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
+                          selectedWaGroupIds.has(g.id)
+                            ? "bg-primary border-primary text-white"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        {selectedWaGroupIds.has(g.id) ? "✓" : ""}
+                      </span>
+                      <span>💬</span>
+                      <span className="font-medium">{g.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="Create new group..."
+                  className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newGroupName.trim()) return;
+                    const r = await fetch("/api/whatsapp-groups", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ name: newGroupName.trim() }),
+                    });
+                    const group = await r.json();
+                    setAllWaGroups((prev) => [...prev, group]);
+                    setSelectedWaGroupIds((prev) => {
+                      const next = new Set(prev);
+                      next.add(group.id);
+                      return next;
+                    });
+                    setNewGroupName("");
+                  }}
+                  disabled={!newGroupName.trim()}
+                  className="bg-primary text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                >
+                  Create
+                </button>
+              </div>
+              <p className="text-xs text-muted mt-1">Link groups to send event details via WhatsApp</p>
             </div>
 
             <div>
@@ -616,6 +702,14 @@ export default function NewEventPage() {
               <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Helper</span>
                 <span className="text-sm font-medium">{helperPlayer ? `${helperPlayer.emoji} ${helperPlayer.name}` : "None"}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">WhatsApp</span>
+                <span className="text-sm font-medium">
+                  {selectedWaGroupIds.size > 0
+                    ? `${selectedWaGroupIds.size} group${selectedWaGroupIds.size > 1 ? "s" : ""}`
+                    : "None"}
+                </span>
               </button>
               <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Date</span>
