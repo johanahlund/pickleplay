@@ -13,7 +13,6 @@ export async function GET() {
   const matches = await prisma.match.findMany({
     where: {
       players: { some: { playerId: user.id } },
-      status: "completed",
     },
     orderBy: { createdAt: "desc" },
     include: {

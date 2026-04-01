@@ -37,6 +37,7 @@ export default function MatchesPage() {
   const [playedAgainstFilter, setPlayedAgainstFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [showCompleted, setShowCompleted] = useState(true);
 
   useEffect(() => {
     fetch("/api/matches/my")
@@ -72,6 +73,9 @@ export default function MatchesPage() {
 
   const filtered = useMemo(() => {
     return matches.filter((m) => {
+      // Status filter
+      if (showCompleted && m.status !== "completed") return false;
+
       const myTeam = m.players.find((mp) => mp.playerId === userId)?.team;
       if (!myTeam) return false;
 
@@ -98,7 +102,7 @@ export default function MatchesPage() {
 
       return true;
     });
-  }, [matches, userId, playedWithFilter, playedAgainstFilter, dateFrom, dateTo]);
+  }, [matches, userId, playedWithFilter, playedAgainstFilter, dateFrom, dateTo, showCompleted]);
 
   // Stats
   const stats = useMemo(() => {
@@ -123,11 +127,37 @@ export default function MatchesPage() {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
 
-  const hasFilters = playedWithFilter || playedAgainstFilter || dateFrom || dateTo;
+  const hasFilters = playedWithFilter || playedAgainstFilter || dateFrom || dateTo || !showCompleted;
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">My Matches</h2>
+
+      {/* Completed / All toggle */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setShowCompleted(true)}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+            showCompleted
+              ? "bg-primary text-white"
+              : "bg-gray-100 text-foreground hover:bg-gray-200"
+          }`}
+        >
+          Completed
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowCompleted(false)}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+            !showCompleted
+              ? "bg-primary text-white"
+              : "bg-gray-100 text-foreground hover:bg-gray-200"
+          }`}
+        >
+          All
+        </button>
+      </div>
 
       {/* Filters */}
       <div className="bg-card rounded-xl border border-border p-3 space-y-3">
@@ -170,7 +200,7 @@ export default function MatchesPage() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full border border-border rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
           <div>
@@ -179,7 +209,7 @@ export default function MatchesPage() {
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full border border-border rounded-lg px-1.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
         </div>
@@ -191,6 +221,7 @@ export default function MatchesPage() {
               setPlayedAgainstFilter("");
               setDateFrom("");
               setDateTo("");
+              setShowCompleted(true);
             }}
             className="text-xs text-primary font-medium"
           >
@@ -228,14 +259,20 @@ export default function MatchesPage() {
             const team2 = m.players.filter((mp) => mp.team === 2);
             const score1 = team1.reduce((s, mp) => s + mp.score, 0);
             const score2 = team2.reduce((s, mp) => s + mp.score, 0);
-            const won =
-              myTeam === 1 ? score1 > score2 : score2 > score1;
+            const isCompleted = m.status === "completed";
+            const won = isCompleted
+              ? (myTeam === 1 ? score1 > score2 : score2 > score1)
+              : false;
 
             return (
               <div
                 key={m.id}
                 className={`bg-card rounded-xl border p-3 ${
-                  won ? "border-green-200" : "border-red-200"
+                  !isCompleted
+                    ? "border-blue-200"
+                    : won
+                    ? "border-green-200"
+                    : "border-red-200"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -246,15 +283,21 @@ export default function MatchesPage() {
                       day: "numeric",
                     })}
                   </span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      won
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {won ? "W" : "L"}
-                  </span>
+                  {isCompleted ? (
+                    <span
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        won
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {won ? "W" : "L"}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">
+                      {m.status}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className={`flex-1 text-sm ${myTeam === 1 ? "font-semibold" : ""}`}>
