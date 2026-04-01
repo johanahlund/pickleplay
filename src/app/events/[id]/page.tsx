@@ -256,6 +256,7 @@ export default function EventDetailPage() {
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [showAddHelper, setShowAddHelper] = useState(false);
 
   const isOwner = !!(event && userId && event.createdById === userId);
   const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId));
@@ -812,28 +813,45 @@ export default function EventDetailPage() {
         {/* Add helper — owner/admin only */}
         {(isOwner || isAdmin) && (
           <div>
-            <h4 className="text-sm font-medium text-muted mb-1">Add Helper</h4>
-            {allPlayers.length === 0 ? (
-              <p className="text-sm text-muted py-2">Loading players...</p>
+            {!showAddHelper ? (
+              <button
+                onClick={() => { fetchAllPlayers(); setShowAddHelper(true); setAdminSearch(""); }}
+                className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
+              >
+                + Add Helper
+              </button>
             ) : (
               <>
-                {availablePlayers.length > 6 && (
-                  <input type="text" value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)}
-                    placeholder="Search by name..."
-                    className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-2" />
-                )}
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {availablePlayers.map((p) => (
-                    <button key={p.id} onClick={() => addHelper(p.id)}
-                      className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
-                      <span className="text-2xl">{p.emoji}</span>
-                      <span className="text-lg font-medium">{p.name}</span>
-                    </button>
-                  ))}
-                  {availablePlayers.length === 0 && (
-                    <p className="text-center py-4 text-muted text-sm">No players available to add</p>
-                  )}
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-muted">Add Helper</h4>
+                  <button
+                    onClick={() => setShowAddHelper(false)}
+                    className="text-xs text-muted hover:text-foreground px-2 py-1 rounded bg-gray-100"
+                  >
+                    Close
+                  </button>
                 </div>
+                {allPlayers.length === 0 ? (
+                  <p className="text-sm text-muted py-2">Loading players...</p>
+                ) : (
+                  <>
+                    <input type="text" value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)}
+                      placeholder="Search by name..."
+                      className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-2" />
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {availablePlayers.map((p) => (
+                        <button key={p.id} onClick={async () => { await addHelper(p.id); setShowAddHelper(false); }}
+                          className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
+                          <span className="text-2xl">{p.emoji}</span>
+                          <span className="text-lg font-medium">{p.name}</span>
+                        </button>
+                      ))}
+                      {availablePlayers.length === 0 && (
+                        <p className="text-center py-4 text-muted text-sm">No players available to add</p>
+                      )}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
