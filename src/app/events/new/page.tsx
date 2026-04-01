@@ -64,11 +64,11 @@ export default function NewEventPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/players").then((r) => r.json()),
-      fetch("/api/events").then((r) => r.json()),
-      fetch("/api/whatsapp-groups").then((r) => r.json()),
+      fetch("/api/players").then((r) => r.ok ? r.json() : []),
+      fetch("/api/events").then((r) => r.ok ? r.json() : []),
+      fetch("/api/whatsapp-groups").then((r) => r.ok ? r.json() : []),
     ]).then(([playersData, eventsData, waGroupsData]) => {
-      setPlayers(playersData);
+      if (Array.isArray(playersData)) setPlayers(playersData);
       if (userId && Array.isArray(eventsData)) {
         const myEvents = eventsData
           .filter((e: { createdById?: string }) => e.createdById === userId)
@@ -82,6 +82,8 @@ export default function NewEventPage() {
         setRecentPlayerIds(ids);
       }
       if (Array.isArray(waGroupsData)) setAllWaGroups(waGroupsData);
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
   }, [userId]);
