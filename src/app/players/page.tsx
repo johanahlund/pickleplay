@@ -14,6 +14,7 @@ interface Player {
   losses: number;
   photoUrl?: string | null;
   gender?: string | null;
+  phone?: string | null;
   role?: string;
   _count?: { matchPlayers: number };
 }
@@ -35,7 +36,9 @@ export default function PlayersPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [gender, setGender] = useState<string | null>(null);
+  const [phone, setPhone] = useState("");
   const [editGender, setEditGender] = useState<string | null>(null);
+  const [editPhone, setEditPhone] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
 
   const isAdmin = session?.user?.role === "admin";
@@ -57,11 +60,12 @@ export default function PlayersPage() {
     await fetch("/api/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), emoji, ...(gender ? { gender } : {}) }),
+      body: JSON.stringify({ name: name.trim(), emoji, ...(gender ? { gender } : {}), ...(phone.trim() ? { phone: phone.trim() } : {}) }),
     });
     setName("");
     setEmoji("🏓");
     setGender(null);
+    setPhone("");
     setShowForm(false);
     fetchPlayers();
   };
@@ -77,6 +81,7 @@ export default function PlayersPage() {
     setEditName(p.name);
     setEditEmoji(p.emoji);
     setEditGender(p.gender || null);
+    setEditPhone(p.phone || "");
   };
 
   const cancelEdit = () => {
@@ -90,7 +95,7 @@ export default function PlayersPage() {
     await fetch(`/api/players/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName.trim(), emoji: editEmoji, gender: editGender }),
+      body: JSON.stringify({ name: editName.trim(), emoji: editEmoji, gender: editGender, phone: editPhone.trim() || null }),
     });
     cancelEdit();
     fetchPlayers();
@@ -283,6 +288,16 @@ export default function PlayersPage() {
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">WhatsApp (optional)</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+46 70 123 4567"
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
           <button
             type="submit"
             className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold active:bg-primary-dark transition-colors"
@@ -354,6 +369,16 @@ export default function PlayersPage() {
                       ))}
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-muted mb-1">WhatsApp (optional)</label>
+                    <input
+                      type="tel"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="+46 70 123 4567"
+                      className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={saveEdit}
@@ -390,6 +415,18 @@ export default function PlayersPage() {
                           <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
                             {p.gender === "M" ? "♂" : "♀"}
                           </span>
+                        )}
+                        {p.phone && (
+                          <a
+                            href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-500 text-sm hover:text-green-600"
+                            onClick={(e) => e.stopPropagation()}
+                            title={p.phone}
+                          >
+                            💬
+                          </a>
                         )}
                       </div>
                       <div className="text-base text-muted">

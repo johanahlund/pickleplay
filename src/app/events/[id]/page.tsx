@@ -11,6 +11,7 @@ interface Player {
   rating: number;
   role?: string;
   gender?: string | null;
+  phone?: string | null;
 }
 
 interface MatchPlayer {
@@ -194,6 +195,17 @@ function SwipeablePlayerRow({
         <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
           Admin
         </span>
+      )}
+      {ep.player.phone && (
+        <a
+          href={`https://wa.me/${ep.player.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-green-500 text-sm"
+          onClick={(e) => e.stopPropagation()}
+        >
+          💬
+        </a>
       )}
       {localPaused && (
         <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">

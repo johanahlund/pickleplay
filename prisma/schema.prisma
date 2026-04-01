@@ -27,6 +27,7 @@ model Player {
 
   // Profile
   gender       String?  // "M" | "F"
+  phone        String?  // WhatsApp number
   photoUrl     String?
 
   eventPlayers  EventPlayer[]
