@@ -25,7 +25,7 @@ function getDefaultTime() {
   return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
 }
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 export default function NewEventPage() {
   const router = useRouter();
@@ -69,7 +69,6 @@ export default function NewEventPage() {
       fetch("/api/whatsapp-groups").then((r) => r.json()),
     ]).then(([playersData, eventsData, waGroupsData]) => {
       setPlayers(playersData);
-      // Get player IDs from the last 2 events created by current user
       if (userId && Array.isArray(eventsData)) {
         const myEvents = eventsData
           .filter((e: { createdById?: string }) => e.createdById === userId)
@@ -172,7 +171,6 @@ export default function NewEventPage() {
     });
     const event = await r.json();
 
-    // Add helper after event creation
     if (helperId) {
       await fetch(`/api/events/${event.id}/helpers`, {
         method: "POST",
@@ -181,7 +179,6 @@ export default function NewEventPage() {
       });
     }
 
-    // Link WhatsApp groups
     for (const gid of selectedWaGroupIds) {
       await fetch(`/api/events/${event.id}/whatsapp-groups`, {
         method: "POST",
@@ -196,16 +193,11 @@ export default function NewEventPage() {
   const canAdvance = () => {
     switch (step) {
       case 1: return name.trim().length > 0;
-      case 2: return true;
-      case 3: return true;
-      case 4: return true;
-      case 5: return true;
-      case 6: return true;
-      default: return false;
+      default: return true;
     }
   };
 
-  const stepTitles = ["Name & When", "Format", "Scoring", "Pairing", "Players", "Review"];
+  const stepTitles = ["Name & When", "Helper", "Format", "Scoring", "Pairing", "Players", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -229,22 +221,76 @@ export default function NewEventPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Header with nav buttons */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">New Event</h2>
         <span className="text-sm text-muted">{step} / {TOTAL_STEPS}</span>
       </div>
 
-      {/* Progress bar */}
-      <div className="flex gap-1.5">
-        {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-              i < step ? "bg-primary" : "bg-gray-200"
-            }`}
-          />
-        ))}
+      {/* Progress bar + nav buttons */}
+      <div className="flex items-center gap-2">
+        {returnToReview && step !== TOTAL_STEPS ? (
+          <>
+            <div className="flex gap-1 flex-1">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                    i < step ? "bg-primary" : "bg-gray-200"
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
+              className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors"
+            >
+              Review
+            </button>
+          </>
+        ) : (
+          <>
+            {step > 1 && (
+              <button
+                type="button"
+                onClick={() => setStep(step - 1)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-foreground active:bg-gray-100 transition-colors"
+              >
+                Back
+              </button>
+            )}
+            <div className="flex gap-1 flex-1">
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                    i < step ? "bg-primary" : "bg-gray-200"
+                  }`}
+                />
+              ))}
+            </div>
+            {step < TOTAL_STEPS ? (
+              <button
+                type="button"
+                onClick={() => canAdvance() && setStep(step + 1)}
+                disabled={!canAdvance()}
+                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={createEvent}
+                disabled={!name.trim() || creating}
+                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creating ? "..." : "Create"}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Step title */}
@@ -266,82 +312,6 @@ export default function NewEventPage() {
                 className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 autoFocus
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-muted mb-1">Event Helper</label>
-              {helperPlayer ? (
-                <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg">
-                  <span className="text-xl">{helperPlayer.emoji}</span>
-                  <span className="font-medium flex-1">{helperPlayer.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
-                    className="text-xs text-muted hover:text-foreground px-2 py-1 rounded bg-gray-100"
-                  >
-                    Change
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={helperSearch}
-                      onChange={(e) => setHelperSearch(e.target.value)}
-                      placeholder="Search by name..."
-                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {(["M", "F"] as const).map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          helperGenderFilter === g
-                            ? "bg-primary text-white"
-                            : "bg-gray-100 text-foreground hover:bg-gray-200"
-                        }`}
-                      >
-                        {g === "M" ? "♂" : "♀"}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    <button
-                      type="button"
-                      onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
-                      className={`w-full text-left p-2.5 rounded-lg transition-all text-sm text-muted ${
-                        !helperId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
-                      }`}
-                    >
-                      None
-                    </button>
-                    {players
-                      .filter((p) => p.id !== userId)
-                      .filter((p) => !helperSearch || p.name.toLowerCase().includes(helperSearch.toLowerCase()))
-                      .filter((p) => !helperGenderFilter || p.gender === helperGenderFilter)
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => { setHelperId(p.id); setHelperSearch(""); setHelperGenderFilter(null); }}
-                          className="w-full flex items-center gap-3 p-2.5 rounded-lg transition-all hover:bg-gray-50 border border-transparent"
-                        >
-                          <span className="text-xl">{p.emoji}</span>
-                          <span className="font-medium flex-1 text-left text-sm">{p.name}</span>
-                          {p.gender && (
-                            <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                              {p.gender === "M" ? "♂" : "♀"}
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                  </div>
-                </>
-              )}
-              <p className="text-xs text-muted mt-1">Can manage this event alongside you</p>
             </div>
 
             <div>
@@ -413,7 +383,6 @@ export default function NewEventPage() {
                   Create
                 </button>
               </div>
-              <p className="text-xs text-muted mt-1">Link groups to send event details via WhatsApp</p>
             </div>
 
             <div>
@@ -448,8 +417,86 @@ export default function NewEventPage() {
           </>
         )}
 
-        {/* Step 2: Format */}
+        {/* Step 2: Helper */}
         {step === 2 && (
+          <>
+            {helperPlayer ? (
+              <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg">
+                <span className="text-xl">{helperPlayer.emoji}</span>
+                <span className="font-medium flex-1">{helperPlayer.name}</span>
+                <button
+                  type="button"
+                  onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
+                  className="text-xs text-muted hover:text-foreground px-2 py-1 rounded bg-gray-100"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={helperSearch}
+                    onChange={(e) => setHelperSearch(e.target.value)}
+                    placeholder="Search by name..."
+                    className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                  {(["M", "F"] as const).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        helperGenderFilter === g
+                          ? "bg-primary text-white"
+                          : "bg-gray-100 text-foreground hover:bg-gray-200"
+                      }`}
+                    >
+                      {g === "M" ? "♂" : "♀"}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setHelperId(null); setHelperSearch(""); setHelperGenderFilter(null); }}
+                    className={`w-full text-left p-2.5 rounded-lg transition-all text-sm text-muted ${
+                      !helperId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
+                    }`}
+                  >
+                    None
+                  </button>
+                  {players
+                    .filter((p) => p.id !== userId)
+                    .filter((p) => !helperSearch || p.name.toLowerCase().includes(helperSearch.toLowerCase()))
+                    .filter((p) => !helperGenderFilter || p.gender === helperGenderFilter)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setHelperId(p.id); setHelperSearch(""); setHelperGenderFilter(null); }}
+                        className="w-full flex items-center gap-3 p-2.5 rounded-lg transition-all hover:bg-gray-50 border border-transparent"
+                      >
+                        <span className="text-xl">{p.emoji}</span>
+                        <span className="font-medium flex-1 text-left text-sm">{p.name}</span>
+                        {p.gender && (
+                          <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                            {p.gender === "M" ? "♂" : "♀"}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                </div>
+              </>
+            )}
+            <p className="text-xs text-muted">Can manage this event alongside you</p>
+          </>
+        )}
+
+        {/* Step 3: Format */}
+        {step === 3 && (
           <>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Format</label>
@@ -492,8 +539,8 @@ export default function NewEventPage() {
           </>
         )}
 
-        {/* Step 3: Scoring */}
-        {step === 3 && (
+        {/* Step 4: Scoring */}
+        {step === 4 && (
           <>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Sets per Match</label>
@@ -541,8 +588,8 @@ export default function NewEventPage() {
           </>
         )}
 
-        {/* Step 4: Pairing Mode */}
-        {step === 4 && (
+        {/* Step 5: Pairing Mode */}
+        {step === 5 && (
           <div className="space-y-1.5">
             {[
               { value: "random", label: "🎲 Random", desc: "Random matchups, everyone plays" },
@@ -570,8 +617,8 @@ export default function NewEventPage() {
           </div>
         )}
 
-        {/* Step 5: Players */}
-        {step === 5 && (() => {
+        {/* Step 6: Players */}
+        {step === 6 && (() => {
           const filtered = getFilteredPlayers();
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
           return (
@@ -614,7 +661,7 @@ export default function NewEventPage() {
                 ))}
               </div>
 
-              {/* Show label for context */}
+              {/* Context label */}
               {recentPlayerIds.size > 0 && !showAllPlayers && (
                 <p className="text-xs text-muted">Showing players from your last 2 events</p>
               )}
@@ -662,7 +709,7 @@ export default function NewEventPage() {
                 </div>
               )}
 
-              {/* Search All button */}
+              {/* Search All / Show Recent */}
               {recentPlayerIds.size > 0 && !showAllPlayers && (
                 <button
                   type="button"
@@ -685,8 +732,8 @@ export default function NewEventPage() {
           );
         })()}
 
-        {/* Step 6: Review */}
-        {step === 6 && (() => {
+        {/* Step 7: Review */}
+        {step === 7 && (() => {
           const goEdit = (targetStep: number) => {
             setReturnToReview(true);
             setStep(targetStep);
@@ -699,7 +746,7 @@ export default function NewEventPage() {
                 <span className="text-sm text-muted">Name</span>
                 <span className="text-sm font-medium">{name}</span>
               </button>
-              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Helper</span>
                 <span className="text-sm font-medium">{helperPlayer ? `${helperPlayer.emoji} ${helperPlayer.name}` : "None"}</span>
               </button>
@@ -719,78 +766,33 @@ export default function NewEventPage() {
                 <span className="text-sm text-muted">Time</span>
                 <span className="text-sm font-medium">{time} – {endTime}</span>
               </button>
-              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Format</span>
                 <span className="text-sm font-medium capitalize">{format}</span>
               </button>
-              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Courts</span>
                 <span className="text-sm font-medium">{numCourts}</span>
               </button>
-              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Sets</span>
                 <span className="text-sm font-medium">{numSets === 1 ? "1 Set" : "Best of 3"}</span>
               </button>
-              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Scoring</span>
                 <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
               </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
+              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Pairing</span>
                 <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
               </button>
-              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full border-b-0"}>
+              <button type="button" onClick={() => goEdit(6)} className={rowClass + " w-full border-b-0"}>
                 <span className="text-sm text-muted">Players</span>
                 <span className="text-sm font-medium">{selectedIds.size} selected</span>
               </button>
             </div>
           );
         })()}
-      </div>
-
-      {/* Navigation buttons */}
-      <div className="flex gap-3">
-        {returnToReview && step !== 6 ? (
-          <button
-            type="button"
-            onClick={() => { setReturnToReview(false); setStep(6); }}
-            className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors"
-          >
-            Back to Review
-          </button>
-        ) : (
-          <>
-            {step > 1 && (
-              <button
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="flex-1 py-3 rounded-xl font-semibold text-lg border border-border text-foreground active:bg-gray-100 transition-colors"
-              >
-                Back
-              </button>
-            )}
-
-            {step < TOTAL_STEPS ? (
-              <button
-                type="button"
-                onClick={() => canAdvance() && setStep(step + 1)}
-                disabled={!canAdvance()}
-                className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={createEvent}
-                disabled={!name.trim() || creating}
-                className="flex-1 bg-primary text-white py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creating ? "Creating..." : "Create Event"}
-              </button>
-            )}
-          </>
-        )}
       </div>
     </div>
   );
