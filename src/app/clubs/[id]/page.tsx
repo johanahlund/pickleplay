@@ -184,7 +184,7 @@ function SwipeableMemberRow({
       )}
       <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
-      {canManage && member.role !== "owner" && !isSelf ? (
+      {isOwner && member.role !== "owner" && !isSelf ? (
         <select
           value={member.role}
           onChange={(e) => onRoleChange(e.target.value)}
@@ -193,7 +193,7 @@ function SwipeableMemberRow({
         >
           <option value="member">Member</option>
           <option value="admin">Admin</option>
-          {isOwner && <option value="owner">Owner</option>}
+          <option value="owner">Owner</option>
         </select>
       ) : (
         <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize w-16 text-center">
