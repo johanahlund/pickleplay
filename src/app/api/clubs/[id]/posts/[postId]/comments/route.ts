@@ -42,3 +42,36 @@ export async function POST(
 
   return NextResponse.json(comment);
 }
+
+// Delete a comment (author or club admin)
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string; postId: string }> }
+) {
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const { commentId } = await req.json();
+
+  const comment = await prisma.clubComment.findUnique({ where: { id: commentId } });
+  if (!comment) {
+    return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+  }
+
+  if (comment.authorId !== user.id && user.role !== "admin") {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: id, playerId: user.id } },
+    });
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
+  }
+
+  await prisma.clubComment.delete({ where: { id: commentId } });
+  return NextResponse.json({ ok: true });
+}

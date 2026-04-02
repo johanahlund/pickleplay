@@ -6,6 +6,50 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
+// ── Swipe to delete (no confirmation) ──
+function SwipeToDelete({ children, canSwipe, onDelete }: { children: React.ReactNode; canSwipe: boolean; onDelete: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const startX = useRef(0);
+  const startY = useRef(0);
+  const offset = useRef(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (!canSwipe) return;
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    offset.current = 0;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!canSwipe) return;
+    const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0) {
+      offset.current = dx;
+      if (ref.current) ref.current.style.transform = `translateX(${Math.max(dx, -120)}px)`;
+    }
+  };
+  const onTouchEnd = () => {
+    if (offset.current < -80 && canSwipe) {
+      onDelete();
+      return;
+    }
+    if (ref.current) ref.current.style.transform = "";
+    offset.current = 0;
+  };
+
+  return (
+    <div className="overflow-hidden relative">
+      <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center text-white text-xs font-medium rounded-r-xl">
+        Delete
+      </div>
+      <div ref={ref} className="relative transition-transform select-none" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 interface Player {
   id: string;
   name: string;
@@ -378,8 +422,16 @@ export default function ClubDetailPage() {
   };
 
   const deletePost = async (postId: string) => {
-    if (!confirm("Delete this post?")) return;
     await fetch(`/api/clubs/${id}/posts/${postId}`, { method: "DELETE" });
+    fetchPosts();
+  };
+
+  const deleteComment = async (postId: string, commentId: string) => {
+    await fetch(`/api/clubs/${id}/posts/${postId}/comments`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId }),
+    });
     fetchPosts();
   };
 
@@ -452,77 +504,84 @@ export default function ClubDetailPage() {
               <p className="text-muted text-sm">No posts yet. Be the first!</p>
             </div>
           ) : (
-            posts.map((post) => (
-              <div key={post.id} className="bg-card rounded-xl border border-border p-3 space-y-2">
-                {/* Post header */}
-                <div className="flex items-center gap-2">
-                  <PlayerAvatar name={post.author.name} photoUrl={post.author.photoUrl} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-sm">{post.author.name}</span>
-                    <span className="text-xs text-muted ml-2">{timeAgo(post.createdAt)}</span>
-                  </div>
-                  {(post.author.id === userId || canManage) && (
-                    <button onClick={() => deletePost(post.id)} className="text-xs text-muted hover:text-danger px-1">✕</button>
-                  )}
-                </div>
-
-                {/* Post content */}
-                <p className="text-sm whitespace-pre-wrap">{post.content}</p>
-
-                {/* Comments */}
-                {post.comments.length > 0 && (
-                  <div className="pl-4 border-l-2 border-gray-100 space-y-2 mt-2">
-                    {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => (
-                      <div key={c.id} className="flex items-start gap-2">
-                        <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-semibold text-xs">{c.author.name}</span>
-                          <span className="text-[10px] text-muted ml-1">{timeAgo(c.createdAt)}</span>
-                          <p className="text-xs">{c.content}</p>
-                        </div>
+            posts.map((post) => {
+              const canDeletePost = post.author.id === userId || canManage;
+              return (
+                <SwipeToDelete key={post.id} canSwipe={canDeletePost} onDelete={() => deletePost(post.id)}>
+                  <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+                    {/* Post header */}
+                    <div className="flex items-center gap-2">
+                      <PlayerAvatar name={post.author.name} photoUrl={post.author.photoUrl} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-sm">{post.author.name}</span>
+                        <span className="text-xs text-muted ml-2">{timeAgo(post.createdAt)}</span>
                       </div>
-                    ))}
-                    {post.comments.length > 2 && expandedPost !== post.id && (
+                    </div>
+
+                    {/* Post content */}
+                    <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+
+                    {/* Comments */}
+                    {post.comments.length > 0 && (
+                      <div className="pl-4 border-l-2 border-gray-100 space-y-2 mt-2">
+                        {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => {
+                          const canDeleteComment = c.author.id === userId || canManage;
+                          return (
+                            <SwipeToDelete key={c.id} canSwipe={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}>
+                              <div className="flex items-start gap-2">
+                                <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-semibold text-xs">{c.author.name}</span>
+                                  <span className="text-[10px] text-muted ml-1">{timeAgo(c.createdAt)}</span>
+                                  <p className="text-xs">{c.content}</p>
+                                </div>
+                              </div>
+                            </SwipeToDelete>
+                          );
+                        })}
+                        {post.comments.length > 2 && expandedPost !== post.id && (
+                          <button
+                            onClick={() => setExpandedPost(post.id)}
+                            className="text-xs text-primary font-medium"
+                          >
+                            View all {post.comments.length} comments
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Add comment */}
+                    {postingComment === post.id ? (
+                      <div className="flex gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={commentContent}
+                          onChange={(e) => setCommentContent(e.target.value)}
+                          placeholder="Write a comment..."
+                          className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(post.id); } }}
+                        />
+                        <button
+                          onClick={() => addComment(post.id)}
+                          disabled={!commentContent.trim()}
+                          className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                        >
+                          Send
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => setExpandedPost(post.id)}
-                        className="text-xs text-primary font-medium"
+                        onClick={() => { setPostingComment(post.id); setCommentContent(""); }}
+                        className="text-xs text-muted hover:text-foreground"
                       >
-                        View all {post.comments.length} comments
+                        {post._count.comments > 0 ? "Reply" : "Comment"}
                       </button>
                     )}
                   </div>
-                )}
-
-                {/* Add comment */}
-                {postingComment === post.id ? (
-                  <div className="flex gap-2 mt-1">
-                    <input
-                      type="text"
-                      value={commentContent}
-                      onChange={(e) => setCommentContent(e.target.value)}
-                      placeholder="Write a comment..."
-                      className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      autoFocus
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(post.id); } }}
-                    />
-                    <button
-                      onClick={() => addComment(post.id)}
-                      disabled={!commentContent.trim()}
-                      className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-                    >
-                      Send
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => { setPostingComment(post.id); setCommentContent(""); }}
-                    className="text-xs text-muted hover:text-foreground"
-                  >
-                    {post._count.comments > 0 ? "Reply" : "Comment"}
-                  </button>
-                )}
-              </div>
-            ))
+                </SwipeToDelete>
+              );
+            })
           )}
         </div>
       )}
