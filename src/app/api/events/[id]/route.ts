@@ -50,9 +50,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized to edit this event" }, { status: 403 });
   }
 
-  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, ranked, openSignup, visibility } = await req.json();
+  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, rankingMode, openSignup, visibility } = await req.json();
 
-  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; ranked?: boolean; openSignup?: boolean; visibility?: string } = {};
+  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; rankingMode?: string; openSignup?: boolean; visibility?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -109,8 +109,11 @@ export async function PATCH(
     }
     data.pairingMode = pairingMode;
   }
-  if (ranked !== undefined) {
-    data.ranked = !!ranked;
+  if (rankingMode !== undefined) {
+    if (!["ranked", "approval", "none"].includes(rankingMode)) {
+      return NextResponse.json({ error: "Invalid ranking mode" }, { status: 400 });
+    }
+    data.rankingMode = rankingMode;
   }
   if (openSignup !== undefined) {
     data.openSignup = !!openSignup;

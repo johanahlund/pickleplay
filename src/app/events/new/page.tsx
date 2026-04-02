@@ -49,7 +49,7 @@ export default function NewEventPage() {
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
-  const [ranked, setRanked] = useState(true);
+  const [rankingMode, setRankingMode] = useState("ranked");
   const [helperId, setHelperId] = useState<string | null>(null);
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
@@ -225,7 +225,7 @@ export default function NewEventPage() {
         numSets,
         scoringType,
         pairingMode,
-        ranked,
+        rankingMode,
       }),
     });
     const event = await r.json();
@@ -724,27 +724,27 @@ export default function NewEventPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRanked(true)}
-                  className={`flex-1 py-3 rounded-lg font-medium transition-all text-sm ${
-                    ranked ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                  }`}
-                >
-                  Ranked
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRanked(false)}
-                  className={`flex-1 py-3 rounded-lg font-medium transition-all text-sm ${
-                    !ranked ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                  }`}
-                >
-                  Unranked
-                </button>
+              <div className="space-y-1.5">
+                {[
+                  { value: "ranked", label: "Ranked", desc: "Scores count towards ratings immediately" },
+                  { value: "approval", label: "Approval", desc: "Scores need confirmation before counting" },
+                  { value: "none", label: "Not counted", desc: "Scores recorded but don't affect ratings" },
+                ].map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setRankingMode(m.value)}
+                    className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
+                      rankingMode === m.value
+                        ? "bg-primary/10 border border-primary/30"
+                        : "bg-gray-50 border border-transparent hover:bg-gray-100"
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{m.label}</div>
+                    <div className="text-xs text-muted">{m.desc}</div>
+                  </button>
+                ))}
               </div>
-              <p className="text-xs text-muted mt-1">Unranked matches won't affect player ratings</p>
             </div>
           </>
         )}
@@ -970,7 +970,9 @@ export default function NewEventPage() {
               </button>
               <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Rankings</span>
-                <span className="text-sm font-medium">{ranked ? "Ranked" : "Unranked"}</span>
+                <span className="text-sm font-medium">
+                  {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Not counted"}
+                </span>
               </button>
               <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Pairing</span>

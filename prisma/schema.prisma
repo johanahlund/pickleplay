@@ -76,7 +76,7 @@ model Event {
   scoringType  String   @default("normal_11") // normal_11, normal_15, rally_21, timed
   timedMinutes Int?     // only when scoringType = "timed"
   pairingMode  String   @default("random") // random, skill_balanced, mixed_gender, skill_mixed_gender, king_of_court, swiss
-  ranked       Boolean  @default(true)   // true = matches count towards rankings by default
+  rankingMode  String   @default("ranked") // "ranked" | "approval" | "none"
   openSignup   Boolean  @default(true)  // true = anyone can join, false = only manager can add players
   visibility   String   @default("visible") // "visible" | "hidden" (hidden only shown to owner/helpers/players)
   createdAt    DateTime @default(now())
@@ -121,9 +121,10 @@ model Match {
   eventId   String
   courtNum  Int
   round     Int
-  status    String   @default("pending") // pending, active, completed
-  ranked    Boolean  @default(true)     // true = counts towards rankings
-  eloChange Float    @default(0) // stored for score edit reversal
+  status         String   @default("pending") // pending, active, completed
+  rankingMode    String   @default("ranked") // "ranked" | "approval" | "none"
+  scoreConfirmed Boolean  @default(false)    // for approval mode: true once confirmed
+  eloChange      Float    @default(0) // stored for score edit reversal
   createdAt DateTime @default(now())
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
