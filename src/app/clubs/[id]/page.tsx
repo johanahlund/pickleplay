@@ -89,17 +89,21 @@ interface EventInfo {
   _count: { matches: number };
 }
 
+interface ClubLocation { id: string; name: string; googleMapsUrl?: string | null }
+
 interface Club {
   id: string;
   name: string;
   emoji: string;
+  description?: string | null;
   createdById: string | null;
   members: ClubMember[];
   whatsappGroups: WaGroup[];
+  locations: ClubLocation[];
   _count: { events: number };
 }
 
-type Tab = "feed" | "events" | "members" | "rankings" | "settings";
+type Tab = "feed" | "events" | "members" | "rankings";
 
 // ── Swipeable Member Row ──
 function SwipeableMemberRow({
@@ -242,9 +246,12 @@ export default function ClubDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberSearch, setAddMemberSearch] = useState("");
+  const [showInfo, setShowInfo] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editLocations, setEditLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostContent, setNewPostContent] = useState("");
   const [postingComment, setPostingComment] = useState<string | null>(null);
@@ -313,9 +320,31 @@ export default function ClubDetailPage() {
   };
 
   const saveEdit = async () => {
-    await fetch(`/api/clubs/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editName, emoji: editEmoji }) });
+    await fetch(`/api/clubs/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editName,
+        emoji: editEmoji,
+        description: editDescription,
+        locations: editLocations.filter((l) => l.name.trim()),
+      }),
+    });
     setEditing(false);
     fetchClub();
+  };
+
+  const startEditing = () => {
+    if (!club) return;
+    setEditName(club.name);
+    setEditEmoji(club.emoji);
+    setEditDescription(club.description || "");
+    setEditLocations(
+      club.locations.length > 0
+        ? club.locations.map((l) => ({ name: l.name, googleMapsUrl: l.googleMapsUrl || "" }))
+        : [{ name: "", googleMapsUrl: "" }]
+    );
+    setEditing(true);
   };
 
   const deleteClub = async () => {
@@ -407,7 +436,6 @@ export default function ClubDetailPage() {
     { key: "events", label: "Events" },
     { key: "members", label: "Members" },
     { key: "rankings", label: "Rankings" },
-    ...(canManage ? [{ key: "settings" as Tab, label: "Settings" }] : []),
   ];
 
   const createPost = async () => {
@@ -461,20 +489,182 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-3">
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-              tab === t.key ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Tab bar + info icon */}
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setShowInfo(false); }}
+              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                !showInfo && tab === t.key ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+            showInfo ? "bg-primary text-white" : "bg-gray-100 text-muted hover:text-foreground"
+          }`}
+        >
+          ℹ
+        </button>
       </div>
+
+      {/* ── Club Info Panel ── */}
+      {showInfo && (
+        <div className="space-y-4">
+          {editing ? (
+            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Club Name</label>
+                <input
+                  type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Icon</label>
+                <div className="flex flex-wrap gap-2">
+                  {EMOJIS.map((e) => (
+                    <button key={e} type="button" onClick={() => setEditEmoji(e)}
+                      className={`text-2xl p-1 rounded-lg transition-all ${editEmoji === e ? "bg-primary/10 ring-2 ring-primary scale-110" : "hover:bg-gray-100"}`}
+                    >{e}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Description</label>
+                <textarea
+                  value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
+                  rows={3} placeholder="Tell members about this club..."
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Locations</label>
+                <div className="space-y-2">
+                  {editLocations.map((loc, i) => (
+                    <div key={i} className="flex gap-2 items-start">
+                      <div className="flex-1 space-y-1">
+                        <input
+                          type="text" value={loc.name} placeholder="Location name"
+                          onChange={(e) => {
+                            const next = [...editLocations];
+                            next[i] = { ...next[i], name: e.target.value };
+                            setEditLocations(next);
+                          }}
+                          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        <input
+                          type="url" value={loc.googleMapsUrl} placeholder="Google Maps URL"
+                          onChange={(e) => {
+                            const next = [...editLocations];
+                            next[i] = { ...next[i], googleMapsUrl: e.target.value };
+                            setEditLocations(next);
+                          }}
+                          className="w-full border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setEditLocations(editLocations.filter((_, j) => j !== i))}
+                        className="text-xs text-danger px-2 py-2 rounded hover:bg-red-50 mt-1"
+                      >✕</button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setEditLocations([...editLocations, { name: "", googleMapsUrl: "" }])}
+                    className="text-xs text-primary font-medium"
+                  >+ Add Location</button>
+                </div>
+              </div>
+
+              {/* WhatsApp Groups */}
+              {club.whatsappGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">WhatsApp Groups</label>
+                  {club.whatsappGroups.map((g) => (
+                    <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg">
+                      <span>💬</span>
+                      <span className="text-sm">{g.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium">Save</button>
+                <button onClick={() => setEditing(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+              </div>
+
+              {isOwner && (
+                <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
+                  Delete Club
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{club.emoji}</span>
+                  <div>
+                    <h3 className="font-bold">{club.name}</h3>
+                    <p className="text-xs text-muted">{club.members.length} members &middot; {club._count.events} events</p>
+                  </div>
+                </div>
+                {canManage && (
+                  <button onClick={startEditing} className="text-xs text-primary px-2 py-1 rounded bg-primary/10">
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {club.description && (
+                <p className="text-sm whitespace-pre-wrap">{club.description}</p>
+              )}
+
+              {club.locations.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted mb-1 uppercase tracking-wider">Locations</h4>
+                  <div className="space-y-1">
+                    {club.locations.map((loc) => (
+                      <div key={loc.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                        <span className="text-sm">📍</span>
+                        <span className="text-sm font-medium flex-1">{loc.name}</span>
+                        {loc.googleMapsUrl && (
+                          <a
+                            href={loc.googleMapsUrl}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-primary font-medium"
+                          >
+                            Map →
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {club.whatsappGroups.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-medium text-muted mb-1 uppercase tracking-wider">WhatsApp Groups</h4>
+                  {club.whatsappGroups.map((g) => (
+                    <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                      <span>💬</span>
+                      <span className="text-sm font-medium">{g.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Feed Tab ── */}
       {tab === "feed" && (
@@ -848,64 +1038,7 @@ export default function ClubDetailPage() {
         </div>
       )}
 
-      {/* ── Settings Tab ── */}
-      {tab === "settings" && canManage && (
-        <div className="space-y-4">
-          {editing ? (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-              <input
-                type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-lg font-bold"
-              />
-              <div className="flex flex-wrap gap-2">
-                {EMOJIS.map((e) => (
-                  <button key={e} type="button" onClick={() => setEditEmoji(e)}
-                    className={`text-2xl p-1 rounded-lg transition-all ${editEmoji === e ? "bg-primary/10 ring-2 ring-primary scale-110" : "hover:bg-gray-100"}`}
-                  >{e}</button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <button onClick={saveEdit} className="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium">Save</button>
-                <button onClick={() => setEditing(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setEditName(club.name); setEditEmoji(club.emoji); setEditing(true); }}
-              className="w-full bg-card rounded-xl border border-border p-4 text-left active:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-semibold">Club Name & Icon</span>
-                  <p className="text-sm text-muted">{club.emoji} {club.name}</p>
-                </div>
-                <span className="text-xl text-muted">›</span>
-              </div>
-            </button>
-          )}
-
-          {club.whatsappGroups.length > 0 && (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-              <h3 className="text-sm font-medium text-muted">WhatsApp Groups</h3>
-              {club.whatsappGroups.map((g) => (
-                <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg">
-                  <span>💬</span>
-                  <span className="text-sm font-medium">{g.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {isOwner && (
-            <button
-              onClick={deleteClub}
-              className="w-full py-3 text-sm text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors"
-            >
-              Delete Club
-            </button>
-          )}
-        </div>
-      )}
+      {/* Settings tab removed — club info is now via ℹ icon */}
     </div>
   );
 }

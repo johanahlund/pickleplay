@@ -16,6 +16,7 @@ export async function GET(
         orderBy: { player: { name: "asc" } },
       },
       whatsappGroups: { orderBy: { name: "asc" } },
+      locations: { orderBy: { name: "asc" } },
       _count: { select: { events: true } },
     },
   });
@@ -42,12 +43,30 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const { name, emoji } = await req.json();
-  const data: { name?: string; emoji?: string } = {};
+  const { name, emoji, description, locations } = await req.json();
+  const data: { name?: string; emoji?: string; description?: string | null } = {};
   if (name?.trim()) data.name = name.trim();
   if (emoji) data.emoji = emoji;
+  if (description !== undefined) data.description = description?.trim() || null;
 
   const club = await prisma.club.update({ where: { id }, data });
+
+  // Handle locations if provided: replace all
+  if (locations !== undefined && Array.isArray(locations)) {
+    await prisma.clubLocation.deleteMany({ where: { clubId: id } });
+    for (const loc of locations) {
+      if (loc.name?.trim()) {
+        await prisma.clubLocation.create({
+          data: {
+            clubId: id,
+            name: loc.name.trim(),
+            googleMapsUrl: loc.googleMapsUrl?.trim() || null,
+          },
+        });
+      }
+    }
+  }
+
   return NextResponse.json(club);
 }
 

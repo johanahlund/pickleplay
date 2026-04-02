@@ -44,6 +44,7 @@ model Club {
   id          String   @id @default(cuid())
   name        String
   emoji       String   @default("🏓")
+  description String?
   createdAt   DateTime @default(now())
 
   createdById String?
@@ -53,6 +54,16 @@ model Club {
   events         Event[]
   whatsappGroups WhatsAppGroup[]
   posts          ClubPost[]
+  locations      ClubLocation[]
+}
+
+model ClubLocation {
+  id            String @id @default(cuid())
+  clubId        String
+  name          String
+  googleMapsUrl String?
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 }
 
 model ClubMember {
