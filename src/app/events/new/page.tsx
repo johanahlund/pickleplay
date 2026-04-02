@@ -50,6 +50,8 @@ export default function NewEventPage() {
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
   const [rankingMode, setRankingMode] = useState("ranked");
+  const [minPlayers, setMinPlayers] = useState<string>("");
+  const [maxPlayers, setMaxPlayers] = useState<string>("");
   const [helperId, setHelperId] = useState<string | null>(null);
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
@@ -226,6 +228,8 @@ export default function NewEventPage() {
         scoringType,
         pairingMode,
         rankingMode,
+        ...(minPlayers ? { minPlayers: parseInt(minPlayers) } : {}),
+        ...(maxPlayers ? { maxPlayers: parseInt(maxPlayers) } : {}),
       }),
     });
     const event = await r.json();
@@ -673,6 +677,31 @@ export default function NewEventPage() {
                 ))}
               </div>
             </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-muted mb-1">Min Players</label>
+                <input
+                  type="number"
+                  value={minPlayers}
+                  onChange={(e) => setMinPlayers(e.target.value)}
+                  placeholder="No min"
+                  min="1"
+                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-muted mb-1">Max Players</label>
+                <input
+                  type="number"
+                  value={maxPlayers}
+                  onChange={(e) => setMaxPlayers(e.target.value)}
+                  placeholder="No max"
+                  min="1"
+                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted">Players beyond max will be waitlisted</p>
           </>
         )}
 
@@ -959,6 +988,14 @@ export default function NewEventPage() {
               <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Courts</span>
                 <span className="text-sm font-medium">{numCourts}</span>
+              </button>
+              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Players</span>
+                <span className="text-sm font-medium">
+                  {minPlayers || maxPlayers
+                    ? `${minPlayers || "–"} / ${maxPlayers || "–"}`
+                    : "No limit"}
+                </span>
               </button>
               <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Sets</span>

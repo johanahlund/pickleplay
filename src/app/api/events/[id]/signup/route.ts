@@ -2,6 +2,23 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
+function getActiveCount(players: { status: string }[]) {
+  return players.filter((p) => p.status === "registered" || p.status === "checked_in").length;
+}
+
+async function promoteNextWaitlisted(eventId: string) {
+  const next = await prisma.eventPlayer.findFirst({
+    where: { eventId, status: "waitlisted" },
+    orderBy: { joinedAt: "asc" },
+  });
+  if (next) {
+    await prisma.eventPlayer.update({
+      where: { id: next.id },
+      data: { status: "registered" },
+    });
+  }
+}
+
 // User signs up for event
 export async function POST(
   _req: Request,
@@ -16,18 +33,18 @@ export async function POST(
 
   const { id } = await params;
 
-  // Check event exists
-  const event = await prisma.event.findUnique({ where: { id } });
+  const event = await prisma.event.findUnique({
+    where: { id },
+    include: { players: { select: { status: true } } },
+  });
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  // Check if event allows open signup
   if (!event.openSignup) {
     return NextResponse.json({ error: "This event is closed — only the organizer can add players" }, { status: 403 });
   }
 
-  // Check not already signed up
   const existing = await prisma.eventPlayer.findUnique({
     where: { eventId_playerId: { eventId: id, playerId: user.id } },
   });
@@ -35,11 +52,16 @@ export async function POST(
     return NextResponse.json({ error: "Already signed up" }, { status: 400 });
   }
 
+  // Determine status based on capacity
+  const activeCount = getActiveCount(event.players);
+  const isFull = event.maxPlayers !== null && activeCount >= event.maxPlayers;
+  const status = isFull ? "waitlisted" : "registered";
+
   await prisma.eventPlayer.create({
-    data: { eventId: id, playerId: user.id },
+    data: { eventId: id, playerId: user.id, status },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, status });
 }
 
 // User unsigns from event
@@ -56,6 +78,13 @@ export async function DELETE(
 
   const { id } = await params;
 
+  const ep = await prisma.eventPlayer.findUnique({
+    where: { eventId_playerId: { eventId: id, playerId: user.id } },
+  });
+  if (!ep) {
+    return NextResponse.json({ error: "Not signed up" }, { status: 400 });
+  }
+
   // Check user is not in any match for this event
   const inMatch = await prisma.matchPlayer.findFirst({
     where: {
@@ -70,9 +99,19 @@ export async function DELETE(
     );
   }
 
+  const wasActive = ep.status === "registered" || ep.status === "checked_in";
+
   await prisma.eventPlayer.deleteMany({
     where: { eventId: id, playerId: user.id },
   });
+
+  // If an active player left, promote next waitlisted
+  if (wasActive) {
+    const event = await prisma.event.findUnique({ where: { id } });
+    if (event?.maxPlayers) {
+      await promoteNextWaitlisted(id);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -38,9 +38,28 @@ export async function DELETE(
     );
   }
 
+  const wasActive = eventPlayer.status === "registered" || eventPlayer.status === "checked_in";
+
   await prisma.eventPlayer.delete({
     where: { eventId_playerId: { eventId: id, playerId } },
   });
+
+  // Promote next waitlisted player if an active player was removed
+  if (wasActive) {
+    const event = await prisma.event.findUnique({ where: { id } });
+    if (event?.maxPlayers) {
+      const next = await prisma.eventPlayer.findFirst({
+        where: { eventId: id, status: "waitlisted" },
+        orderBy: { joinedAt: "asc" },
+      });
+      if (next) {
+        await prisma.eventPlayer.update({
+          where: { id: next.id },
+          data: { status: "registered" },
+        });
+      }
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, numCourts, format, playerIds, date, endDate, numSets, scoringType, timedMinutes, pairingMode, rankingMode, clubId } = await req.json();
+  const { name, numCourts, format, playerIds, date, endDate, numSets, scoringType, timedMinutes, pairingMode, rankingMode, minPlayers, maxPlayers, clubId } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -58,6 +58,8 @@ export async function POST(req: Request) {
       ...(timedMinutes !== undefined && timedMinutes !== null ? { timedMinutes } : {}),
       ...(pairingMode ? { pairingMode } : {}),
       ...(rankingMode && ["ranked", "approval", "none"].includes(rankingMode) ? { rankingMode } : {}),
+      ...(minPlayers !== undefined ? { minPlayers: minPlayers || null } : {}),
+      ...(maxPlayers !== undefined ? { maxPlayers: maxPlayers || null } : {}),
       players: {
         create: (playerIds || []).map((pid: string) => ({
           playerId: pid,

@@ -77,6 +77,8 @@ model Event {
   timedMinutes Int?     // only when scoringType = "timed"
   pairingMode  String   @default("random") // random, skill_balanced, mixed_gender, skill_mixed_gender, king_of_court, swiss
   rankingMode  String   @default("ranked") // "ranked" | "approval" | "none"
+  minPlayers   Int?     // minimum players needed
+  maxPlayers   Int?     // maximum players allowed (null = unlimited)
   openSignup   Boolean  @default(true)  // true = anyone can join, false = only manager can add players
   visibility   String   @default("visible") // "visible" | "hidden" (hidden only shown to owner/helpers/players)
   createdAt    DateTime @default(now())
@@ -94,10 +96,11 @@ model Event {
 }
 
 model EventPlayer {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   eventId   String
   playerId  String
-  checkedIn Boolean @default(true)
+  status    String   @default("registered") // "registered" | "waitlisted" | "checked_in" | "paused"
+  joinedAt  DateTime @default(now())
 
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)

@@ -49,7 +49,7 @@ interface Event {
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
-  players: { player: Player; checkedIn: boolean }[];
+  players: { player: Player; status: string }[];
   matches: Match[];
   helpers: EventHelper[];
 }
@@ -108,7 +108,7 @@ function SwipeablePlayerRow({
   onPause,
   onRemove,
 }: {
-  ep: { player: Player; checkedIn: boolean };
+  ep: { player: Player; status: string };
   canManage: boolean;
   hasMatches: boolean;
   showContact: boolean;
@@ -121,12 +121,12 @@ function SwipeablePlayerRow({
   const swipeOffset = useRef(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
-  const [localPaused, setLocalPaused] = useState(!ep.checkedIn);
+  const [localPaused, setLocalPaused] = useState(ep.status === "paused");
 
   // Sync with prop when it changes (after API response)
   useEffect(() => {
-    setLocalPaused(!ep.checkedIn);
-  }, [ep.checkedIn]);
+    setLocalPaused(ep.status === "paused");
+  }, [ep.status]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!canManage) return;
@@ -208,6 +208,16 @@ function SwipeablePlayerRow({
         >
           💬
         </a>
+      )}
+      {ep.status === "checked_in" && (
+        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+          In
+        </span>
+      )}
+      {ep.status === "waitlisted" && (
+        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
+          Waitlist
+        </span>
       )}
       {localPaused && (
         <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
@@ -307,10 +317,10 @@ export default function EventDetailPage() {
         })
       : "";
     const playerList = event.players
-      .filter((ep) => ep.checkedIn)
+      .filter((ep) => ep.status === "registered" || ep.status === "checked_in")
       .map((ep) => `${ep.player.emoji} ${ep.player.name}`)
       .join("\n");
-    const checkedInCount = event.players.filter((ep) => ep.checkedIn).length;
+    const checkedInCount = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").length;
 
     return `🏓 *${event.name}*\n📅 ${date}\n⏰ ${time}${endTime ? ` – ${endTime}` : ""}\n🏟️ ${event.numCourts} court${event.numCourts > 1 ? "s" : ""} · ${event.format}\n\n👥 Players (${checkedInCount}):\n${playerList}`;
   };
@@ -436,6 +446,11 @@ export default function EventDetailPage() {
 
   const togglePausePlayer = async (playerId: string) => {
     await fetch(`/api/events/${id}/players/${playerId}/pause`, { method: "POST" });
+    await fetchEvent();
+  };
+
+  const checkInPlayer = async (playerId: string) => {
+    await fetch(`/api/events/${id}/players/${playerId}/checkin`, { method: "POST" });
     await fetchEvent();
   };
 
@@ -613,8 +628,9 @@ export default function EventDetailPage() {
 
   const hasMatches = event.matches.length > 0;
   const minPlayers = event.format === "singles" ? 2 : 4;
-  const activePlayers = event.players.filter((ep) => ep.checkedIn);
-  const pausedPlayers = event.players.filter((ep) => !ep.checkedIn);
+  const activePlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+  const pausedPlayers = event.players.filter((ep) => ep.status === "paused");
+  const waitlistedPlayers = event.players.filter((ep) => ep.status === "waitlisted");
   const isIncremental = event.pairingMode === "king_of_court" || event.pairingMode === "swiss";
 
   const backButton = (
@@ -1024,7 +1040,7 @@ export default function EventDetailPage() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-bold text-foreground">
-            Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
+            Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </h3>
           {canManage && (
             <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
@@ -1212,7 +1228,7 @@ export default function EventDetailPage() {
         <div>
           <label className="block text-lg font-semibold text-foreground mb-1">Team 1 ({manualTeam1.length})</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
-            {event.players.filter((ep) => ep.checkedIn).map((ep) => (
+            {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 1)}
                 className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
                   manualTeam1.includes(ep.player.id) ? "bg-blue-100 text-blue-800 font-medium"
@@ -1226,7 +1242,7 @@ export default function EventDetailPage() {
         <div>
           <label className="block text-lg font-semibold text-foreground mb-1">Team 2 ({manualTeam2.length})</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
-            {event.players.filter((ep) => ep.checkedIn).map((ep) => (
+            {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 2)}
                 className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
                   manualTeam2.includes(ep.player.id) ? "bg-red-100 text-red-800 font-medium"
@@ -1300,7 +1316,7 @@ export default function EventDetailPage() {
         className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
         <div className="flex items-center justify-between">
           <span className="text-xl font-bold text-foreground">
-            👥 Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""})
+            👥 Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </span>
           <span className="text-2xl text-muted">›</span>
         </div>

@@ -49,7 +49,7 @@ export async function POST(
   }
 
   const playerInfos: PlayerInfo[] = event.players
-    .filter((ep) => ep.checkedIn)
+    .filter((ep) => ep.status === "registered" || ep.status === "checked_in")
     .map((ep) => ({
       id: ep.player.id,
       name: ep.player.name,

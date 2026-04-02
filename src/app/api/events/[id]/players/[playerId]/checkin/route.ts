@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// Toggle between paused and active (checked_in/registered)
+// Check a player in (confirm they're physically present)
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string; playerId: string }> }
@@ -22,11 +22,13 @@ export async function POST(
     return NextResponse.json({ error: "Player not in event" }, { status: 404 });
   }
 
-  const newStatus = ep.status === "paused" ? "checked_in" : "paused";
+  if (ep.status === "waitlisted") {
+    return NextResponse.json({ error: "Player is on waitlist — promote them first" }, { status: 400 });
+  }
 
   const updated = await prisma.eventPlayer.update({
     where: { id: ep.id },
-    data: { status: newStatus },
+    data: { status: "checked_in" },
   });
 
   return NextResponse.json({ status: updated.status });
