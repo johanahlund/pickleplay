@@ -49,6 +49,7 @@ interface Event {
   numSets: number;
   scoringType: string;
   pairingMode: string;
+  rankingMode?: string;
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
@@ -1301,86 +1302,97 @@ export default function EventDetailPage() {
     );
   }
 
+  const scoringLabel = (v: string) =>
+    ({ normal_11: "To 11", normal_15: "To 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
+  const pairingLabel = (v: string) =>
+    ({ random: "Random", skill_balanced: "Skill Balanced", mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed", king_of_court: "King of Court", swiss: "Swiss", manual: "Manual" }[v] || v);
+  const rankingLabel = (v: string) =>
+    ({ ranked: "Ranked", approval: "Approval", none: "Not counted" }[v] || v);
+
+  const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 rounded-lg hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {eventHeader}
 
-      {/* 1. Event Details */}
-      <button onClick={() => { startEditEvent(); setActiveSection("details"); }}
-        className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xl font-bold text-foreground">{event.name}</span>
-            <p className="text-base text-muted mt-1">
-              {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
-              &middot; {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
-            </p>
-          </div>
-          <span className="text-2xl text-muted">›</span>
-        </div>
-      </button>
+      {/* Summary rows — tap to edit */}
+      <div className="bg-card rounded-xl border border-border p-1 space-y-0">
+        <p className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider">Tap any row to edit</p>
 
-      {/* 2. Administrators */}
-      {canManage && (
-        <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }}
-          className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xl font-bold text-foreground">
-                Administrators
-              </span>
-              <p className="text-sm text-muted mt-0.5">
-                {1 + event.helpers.length} {1 + event.helpers.length === 1 ? "person" : "people"}
-                {event.helpers.length > 0 && (
-                  <span> &middot; {event.helpers.map((h) => h.player.name).join(", ")}</span>
-                )}
-              </p>
-            </div>
-            <span className="text-2xl text-muted">›</span>
-          </div>
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Date</span>
+          <span className="text-sm font-medium">
+            {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+            {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+          </span>
         </button>
-      )}
 
-      {/* 3. Players */}
-      <button onClick={() => setActiveSection("players")}
-        className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
-        <div className="flex items-center justify-between">
-          <span className="text-xl font-bold text-foreground">
-            👥 Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Format</span>
+          <span className="text-sm font-medium capitalize">{event.format}</span>
+        </button>
+
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Courts</span>
+          <span className="text-sm font-medium">{event.numCourts}</span>
+        </button>
+
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Scoring</span>
+          <span className="text-sm font-medium">{scoringLabel(event.scoringType)} &middot; {event.numSets === 1 ? "1 set" : "Best of 3"}</span>
+        </button>
+
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Pairing</span>
+          <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
+        </button>
+
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">Rankings</span>
+          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+        </button>
+
+        {canManage && (
+          <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
+            <span className="text-sm text-muted">Helpers</span>
+            <span className="text-sm font-medium">
+              {event.helpers.length > 0
+                ? event.helpers.map((h) => h.player.name).join(", ")
+                : "None"}
+            </span>
+          </button>
+        )}
+
+        <button onClick={() => setActiveSection("players")} className={rowClass}>
+          <span className="text-sm text-muted">Players</span>
+          <span className="text-sm font-medium">
+            {activePlayers.length}
+            {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
+            {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
-          <span className="text-2xl text-muted">›</span>
-        </div>
-      </button>
+        </button>
 
-      {/* 3. Rounds */}
-      <button onClick={() => setActiveSection("rounds")}
-        className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
-        <div className="flex items-center justify-between">
-          <span className="text-xl font-bold text-foreground">
-            🏸 Rounds ({event.matches.length} match{event.matches.length !== 1 ? "es" : ""})
-          </span>
-          <span className="text-2xl text-muted">›</span>
-        </div>
-      </button>
+        <button onClick={() => setActiveSection("rounds")} className={rowClass}>
+          <span className="text-sm text-muted">Matches</span>
+          <span className="text-sm font-medium">{event.matches.length} match{event.matches.length !== 1 ? "es" : ""}</span>
+        </button>
+      </div>
 
-      {/* 4. Add Match Manually */}
+      {/* Actions */}
       {canManage && (
         <button onClick={() => setActiveSection("manual")}
-          className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xl font-bold text-foreground">➕ Add Match Manually</span>
-            <span className="text-2xl text-muted">›</span>
-          </div>
+          className="w-full py-3 text-center rounded-xl text-sm font-semibold text-white bg-primary active:bg-primary-dark transition-colors shadow-sm"
+        >
+          + Add Match
         </button>
       )}
 
-      {/* Delete Event */}
       {(isOwner || isAdmin) && (
         <button
           onClick={deleteEvent}
-          className="w-full py-3 text-sm text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors"
+          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors"
         >
-          🗑️ Delete Event
+          Delete Event
         </button>
       )}
     </div>
