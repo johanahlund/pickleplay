@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
@@ -29,6 +29,7 @@ const TOTAL_STEPS = 7;
 
 export default function NewEventPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [step, setStep] = useState(1);
@@ -98,8 +99,13 @@ export default function NewEventPage() {
           id: c.id, name: c.name, emoji: c.emoji, memberIds: [] as string[],
         }));
         setClubs(clubList);
-        // Auto-select first club if only one
-        if (clubList.length === 1) setSelectedClubId(clubList[0].id);
+        // Auto-select from URL param, or first club if only one
+        const urlClubId = searchParams.get("clubId");
+        if (urlClubId && clubList.some((c: { id: string }) => c.id === urlClubId)) {
+          setSelectedClubId(urlClubId);
+        } else if (clubList.length === 1) {
+          setSelectedClubId(clubList[0].id);
+        }
         // Fetch members for each club
         Promise.all(
           clubList.map((c: { id: string }) =>

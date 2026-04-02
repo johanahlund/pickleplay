@@ -12,7 +12,7 @@ export async function GET(
     where: { id },
     include: {
       members: {
-        include: { player: { select: { id: true, name: true, emoji: true, rating: true, gender: true, phone: true } } },
+        include: { player: { select: { id: true, name: true, emoji: true, rating: true, gender: true, phone: true, wins: true, losses: true, role: true } } },
         orderBy: { player: { name: "asc" } },
       },
       whatsappGroups: { orderBy: { name: "asc" } },
