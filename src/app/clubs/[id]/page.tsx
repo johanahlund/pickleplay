@@ -13,6 +13,7 @@ interface Player {
   rating: number;
   gender?: string | null;
   phone?: string | null;
+  photoUrl?: string | null;
   wins: number;
   losses: number;
   role?: string;
