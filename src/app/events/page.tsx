@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { ClearInput } from "@/components/ClearInput";
 
 interface Event {
   id: string;
@@ -118,13 +119,7 @@ export default function EventsPage() {
       </div>
 
       <div className="space-y-2">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search events..."
-          className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
-        />
+        <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search events..." className="text-sm" />
         <div className="flex flex-wrap gap-1.5">
           {[
             { value: "all", label: "All" },

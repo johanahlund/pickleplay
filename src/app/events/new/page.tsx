@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ClearInput } from "@/components/ClearInput";
 
 interface Player {
   id: string;
@@ -549,13 +550,7 @@ function NewEventPage() {
 
               {/* Filters */}
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={helperSearch}
-                  onChange={(e) => setHelperSearch(e.target.value)}
-                  placeholder="Search by name..."
-                  className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
+                <ClearInput value={helperSearch} onChange={setHelperSearch} placeholder="Search by name..." className="text-sm" />
                 {(["M", "F"] as const).map((g) => (
                   <button
                     key={g}
@@ -843,13 +838,7 @@ function NewEventPage() {
 
               {/* Filters */}
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={playerSearch}
-                  onChange={(e) => setPlayerSearch(e.target.value)}
-                  placeholder="Search by name..."
-                  className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
+                <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search by name..." className="text-sm" />
                 {(["M", "F"] as const).map((g) => (
                   <button
                     key={g}

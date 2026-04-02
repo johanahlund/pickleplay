@@ -5,47 +5,40 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ClearInput } from "@/components/ClearInput";
 
-// ── Swipe to delete (no confirmation) ──
-function SwipeToDelete({ children, canSwipe, onDelete }: { children: React.ReactNode; canSwipe: boolean; onDelete: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const startX = useRef(0);
-  const startY = useRef(0);
-  const offset = useRef(0);
+// ── Long press to delete ──
+function LongPressDelete({ children, canDelete, onDelete }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moved = useRef(false);
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    if (!canSwipe) return;
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
-    offset.current = 0;
+  const onTouchStart = () => {
+    if (!canDelete) return;
+    moved.current = false;
+    timer.current = setTimeout(() => {
+      if (!moved.current) {
+        if (navigator.vibrate) navigator.vibrate(50);
+        if (confirm("Delete this?")) onDelete();
+      }
+    }, 600);
   };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!canSwipe) return;
-    const dx = e.touches[0].clientX - startX.current;
-    const dy = e.touches[0].clientY - startY.current;
-    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return;
-    if (dx < 0) {
-      offset.current = dx;
-      if (ref.current) ref.current.style.transform = `translateX(${Math.max(dx, -120)}px)`;
-    }
+  const onTouchMove = () => {
+    moved.current = true;
+    if (timer.current) clearTimeout(timer.current);
   };
   const onTouchEnd = () => {
-    if (offset.current < -80 && canSwipe) {
-      onDelete();
-      return;
-    }
-    if (ref.current) ref.current.style.transform = "";
-    offset.current = 0;
+    if (timer.current) clearTimeout(timer.current);
   };
 
   return (
-    <div className="overflow-hidden relative">
-      <div className="absolute inset-y-0 right-0 w-24 bg-red-500 flex items-center justify-center text-white text-xs font-medium rounded-r-xl">
-        Delete
-      </div>
-      <div ref={ref} className="relative transition-transform select-none" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-        {children}
-      </div>
+    <div
+      className="select-none"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onContextMenu={(e) => { if (canDelete) e.preventDefault(); }}
+    >
+      {children}
     </div>
   );
 }
@@ -697,7 +690,7 @@ export default function ClubDetailPage() {
             posts.map((post) => {
               const canDeletePost = post.author.id === userId || canManage;
               return (
-                <SwipeToDelete key={post.id} canSwipe={canDeletePost} onDelete={() => deletePost(post.id)}>
+                <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}>
                   <div className="bg-card rounded-xl border border-border p-3 space-y-2">
                     {/* Post header */}
                     <div className="flex items-center gap-2">
@@ -717,7 +710,7 @@ export default function ClubDetailPage() {
                         {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => {
                           const canDeleteComment = c.author.id === userId || canManage;
                           return (
-                            <SwipeToDelete key={c.id} canSwipe={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}>
+                            <LongPressDelete key={c.id} canDelete={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}>
                               <div className="flex items-start gap-2">
                                 <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
                                 <div className="flex-1 min-w-0">
@@ -726,7 +719,7 @@ export default function ClubDetailPage() {
                                   <p className="text-xs">{c.content}</p>
                                 </div>
                               </div>
-                            </SwipeToDelete>
+                            </LongPressDelete>
                           );
                         })}
                         {post.comments.length > 2 && expandedPost !== post.id && (
@@ -769,7 +762,7 @@ export default function ClubDetailPage() {
                       </button>
                     )}
                   </div>
-                </SwipeToDelete>
+                </LongPressDelete>
               );
             })
           )}
@@ -788,13 +781,7 @@ export default function ClubDetailPage() {
             </Link>
           )}
 
-          <input
-            type="text"
-            value={eventSearch}
-            onChange={(e) => setEventSearch(e.target.value)}
-            placeholder="Search events..."
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
+          <ClearInput value={eventSearch} onChange={setEventSearch} placeholder="Search events..." className="text-sm" />
 
           <div className="flex flex-wrap gap-1.5">
             {[
@@ -896,13 +883,7 @@ export default function ClubDetailPage() {
         <div className="space-y-3">
           {/* Filters */}
           <div className="flex gap-2">
-            <input
-              type="text"
-              value={memberSearch}
-              onChange={(e) => setMemberSearch(e.target.value)}
-              placeholder="Search members..."
-              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
+            <ClearInput value={memberSearch} onChange={setMemberSearch} placeholder="Search members..." className="text-sm" />
             {(["M", "F"] as const).map((g) => (
               <button
                 key={g}
@@ -958,13 +939,7 @@ export default function ClubDetailPage() {
                   <h4 className="text-sm font-medium text-muted">Add Member</h4>
                   <button onClick={() => setShowAddMember(false)} className="text-xs text-muted px-2 py-1 rounded bg-gray-100">Close</button>
                 </div>
-                <input
-                  type="text"
-                  value={addMemberSearch}
-                  onChange={(e) => setAddMemberSearch(e.target.value)}
-                  placeholder="Search by name..."
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
+                <ClearInput value={addMemberSearch} onChange={setAddMemberSearch} placeholder="Search by name..." className="text-sm" />
                 <div className="space-y-1 max-h-64 overflow-y-auto">
                   {nonMembers.map((p) => (
                     <button

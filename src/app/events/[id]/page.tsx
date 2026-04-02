@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ClearInput } from "@/components/ClearInput";
 
 interface Player {
   id: string;
@@ -855,9 +856,7 @@ export default function EventDetailPage() {
                   <p className="text-sm text-muted py-2">Loading players...</p>
                 ) : (
                   <>
-                    <input type="text" value={adminSearch} onChange={(e) => setAdminSearch(e.target.value)}
-                      placeholder="Search by name..."
-                      className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base mb-2" />
+                    <ClearInput value={adminSearch} onChange={setAdminSearch} placeholder="Search by name..." className="text-base mb-2" />
                     <div className="space-y-1 max-h-64 overflow-y-auto">
                       {availablePlayers.map((p) => (
                         <button key={p.id} onClick={async () => { await addHelper(p.id); setShowAddHelper(false); }}
@@ -1002,9 +1001,7 @@ export default function EventDetailPage() {
           ← Players
         </button>
         <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
-        <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
-          placeholder="Search by name..."
-          className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base" />
+        <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-base" />
         <div className="flex gap-2">
           {[
             { value: null, label: "All" },
@@ -1064,9 +1061,7 @@ export default function EventDetailPage() {
           </div>
         )}
         {event.players.length > 6 && (
-          <input type="text" value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)}
-            placeholder="Search players..."
-            className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base" />
+          <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
         )}
         <div className="space-y-0">
           {[...event.players]

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ClearInput } from "@/components/ClearInput";
 
 interface Player {
   id: string;
@@ -202,13 +203,7 @@ export default function PlayersPage() {
         )}
       </div>
 
-      <input
-        type="text"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search players..."
-        className="w-full border border-border rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/50 text-base"
-      />
+      <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search players..." className="text-base" />
       <div className="flex gap-2">
         {[
           { value: null, label: "All" },
