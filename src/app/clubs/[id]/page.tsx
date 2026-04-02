@@ -199,6 +199,10 @@ export default function ClubDetailPage() {
   // Event filters
   const [eventSearch, setEventSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
+  const [visiblePast, setVisiblePast] = useState(12);
+  const [visibleFuture, setVisibleFuture] = useState(13);
+  const todayRef = useRef<HTMLDivElement>(null);
+  const [scrolledToToday, setScrolledToToday] = useState(false);
 
   // Member filters
   const [memberSearch, setMemberSearch] = useState("");
@@ -260,12 +264,55 @@ export default function ClubDetailPage() {
     router.push("/clubs");
   };
 
-  // Filtered events
+  // Filtered events — sorted by date ascending
   const filteredEvents = useMemo(() => {
     return events
       .filter((e) => e.name.toLowerCase().includes(eventSearch.toLowerCase()))
-      .filter((e) => matchesDateFilter(e.date, dateFilter));
+      .filter((e) => matchesDateFilter(e.date, dateFilter))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [events, eventSearch, dateFilter]);
+
+  // Split into past and upcoming for "All" view windowing
+  const todayStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  }, []);
+
+  const { pastEvents, todayAndFutureEvents, windowedEvents, hasMorePast, hasMoreFuture } = useMemo(() => {
+    if (dateFilter !== "all") {
+      return { pastEvents: [], todayAndFutureEvents: [], windowedEvents: filteredEvents, hasMorePast: false, hasMoreFuture: false };
+    }
+    const past = filteredEvents.filter((e) => new Date(e.date).getTime() < todayStart);
+    const future = filteredEvents.filter((e) => new Date(e.date).getTime() >= todayStart);
+
+    const visiblePastSlice = past.slice(Math.max(0, past.length - visiblePast));
+    const visibleFutureSlice = future.slice(0, visibleFuture);
+
+    return {
+      pastEvents: past,
+      todayAndFutureEvents: future,
+      windowedEvents: [...visiblePastSlice, ...visibleFutureSlice],
+      hasMorePast: past.length > visiblePast,
+      hasMoreFuture: future.length > visibleFuture,
+    };
+  }, [filteredEvents, dateFilter, todayStart, visiblePast, visibleFuture]);
+
+  // Scroll to today marker when "All" events load
+  useEffect(() => {
+    if (dateFilter === "all" && todayRef.current && !scrolledToToday && windowedEvents.length > 0) {
+      setTimeout(() => {
+        todayRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+        setScrolledToToday(true);
+      }, 100);
+    }
+  }, [dateFilter, windowedEvents, scrolledToToday]);
+
+  // Reset scroll state when switching filters
+  useEffect(() => {
+    setScrolledToToday(false);
+    setVisiblePast(12);
+    setVisibleFuture(13);
+  }, [dateFilter]);
 
   // Filtered members
   const filteredMembers = useMemo(() => {
@@ -360,39 +407,76 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          {filteredEvents.length === 0 ? (
+          {(dateFilter === "all" ? windowedEvents : filteredEvents).length === 0 ? (
             <div className="text-center py-8"><p className="text-muted text-sm">No events found</p></div>
           ) : (
-            filteredEvents.map((event) => {
-              const ts = getTimeStatus(event);
-              const borderColor = ts === "active" ? "border-l-green-500" : ts === "upcoming" ? "border-l-blue-400" : "border-l-gray-300";
-              const cardOpacity = ts === "past" ? "opacity-60" : "";
-              return (
-                <Link
-                  key={event.id}
-                  href={`/events/${event.id}`}
-                  className={`block bg-card rounded-xl border border-border border-l-4 ${borderColor} ${cardOpacity} p-3 active:bg-gray-50 transition-colors`}
+            <>
+              {/* Load more past */}
+              {dateFilter === "all" && hasMorePast && (
+                <button
+                  onClick={() => setVisiblePast((p) => p + 25)}
+                  className="w-full py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="text-center min-w-[44px]">
-                      <div className="text-xs text-muted uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: "short" })}</div>
-                      <div className="text-xl font-bold leading-tight">{new Date(event.date).getDate()}</div>
-                      <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-sm flex items-center gap-2 truncate">
-                        {event.name}
-                        {ts === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
-                      </h3>
-                      <p className="text-xs text-muted">
-                        {event.players.length} players &middot; {event._count.matches} matches &middot; {event.format}
-                      </p>
-                    </div>
-                    <span className="text-xl text-muted">›</span>
+                  Load {Math.min(25, pastEvents.length - visiblePast)} older events
+                </button>
+              )}
+
+              {(dateFilter === "all" ? windowedEvents : filteredEvents).map((event, idx) => {
+                const ts = getTimeStatus(event);
+                const borderColor = ts === "active" ? "border-l-green-500" : ts === "upcoming" ? "border-l-blue-400" : "border-l-gray-300";
+                const cardOpacity = ts === "past" ? "opacity-60" : "";
+
+                // Insert "Today" marker at the boundary
+                const eventTime = new Date(event.date).getTime();
+                const prevEvent = (dateFilter === "all" ? windowedEvents : filteredEvents)[idx - 1];
+                const prevTime = prevEvent ? new Date(prevEvent.date).getTime() : 0;
+                const showTodayMarker = dateFilter === "all" && eventTime >= todayStart && prevTime < todayStart;
+
+                return (
+                  <div key={event.id}>
+                    {showTodayMarker && (
+                      <div ref={todayRef} className="flex items-center gap-2 py-2">
+                        <div className="flex-1 h-px bg-primary/40" />
+                        <span className="text-xs font-semibold text-primary px-2">Today</span>
+                        <div className="flex-1 h-px bg-primary/40" />
+                      </div>
+                    )}
+                    <Link
+                      href={`/events/${event.id}`}
+                      className={`block bg-card rounded-xl border border-border border-l-4 ${borderColor} ${cardOpacity} p-3 active:bg-gray-50 transition-colors`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-center min-w-[44px]">
+                          <div className="text-xs text-muted uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: "short" })}</div>
+                          <div className="text-xl font-bold leading-tight">{new Date(event.date).getDate()}</div>
+                          <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm flex items-center gap-2 truncate">
+                            {event.name}
+                            {ts === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+                          </h3>
+                          <p className="text-xs text-muted">
+                            {event.players.length} players &middot; {event._count.matches} matches &middot; {event.format}
+                          </p>
+                        </div>
+                        <span className="text-xl text-muted">›</span>
+                      </div>
+                    </Link>
                   </div>
-                </Link>
-              );
-            })
+                );
+              })}
+
+              {/* Load more future */}
+              {dateFilter === "all" && hasMoreFuture && (
+                <button
+                  onClick={() => setVisibleFuture((f) => f + 25)}
+                  className="w-full py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
+                >
+                  Load {Math.min(25, todayAndFutureEvents.length - visibleFuture)} newer events
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
