@@ -1,10 +1,16 @@
 import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
+    await requireAdmin();
+  } catch {
+    return NextResponse.json({ error: "Only admins can delete players" }, { status: 403 });
+  }
   const { id } = await params;
   await prisma.player.delete({ where: { id } });
   return NextResponse.json({ ok: true });
