@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const APP_VERSION = "1.5.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -114,33 +114,76 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 export function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [clubName, setClubName] = useState<string | null>(null);
+  const [clubEmoji, setClubEmoji] = useState<string | null>(null);
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
+
+  // Detect if we're inside a club
+  const clubMatch = pathname.match(/^\/clubs\/([^/]+)/);
+  const clubId = clubMatch?.[1];
+
+  // Also detect if we're on an event page that belongs to a club
+  // (we'll show the club context from the clubs path only)
+
+  useEffect(() => {
+    if (clubId) {
+      fetch(`/api/clubs/${clubId}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) {
+            setClubName(data.name);
+            setClubEmoji(data.emoji);
+          }
+        });
+    } else {
+      setClubName(null);
+      setClubEmoji(null);
+    }
+  }, [clubId]);
 
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 bg-primary text-white px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-md">
-        <div className="max-w-[600px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight">PickleJ</h1>
-            <span className="text-xs opacity-80 font-mono">v{APP_VERSION}</span>
-          </div>
-          {!isAuthPage && session?.user && (
+        <div className="max-w-[600px] mx-auto">
+          {/* Top row: app name + user */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight">PickleJ</h1>
+              <span className="text-xs opacity-80 font-mono">v{APP_VERSION}</span>
+            </div>
+            {!isAuthPage && session?.user && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="text-sm opacity-90 hover:opacity-100 transition-opacity"
+                  title="Change password"
+                >
+                  {session.user.emoji} {session.user.name}
+                </button>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/signin" })}
+                  className="text-xs bg-white/20 px-2 py-1 rounded-md hover:bg-white/30 transition-colors"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Club context row */}
+          {clubId && clubName && (
+            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-white/20">
               <button
-                onClick={() => setShowPasswordModal(true)}
-                className="text-sm opacity-90 hover:opacity-100 transition-opacity"
-                title="Change password"
+                onClick={() => router.push("/clubs")}
+                className="text-white/80 hover:text-white text-sm font-medium"
               >
-                {session.user.emoji} {session.user.name}
+                ←
               </button>
-              <button
-                onClick={() => signOut({ callbackUrl: "/signin" })}
-                className="text-xs bg-white/20 px-2 py-1 rounded-md hover:bg-white/30 transition-colors"
-              >
-                Sign Out
-              </button>
+              <span className="text-sm">{clubEmoji}</span>
+              <span className="text-sm font-semibold opacity-90">{clubName}</span>
             </div>
           )}
         </div>

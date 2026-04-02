@@ -192,14 +192,7 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-4">
-      {/* Club header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push("/clubs")} className="text-2xl">←</button>
-        <span className="text-3xl">{club.emoji}</span>
-        <div className="flex-1">
-          <h2 className="text-xl font-bold">{club.name}</h2>
-        </div>
-      </div>
+      {/* Tab bar is the first thing — club name is in the header */}
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">

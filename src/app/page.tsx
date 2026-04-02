@@ -1,76 +1,13 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const [stats, setStats] = useState({ players: 0, events: 0 });
-
+  const router = useRouter();
   useEffect(() => {
-    Promise.all([
-      fetch("/api/players").then((r) => r.json()),
-      fetch("/api/events").then((r) => r.json()),
-    ]).then(([players, events]) => {
-      setStats({
-        players: Array.isArray(players) ? players.length : 0,
-        events: Array.isArray(events) ? events.length : 0,
-      });
-    });
-  }, []);
+    router.replace("/clubs");
+  }, [router]);
 
-  return (
-    <div className="space-y-6">
-      <div className="text-center py-6">
-        <div className="text-6xl mb-3">🏓</div>
-        <h2 className="text-2xl font-bold">Welcome to PickleJ</h2>
-        <p className="text-muted mt-1">Organize games, track scores, climb the ranks!</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Link href="/players" className="bg-card rounded-xl border border-border p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-3xl font-bold text-primary">{stats.players}</div>
-          <div className="text-sm text-muted mt-1">Players</div>
-        </Link>
-        <Link href="/events" className="bg-card rounded-xl border border-border p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-3xl font-bold text-primary">{stats.events}</div>
-          <div className="text-sm text-muted mt-1">Events</div>
-        </Link>
-      </div>
-
-      <div className="space-y-3">
-        <Link
-          href="/events/new"
-          className="block w-full bg-primary text-white text-center py-3 rounded-xl font-semibold text-lg shadow-md active:bg-primary-dark transition-colors"
-        >
-          + New Event
-        </Link>
-        <Link
-          href="/players"
-          className="block w-full bg-card text-foreground text-center py-3 rounded-xl font-semibold border border-border active:bg-gray-50 transition-colors"
-        >
-          Manage Players
-        </Link>
-        <Link
-          href="/leaderboard"
-          className="block w-full bg-card text-foreground text-center py-3 rounded-xl font-semibold border border-border active:bg-gray-50 transition-colors"
-        >
-          View Rankings
-        </Link>
-        <button
-          onClick={() => {
-            const url = `${window.location.origin}/register`;
-            if (navigator.share) {
-              navigator.share({ title: "Join PickleJ!", text: "Sign up and play pickleball with us!", url });
-            } else {
-              navigator.clipboard.writeText(url);
-              alert("Invite link copied to clipboard!");
-            }
-          }}
-          className="block w-full bg-card text-foreground text-center py-3 rounded-xl font-semibold border border-border active:bg-gray-50 transition-colors"
-        >
-          Invite Friends
-        </button>
-      </div>
-    </div>
-  );
+  return <div className="text-center py-12 text-muted">Loading...</div>;
 }

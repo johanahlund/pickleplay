@@ -39,7 +39,7 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <Header />
-          <main className="px-4 pt-[calc(4rem+env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
+          <main className="px-4 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
           <BottomNav />
         </Providers>
         <ServiceWorkerRegister />

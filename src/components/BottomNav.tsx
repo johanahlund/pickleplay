@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { href: "/", label: "Home", icon: "🏠" },
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
-  { href: "/matches", label: "Matches", icon: "🏓" },
+  { href: "/matches", label: "My Matches", icon: "🏓" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
