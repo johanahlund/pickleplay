@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
 interface Player {
@@ -27,7 +27,15 @@ function getDefaultTime() {
 
 const TOTAL_STEPS = 7;
 
-export default function NewEventPage() {
+export default function NewEventPageWrapper() {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-muted">Loading...</div>}>
+      <NewEventPage />
+    </Suspense>
+  );
+}
+
+function NewEventPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
