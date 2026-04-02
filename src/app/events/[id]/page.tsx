@@ -1241,6 +1241,18 @@ export default function EventDetailPage() {
       {!hasMatches && (
         <div className="text-center py-8 text-muted text-lg">No matches yet</div>
       )}
+
+      {/* Add match actions */}
+      {canManage && (
+        <div className="space-y-2 pt-2">
+          <button
+            onClick={() => setActiveSection("manual")}
+            className="w-full py-3 text-center rounded-xl text-sm font-semibold border border-primary text-primary hover:bg-primary/5 active:bg-primary/10 transition-colors"
+          >
+            + Add Individual Match
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -1374,18 +1386,22 @@ export default function EventDetailPage() {
 
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-sm text-muted">Matches</span>
-          <span className="text-sm font-medium">{event.matches.length} match{event.matches.length !== 1 ? "es" : ""}</span>
+          <span className="text-sm font-medium">
+            {event.matches.length === 0
+              ? "None"
+              : (() => {
+                  const completed = event.matches.filter((m) => m.status === "completed").length;
+                  const pending = event.matches.filter((m) => m.status === "pending").length;
+                  const active = event.matches.filter((m) => m.status === "active").length;
+                  const parts = [];
+                  if (completed > 0) parts.push(`${completed} played`);
+                  if (active > 0) parts.push(`${active} active`);
+                  if (pending > 0) parts.push(`${pending} pending`);
+                  return parts.join(", ");
+                })()}
+          </span>
         </button>
       </div>
-
-      {/* Actions */}
-      {canManage && (
-        <button onClick={() => setActiveSection("manual")}
-          className="w-full py-3 text-center rounded-xl text-sm font-semibold text-white bg-primary active:bg-primary-dark transition-colors shadow-sm"
-        >
-          + Add Match
-        </button>
-      )}
 
       {(isOwner || isAdmin) && (
         <button
