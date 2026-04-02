@@ -636,10 +636,40 @@ export default function EventDetailPage() {
   const waitlistedPlayers = event.players.filter((ep) => ep.status === "waitlisted");
   const isIncremental = event.pairingMode === "king_of_court" || event.pairingMode === "swiss";
 
+  // Navigate back to club events or global events list
+  const closeEvent = () => {
+    const clubId = typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null;
+    if (clubId) {
+      router.push(`/clubs/${clubId}`);
+    } else {
+      router.push("/events");
+    }
+  };
+
+  const eventHeader = (
+    <div className="flex items-center gap-3 bg-card rounded-xl border border-border p-3">
+      <button onClick={closeEvent} className="text-lg text-muted hover:text-foreground transition-colors">✕</button>
+      <div className="flex-1 min-w-0">
+        <h2 className="font-bold text-lg truncate">{event.name}</h2>
+        <p className="text-xs text-muted">
+          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+          {" "}&middot; {event.format} &middot; {event.players.length} players
+          {event.status !== "setup" && (
+            <span className={`ml-1.5 inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+              event.status === "active" ? "bg-green-100 text-green-700" :
+              event.status === "completed" ? "bg-gray-100 text-muted" :
+              "bg-blue-100 text-blue-700"
+            }`}>{event.status}</span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+
   const backButton = (
     <button
       onClick={() => setActiveSection("overview")}
-      className="flex items-center gap-1 text-lg text-primary font-semibold mb-4 active:opacity-70"
+      className="flex items-center gap-1 text-lg text-primary font-semibold mb-2 active:opacity-70"
     >
       ← Back
     </button>
@@ -1260,6 +1290,7 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
+        {eventHeader}
         {backButton}
         {activeSection === "details" && renderDetails()}
         {activeSection === "admins" && renderAdmins()}
@@ -1272,6 +1303,8 @@ export default function EventDetailPage() {
 
   return (
     <div className="space-y-4">
+      {eventHeader}
+
       {/* 1. Event Details */}
       <button onClick={() => { startEditEvent(); setActiveSection("details"); }}
         className="w-full bg-card rounded-xl border border-border p-5 text-left active:bg-gray-50 transition-colors">
