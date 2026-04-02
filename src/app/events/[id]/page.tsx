@@ -3,11 +3,13 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface Player {
   id: string;
   name: string;
   emoji: string;
+  photoUrl?: string | null;
   rating: number;
   role?: string;
   gender?: string | null;
@@ -189,7 +191,7 @@ function SwipeablePlayerRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <span className="text-2xl">{ep.player.emoji}</span>
+      <PlayerAvatar name={ep.player.name} size="sm" />
       <span className={`text-lg font-medium flex-1 ${localPaused ? "line-through text-muted" : ""}`}>
         {ep.player.name}
       </span>
@@ -318,7 +320,7 @@ export default function EventDetailPage() {
       : "";
     const playerList = event.players
       .filter((ep) => ep.status === "registered" || ep.status === "checked_in")
-      .map((ep) => `${ep.player.emoji} ${ep.player.name}`)
+      .map((ep) => ep.player.name)
       .join("\n");
     const checkedInCount = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").length;
 
@@ -800,7 +802,7 @@ export default function EventDetailPage() {
           <div>
             <h4 className="text-sm font-medium text-muted mb-1">Owner</h4>
             <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-purple-50">
-              <span className="text-2xl">{owner.emoji}</span>
+              <PlayerAvatar name={owner.name} size="sm" />
               <span className="text-lg font-medium">{owner.name}</span>
               <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Owner</span>
             </div>
@@ -814,7 +816,7 @@ export default function EventDetailPage() {
             <div className="space-y-1">
               {event.helpers.map((h) => (
                 <div key={h.playerId} className="flex items-center gap-2 rounded-lg px-3 py-2">
-                  <span className="text-2xl">{h.player.emoji}</span>
+                  <PlayerAvatar name={h.player.name} size="sm" />
                   <span className="text-lg font-medium flex-1">{h.player.name}</span>
                   {(isOwner || isAdmin) && (
                     <button onClick={() => removeHelper(h.playerId)}
@@ -860,7 +862,7 @@ export default function EventDetailPage() {
                       {availablePlayers.map((p) => (
                         <button key={p.id} onClick={async () => { await addHelper(p.id); setShowAddHelper(false); }}
                           className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
-                          <span className="text-2xl">{p.emoji}</span>
+                          <PlayerAvatar name={p.name} size="sm" />
                           <span className="text-lg font-medium">{p.name}</span>
                         </button>
                       ))}
@@ -1019,7 +1021,7 @@ export default function EventDetailPage() {
           {available.map((p) => (
             <button key={p.id} onClick={() => addPlayerToEvent(p.id)}
               className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
-              <span className="text-2xl">{p.emoji}</span>
+              <PlayerAvatar name={p.name} size="sm" />
               <span className="text-lg font-medium">{p.name}</span>
               {p.gender && <span className={`text-sm ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{p.gender === "M" ? "♂" : "♀"}</span>}
               <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
@@ -1154,7 +1156,7 @@ export default function EventDetailPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         {team1.map((mp) => (
                           <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                            <span>{mp.player.emoji}</span>
+                            <PlayerAvatar name={mp.player.name} size="xs" />
                             <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                           </span>
                         ))}
@@ -1176,7 +1178,7 @@ export default function EventDetailPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         {team2.map((mp) => (
                           <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                            <span>{mp.player.emoji}</span>
+                            <PlayerAvatar name={mp.player.name} size="xs" />
                             <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                           </span>
                         ))}
@@ -1234,7 +1236,7 @@ export default function EventDetailPage() {
                   manualTeam1.includes(ep.player.id) ? "bg-blue-100 text-blue-800 font-medium"
                   : manualTeam2.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
                 }`} disabled={manualTeam2.includes(ep.player.id)}>
-                {ep.player.emoji} {ep.player.name}
+                <PlayerAvatar name={ep.player.name} size="xs" /> {ep.player.name}
               </button>
             ))}
           </div>
@@ -1248,7 +1250,7 @@ export default function EventDetailPage() {
                   manualTeam2.includes(ep.player.id) ? "bg-red-100 text-red-800 font-medium"
                   : manualTeam1.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
                 }`} disabled={manualTeam1.includes(ep.player.id)}>
-                {ep.player.emoji} {ep.player.name}
+                <PlayerAvatar name={ep.player.name} size="xs" /> {ep.player.name}
               </button>
             ))}
           </div>

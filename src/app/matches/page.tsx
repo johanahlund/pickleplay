@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface PlayerInfo {
   id: string;
@@ -172,7 +173,7 @@ export default function MatchesPage() {
               <option value="">Anyone</option>
               {teammates.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.emoji} {p.name}
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -187,7 +188,7 @@ export default function MatchesPage() {
               <option value="">Anyone</option>
               {opponents.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.emoji} {p.name}
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -303,7 +304,7 @@ export default function MatchesPage() {
                   <div className={`flex-1 text-sm ${myTeam === 1 ? "font-semibold" : ""}`}>
                     {team1.map((mp) => (
                       <span key={mp.id} className="mr-1">
-                        {mp.player.emoji}
+                        <PlayerAvatar name={mp.player.name} size="xs" />
                         <span className="text-xs">{mp.player.name.split(" ")[0]}</span>
                       </span>
                     ))}
@@ -314,7 +315,7 @@ export default function MatchesPage() {
                   <div className={`flex-1 text-sm text-right ${myTeam === 2 ? "font-semibold" : ""}`}>
                     {team2.map((mp) => (
                       <span key={mp.id} className="ml-1">
-                        {mp.player.emoji}
+                        <PlayerAvatar name={mp.player.name} size="xs" />
                         <span className="text-xs">{mp.player.name.split(" ")[0]}</span>
                       </span>
                     ))}

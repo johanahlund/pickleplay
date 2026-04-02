@@ -161,7 +161,7 @@ export function Header() {
                   className="text-sm opacity-90 hover:opacity-100 transition-opacity"
                   title="Change password"
                 >
-                  {session.user.emoji} {session.user.name}
+                  {session.user.name}
                 </button>
                 <button
                   onClick={() => signOut({ callbackUrl: "/signin" })}

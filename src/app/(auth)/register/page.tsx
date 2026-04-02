@@ -4,14 +4,11 @@ import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
-const EMOJIS = ["🏓", "🎯", "⚡", "🔥", "🌟", "💪", "🦅", "🐉", "🎪", "🍕", "🌊", "🎸"];
-
 export default function RegisterPage() {
   const { data: session, status } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [emoji, setEmoji] = useState("🏓");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +37,6 @@ export default function RegisterPage() {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         password,
-        emoji,
       }),
     });
 
@@ -119,26 +115,6 @@ export default function RegisterPage() {
             required
             minLength={6}
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-muted mb-1">Avatar</label>
-          <div className="flex flex-wrap gap-2">
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => setEmoji(e)}
-                className={`text-2xl p-1 rounded-lg transition-all ${
-                  emoji === e
-                    ? "bg-primary/10 ring-2 ring-primary scale-110"
-                    : "hover:bg-gray-100"
-                }`}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
         </div>
 
         <button

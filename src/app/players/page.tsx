@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface Player {
   id: string;
@@ -19,18 +20,14 @@ interface Player {
   _count?: { matchPlayers: number };
 }
 
-const EMOJIS = ["🏓", "🎯", "⚡", "🔥", "🌟", "💪", "🦅", "🐉", "🎪", "🍕", "🌊", "🎸"];
-
 export default function PlayersPage() {
   const { data: session } = useSession();
   const [players, setPlayers] = useState<Player[]>([]);
   const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("🏓");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editEmoji, setEditEmoji] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -60,10 +57,9 @@ export default function PlayersPage() {
     await fetch("/api/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), emoji, ...(gender ? { gender } : {}), ...(phone.trim() ? { phone: phone.trim() } : {}) }),
+      body: JSON.stringify({ name: name.trim(), ...(gender ? { gender } : {}), ...(phone.trim() ? { phone: phone.trim() } : {}) }),
     });
     setName("");
-    setEmoji("🏓");
     setGender(null);
     setPhone("");
     setShowForm(false);
@@ -79,7 +75,6 @@ export default function PlayersPage() {
   const startEdit = (p: Player) => {
     setEditingId(p.id);
     setEditName(p.name);
-    setEditEmoji(p.emoji);
     setEditGender(p.gender || null);
     setEditPhone(p.phone || "");
   };
@@ -87,7 +82,6 @@ export default function PlayersPage() {
   const cancelEdit = () => {
     setEditingId(null);
     setEditName("");
-    setEditEmoji("");
   };
 
   const saveEdit = async () => {
@@ -95,7 +89,7 @@ export default function PlayersPage() {
     await fetch(`/api/players/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName.trim(), emoji: editEmoji, gender: editGender, phone: editPhone.trim() || null }),
+      body: JSON.stringify({ name: editName.trim(), gender: editGender, phone: editPhone.trim() || null }),
     });
     cancelEdit();
     fetchPlayers();
@@ -247,25 +241,6 @@ export default function PlayersPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-muted mb-1">Avatar</label>
-            <div className="flex flex-wrap gap-2">
-              {EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => setEmoji(e)}
-                  className={`text-2xl p-1 rounded-lg transition-all ${
-                    emoji === e
-                      ? "bg-primary/10 ring-2 ring-primary scale-110"
-                      : "hover:bg-gray-100"
-                  }`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
             <label className="block text-sm font-medium text-muted mb-1">Gender (optional)</label>
             <div className="flex gap-2">
               {[
@@ -321,24 +296,6 @@ export default function PlayersPage() {
             >
               {editingId === p.id ? (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-wrap gap-1">
-                      {EMOJIS.map((e) => (
-                        <button
-                          key={e}
-                          type="button"
-                          onClick={() => setEditEmoji(e)}
-                          className={`text-xl p-0.5 rounded transition-all ${
-                            editEmoji === e
-                              ? "bg-primary/10 ring-2 ring-primary scale-110"
-                              : ""
-                          }`}
-                        >
-                          {e}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                   <input
                     type="text"
                     value={editName}
@@ -397,7 +354,7 @@ export default function PlayersPage() {
               ) : (
                 <div>
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">{p.emoji}</span>
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-lg">{p.name}</span>

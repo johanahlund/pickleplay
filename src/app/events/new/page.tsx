@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface Player {
   id: string;
@@ -534,7 +535,7 @@ function NewEventPage() {
             <>
               {helperPlayer && (
                 <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg mb-2">
-                  <span className="text-xl">{helperPlayer.emoji}</span>
+                  <PlayerAvatar name={helperPlayer.name} size="sm" />
                   <span className="font-medium flex-1">{helperPlayer.name}</span>
                   <button
                     type="button"
@@ -602,7 +603,7 @@ function NewEventPage() {
                       >
                         {helperId === p.id ? "✓" : ""}
                       </span>
-                      <span className="text-xl">{p.emoji}</span>
+                      <PlayerAvatar name={p.name} size="sm" />
                       <span className="font-medium flex-1 text-left">{p.name}</span>
                       {p.gender && (
                         <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
@@ -903,7 +904,7 @@ function NewEventPage() {
                       >
                         {selectedIds.has(p.id) ? "✓" : ""}
                       </span>
-                      <span className="text-xl">{p.emoji}</span>
+                      <PlayerAvatar name={p.name} size="sm" />
                       <span className="font-medium flex-1 text-left">{p.name}</span>
                       {p.gender && (
                         <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
@@ -977,7 +978,7 @@ function NewEventPage() {
               )}
               <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Helper</span>
-                <span className="text-sm font-medium">{helperPlayer ? `${helperPlayer.emoji} ${helperPlayer.name}` : "None"}</span>
+                <span className="text-sm font-medium flex items-center gap-1">{helperPlayer ? <><PlayerAvatar name={helperPlayer.name} size="xs" /> {helperPlayer.name}</> : "None"}</span>
               </button>
               <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">WhatsApp</span>
