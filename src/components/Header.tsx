@@ -120,29 +120,46 @@ export function Header() {
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
+  const isClubsListPage = pathname === "/clubs";
 
-  // Detect if we're inside a club
+  // Detect if we're inside a club from the URL
   const clubMatch = pathname.match(/^\/clubs\/([^/]+)/);
-  const clubId = clubMatch?.[1];
+  const urlClubId = clubMatch?.[1];
 
-  // Also detect if we're on an event page that belongs to a club
-  // (we'll show the club context from the clubs path only)
-
+  // Persist active club in sessionStorage
   useEffect(() => {
-    if (clubId) {
-      fetch(`/api/clubs/${clubId}`)
+    if (urlClubId) {
+      // Entering a club — save it
+      sessionStorage.setItem("activeClubId", urlClubId);
+      fetch(`/api/clubs/${urlClubId}`)
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
           if (data) {
             setClubName(data.name);
             setClubEmoji(data.emoji);
+            sessionStorage.setItem("activeClubName", data.name);
+            sessionStorage.setItem("activeClubEmoji", data.emoji);
           }
         });
-    } else {
+    } else if (isClubsListPage) {
+      // Back at clubs list — clear context
+      sessionStorage.removeItem("activeClubId");
+      sessionStorage.removeItem("activeClubName");
+      sessionStorage.removeItem("activeClubEmoji");
       setClubName(null);
       setClubEmoji(null);
+    } else {
+      // On another page (events, matches, etc.) — restore from session
+      const savedName = sessionStorage.getItem("activeClubName");
+      const savedEmoji = sessionStorage.getItem("activeClubEmoji");
+      if (savedName) {
+        setClubName(savedName);
+        setClubEmoji(savedEmoji);
+      }
     }
-  }, [clubId]);
+  }, [urlClubId, isClubsListPage]);
+
+  const activeClubId = urlClubId || (typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null);
 
   return (
     <>
@@ -174,7 +191,7 @@ export function Header() {
           </div>
 
           {/* Club context row */}
-          {clubId && clubName && (
+          {activeClubId && clubName && (
             <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-white/20">
               <button
                 onClick={() => router.push("/clubs")}
@@ -182,8 +199,13 @@ export function Header() {
               >
                 ←
               </button>
-              <span className="text-sm">{clubEmoji}</span>
-              <span className="text-sm font-semibold opacity-90">{clubName}</span>
+              <button
+                onClick={() => router.push(`/clubs/${activeClubId}`)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+              >
+                <span className="text-sm">{clubEmoji}</span>
+                <span className="text-sm font-semibold opacity-90">{clubName}</span>
+              </button>
             </div>
           )}
         </div>
