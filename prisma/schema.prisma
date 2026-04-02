@@ -36,6 +36,8 @@ model Player {
   eventHelpers  EventHelper[]
   clubMembers   ClubMember[]
   createdClubs  Club[]        @relation("createdClubs")
+  clubPosts     ClubPost[]
+  clubComments  ClubComment[]
 }
 
 model Club {
@@ -50,6 +52,7 @@ model Club {
   members        ClubMember[]
   events         Event[]
   whatsappGroups WhatsAppGroup[]
+  posts          ClubPost[]
 }
 
 model ClubMember {
@@ -167,4 +170,27 @@ model EventWhatsAppGroup {
   whatsappGroup WhatsAppGroup @relation(fields: [whatsappGroupId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, whatsappGroupId])
+}
+
+model ClubPost {
+  id        String   @id @default(cuid())
+  clubId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  club     Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  author   Player        @relation(fields: [authorId], references: [id])
+  comments ClubComment[]
+}
+
+model ClubComment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  post   ClubPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author Player   @relation(fields: [authorId], references: [id])
 }

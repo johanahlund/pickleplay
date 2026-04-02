@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface Player {
   id: string;
@@ -25,6 +26,10 @@ interface ClubMember {
 }
 
 interface WaGroup { id: string; name: string }
+
+interface PostAuthor { id: string; name: string; emoji: string; photoUrl?: string | null }
+interface Comment { id: string; authorId: string; content: string; createdAt: string; author: PostAuthor }
+interface Post { id: string; content: string; createdAt: string; author: PostAuthor; comments: Comment[]; _count: { comments: number } }
 
 interface EventInfo {
   id: string;
@@ -49,7 +54,7 @@ interface Club {
   _count: { events: number };
 }
 
-type Tab = "events" | "members" | "rankings" | "settings";
+type Tab = "feed" | "events" | "members" | "rankings" | "settings";
 
 // ── Swipeable Member Row ──
 function SwipeableMemberRow({
@@ -117,7 +122,7 @@ function SwipeableMemberRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <span className="text-lg w-8 text-center">{p.emoji}</span>
+      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
       <span className="font-medium text-sm flex-1 min-w-0 truncate">{p.name}</span>
       {p.gender && (
         <span className={`text-xs w-4 text-center ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
@@ -187,7 +192,7 @@ export default function ClubDetailPage() {
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("events");
+  const [tab, setTab] = useState<Tab>("feed");
   const [events, setEvents] = useState<EventInfo[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -195,6 +200,11 @@ export default function ClubDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newPostContent, setNewPostContent] = useState("");
+  const [postingComment, setPostingComment] = useState<string | null>(null);
+  const [commentContent, setCommentContent] = useState("");
+  const [expandedPost, setExpandedPost] = useState<string | null>(null);
 
   // Event filters
   const [eventSearch, setEventSearch] = useState("");
@@ -225,7 +235,12 @@ export default function ClubDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { fetchClub(); fetchEvents(); }, [fetchClub, fetchEvents]);
+  const fetchPosts = useCallback(async () => {
+    const r = await fetch(`/api/clubs/${id}/posts`);
+    if (r.ok) setPosts(await r.json());
+  }, [id]);
+
+  useEffect(() => { fetchClub(); fetchEvents(); fetchPosts(); }, [fetchClub, fetchEvents, fetchPosts]);
 
   const myMembership = club?.members.find((m) => m.playerId === userId);
   const canManage = myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin;
@@ -343,11 +358,53 @@ export default function ClubDetailPage() {
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: "feed", label: "Feed" },
     { key: "events", label: "Events" },
-    { key: "members", label: `Members` },
+    { key: "members", label: "Members" },
     { key: "rankings", label: "Rankings" },
     ...(canManage ? [{ key: "settings" as Tab, label: "Settings" }] : []),
   ];
+
+  const createPost = async () => {
+    if (!newPostContent.trim()) return;
+    await fetch(`/api/clubs/${id}/posts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: newPostContent.trim() }),
+    });
+    setNewPostContent("");
+    fetchPosts();
+  };
+
+  const deletePost = async (postId: string) => {
+    if (!confirm("Delete this post?")) return;
+    await fetch(`/api/clubs/${id}/posts/${postId}`, { method: "DELETE" });
+    fetchPosts();
+  };
+
+  const addComment = async (postId: string) => {
+    if (!commentContent.trim()) return;
+    await fetch(`/api/clubs/${id}/posts/${postId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: commentContent.trim() }),
+    });
+    setCommentContent("");
+    setPostingComment(null);
+    fetchPosts();
+  };
+
+  function timeAgo(dateStr: string) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "now";
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d`;
+    return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
 
   return (
     <div className="space-y-3">
@@ -365,6 +422,109 @@ export default function ClubDetailPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Feed Tab ── */}
+      {tab === "feed" && (
+        <div className="space-y-3">
+          {/* New post */}
+          <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+            <textarea
+              value={newPostContent}
+              onChange={(e) => setNewPostContent(e.target.value)}
+              placeholder="Share something with the club..."
+              rows={2}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+            />
+            <div className="flex justify-end">
+              <button
+                onClick={createPost}
+                disabled={!newPostContent.trim()}
+                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+              >
+                Post
+              </button>
+            </div>
+          </div>
+
+          {posts.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted text-sm">No posts yet. Be the first!</p>
+            </div>
+          ) : (
+            posts.map((post) => (
+              <div key={post.id} className="bg-card rounded-xl border border-border p-3 space-y-2">
+                {/* Post header */}
+                <div className="flex items-center gap-2">
+                  <PlayerAvatar name={post.author.name} photoUrl={post.author.photoUrl} size="sm" />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-sm">{post.author.name}</span>
+                    <span className="text-xs text-muted ml-2">{timeAgo(post.createdAt)}</span>
+                  </div>
+                  {(post.author.id === userId || canManage) && (
+                    <button onClick={() => deletePost(post.id)} className="text-xs text-muted hover:text-danger px-1">✕</button>
+                  )}
+                </div>
+
+                {/* Post content */}
+                <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+
+                {/* Comments */}
+                {post.comments.length > 0 && (
+                  <div className="pl-4 border-l-2 border-gray-100 space-y-2 mt-2">
+                    {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => (
+                      <div key={c.id} className="flex items-start gap-2">
+                        <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-xs">{c.author.name}</span>
+                          <span className="text-[10px] text-muted ml-1">{timeAgo(c.createdAt)}</span>
+                          <p className="text-xs">{c.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {post.comments.length > 2 && expandedPost !== post.id && (
+                      <button
+                        onClick={() => setExpandedPost(post.id)}
+                        className="text-xs text-primary font-medium"
+                      >
+                        View all {post.comments.length} comments
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Add comment */}
+                {postingComment === post.id ? (
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="text"
+                      value={commentContent}
+                      onChange={(e) => setCommentContent(e.target.value)}
+                      placeholder="Write a comment..."
+                      className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addComment(post.id); } }}
+                    />
+                    <button
+                      onClick={() => addComment(post.id)}
+                      disabled={!commentContent.trim()}
+                      className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                    >
+                      Send
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setPostingComment(post.id); setCommentContent(""); }}
+                    className="text-xs text-muted hover:text-foreground"
+                  >
+                    {post._count.comments > 0 ? "Reply" : "Comment"}
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* ── Events Tab ── */}
       {tab === "events" && (
@@ -562,7 +722,7 @@ export default function ClubDetailPage() {
                       onClick={() => addMember(p.id)}
                       className="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors"
                     >
-                      <span className="text-lg">{p.emoji}</span>
+                      <PlayerAvatar name={p.name} size="xs" />
                       <span className="text-sm font-medium flex-1">{p.name}</span>
                       {p.gender && (
                         <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
@@ -600,7 +760,7 @@ export default function ClubDetailPage() {
                 }`}
               >
                 <span className="text-xl w-8 text-center font-bold">{getMedal(i)}</span>
-                <span className="text-xl">{p.emoji}</span>
+                <PlayerAvatar name={p.name} size="sm" />
                 <div className="flex-1 min-w-0">
                   <span className="font-semibold text-sm truncate block">{p.name}</span>
                   <span className="text-xs text-muted">{p.wins}W / {p.losses}L &middot; {p.wins + p.losses > 0 ? Math.round((p.wins / (p.wins + p.losses)) * 100) : 0}%</span>
@@ -618,7 +778,7 @@ export default function ClubDetailPage() {
               {rankings.unranked.map((p) => (
                 <div key={p.id} className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-50">
                   <span className="text-xl w-8 text-center">-</span>
-                  <span className="text-xl">{p.emoji}</span>
+                  <PlayerAvatar name={p.name} size="sm" />
                   <span className="font-medium text-sm flex-1">{p.name}</span>
                   <span className="text-sm text-muted">1000</span>
                 </div>
