@@ -266,7 +266,14 @@ export default function ClubDetailPage() {
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("feed");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("tab");
+      if (t && ["feed", "events", "members", "rankings"].includes(t)) return t as Tab;
+    }
+    return "feed";
+  });
   const [events, setEvents] = useState<EventInfo[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -452,15 +459,26 @@ export default function ClubDetailPage() {
     .filter((p) => !addMemberSearch || p.name.toLowerCase().includes(addMemberSearch.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Portal the tab bar into the header's #club-tab-bar div
+  // Portal the tab bar into the header and hide the fallback tabs
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const find = () => {
-      const el = document.getElementById("club-tab-bar");
-      if (el) { setPortalTarget(el); return; }
+      const el = document.getElementById("club-tab-bar-portal");
+      if (el) {
+        setPortalTarget(el);
+        // Hide the fallback tabs
+        const fallback = document.getElementById("club-tab-bar-fallback");
+        if (fallback) fallback.style.display = "none";
+        return;
+      }
       setTimeout(find, 100);
     };
     find();
+    return () => {
+      // Show fallback again when leaving club page
+      const fallback = document.getElementById("club-tab-bar-fallback");
+      if (fallback) fallback.style.display = "";
+    };
   }, []);
 
   if (loading || !club) return <div className="text-center py-12 text-muted">Loading...</div>;

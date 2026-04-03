@@ -225,8 +225,27 @@ export function Header() {
                   <span className="text-sm font-semibold opacity-90">{clubName}</span>
                 </button>
               </div>
-              {/* Club tab bar — rendered via a global event so the club page can inject tabs */}
-              <div id="club-tab-bar" className="mt-1.5" />
+              {/* Club tab bar — always visible when in club context */}
+              <div className="mt-1.5">
+                <div id="club-tab-bar-portal" />
+                {/* Fallback tabs when portal isn't filled (e.g., on event page) */}
+                <div id="club-tab-bar-fallback" className="flex gap-1 bg-white/10 rounded-xl p-1">
+                  {[
+                    { key: "feed", label: "Feed" },
+                    { key: "events", label: "Events" },
+                    { key: "members", label: "Members" },
+                    { key: "rankings", label: "Rankings" },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => router.push(`/clubs/${activeClubId}?tab=${t.key}`)}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-all"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
         </div>
