@@ -717,6 +717,19 @@ export default function EventDetailPage() {
   const waitlistedPlayers = event.players.filter((ep) => ep.status === "waitlisted");
   const isIncremental = event.pairingMode === "king_of_court" || event.pairingMode === "swiss";
 
+  // Courts currently in use (active match being played)
+  const activeCourts = new Set(
+    event.matches.filter((m) => m.status === "active").map((m) => m.courtNum)
+  );
+  // Next pending matches ready to play
+  const pendingReadyMatches = event.matches
+    .filter((m) => m.status === "pending" && m.players.length >= 2)
+    .sort((a, b) => a.round - b.round || a.courtNum - b.courtNum);
+  const nextMatchIdSet = new Set(pendingReadyMatches.slice(0, event.numCourts).map((m) => m.id));
+  const courtFreeMatchIds = new Set(
+    pendingReadyMatches.filter((m) => !activeCourts.has(m.courtNum)).map((m) => m.id)
+  );
+
   // Navigate back to club events or global events list
   const closeEvent = () => {
     const clubId = typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null;
@@ -1393,11 +1406,30 @@ export default function EventDetailPage() {
             const canScore = canManage || isMatchPlayer;
             const showInputs = canScore && (!isCompleted || isEditing);
 
+            const isNextMatch = nextMatchIdSet.has(match.id);
+            const isCourtFree = courtFreeMatchIds.has(match.id);
+
             return (
-              <div key={match.id} className="bg-card rounded-xl border border-border overflow-hidden">
-                <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted">
+              <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
+                isCourtFree && !isCompleted
+                  ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
+                  : isNextMatch && !isCompleted
+                    ? "border-blue-300 ring-1 ring-blue-200/50"
+                    : "border-border"
+              }`}>
+                <div className={`px-3 py-2 border-b flex items-center justify-between ${
+                  isCourtFree && !isCompleted
+                    ? "bg-green-50 border-green-200"
+                    : isNextMatch && !isCompleted
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-border"
+                }`}>
+                  <span className={`text-sm font-medium ${
+                    isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
+                  }`}>
                     Court {match.courtNum}
+                    {isCourtFree && !isCompleted && " — Ready!"}
+                    {isNextMatch && !isCourtFree && !isCompleted && " — Up next"}
                     {event.pairingMode === "king_of_court" && match.courtNum === 1 && <span className="ml-1 text-amber-500">👑</span>}
                     {event.pairingMode === "king_of_court" && match.courtNum === event.numCourts && event.numCourts > 1 && <span className="ml-1 text-gray-400">🔰</span>}
                   </span>

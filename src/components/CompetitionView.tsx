@@ -146,6 +146,34 @@ export function CompetitionView({
   const allGroupsComplete = groupMatches.length > 0 && groupMatches.every((m) => m.status === "completed");
   const hasGroupMatches = groupMatches.length > 0;
 
+  // Courts currently in use (have an active/pending-but-playing match)
+  const busyCourts = new Set(
+    matches
+      .filter((m) => m.status === "active" || (m.status === "pending" && m.players.length > 0))
+      .filter((m) => m.status === "active")
+      .map((m) => m.courtNum)
+  );
+
+  // Next pending matches (ready to play = have players assigned)
+  const pendingReady = matches
+    .filter((m) => m.status === "pending" && m.players.length >= 2)
+    .sort((a, b) => {
+      // Bracket ready matches first, then group, then by round
+      const aP = a.bracketStage ? 0 : 1;
+      const bP = b.bracketStage ? 0 : 1;
+      if (aP !== bP) return aP - bP;
+      return a.round - b.round;
+    });
+  const nextMatchIds = new Set(pendingReady.slice(0, numCourts).map((m) => m.id));
+
+  // Which of the next matches have a free court?
+  const courtAvailableMatchIds = new Set<string>();
+  for (const m of pendingReady) {
+    if (!busyCourts.has(m.courtNum)) {
+      courtAvailableMatchIds.add(m.id);
+    }
+  }
+
   // Calculate standings per group (client-side for display)
   const pairById = new Map(pairs.map((p) => [p.id, p]));
   const pairByPlayerId = new Map<string, string>();
@@ -590,13 +618,31 @@ export function CompetitionView({
                 const t1Won = t1Score !== null && t2Score !== null && t1Score > t2Score;
                 const t2Won = t1Score !== null && t2Score !== null && t2Score > t1Score;
                 const hasPairs = t1.length > 0 && t2.length > 0;
+                const isNext = nextMatchIds.has(match.id);
+                const courtFree = courtAvailableMatchIds.has(match.id);
 
                 return (
-                  <div key={match.id} className="bg-card rounded-xl border border-border overflow-hidden">
-                    <div className="px-3 py-1.5 bg-gray-50 border-b border-border flex items-center justify-between">
-                      <span className="text-xs text-muted">Court {match.courtNum}</span>
+                  <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
+                    courtFree
+                      ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
+                      : isNext
+                        ? "border-blue-300 ring-1 ring-blue-200/50"
+                        : "border-border"
+                  }`}>
+                    <div className={`px-3 py-1.5 border-b flex items-center justify-between ${
+                      courtFree
+                        ? "bg-green-50 border-green-200"
+                        : isNext
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-gray-50 border-border"
+                    }`}>
+                      <span className={`text-xs font-medium ${courtFree ? "text-green-700" : isNext ? "text-blue-600" : "text-muted"}`}>
+                        Court {match.courtNum}
+                        {courtFree && " — Ready to play!"}
+                        {isNext && !courtFree && " — Up next"}
+                      </span>
                       {isCompleted && <span className="text-xs text-green-600 font-medium">Final</span>}
-                      {!hasPairs && <span className="text-xs text-muted italic">TBD</span>}
+                      {!hasPairs && !isNext && <span className="text-xs text-muted italic">TBD</span>}
                     </div>
                     {hasPairs ? (
                       <div className="p-3 space-y-1">
