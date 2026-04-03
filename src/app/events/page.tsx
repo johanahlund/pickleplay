@@ -112,7 +112,7 @@ export default function EventsPage() {
         <h2 className="text-xl font-bold">Events</h2>
         <Link
           href="/events/new"
-          className="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-primary-dark transition-colors"
+          className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
         >
           + New
         </Link>
@@ -134,7 +134,7 @@ export default function EventsPage() {
               onClick={() => setDateFilter(f.value)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                 dateFilter === f.value
-                  ? "bg-primary text-white"
+                  ? "bg-selected text-white"
                   : "bg-gray-100 text-muted hover:bg-gray-200"
               }`}
             >

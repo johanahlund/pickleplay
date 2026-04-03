@@ -315,7 +315,7 @@ function NewEventPage() {
                 <div
                   key={i}
                   className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                    i < step ? "bg-primary" : "bg-gray-200"
+                    i < step ? "bg-action" : "bg-gray-200"
                   }`}
                 />
               ))}
@@ -323,7 +323,7 @@ function NewEventPage() {
             <button
               type="button"
               onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
-              className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors"
+              className="bg-action text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-action-dark transition-colors"
             >
               Review
             </button>
@@ -344,7 +344,7 @@ function NewEventPage() {
                 <div
                   key={i}
                   className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                    i < step ? "bg-primary" : "bg-gray-200"
+                    i < step ? "bg-action" : "bg-gray-200"
                   }`}
                 />
               ))}
@@ -354,7 +354,7 @@ function NewEventPage() {
                 type="button"
                 onClick={() => canAdvance() && setStep(step + 1)}
                 disabled={!canAdvance()}
-                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-action text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>
@@ -363,7 +363,7 @@ function NewEventPage() {
                 type="button"
                 onClick={createEvent}
                 disabled={!name.trim() || creating}
-                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-action-dark text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? "..." : "Create"}
               </button>
@@ -401,7 +401,7 @@ function NewEventPage() {
                     type="button"
                     onClick={() => setSelectedClubId(null)}
                     className={`w-full text-left p-2.5 rounded-lg transition-all text-sm ${
-                      !selectedClubId ? "bg-primary/10 border border-primary/30" : "hover:bg-gray-50 border border-transparent"
+                      !selectedClubId ? "bg-selected/10 border border-selected/30" : "hover:bg-gray-50 border border-transparent"
                     }`}
                   >
                     No club
@@ -413,7 +413,7 @@ function NewEventPage() {
                       onClick={() => setSelectedClubId(c.id)}
                       className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-all text-sm ${
                         selectedClubId === c.id
-                          ? "bg-primary/10 border border-primary/30"
+                          ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
@@ -443,14 +443,14 @@ function NewEventPage() {
                       }}
                       className={`w-full flex items-center gap-2 p-2.5 rounded-lg transition-all text-sm ${
                         selectedWaGroupIds.has(g.id)
-                          ? "bg-primary/10 border border-primary/30"
+                          ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
                       <span
                         className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
                           selectedWaGroupIds.has(g.id)
-                            ? "bg-primary border-primary text-white"
+                            ? "bg-selected border-selected text-white"
                             : "border-gray-300"
                         }`}
                       >
@@ -489,7 +489,7 @@ function NewEventPage() {
                     setNewGroupName("");
                   }}
                   disabled={!newGroupName.trim()}
-                  className="bg-primary text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                  className="bg-action text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                 >
                   Create
                 </button>
@@ -535,7 +535,7 @@ function NewEventPage() {
           return (
             <>
               {helperPlayer && (
-                <div className="flex items-center gap-2 p-2.5 bg-primary/10 border border-primary/30 rounded-lg mb-2">
+                <div className="flex items-center gap-2 p-2.5 bg-selected/10 border border-selected/30 rounded-lg mb-2">
                   <PlayerAvatar name={helperPlayer.name} size="sm" />
                   <span className="font-medium flex-1">{helperPlayer.name}</span>
                   <button
@@ -558,7 +558,7 @@ function NewEventPage() {
                     onClick={() => setHelperGenderFilter(helperGenderFilter === g ? null : g)}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       helperGenderFilter === g
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -585,14 +585,14 @@ function NewEventPage() {
                       onClick={() => setHelperId(helperId === p.id ? null : p.id)}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
                         helperId === p.id
-                          ? "bg-primary/10 border border-primary/30"
+                          ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
                       <span
                         className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
                           helperId === p.id
-                            ? "bg-primary border-primary text-white"
+                            ? "bg-selected border-selected text-white"
                             : "border-gray-300"
                         }`}
                       >
@@ -659,7 +659,7 @@ function NewEventPage() {
                     onClick={() => setFormat(f)}
                     className={`flex-1 py-3 rounded-lg font-medium transition-all capitalize ${
                       format === f
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -678,7 +678,7 @@ function NewEventPage() {
                     onClick={() => setNumCourts(n)}
                     className={`flex-1 py-3 rounded-lg font-medium transition-all ${
                       numCourts === n
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -728,7 +728,7 @@ function NewEventPage() {
                     onClick={() => setNumSets(n)}
                     className={`flex-1 py-3 rounded-lg font-medium transition-all ${
                       numSets === n
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -752,7 +752,7 @@ function NewEventPage() {
                     onClick={() => setScoringType(s.value)}
                     className={`py-3 px-3 rounded-lg font-medium transition-all text-sm ${
                       scoringType === s.value
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -775,7 +775,7 @@ function NewEventPage() {
                     onClick={() => setRankingMode(m.value)}
                     className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
                       rankingMode === m.value
-                        ? "bg-primary/10 border border-primary/30"
+                        ? "bg-selected/10 border border-selected/30"
                         : "bg-gray-50 border border-transparent hover:bg-gray-100"
                     }`}
                   >
@@ -806,7 +806,7 @@ function NewEventPage() {
                 onClick={() => setPairingMode(m.value)}
                 className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
                   pairingMode === m.value
-                    ? "bg-primary/10 border border-primary/30"
+                    ? "bg-selected/10 border border-selected/30"
                     : "bg-gray-50 border border-transparent hover:bg-gray-100"
                 }`}
               >
@@ -846,7 +846,7 @@ function NewEventPage() {
                     onClick={() => setPlayerGenderFilter(playerGenderFilter === g ? null : g)}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       playerGenderFilter === g
-                        ? "bg-primary text-white"
+                        ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -880,14 +880,14 @@ function NewEventPage() {
                       onClick={() => togglePlayer(p.id)}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
                         selectedIds.has(p.id)
-                          ? "bg-primary/10 border border-primary/30"
+                          ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
                       <span
                         className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
                           selectedIds.has(p.id)
-                            ? "bg-primary border-primary text-white"
+                            ? "bg-selected border-selected text-white"
                             : "border-gray-300"
                         }`}
                       >

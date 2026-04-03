@@ -5,6 +5,9 @@
   --foreground: #0f172a;
   --primary: #2563eb;
   --primary-dark: #1d4ed8;
+  --selected: #6366f1;
+  --action: #3b82f6;
+  --action-dark: #1e40af;
   --accent: #eab308;
   --card: #ffffff;
   --border: #e2e8f0;
@@ -17,6 +20,9 @@
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-primary-dark: var(--primary-dark);
+  --color-selected: var(--selected);
+  --color-action: var(--action);
+  --color-action-dark: var(--action-dark);
   --color-accent: var(--accent);
   --color-card: var(--card);
   --color-border: var(--border);

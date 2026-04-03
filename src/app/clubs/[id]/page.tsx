@@ -500,7 +500,7 @@ export default function ClubDetailPage() {
         <button
           onClick={() => setShowInfo(!showInfo)}
           className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
-            showInfo ? "bg-primary text-white" : "bg-gray-100 text-muted hover:text-foreground"
+            showInfo ? "bg-selected text-white" : "bg-gray-100 text-muted hover:text-foreground"
           }`}
         >
           ℹ
@@ -589,7 +589,7 @@ export default function ClubDetailPage() {
               )}
 
               <div className="flex gap-2">
-                <button onClick={saveEdit} className="flex-1 bg-primary text-white py-2 rounded-lg text-sm font-medium">Save</button>
+                <button onClick={saveEdit} className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium">Save</button>
                 <button onClick={() => setEditing(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
               </div>
 
@@ -675,7 +675,7 @@ export default function ClubDetailPage() {
               <button
                 onClick={createPost}
                 disabled={!newPostContent.trim()}
-                className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                className="bg-action text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
               >
                 Post
               </button>
@@ -748,7 +748,7 @@ export default function ClubDetailPage() {
                         <button
                           onClick={() => addComment(post.id)}
                           disabled={!commentContent.trim()}
-                          className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                          className="bg-action-dark text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
                         >
                           Send
                         </button>
@@ -796,7 +796,7 @@ export default function ClubDetailPage() {
                 key={f.value}
                 onClick={() => setDateFilter(f.value)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  dateFilter === f.value ? "bg-primary text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                  dateFilter === f.value ? "bg-selected text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
                 }`}
               >
                 {f.label}
@@ -889,7 +889,7 @@ export default function ClubDetailPage() {
                 key={g}
                 onClick={() => setMemberGender(memberGender === g ? null : g)}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  memberGender === g ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  memberGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
                 }`}
               >
                 {g === "M" ? "♂" : "♀"}

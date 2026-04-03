@@ -196,7 +196,7 @@ export default function PlayersPage() {
         {isAdmin && (
           <button
             onClick={() => setShowForm(!showForm)}
-            className="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-primary-dark transition-colors"
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
           >
             {showForm ? "Cancel" : "+ Add"}
           </button>
@@ -214,7 +214,7 @@ export default function PlayersPage() {
             key={g.label}
             onClick={() => setGenderFilter(g.value)}
             className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-              genderFilter === g.value ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              genderFilter === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
             }`}
           >
             {g.label}
@@ -249,7 +249,7 @@ export default function PlayersPage() {
                   onClick={() => setGender(g.value)}
                   className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
                     gender === g.value
-                      ? "bg-primary text-white"
+                      ? "bg-selected text-white"
                       : "bg-gray-100 text-foreground hover:bg-gray-200"
                   }`}
                 >
@@ -270,7 +270,7 @@ export default function PlayersPage() {
           </div>
           <button
             type="submit"
-            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold active:bg-primary-dark transition-colors"
+            className="w-full bg-action text-white py-2.5 rounded-lg font-semibold active:bg-action-dark transition-colors"
           >
             Add Player
           </button>
@@ -312,7 +312,7 @@ export default function PlayersPage() {
                           onClick={() => setEditGender(g.value)}
                           className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
                             editGender === g.value
-                              ? "bg-primary text-white"
+                              ? "bg-selected text-white"
                               : "bg-gray-100 text-foreground hover:bg-gray-200"
                           }`}
                         >
@@ -334,7 +334,7 @@ export default function PlayersPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={saveEdit}
-                      className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-sm"
+                      className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-sm"
                     >
                       Save
                     </button>

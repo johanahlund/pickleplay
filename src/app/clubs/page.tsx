@@ -94,7 +94,7 @@ export default function ClubsPage() {
           <button
             type="submit"
             disabled={!newName.trim() || creating}
-            className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold active:bg-primary-dark transition-colors disabled:opacity-50"
+            className="w-full bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50"
           >
             {creating ? "Creating..." : "Create Club"}
           </button>

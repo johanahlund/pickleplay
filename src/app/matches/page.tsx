@@ -141,7 +141,7 @@ export default function MatchesPage() {
           onClick={() => setShowCompleted(true)}
           className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
             showCompleted
-              ? "bg-primary text-white"
+              ? "bg-selected text-white"
               : "bg-gray-100 text-foreground hover:bg-gray-200"
           }`}
         >
@@ -152,7 +152,7 @@ export default function MatchesPage() {
           onClick={() => setShowCompleted(false)}
           className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
             !showCompleted
-              ? "bg-primary text-white"
+              ? "bg-selected text-white"
               : "bg-gray-100 text-foreground hover:bg-gray-200"
           }`}
         >

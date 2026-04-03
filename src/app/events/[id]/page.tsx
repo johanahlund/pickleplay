@@ -708,7 +708,7 @@ export default function EventDetailPage() {
             <div className="flex gap-2">
               {[1, 2, 3, 4].map((n) => (
                 <button key={n} type="button" onClick={() => setEditCourts(n)}
-                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editCourts === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{n}</button>
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{n}</button>
               ))}
             </div>
           </div>
@@ -717,7 +717,7 @@ export default function EventDetailPage() {
             <div className="flex gap-2">
               {[1, 3].map((n) => (
                 <button key={n} type="button" onClick={() => setEditNumSets(n)}
-                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editNumSets === n ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>
+                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editNumSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
                   {n === 1 ? "1 Set" : "Best of 3"}</button>
               ))}
             </div>
@@ -727,7 +727,7 @@ export default function EventDetailPage() {
             <div className="grid grid-cols-2 gap-2">
               {[{ value: "normal_11", label: "11" }, { value: "normal_15", label: "15" }, { value: "rally_21", label: "R21" }, { value: "timed", label: "Time" }].map((s) => (
                 <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
-                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{s.label}</button>
+                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{s.label}</button>
               ))}
             </div>
           </div>
@@ -741,7 +741,7 @@ export default function EventDetailPage() {
                 { value: "manual", label: "✏️ Manual" },
               ].map((m) => (
                 <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
-                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editPairingMode === m.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{m.label}</button>
+                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editPairingMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{m.label}</button>
               ))}
             </div>
           </div>
@@ -752,7 +752,7 @@ export default function EventDetailPage() {
                 <div className="flex gap-2">
                   {[{ value: true, label: "Open (anyone can join)" }, { value: false, label: "Closed (invite only)" }].map((o) => (
                     <button key={String(o.value)} type="button" onClick={() => setEditOpenSignup(o.value)}
-                      className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editOpenSignup === o.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{o.label}</button>
+                      className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editOpenSignup === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{o.label}</button>
                   ))}
                 </div>
               </div>
@@ -762,7 +762,7 @@ export default function EventDetailPage() {
                   <div className="flex gap-2">
                     {[{ value: "visible", label: "Visible to all" }, { value: "hidden", label: "Hidden" }].map((v) => (
                       <button key={v.value} type="button" onClick={() => setEditVisibility(v.value)}
-                        className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editVisibility === v.value ? "bg-primary text-white" : "bg-gray-100 text-foreground"}`}>{v.label}</button>
+                        className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editVisibility === v.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{v.label}</button>
                     ))}
                   </div>
                   <p className="text-xs text-muted mt-1">Hidden events are only visible to the organizer, helpers, and added players</p>
@@ -771,7 +771,7 @@ export default function EventDetailPage() {
             </>
           )}
           <div className="flex gap-2">
-            <button onClick={saveEditEvent} className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-sm">Save</button>
+            <button onClick={saveEditEvent} className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
             <button onClick={() => setEditingEvent(false)} className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm">Cancel</button>
           </div>
         </div>
@@ -1003,7 +1003,7 @@ export default function EventDetailPage() {
                         fetchWaGroups();
                       }}
                       disabled={!newGroupName.trim()}
-                      className="bg-primary text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                      className="bg-action text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
                     >
                       Create
                     </button>
@@ -1041,7 +1041,7 @@ export default function EventDetailPage() {
           ].map((g) => (
             <button key={g.label} onClick={() => setAddPlayerGender(g.value)}
               className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-                addPlayerGender === g.value ? "bg-primary text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                addPlayerGender === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
               }`}>{g.label}</button>
           ))}
         </div>
@@ -1087,7 +1087,7 @@ export default function EventDetailPage() {
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
               <button onClick={unsignFromEvent} className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave Event</button>
             ) : (
-              <button onClick={signupForEvent} className="text-sm bg-primary text-white px-4 py-1.5 rounded-lg font-medium">Join Event</button>
+              <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join Event</button>
             )}
           </div>
         )}
@@ -1120,7 +1120,7 @@ export default function EventDetailPage() {
               <div className="flex items-center gap-0">
                 <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
                   className="w-14 h-14 rounded-l-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300">−</button>
-                <div className="w-14 h-14 bg-primary text-white font-bold text-3xl flex items-center justify-center">{numRounds}</div>
+                <div className="w-14 h-14 bg-selected text-white font-bold text-3xl flex items-center justify-center">{numRounds}</div>
                 <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
                   className="w-14 h-14 rounded-r-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300">+</button>
               </div>
@@ -1128,7 +1128,7 @@ export default function EventDetailPage() {
           )}
           <button onClick={generateMatches}
             disabled={generating || (!allCompleted && activePlayers.length < minPlayers)}
-            className="w-full bg-primary text-white py-3.5 rounded-xl font-semibold text-xl shadow-md active:bg-primary-dark transition-colors disabled:opacity-50">
+            className="w-full bg-action text-white py-3.5 rounded-xl font-semibold text-xl shadow-md active:bg-action-dark transition-colors disabled:opacity-50">
             {generating ? "Generating..." : hasMatches
               ? "🔄 Generate Next Rounds"
               : `🎲 Generate ${isIncremental ? "Next Round" : `${numRounds} Round${numRounds > 1 ? "s" : ""}`}`}
@@ -1222,12 +1222,12 @@ export default function EventDetailPage() {
                   </div>
                   {showInputs && !isEditing && scores[match.id]?.team1 && scores[match.id]?.team2 && (
                     <button onClick={() => submitScore(match.id)}
-                      className="w-full mt-2 bg-primary text-white py-2.5 rounded-lg font-medium text-base active:bg-primary-dark transition-colors">Submit Score</button>
+                      className="w-full mt-2 bg-action-dark text-white py-2.5 rounded-lg font-medium text-base transition-colors">Submit Score</button>
                   )}
                   {isEditing && (
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => editScore(match.id)} disabled={!scores[match.id]?.team1 || !scores[match.id]?.team2}
-                        className="flex-1 bg-primary text-white py-2 rounded-lg font-medium text-base disabled:opacity-50">Save Edit</button>
+                        className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-base disabled:opacity-50">Save Edit</button>
                       <button onClick={cancelEditMatch}
                         className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-base">Cancel</button>
                     </div>
@@ -1262,7 +1262,7 @@ export default function EventDetailPage() {
       <div className="flex items-center gap-3">
         <span className="text-lg font-semibold text-foreground">Court</span>
         <button type="button" onClick={() => setManualCourt(manualCourt >= event.numCourts ? 1 : manualCourt + 1)}
-          className="w-14 h-14 rounded-xl bg-primary text-white font-bold text-3xl flex items-center justify-center active:opacity-80">{manualCourt}</button>
+          className="w-14 h-14 rounded-xl bg-selected text-white font-bold text-3xl flex items-center justify-center active:opacity-80">{manualCourt}</button>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -1295,7 +1295,7 @@ export default function EventDetailPage() {
         </div>
       </div>
       <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
-        className="w-full bg-primary text-white py-3 rounded-xl font-semibold text-lg disabled:opacity-50">Create Match</button>
+        className="w-full bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">Create Match</button>
     </div>
   );
 
