@@ -330,8 +330,8 @@ function NewEventPage() {
                 <div className="flex gap-1">
                   {stepTitles.map((title, i) => (
                     <div key={i} className="flex-1 text-center">
-                      <div className={`h-1 rounded-full transition-all duration-300 ${i < step ? "bg-action" : "bg-gray-200"}`} />
-                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : i < step ? "text-muted" : "text-gray-300"}`}>{title}</span>
+                      <div className={`h-1 rounded-full transition-all duration-300 ${i === step - 1 ? "bg-action" : "bg-gray-200"}`} />
+                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : "text-gray-300"}`}>{title}</span>
                     </div>
                   ))}
                 </div>
@@ -1011,26 +1011,19 @@ function NewEventPage() {
                   <span className="text-sm text-muted">Name</span>
                   <span className="text-sm font-medium">{name}</span>
                 </button>
-                {selectedClub && (
-                  <button type="button" onClick={() => goEdit(1)} className={rowClass}>
-                    <span className="text-sm text-muted">Club</span>
-                    <span className="text-sm font-medium">{selectedClub.emoji} {selectedClub.name}</span>
-                  </button>
-                )}
                 <button type="button" onClick={() => goEdit(1)} className={rowClass}>
-                  <span className="text-sm text-muted">Date</span>
-                  <span className="text-sm font-medium">{new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
-                </button>
-                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
-                  <span className="text-sm text-muted">Time</span>
-                  <span className="text-sm font-medium">{time} – {endTime}</span>
+                  <span className="text-sm text-muted">When</span>
+                  <span className="text-sm font-medium">
+                    {new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} {time} – {endTime}
+                  </span>
                 </button>
                 <button type="button" onClick={() => goEdit(2)} className={rowClass}>
                   <span className="text-sm text-muted">Organizer</span>
-                  <span className="text-sm font-medium flex items-center gap-1">
-                    {helperPlayers.length > 0
-                      ? helperPlayers.map((hp) => hp.name).join(", ")
-                      : "Just you"}
+                  <span className="text-sm font-medium text-right">
+                    <span>{session?.user?.name || "You"}</span>
+                    {helperPlayers.length > 0 && (
+                      <span className="block text-xs text-muted">({helperPlayers.map((hp) => hp.name).join(", ")})</span>
+                    )}
                   </span>
                 </button>
                 <button type="button" onClick={() => goEdit(3)} className={rowClass}>

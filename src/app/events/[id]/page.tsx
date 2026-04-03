@@ -1628,13 +1628,14 @@ export default function EventDetailPage() {
 
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
-  const organizerText = ownerName
-    ? helperNames.length > 0
-      ? `${ownerName} (${helperNames.join(", ")})`
-      : ownerName
-    : "—";
 
   const scoringDisplay = `${event.numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(event.scoringType).toLowerCase()}`;
+
+  // Show club only when not in club context (i.e., opened from "My Events")
+  const hasClubContext = typeof window !== "undefined" && !!sessionStorage.getItem("activeClubId");
+  const showClub = event.club && !hasClubContext;
+
+  const whenDisplay = `${new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}${event.endDate ? ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}`;
 
   return (
     <div className="space-y-3">
@@ -1642,9 +1643,24 @@ export default function EventDetailPage() {
 
       {/* Organizer & Courts */}
       <div className={frameClass}>
+        {showClub && (
+          <div className={rowClass}>
+            <span className="text-sm text-muted">Club</span>
+            <span className="text-sm font-medium">{event.club!.emoji} {event.club!.name}</span>
+          </div>
+        )}
+        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+          <span className="text-sm text-muted">When</span>
+          <span className="text-sm font-medium">{whenDisplay}</span>
+        </button>
         <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
           <span className="text-sm text-muted">Organizer</span>
-          <span className="text-sm font-medium truncate ml-4 text-right">{organizerText}</span>
+          <span className="text-sm font-medium text-right ml-4 truncate">
+            <span>{ownerName || "—"}</span>
+            {helperNames.length > 0 && (
+              <span className="block text-xs text-muted">({helperNames.join(", ")})</span>
+            )}
+          </span>
         </button>
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Courts</span>
