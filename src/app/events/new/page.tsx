@@ -64,8 +64,8 @@ function NewEventPage() {
   const [pairPreferMixed, setPairPreferMixed] = useState(false);
   const [manualPairFirst, setManualPairFirst] = useState<string | null>(null);
   const [competitionEnabled, setCompetitionEnabled] = useState(false);
-  const [minPlayers, setMinPlayers] = useState<string>("");
-  const [maxPlayers, setMaxPlayers] = useState<string>("");
+  const [minPlayers, setMinPlayers] = useState<string>("4");
+  const [maxPlayers, setMaxPlayers] = useState<string>("10");
   const [helperIds, setHelperIds] = useState<Set<string>>(new Set());
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
@@ -564,7 +564,7 @@ function NewEventPage() {
                   <button
                     key={n}
                     type="button"
-                    onClick={() => setNumCourts(n)}
+                    onClick={() => { setNumCourts(n); setMaxPlayers(String(n * 4 + 2)); }}
                     className={`flex-1 py-3 rounded-lg font-medium transition-all ${
                       numCourts === n
                         ? "bg-selected text-white"
