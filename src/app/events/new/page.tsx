@@ -69,7 +69,7 @@ function NewEventPage() {
   const [manualPairFirst, setManualPairFirst] = useState<string | null>(null);
   const [minPlayers, setMinPlayers] = useState<string>("");
   const [maxPlayers, setMaxPlayers] = useState<string>("");
-  const [helperId, setHelperId] = useState<string | null>(null);
+  const [helperIds, setHelperIds] = useState<Set<string>>(new Set());
   const [helperSearch, setHelperSearch] = useState("");
   const [helperGenderFilter, setHelperGenderFilter] = useState<string | null>(null);
   const [showAllHelpers, setShowAllHelpers] = useState(false);
@@ -145,7 +145,9 @@ function NewEventPage() {
     if (defaultsApplied || players.length === 0) return;
     const defaults = new Set<string>();
     if (userId && players.some((p) => p.id === userId)) defaults.add(userId);
-    if (helperId && players.some((p) => p.id === helperId)) defaults.add(helperId);
+    for (const hid of helperIds) {
+      if (players.some((p) => p.id === hid)) defaults.add(hid);
+    }
     if (defaults.size > 0) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -154,19 +156,22 @@ function NewEventPage() {
       });
     }
     setDefaultsApplied(true);
-  }, [players, userId, helperId, defaultsApplied]);
+  }, [players, userId, helperIds, defaultsApplied]);
 
-  // When helper changes, ensure they're added to selected players
+  // When helpers change, ensure they're added to selected players
   useEffect(() => {
-    if (helperId && players.some((p) => p.id === helperId)) {
-      setSelectedIds((prev) => {
-        if (prev.has(helperId)) return prev;
-        const next = new Set(prev);
-        next.add(helperId);
-        return next;
-      });
-    }
-  }, [helperId, players]);
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const hid of helperIds) {
+        if (players.some((p) => p.id === hid) && !next.has(hid)) {
+          next.add(hid);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [helperIds, players]);
 
   const togglePlayer = (id: string) => {
     setSelectedIds((prev) => {
@@ -256,11 +261,11 @@ function NewEventPage() {
     });
     const event = await r.json();
 
-    if (helperId) {
+    for (const hid of helperIds) {
       await fetch(`/api/events/${event.id}/helpers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: helperId }),
+        body: JSON.stringify({ playerId: hid }),
       });
     }
 
@@ -297,7 +302,7 @@ function NewEventPage() {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
 
-  const helperPlayer = helperId ? players.find((p) => p.id === helperId) : null;
+  const helperPlayers = players.filter((p) => helperIds.has(p.id));
 
   const scoringLabel = (v: string) =>
     ({ normal_11: "To 11", normal_15: "To 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
@@ -442,19 +447,26 @@ function NewEventPage() {
         {step === 2 && (() => {
           const helperCandidates = getFilteredHelperCandidates();
           const helperTier = showAllHelpers ? "all" : showClubHelpers ? "club" : "recent";
+          const toggleHelper = (pid: string) => {
+            setHelperIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(pid)) next.delete(pid); else next.add(pid);
+              return next;
+            });
+          };
           return (
             <>
-              {helperPlayer && (
-                <div className="flex items-center gap-2 p-2.5 bg-selected/10 border border-selected/30 rounded-lg mb-2">
-                  <PlayerAvatar name={helperPlayer.name} size="sm" />
-                  <span className="font-medium flex-1">{helperPlayer.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setHelperId(null)}
-                    className="text-xs text-danger hover:text-foreground px-2 py-1 rounded bg-gray-100"
-                  >
-                    Remove
-                  </button>
+              {/* Selected helpers */}
+              {helperPlayers.length > 0 && (
+                <div className="space-y-1 mb-1">
+                  {helperPlayers.map((hp) => (
+                    <div key={hp.id} className="flex items-center gap-2 p-2 bg-selected/10 border border-selected/30 rounded-lg">
+                      <PlayerAvatar name={hp.name} size="sm" />
+                      <span className="font-medium flex-1 text-sm">{hp.name}</span>
+                      <button type="button" onClick={() => toggleHelper(hp.id)}
+                        className="text-xs text-danger hover:text-foreground px-2 py-1 rounded bg-gray-100">Remove</button>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -500,21 +512,21 @@ function NewEventPage() {
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setHelperId(helperId === p.id ? null : p.id)}
+                      onClick={() => toggleHelper(p.id)}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
-                        helperId === p.id
+                        helperIds.has(p.id)
                           ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
                       <span
                         className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
-                          helperId === p.id
+                          helperIds.has(p.id)
                             ? "bg-selected border-selected text-white"
                             : "border-gray-300"
                         }`}
                       >
-                        {helperId === p.id ? "✓" : ""}
+                        {helperIds.has(p.id) ? "✓" : ""}
                       </span>
                       <PlayerAvatar name={p.name} size="sm" />
                       <span className="font-medium flex-1 text-left">{p.name}</span>
@@ -1014,7 +1026,11 @@ function NewEventPage() {
                 </button>
                 <button type="button" onClick={() => goEdit(2)} className={rowClass}>
                   <span className="text-sm text-muted">Organizer</span>
-                  <span className="text-sm font-medium flex items-center gap-1">{helperPlayer ? <><PlayerAvatar name={helperPlayer.name} size="xs" /> {helperPlayer.name}</> : "Just you"}</span>
+                  <span className="text-sm font-medium flex items-center gap-1">
+                    {helperPlayers.length > 0
+                      ? helperPlayers.map((hp) => hp.name).join(", ")
+                      : "Just you"}
+                  </span>
                 </button>
                 <button type="button" onClick={() => goEdit(3)} className={rowClass}>
                   <span className="text-sm text-muted">Courts</span>
