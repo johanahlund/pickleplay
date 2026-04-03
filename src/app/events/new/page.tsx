@@ -827,24 +827,12 @@ function NewEventPage() {
         {step === stepNum("Players") && (() => {
           const filtered = getFilteredPlayers();
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
+          const selectedPlayersList = players.filter((p) => selectedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
           return (
             <>
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-muted">
-                  Select Players ({selectedIds.size} selected)
-                </label>
-                <button
-                  type="button"
-                  onClick={selectAll}
-                  className="text-primary text-sm font-medium"
-                >
-                  {allVisibleSelected ? "Deselect All" : "Select All"}
-                </button>
-              </div>
-
               {/* Filters */}
               <div className="flex gap-2">
-                <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search by name..." className="text-sm" />
+                <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search..." className="text-sm" />
                 {(["M", "F"] as const).map((g) => (
                   <button
                     key={g}
@@ -861,47 +849,49 @@ function NewEventPage() {
                 ))}
               </div>
 
-              {/* Recent / All toggle */}
-              {recentPlayerIds.size > 0 && (
-                <div className="flex gap-1">
-                  {(["recent", "all"] as const).map((t) => {
-                    const playerTier = showAllPlayers ? "all" : "recent";
-                    return (
-                      <button key={t} type="button"
-                        onClick={() => { setShowAllPlayers(t === "all"); setShowClubPlayers(false); }}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          playerTier === t ? "bg-selected text-white" : "bg-gray-100 text-foreground"
-                        }`}>
-                        {t === "recent" ? "Recent" : "All"}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="flex gap-2 items-center">
+                {/* Recent / All toggle */}
+                {recentPlayerIds.size > 0 && (
+                  <div className="flex gap-1 flex-1">
+                    {(["recent", "all"] as const).map((t) => {
+                      const playerTier = showAllPlayers ? "all" : "recent";
+                      return (
+                        <button key={t} type="button"
+                          onClick={() => { setShowAllPlayers(t === "all"); setShowClubPlayers(false); }}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            playerTier === t ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                          }`}>
+                          {t === "recent" ? "Recent" : "All"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <button type="button" onClick={selectAll} className="text-primary text-xs font-medium whitespace-nowrap">
+                  {allVisibleSelected ? "Deselect All" : "Select All"}
+                </button>
+              </div>
 
+              {/* Player list */}
               {players.length === 0 ? (
-                <p className="text-sm text-muted py-4 text-center">
-                  No players registered yet. Add players first!
-                </p>
+                <p className="text-sm text-muted py-4 text-center">No players registered yet.</p>
               ) : filtered.length === 0 ? (
-                <p className="text-sm text-muted py-4 text-center">
-                  No players match your filters
-                </p>
+                <p className="text-sm text-muted py-4 text-center">No players match your filters</p>
               ) : (
-                <div className="space-y-1 max-h-80 overflow-y-auto">
+                <div className="space-y-0.5 max-h-64 overflow-y-auto">
                   {filtered.map((p) => (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => togglePlayer(p.id)}
-                      className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all ${
+                      className={`w-full flex items-center gap-2 py-2 px-2.5 rounded-lg transition-all ${
                         selectedIds.has(p.id)
                           ? "bg-selected/10 border border-selected/30"
                           : "hover:bg-gray-50 border border-transparent"
                       }`}
                     >
                       <span
-                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs font-bold transition-colors ${
+                        className={`w-4 h-4 rounded border-2 flex items-center justify-center text-[10px] font-bold shrink-0 ${
                           selectedIds.has(p.id)
                             ? "bg-selected border-selected text-white"
                             : "border-gray-300"
@@ -909,16 +899,36 @@ function NewEventPage() {
                       >
                         {selectedIds.has(p.id) ? "✓" : ""}
                       </span>
-                      <PlayerAvatar name={p.name} size="sm" />
-                      <span className="font-medium flex-1 text-left">{p.name}</span>
+                      <span className="font-medium text-sm flex-1 text-left truncate">{p.name}</span>
                       {p.gender && (
-                        <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                        <span className={`text-[10px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
                           {p.gender === "M" ? "♂" : "♀"}
                         </span>
                       )}
-                      <span className="text-sm text-muted">{Math.round(p.rating)}</span>
                     </button>
                   ))}
+                </div>
+              )}
+
+              {/* Selected tray — fixed at bottom */}
+              {selectedPlayersList.length > 0 && (
+                <div className="sticky bottom-0 bg-card border border-border rounded-xl p-2.5 shadow-lg -mx-1">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-xs font-semibold text-foreground">Selected ({selectedPlayersList.length})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedPlayersList.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => togglePlayer(p.id)}
+                        className="inline-flex items-center gap-1 bg-selected/10 text-foreground text-xs font-medium px-2 py-1 rounded-full border border-selected/20 hover:bg-red-50 hover:border-red-200 hover:text-danger transition-colors"
+                      >
+                        {p.name}
+                        <span className="text-[10px] opacity-50">✕</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </>
