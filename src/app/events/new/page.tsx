@@ -61,6 +61,7 @@ function NewEventPage() {
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
   const [rankingMode, setRankingMode] = useState("ranked");
+  const [genderMode, setGenderMode] = useState<"mix" | "random">("random");
   const [minPlayers, setMinPlayers] = useState<string>("");
   const [maxPlayers, setMaxPlayers] = useState<string>("");
   const [helperId, setHelperId] = useState<string | null>(null);
@@ -276,7 +277,7 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["When", "Helper", "Courts", "Scoring", "Pairing", "Players", "Review"];
+  const stepTitles = ["When", "Helper", "Courts", "Format", "Pairing", "Players", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -566,7 +567,7 @@ function NewEventPage() {
           </>
         )}
 
-        {/* Step 4: Scoring */}
+        {/* Step 4: Main Format */}
         {step === 4 && (
           <>
             <div>
@@ -577,7 +578,7 @@ function NewEventPage() {
                     key={f}
                     type="button"
                     onClick={() => setFormat(f)}
-                    className={`flex-1 py-3 rounded-lg font-medium transition-all capitalize ${
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                       format === f
                         ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
@@ -589,14 +590,36 @@ function NewEventPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Sets per Match</label>
+              <label className="block text-sm font-medium text-muted mb-1">Gender</label>
+              <div className="flex gap-2">
+                {([
+                  { value: "mix", label: "👫 Mix" },
+                  { value: "random", label: "🎲 Random" },
+                ] as const).map((g) => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => setGenderMode(g.value)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                      genderMode === g.value
+                        ? "bg-selected text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Sets</label>
               <div className="flex gap-2">
                 {[1, 3].map((n) => (
                   <button
                     key={n}
                     type="button"
                     onClick={() => setNumSets(n)}
-                    className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                       numSets === n
                         ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
@@ -609,7 +632,7 @@ function NewEventPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex gap-2">
                 {[
                   { value: "normal_11", label: "11" },
                   { value: "normal_15", label: "15" },
@@ -620,7 +643,7 @@ function NewEventPage() {
                     key={s.value}
                     type="button"
                     onClick={() => setScoringType(s.value)}
-                    className={`py-3 px-3 rounded-lg font-medium transition-all text-sm ${
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                       scoringType === s.value
                         ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
@@ -633,27 +656,31 @@ function NewEventPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
-              <div className="space-y-1.5">
+              <div className="flex gap-2">
                 {[
-                  { value: "ranked", label: "Ranked", desc: "Scores count towards ratings immediately" },
-                  { value: "approval", label: "Approval", desc: "Scores need confirmation before counting" },
-                  { value: "none", label: "Not counted", desc: "Scores recorded but don't affect ratings" },
+                  { value: "ranked", label: "Ranked" },
+                  { value: "approval", label: "Approval" },
+                  { value: "none", label: "Unranked" },
                 ].map((m) => (
                   <button
                     key={m.value}
                     type="button"
                     onClick={() => setRankingMode(m.value)}
-                    className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                       rankingMode === m.value
-                        ? "bg-selected/10 border border-selected/30"
-                        : "bg-gray-50 border border-transparent hover:bg-gray-100"
+                        ? "bg-selected text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
-                    <div className="font-medium text-sm">{m.label}</div>
-                    <div className="text-xs text-muted">{m.desc}</div>
+                    {m.label}
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-muted mt-1.5">
+                {rankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
+                {rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
+                {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
+              </p>
             </div>
           </>
         )}
