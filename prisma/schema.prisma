@@ -34,6 +34,8 @@ model Player {
   matchPlayers  MatchPlayer[]
   createdEvents Event[]       @relation("createdEvents")
   eventHelpers  EventHelper[]
+  pairsAsPlayer1 EventPair[]  @relation("pairPlayer1")
+  pairsAsPlayer2 EventPair[]  @relation("pairPlayer2")
   clubMembers   ClubMember[]
   createdClubs  Club[]        @relation("createdClubs")
   clubPosts     ClubPost[]
@@ -106,20 +108,35 @@ model Event {
   players        EventPlayer[]
   matches        Match[]
   helpers        EventHelper[]
+  pairs          EventPair[]
   whatsappGroups EventWhatsAppGroup[]
 }
 
 model EventPlayer {
-  id        String   @id @default(cuid())
-  eventId   String
-  playerId  String
-  status    String   @default("registered") // "registered" | "waitlisted" | "checked_in" | "paused"
-  joinedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  eventId    String
+  playerId   String
+  status     String   @default("registered") // "registered" | "waitlisted" | "checked_in" | "paused"
+  skillLevel Int?     // 1 = beginner, 2 = intermediate, 3 = advanced (per-event)
+  joinedAt   DateTime @default(now())
 
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, playerId])
+}
+
+model EventPair {
+  id        String @id @default(cuid())
+  eventId   String
+  player1Id String
+  player2Id String
+
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player1 Player @relation("pairPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2 Player @relation("pairPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, player1Id, player2Id])
 }
 
 model EventHelper {

@@ -16,6 +16,12 @@ export async function GET(
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
       helpers: { include: { player: true } },
+      pairs: {
+        include: {
+          player1: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
+          player2: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
+        },
+      },
       createdBy: { select: { id: true, name: true, emoji: true } },
       club: { select: { id: true, name: true, emoji: true, locations: true } },
     },

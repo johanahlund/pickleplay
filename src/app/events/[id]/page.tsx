@@ -38,6 +38,20 @@ interface EventHelper {
   player: Player;
 }
 
+interface PairPlayer {
+  id: string;
+  name: string;
+  emoji: string;
+  rating: number;
+  gender?: string | null;
+}
+
+interface EventPair {
+  id: string;
+  player1: PairPlayer;
+  player2: PairPlayer;
+}
+
 interface ClubLocation {
   id: string;
   name: string;
@@ -60,9 +74,10 @@ interface Event {
   visibility: string;
   createdById: string | null;
   createdBy?: { id: string; name: string; emoji: string } | null;
-  players: { player: Player; status: string }[];
+  players: { player: Player; status: string; skillLevel?: number | null }[];
   matches: Match[];
   helpers: EventHelper[];
+  pairs: EventPair[];
   club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
 }
 
@@ -274,8 +289,12 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "pairs" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
+  const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
+  const [pairMixed, setPairMixed] = useState(false);
+  const [generatingPairs, setGeneratingPairs] = useState(false);
+  const [manualPairSelect, setManualPairSelect] = useState<string | null>(null);
   const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
@@ -582,6 +601,55 @@ export default function EventDetailPage() {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
+    });
+    await fetchEvent();
+  };
+
+  const generatePairsAuto = async () => {
+    setGeneratingPairs(true);
+    await fetch(`/api/events/${id}/pairs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: pairMode, preferMixed: pairMixed }),
+    });
+    await fetchEvent();
+    setGeneratingPairs(false);
+  };
+
+  const createManualPair = async (player1Id: string, player2Id: string) => {
+    await fetch(`/api/events/${id}/pairs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player1Id, player2Id }),
+    });
+    setManualPairSelect(null);
+    await fetchEvent();
+  };
+
+  const removePair = async (pairId: string) => {
+    await fetch(`/api/events/${id}/pairs`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairId }),
+    });
+    await fetchEvent();
+  };
+
+  const clearAllPairs = async () => {
+    if (!confirm("Remove all pairs?")) return;
+    await fetch(`/api/events/${id}/pairs`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    await fetchEvent();
+  };
+
+  const setSkillLevel = async (playerId: string, skillLevel: number | null) => {
+    await fetch(`/api/events/${id}/players/${playerId}/level`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skillLevel }),
     });
     await fetchEvent();
   };
@@ -1040,6 +1108,151 @@ export default function EventDetailPage() {
     );
   };
 
+  // ── Section: Pairs ──
+  const renderPairs = () => {
+    const pairedPlayerIds = new Set<string>();
+    event.pairs.forEach((p) => { pairedPlayerIds.add(p.player1.id); pairedPlayerIds.add(p.player2.id); });
+    const unpaired = event.players
+      .filter((ep) => (ep.status === "registered" || ep.status === "checked_in") && !pairedPlayerIds.has(ep.player.id))
+      .sort((a, b) => a.player.name.localeCompare(b.player.name));
+
+    return (
+      <div className="space-y-4">
+        {/* Current pairs */}
+        {event.pairs.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">Pairs ({event.pairs.length})</h3>
+              {canManage && (
+                <button onClick={clearAllPairs} className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Clear All</button>
+              )}
+            </div>
+            {event.pairs.map((pair) => (
+              <div key={pair.id} className="flex items-center gap-2 bg-card rounded-xl border border-border p-3">
+                <div className="flex-1 flex items-center gap-1.5">
+                  <span className="text-lg">{pair.player1.emoji}</span>
+                  <span className="text-sm font-medium">{pair.player1.name}</span>
+                  {pair.player1.gender && <span className={`text-xs ${pair.player1.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player1.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                </div>
+                <span className="text-xs text-muted font-medium">+</span>
+                <div className="flex-1 flex items-center gap-1.5">
+                  <span className="text-lg">{pair.player2.emoji}</span>
+                  <span className="text-sm font-medium">{pair.player2.name}</span>
+                  {pair.player2.gender && <span className={`text-xs ${pair.player2.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player2.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                </div>
+                <span className="text-xs text-muted">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
+                {canManage && (
+                  <button onClick={() => removePair(pair.id)} className="text-xs text-danger px-1.5 py-1 rounded hover:bg-red-50">✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Unpaired players */}
+        {unpaired.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted">Unpaired ({unpaired.length})</h4>
+            {canManage && (
+              <div className="space-y-1">
+                {unpaired.map((ep) => (
+                  <button key={ep.player.id}
+                    onClick={() => {
+                      if (manualPairSelect === ep.player.id) {
+                        setManualPairSelect(null);
+                      } else if (manualPairSelect) {
+                        createManualPair(manualPairSelect, ep.player.id);
+                      } else {
+                        setManualPairSelect(ep.player.id);
+                      }
+                    }}
+                    className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 transition-colors ${
+                      manualPairSelect === ep.player.id
+                        ? "bg-selected/10 border border-selected/30 ring-1 ring-selected/20"
+                        : manualPairSelect
+                          ? "hover:bg-green-50 active:bg-green-100 border border-transparent"
+                          : "hover:bg-gray-50 active:bg-gray-100 border border-transparent"
+                    }`}>
+                    <span className="text-2xl">{ep.player.emoji}</span>
+                    <span className="text-base font-medium flex-1">{ep.player.name}</span>
+                    {ep.player.gender && <span className={`text-xs ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{ep.player.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                    <span className="text-xs text-muted">{Math.round(ep.player.rating)}</span>
+                    {manualPairSelect && manualPairSelect !== ep.player.id && (
+                      <span className="text-xs text-green-600 font-medium">Tap to pair</span>
+                    )}
+                    {manualPairSelect === ep.player.id && (
+                      <span className="text-xs text-selected font-medium">Selected</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!canManage && (
+              <div className="space-y-1">
+                {unpaired.map((ep) => (
+                  <div key={ep.player.id} className="flex items-center gap-2 px-3 py-2">
+                    <span className="text-2xl">{ep.player.emoji}</span>
+                    <span className="text-base font-medium">{ep.player.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Auto-generate controls */}
+        {canManage && unpaired.length >= 2 && (
+          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+            <h4 className="text-sm font-semibold">Auto-generate pairs</h4>
+            <div>
+              <label className="block text-xs text-muted mb-1">Balance by</label>
+              <div className="flex gap-2">
+                {([["rating", "Rating"], ["level", "Skill Level"], ["random", "Random"]] as const).map(([val, label]) => (
+                  <button key={val} onClick={() => setPairMode(val)}
+                    className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${pairMode === val ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pairMixed} onChange={(e) => setPairMixed(e.target.checked)}
+                className="rounded border-border" />
+              Prefer mixed gender (M + F)
+            </label>
+            {pairMode === "level" && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted">Assign skill levels first:</p>
+                {unpaired.map((ep) => {
+                  const currentLevel = event.players.find((p) => p.player.id === ep.player.id)?.skillLevel;
+                  return (
+                    <div key={ep.player.id} className="flex items-center gap-2 py-1">
+                      <span className="text-sm flex-1">{ep.player.emoji} {ep.player.name}</span>
+                      {[1, 2, 3].map((lvl) => (
+                        <button key={lvl} onClick={() => setSkillLevel(ep.player.id, currentLevel === lvl ? null : lvl)}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                            currentLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                          }`}>{lvl}</button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button onClick={generatePairsAuto} disabled={generatingPairs || unpaired.length < 2}
+              className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-base active:bg-action-dark disabled:opacity-50">
+              {generatingPairs ? "Generating..." : event.pairs.length > 0 ? "Regenerate All Pairs" : "Generate Pairs"}
+            </button>
+          </div>
+        )}
+
+        {event.pairs.length === 0 && unpaired.length < 2 && (
+          <p className="text-center py-6 text-muted text-sm">Need at least 2 active players to build pairs</p>
+        )}
+      </div>
+    );
+  };
+
   // ── Section: Players ──
   const renderAddPlayers = () => {
     const available = allPlayers
@@ -1331,6 +1544,7 @@ export default function EventDetailPage() {
         {activeSection === "details" && renderDetails()}
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
+        {activeSection === "pairs" && renderPairs()}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
       </div>
@@ -1383,6 +1597,18 @@ export default function EventDetailPage() {
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
         </button>
+
+        {/* Pairs — doubles only */}
+        {event.format === "doubles" && (
+          <button onClick={() => setActiveSection("pairs")} className={rowClass}>
+            <span className="text-sm text-muted">Pairs</span>
+            <span className="text-sm font-medium">
+              {event.pairs.length === 0
+                ? "Not set"
+                : `${event.pairs.length} pair${event.pairs.length !== 1 ? "s" : ""}`}
+            </span>
+          </button>
+        )}
 
         {/* Format group */}
         <p className={sectionTitle}>Format</p>

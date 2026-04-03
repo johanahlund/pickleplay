@@ -20,6 +20,7 @@ export async function POST(
     where: { id },
     include: {
       players: { include: { player: true } },
+      pairs: true,
       matches: {
         include: { players: true },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
@@ -63,6 +64,108 @@ export async function POST(
       { error: `Need at least ${minPlayers} players for ${format}` },
       { status: 400 }
     );
+  }
+
+  // ── Pair-based generation for doubles ──
+  if (format === "doubles" && event.pairs.length >= 2) {
+    const playerMap = new Map(playerInfos.map((p) => [p.id, p]));
+    const activePairs = event.pairs.filter(
+      (pair) => playerMap.has(pair.player1Id) && playerMap.has(pair.player2Id)
+    );
+
+    if (activePairs.length >= 2) {
+      // Delete existing matches for non-incremental
+      await prisma.match.deleteMany({ where: { eventId: id } });
+
+      // Shuffle pairs, then pit them against each other
+      const matchesPerRound = Math.min(event.numCourts, Math.floor(activePairs.length / 2));
+      const pairGamesPlayed = new Map<string, number>();
+      const pairOpponentCount = new Map<string, number>();
+      activePairs.forEach((p) => pairGamesPlayed.set(p.id, 0));
+
+      const pairKey = (a: string, b: string) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+      const allRounds: { court: number; pair1Id: string; pair2Id: string }[][] = [];
+
+      for (let r = 0; r < numRounds; r++) {
+        // Sort pairs by games played (fairness), then shuffle ties
+        const available = [...activePairs].sort((a, b) => {
+          const diff = (pairGamesPlayed.get(a.id) || 0) - (pairGamesPlayed.get(b.id) || 0);
+          return diff !== 0 ? diff : Math.random() - 0.5;
+        });
+
+        const roundMatches: { court: number; pair1Id: string; pair2Id: string }[] = [];
+        const usedThisRound = new Set<string>();
+
+        for (let court = 0; court < matchesPerRound; court++) {
+          const pool = available.filter((p) => !usedThisRound.has(p.id));
+          if (pool.length < 2) break;
+
+          // Pick best matchup (minimize repeat opponents)
+          let best = [pool[0], pool[1]];
+          let bestScore = Infinity;
+          const limit = Math.min(pool.length, 6);
+
+          for (let i = 0; i < limit; i++) {
+            for (let j = i + 1; j < limit; j++) {
+              const repeats = pairOpponentCount.get(pairKey(pool[i].id, pool[j].id)) || 0;
+              // Also try to balance pair strength
+              const p1Strength = (playerMap.get(pool[i].player1Id)?.rating || 1000) + (playerMap.get(pool[i].player2Id)?.rating || 1000);
+              const p2Strength = (playerMap.get(pool[j].player1Id)?.rating || 1000) + (playerMap.get(pool[j].player2Id)?.rating || 1000);
+              const strengthDiff = Math.abs(p1Strength - p2Strength);
+              const score = repeats * 1000 + strengthDiff * 0.5;
+              if (score < bestScore) {
+                bestScore = score;
+                best = [pool[i], pool[j]];
+              }
+            }
+          }
+
+          usedThisRound.add(best[0].id);
+          usedThisRound.add(best[1].id);
+          pairGamesPlayed.set(best[0].id, (pairGamesPlayed.get(best[0].id) || 0) + 1);
+          pairGamesPlayed.set(best[1].id, (pairGamesPlayed.get(best[1].id) || 0) + 1);
+          pairOpponentCount.set(pairKey(best[0].id, best[1].id), (pairOpponentCount.get(pairKey(best[0].id, best[1].id)) || 0) + 1);
+
+          roundMatches.push({ court: court + 1, pair1Id: best[0].id, pair2Id: best[1].id });
+        }
+
+        if (roundMatches.length > 0) allRounds.push(roundMatches);
+      }
+
+      // Save matches
+      const pairMap = new Map(activePairs.map((p) => [p.id, p]));
+      for (let roundIdx = 0; roundIdx < allRounds.length; roundIdx++) {
+        for (const match of allRounds[roundIdx]) {
+          const pair1 = pairMap.get(match.pair1Id)!;
+          const pair2 = pairMap.get(match.pair2Id)!;
+          await prisma.match.create({
+            data: {
+              eventId: id,
+              courtNum: match.court,
+              round: roundIdx + 1,
+              rankingMode: event.rankingMode,
+              players: {
+                create: [
+                  { playerId: pair1.player1Id, team: 1 },
+                  { playerId: pair1.player2Id, team: 1 },
+                  { playerId: pair2.player1Id, team: 2 },
+                  { playerId: pair2.player2Id, team: 2 },
+                ],
+              },
+            },
+          });
+        }
+      }
+
+      await prisma.event.update({ where: { id }, data: { status: "active" } });
+
+      return NextResponse.json({
+        rounds: allRounds.length,
+        matchesPerRound: allRounds[0]?.length || 0,
+        totalMatches: allRounds.reduce((s, r) => s + r.length, 0),
+        usedPairs: true,
+      });
+    }
   }
 
   const isIncremental = pairingMode === "king_of_court" || pairingMode === "swiss";
