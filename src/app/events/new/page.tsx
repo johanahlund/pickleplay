@@ -63,6 +63,7 @@ function NewEventPage() {
   const [pairBuildMode, setPairBuildMode] = useState<"rating" | "random">("rating");
   const [pairPreferMixed, setPairPreferMixed] = useState(false);
   const [manualPairFirst, setManualPairFirst] = useState<string | null>(null);
+  const [fixedPairs, setFixedPairs] = useState(false);
   const [competitionEnabled, setCompetitionEnabled] = useState(false);
   const [minPlayers, setMinPlayers] = useState<string>("4");
   const [maxPlayers, setMaxPlayers] = useState<string>("10");
@@ -302,11 +303,14 @@ function NewEventPage() {
     }
   };
 
-  const baseSteps = ["When", "Helper", "Courts", "Format", "Players", "Pairs"];
+  const baseSteps = fixedPairs
+    ? ["When", "Helper", "Courts", "Format", "Players", "Pairs"]
+    : ["When", "Helper", "Courts", "Format", "Players"];
   const stepTitles = competitionEnabled
     ? [...baseSteps, "Competition", "Review"]
     : [...baseSteps, "Review"];
   const TOTAL_STEPS = stepTitles.length;
+  const stepNum = (name: string) => stepTitles.indexOf(name) + 1;
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -650,6 +654,34 @@ function NewEventPage() {
                 ))}
               </div>
             </div>
+            {format === "doubles" && (
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Pairs</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: false, label: "New teams each round" },
+                    { value: true, label: "Fixed pairs" },
+                  ] as const).map((p) => (
+                    <button
+                      key={String(p.value)}
+                      type="button"
+                      onClick={() => {
+                        setFixedPairs(p.value);
+                        // If switching away from fixed pairs and Swiss is selected, reset to random
+                        if (!p.value && pairingMode === "swiss") setPairingMode("random");
+                      }}
+                      className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                        fixedPairs === p.value
+                          ? "bg-selected text-white"
+                          : "bg-gray-100 text-foreground hover:bg-gray-200"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Sets</label>
               <div className="flex gap-2">
@@ -702,7 +734,7 @@ function NewEventPage() {
                   { value: "mixed_gender", icon: "👫", label: "Mixed", desc: "Each team has one male + one female" },
                   { value: "skill_mixed_gender", icon: "📊👫", label: "Skill + Mix", desc: "Balanced ratings with mixed gender teams" },
                   { value: "king_of_court", icon: "👑", label: "King", desc: "Winners move up courts, losers move down" },
-                  { value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Teams with similar records play each other" },
+                  ...(fixedPairs ? [{ value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Fixed pairs matched by win/loss record" }] : []),
                   { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
                 ].map((m) => (
                   <button
@@ -792,7 +824,7 @@ function NewEventPage() {
         )}
 
         {/* Step 5: Players */}
-        {step === 5 && (() => {
+        {step === stepNum("Players") && (() => {
           const filtered = getFilteredPlayers();
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
           return (
@@ -894,7 +926,7 @@ function NewEventPage() {
         })()}
 
         {/* Step 6: Pairs */}
-        {step === 6 && format === "doubles" && (() => {
+        {step === stepNum("Pairs") && fixedPairs && format === "doubles" && (() => {
           const selectedPlayers = players.filter((p) => selectedIds.has(p.id));
           const pairedIds = new Set(memoryPairs.flatMap((p) => [p.player1Id, p.player2Id]));
           const unpaired = selectedPlayers.filter((p) => !pairedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
@@ -1018,14 +1050,8 @@ function NewEventPage() {
             </div>
           );
         })()}
-        {step === 6 && format !== "doubles" && (
-          <div className="text-sm text-muted text-center py-4">
-            Pairs are only available for doubles events. You can skip this step.
-          </div>
-        )}
-
-        {/* Competition step (only when enabled, step 7) */}
-        {competitionEnabled && step === 7 && (
+        {/* Competition step */}
+        {competitionEnabled && step === stepNum("Competition") && (
           <div className="space-y-3">
             <p className="text-sm text-muted">
               Competition settings will be configured after creating the event.
@@ -1061,17 +1087,17 @@ function NewEventPage() {
 
               {/* Organizer & Courts */}
               <div className={frameClass}>
-                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("When"))} className={rowClass}>
                   <span className="text-sm text-muted">Name</span>
                   <span className="text-sm font-medium">{name}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("When"))} className={rowClass}>
                   <span className="text-sm text-muted">When</span>
                   <span className="text-sm font-medium">
                     {new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} {time} – {endTime}
                   </span>
                 </button>
-                <button type="button" onClick={() => goEdit(2)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Helper"))} className={rowClass}>
                   <span className="text-sm text-muted">Organizer</span>
                   <span className="text-sm font-medium text-right">
                     <span>{session?.user?.name || "You"}</span>
@@ -1080,7 +1106,7 @@ function NewEventPage() {
                     )}
                   </span>
                 </button>
-                <button type="button" onClick={() => goEdit(3)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Courts"))} className={rowClass}>
                   <span className="text-sm text-muted">Courts</span>
                   <span className="text-sm font-medium">{numCourts}</span>
                 </button>
@@ -1088,12 +1114,12 @@ function NewEventPage() {
 
               {/* Players & Pairs */}
               <div className={frameClass}>
-                <button type="button" onClick={() => goEdit(5)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Players"))} className={rowClass}>
                   <span className="text-sm text-muted">Players</span>
                   <span className="text-sm font-medium">{selectedIds.size} selected</span>
                 </button>
                 {format === "doubles" && (
-                  <button type="button" onClick={() => goEdit(6)} className={rowClass}>
+                  <button type="button" onClick={() => goEdit(stepNum("Pairs"))} className={rowClass}>
                     <span className="text-sm text-muted">Pairs</span>
                     <span className="text-sm font-medium">
                       {memoryPairs.length === 0 ? "Not set" : `${memoryPairs.length} pair${memoryPairs.length !== 1 ? "s" : ""}`}
@@ -1101,7 +1127,7 @@ function NewEventPage() {
                   </button>
                 )}
                 {competitionEnabled && (
-                  <button type="button" onClick={() => goEdit(7)} className={rowClass}>
+                  <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
                     <span className="text-sm text-muted">Competition</span>
                     <span className="text-sm font-medium">Enabled</span>
                   </button>
@@ -1111,23 +1137,23 @@ function NewEventPage() {
               {/* Default Format */}
               <div className={frameClass}>
                 <p className={frameTitleClass}>Default Format</p>
-                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
                   <span className="text-sm text-muted">Format</span>
                   <span className="text-sm font-medium capitalize">{format}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
                   <span className="text-sm text-muted">Gender</span>
                   <span className="text-sm font-medium">{genderLabel}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
                   <span className="text-sm text-muted">Scoring</span>
                   <span className="text-sm font-medium">{scoringDisplay}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
                   <span className="text-sm text-muted">Pairing</span>
                   <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
                   <span className="text-sm text-muted">Rankings</span>
                   <span className="text-sm font-medium">
                     {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}
