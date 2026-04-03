@@ -276,7 +276,7 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["Name & When", "Helper", "Format", "Scoring", "Pairing", "Players", "Review"];
+  const stepTitles = ["When", "Helper", "Format", "Scoring", "Pairing", "Players", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -300,26 +300,26 @@ function NewEventPage() {
 
   return (
     <div className="space-y-3">
-      {/* Sticky header: title + progress + nav */}
+      {/* Sticky header: title + progress with labels + nav */}
       <div className="sticky top-0 z-40 bg-background pb-2 -mx-4 px-4 pt-1">
         <p className="text-xs text-action font-medium italic text-center mb-1.5">New Event</p>
         <div className="flex items-center gap-2">
           {returnToReview && step !== TOTAL_STEPS ? (
             <>
-              <div className="flex gap-1 flex-1">
-                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                      i < step ? "bg-action" : "bg-gray-200"
-                    }`}
-                  />
-                ))}
+              <div className="flex-1">
+                <div className="flex gap-1">
+                  {stepTitles.map((title, i) => (
+                    <div key={i} className="flex-1 text-center">
+                      <div className={`h-1 rounded-full transition-all duration-300 ${i < step ? "bg-action" : "bg-gray-200"}`} />
+                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : i < step ? "text-muted" : "text-gray-300"}`}>{title}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
-                className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors"
+                className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors shrink-0"
               >
                 Review
               </button>
@@ -330,27 +330,27 @@ function NewEventPage() {
                 <button
                   type="button"
                   onClick={() => setStep(step - 1)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 transition-colors"
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 transition-colors shrink-0"
                 >
                   Back
                 </button>
               )}
-              <div className="flex gap-1 flex-1">
-                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                      i < step ? "bg-action" : "bg-gray-200"
-                    }`}
-                  />
-                ))}
+              <div className="flex-1">
+                <div className="flex gap-1">
+                  {stepTitles.map((title, i) => (
+                    <div key={i} className="flex-1 text-center">
+                      <div className={`h-1 rounded-full transition-all duration-300 ${i < step ? "bg-action" : "bg-gray-200"}`} />
+                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : i < step ? "text-muted" : "text-gray-300"}`}>{title}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               {step < TOTAL_STEPS ? (
                 <button
                   type="button"
                   onClick={() => canAdvance() && setStep(step + 1)}
                   disabled={!canAdvance()}
-                  className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
                   Next
                 </button>
@@ -359,7 +359,7 @@ function NewEventPage() {
                   type="button"
                   onClick={createEvent}
                   disabled={!name.trim() || creating}
-                  className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
                   {creating ? "..." : "Create"}
                 </button>
@@ -368,9 +368,6 @@ function NewEventPage() {
           )}
         </div>
       </div>
-
-      {/* Step title */}
-      <p className="text-sm text-muted font-medium">{stepTitles[step - 1]}</p>
 
       {/* Step content */}
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">
