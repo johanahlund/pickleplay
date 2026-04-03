@@ -462,12 +462,20 @@ function NewEventPage() {
                 ))}
               </div>
 
-              {/* Tier label */}
-              <p className="text-xs text-muted">
-                {helperTier === "recent" ? "Showing players from your last 2 events" :
-                 helperTier === "club" ? `Showing ${selectedClub?.name || "club"} members` :
-                 "Showing all players"}
-              </p>
+              {/* Recent / All toggle */}
+              {recentPlayerIds.size > 0 && (
+                <div className="flex gap-1">
+                  {(["recent", "all"] as const).map((t) => (
+                    <button key={t} type="button"
+                      onClick={() => { setShowAllHelpers(t === "all"); setShowClubHelpers(false); }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        helperTier === t ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                      }`}>
+                      {t === "recent" ? "Recent" : "All"}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-1 max-h-64 overflow-y-auto">
                 {helperCandidates.length === 0 ? (
@@ -504,39 +512,6 @@ function NewEventPage() {
                   ))
                 )}
               </div>
-
-              {/* Tier navigation */}
-              <div className="flex gap-2 mt-1">
-                {helperTier !== "recent" && recentPlayerIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setShowAllHelpers(false); setShowClubHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
-                    className="flex-1 py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
-                  >
-                    Recent
-                  </button>
-                )}
-                {helperTier !== "club" && selectedClubId && clubMemberIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setShowClubHelpers(true); setShowAllHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
-                    className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-                  >
-                    Club Members
-                  </button>
-                )}
-                {helperTier !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => { setShowAllHelpers(true); setShowClubHelpers(false); setHelperSearch(""); setHelperGenderFilter(null); }}
-                    className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-                  >
-                    All Players
-                  </button>
-                )}
-              </div>
-
-              <p className="text-xs text-muted">Can manage this event alongside you</p>
             </>
           );
         })()}
