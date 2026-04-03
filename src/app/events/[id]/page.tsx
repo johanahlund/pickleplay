@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
+import { CompetitionView } from "@/components/CompetitionView";
 
 interface Player {
   id: string;
@@ -78,6 +79,9 @@ interface Event {
   matches: Match[];
   helpers: EventHelper[];
   pairs: EventPair[];
+  competitionMode?: string | null;
+  competitionConfig?: Record<string, unknown> | null;
+  competitionPhase?: string | null;
   club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
 }
 
@@ -289,7 +293,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "pairs" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -1545,6 +1549,19 @@ export default function EventDetailPage() {
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
+        {activeSection === "competition" && event && (
+          <CompetitionView
+            eventId={id as string}
+            pairs={event.pairs}
+            matches={event.matches as never}
+            competitionMode={event.competitionMode ?? null}
+            competitionConfig={event.competitionConfig as never}
+            competitionPhase={event.competitionPhase ?? null}
+            canManage={canManage}
+            numCourts={event.numCourts}
+            onRefresh={fetchEvent}
+          />
+        )}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
       </div>
@@ -1606,6 +1623,24 @@ export default function EventDetailPage() {
               {event.pairs.length === 0
                 ? "Not set"
                 : `${event.pairs.length} pair${event.pairs.length !== 1 ? "s" : ""}`}
+            </span>
+          </button>
+        )}
+
+        {/* Competition */}
+        {event.format === "doubles" && event.pairs.length >= 4 && (
+          <button onClick={() => setActiveSection("competition")} className={rowClass}>
+            <span className="text-sm text-muted">Competition</span>
+            <span className="text-sm font-medium">
+              {!event.competitionMode
+                ? "Not enabled"
+                : event.competitionPhase === "groups"
+                  ? "Group Stage"
+                  : event.competitionPhase?.startsWith("bracket")
+                    ? "Bracket Stage"
+                    : event.competitionPhase === "completed"
+                      ? "Completed"
+                      : "Setup"}
             </span>
           </button>
         )}
