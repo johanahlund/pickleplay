@@ -299,77 +299,74 @@ function NewEventPage() {
     }[v] || v);
 
   return (
-    <div className="space-y-4">
-      {/* Header with nav buttons */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">New Event</h2>
-        <span className="text-sm text-muted">{step} / {TOTAL_STEPS}</span>
-      </div>
-
-      {/* Progress bar + nav buttons */}
-      <div className="flex items-center gap-2">
-        {returnToReview && step !== TOTAL_STEPS ? (
-          <>
-            <div className="flex gap-1 flex-1">
-              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                    i < step ? "bg-action" : "bg-gray-200"
-                  }`}
-                />
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
-              className="bg-action text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-action-dark transition-colors"
-            >
-              Review
-            </button>
-          </>
-        ) : (
-          <>
-            {step > 1 && (
+    <div className="space-y-3">
+      {/* Sticky header: title + progress + nav */}
+      <div className="sticky top-0 z-40 bg-background pb-2 -mx-4 px-4 pt-1">
+        <p className="text-xs text-action font-medium italic text-center mb-1.5">New Event</p>
+        <div className="flex items-center gap-2">
+          {returnToReview && step !== TOTAL_STEPS ? (
+            <>
+              <div className="flex gap-1 flex-1">
+                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                      i < step ? "bg-action" : "bg-gray-200"
+                    }`}
+                  />
+                ))}
+              </div>
               <button
                 type="button"
-                onClick={() => setStep(step - 1)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-border text-foreground active:bg-gray-100 transition-colors"
+                onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
+                className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors"
               >
-                Back
+                Review
               </button>
-            )}
-            <div className="flex gap-1 flex-1">
-              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                    i < step ? "bg-action" : "bg-gray-200"
-                  }`}
-                />
-              ))}
-            </div>
-            {step < TOTAL_STEPS ? (
-              <button
-                type="button"
-                onClick={() => canAdvance() && setStep(step + 1)}
-                disabled={!canAdvance()}
-                className="bg-action text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={createEvent}
-                disabled={!name.trim() || creating}
-                className="bg-action-dark text-white px-4 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creating ? "..." : "Create"}
-              </button>
-            )}
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              {step > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setStep(step - 1)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 transition-colors"
+                >
+                  Back
+                </button>
+              )}
+              <div className="flex gap-1 flex-1">
+                {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                      i < step ? "bg-action" : "bg-gray-200"
+                    }`}
+                  />
+                ))}
+              </div>
+              {step < TOTAL_STEPS ? (
+                <button
+                  type="button"
+                  onClick={() => canAdvance() && setStep(step + 1)}
+                  disabled={!canAdvance()}
+                  className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={createEvent}
+                  disabled={!name.trim() || creating}
+                  className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creating ? "..." : "Create"}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Step title */}
