@@ -46,8 +46,8 @@ export async function DELETE(
 
   // Promote next waitlisted player if an active player was removed
   if (wasActive) {
-    const event = await prisma.event.findUnique({ where: { id } });
-    if (event?.maxPlayers) {
+    const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
+    if (cls?.maxPlayers) {
       const next = await prisma.eventPlayer.findFirst({
         where: { eventId: id, status: "waitlisted" },
         orderBy: { joinedAt: "asc" },

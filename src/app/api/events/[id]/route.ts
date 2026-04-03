@@ -10,6 +10,7 @@ export async function GET(
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
+      classes: true,
       players: { include: { player: true } },
       matches: {
         include: { players: { include: { player: true } } },
@@ -58,92 +59,67 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized to edit this event" }, { status: 403 });
   }
 
-  const { name, numCourts, date, endDate, numSets, scoringType, timedMinutes, pairingMode, rankingMode, openSignup, visibility } = await req.json();
+  const body = await req.json();
+  const { name, numCourts, date, endDate, openSignup, visibility } = body;
+  const { numSets, scoringType, timedMinutes, pairingMode, rankingMode } = body;
 
-  const data: { name?: string; numCourts?: number; date?: Date; endDate?: Date | null; numSets?: number; scoringType?: string; timedMinutes?: number | null; pairingMode?: string; rankingMode?: string; openSignup?: boolean; visibility?: string } = {};
+  // Event-level fields
+  const eventData: Record<string, unknown> = {};
   if (name !== undefined) {
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "Name required" }, { status: 400 });
-    }
-    data.name = name.trim();
+    if (!name?.trim()) return NextResponse.json({ error: "Name required" }, { status: 400 });
+    eventData.name = name.trim();
   }
   if (numCourts !== undefined) {
-    if (typeof numCourts !== "number" || numCourts < 1) {
-      return NextResponse.json(
-        { error: "numCourts must be a positive number" },
-        { status: 400 }
-      );
-    }
-    data.numCourts = numCourts;
+    if (typeof numCourts !== "number" || numCourts < 1) return NextResponse.json({ error: "numCourts must be positive" }, { status: 400 });
+    eventData.numCourts = numCourts;
   }
   if (date !== undefined) {
     const parsed = new Date(date);
-    if (isNaN(parsed.getTime())) {
-      return NextResponse.json({ error: "Invalid date" }, { status: 400 });
-    }
-    data.date = parsed;
+    if (isNaN(parsed.getTime())) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    eventData.date = parsed;
   }
   if (endDate !== undefined) {
-    if (endDate === null) {
-      data.endDate = null;
-    } else {
-      const parsed = new Date(endDate);
-      if (isNaN(parsed.getTime())) {
-        return NextResponse.json({ error: "Invalid end date" }, { status: 400 });
-      }
-      data.endDate = parsed;
-    }
+    eventData.endDate = endDate === null ? null : new Date(endDate);
   }
-  if (numSets !== undefined) {
-    if (![1, 3].includes(numSets)) {
-      return NextResponse.json({ error: "numSets must be 1 or 3" }, { status: 400 });
-    }
-    data.numSets = numSets;
-  }
-  if (scoringType !== undefined) {
-    const valid = ["normal_11", "normal_15", "rally_21", "timed"];
-    if (!valid.includes(scoringType)) {
-      return NextResponse.json({ error: "Invalid scoring type" }, { status: 400 });
-    }
-    data.scoringType = scoringType;
-  }
-  if (timedMinutes !== undefined) {
-    data.timedMinutes = timedMinutes; // null or positive integer
-  }
-  if (pairingMode !== undefined) {
-    const valid = ["random", "skill_balanced", "mixed_gender", "skill_mixed_gender", "king_of_court", "swiss", "manual"];
-    if (!valid.includes(pairingMode)) {
-      return NextResponse.json({ error: "Invalid pairing mode" }, { status: 400 });
-    }
-    data.pairingMode = pairingMode;
-  }
-  if (rankingMode !== undefined) {
-    if (!["ranked", "approval", "none"].includes(rankingMode)) {
-      return NextResponse.json({ error: "Invalid ranking mode" }, { status: 400 });
-    }
-    data.rankingMode = rankingMode;
-  }
-  if (openSignup !== undefined) {
-    data.openSignup = !!openSignup;
-  }
-  if (visibility !== undefined) {
-    if (!["visible", "hidden"].includes(visibility)) {
-      return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
-    }
-    data.visibility = visibility;
-  }
+  if (openSignup !== undefined) eventData.openSignup = !!openSignup;
+  if (visibility !== undefined) eventData.visibility = visibility;
 
-  if (Object.keys(data).length === 0) {
+  // Class-level fields (update default class)
+  const classData: Record<string, unknown> = {};
+  if (numSets !== undefined) classData.numSets = numSets;
+  if (scoringType !== undefined) classData.scoringType = scoringType;
+  if (timedMinutes !== undefined) classData.timedMinutes = timedMinutes;
+  if (pairingMode !== undefined) classData.pairingMode = pairingMode;
+  if (rankingMode !== undefined) classData.rankingMode = rankingMode;
+
+  const data = eventData; // for backwards compat with the update below
+
+  if (Object.keys(eventData).length === 0 && Object.keys(classData).length === 0) {
     return NextResponse.json(
       { error: "No fields to update" },
       { status: 400 }
     );
   }
 
-  const event = await prisma.event.update({
+  // Update event-level fields
+  if (Object.keys(eventData).length > 0) {
+    await prisma.event.update({ where: { id }, data: eventData });
+  }
+
+  // Update default class fields
+  if (Object.keys(classData).length > 0) {
+    const defaultClass = await prisma.eventClass.findFirst({
+      where: { eventId: id, isDefault: true },
+    });
+    if (defaultClass) {
+      await prisma.eventClass.update({ where: { id: defaultClass.id }, data: classData });
+    }
+  }
+
+  const event = await prisma.event.findUnique({
     where: { id },
-    data,
     include: {
+      classes: true,
       players: { include: { player: true } },
       matches: {
         include: { players: { include: { player: true } } },

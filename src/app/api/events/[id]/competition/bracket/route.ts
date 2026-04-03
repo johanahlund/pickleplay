@@ -10,6 +10,7 @@ import {
   seedBracket,
   generateBracketMatches,
 } from "@/lib/competition";
+import { getEventClass } from "@/lib/eventClass";
 
 // POST: advance from groups to bracket
 export async function POST(
@@ -43,7 +44,12 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const config = (event.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
+  const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
   if (body.action === "advance") {
     // Check all group matches are completed
@@ -105,7 +111,7 @@ export async function POST(
           bracketStage: match.bracketStage,
           bracketPosition: match.position,
           matchFormat: format,
-          rankingMode: event.rankingMode,
+          rankingMode: cls.rankingMode,
           // Only create player entries for matches with known pairs
           ...(pair1 && pair2
             ? {
@@ -142,7 +148,7 @@ export async function POST(
             bracketStage: match.bracketStage,
             bracketPosition: match.position,
             matchFormat: format,
-            rankingMode: event.rankingMode,
+            rankingMode: cls.rankingMode,
             ...(pair1 && pair2
               ? {
                   players: {
@@ -160,8 +166,8 @@ export async function POST(
       }
     }
 
-    await prisma.event.update({
-      where: { id },
+    await prisma.eventClass.update({
+      where: { id: cls.id },
       data: { competitionPhase: "bracket_upper" },
     });
 

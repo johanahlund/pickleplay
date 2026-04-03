@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { generateRounds, PlayerInfo, CompletedMatch } from "@/lib/matchgen";
+import { getEventClass } from "@/lib/eventClass";
 
 export async function POST(
   req: Request,
@@ -32,8 +33,13 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const format = event.format as "singles" | "doubles";
-  const pairingMode = event.pairingMode as
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
+  const format = cls.format as "singles" | "doubles";
+  const pairingMode = cls.pairingMode as
     | "random"
     | "skill_balanced"
     | "mixed_gender"
@@ -143,7 +149,7 @@ export async function POST(
               eventId: id,
               courtNum: match.court,
               round: roundIdx + 1,
-              rankingMode: event.rankingMode,
+              rankingMode: cls.rankingMode,
               players: {
                 create: [
                   { playerId: pair1.player1Id, team: 1 },
@@ -234,7 +240,7 @@ export async function POST(
           eventId: id,
           courtNum: match.court,
           round: isIncremental ? nextRound + roundIdx : roundIdx + 1,
-          rankingMode: event.rankingMode,
+          rankingMode: cls.rankingMode,
           players: {
             create: [
               ...match.team1.map((p) => ({

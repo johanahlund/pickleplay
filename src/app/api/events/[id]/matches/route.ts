@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { getEventClass } from "@/lib/eventClass";
 
 export async function POST(
   req: Request,
@@ -27,6 +28,11 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
   // Find the current max round, place manual matches in it (or round 1)
   const maxRound = event.matches.length > 0
     ? Math.max(...event.matches.map((m) => m.round))
@@ -39,7 +45,7 @@ export async function POST(
       courtNum: courtNum || 1,
       round,
       status: "pending",
-      rankingMode: event.rankingMode,
+      rankingMode: cls.rankingMode,
       players: {
         create: [
           ...team1PlayerIds.map((pid: string) => ({ playerId: pid, team: 1 })),

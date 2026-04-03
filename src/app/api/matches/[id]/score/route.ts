@@ -176,7 +176,8 @@ async function handlePostScore(matchId: string) {
     where: { id: matchId },
     include: {
       players: true,
-      event: { select: { id: true, competitionMode: true, competitionConfig: true } },
+      event: { select: { id: true } },
+      class: { select: { competitionMode: true, competitionConfig: true } },
     },
   });
   if (!match || !match.event) return;
@@ -186,7 +187,7 @@ async function handlePostScore(matchId: string) {
     const { getNextBracketMatch, getMatchWinnerLoser } = await import("@/lib/competition/progression");
 
     const prefix = match.bracketStage.startsWith("upper_") ? "upper" : "lower";
-    const config = match.event.competitionConfig as Record<string, unknown> | null;
+    const config = match.class?.competitionConfig as Record<string, unknown> | null;
     const hasThirdPlace = prefix === "upper"
       ? !!(config?.upperThirdPlace ?? true)
       : !!(config?.lowerThirdPlace ?? false);

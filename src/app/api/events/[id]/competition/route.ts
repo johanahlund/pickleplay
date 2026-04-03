@@ -6,6 +6,7 @@ import {
   DEFAULT_COMPETITION_CONFIG,
   CompetitionConfig,
 } from "@/lib/competition";
+import { getEventClass } from "@/lib/eventClass";
 
 // GET competition state
 export async function GET(
@@ -13,21 +14,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const event = await prisma.event.findUnique({
-    where: { id },
-    select: {
-      competitionMode: true,
-      competitionConfig: true,
-      competitionPhase: true,
-    },
-  });
-  if (!event) {
-    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
   }
   return NextResponse.json({
-    mode: event.competitionMode,
-    config: event.competitionConfig ?? DEFAULT_COMPETITION_CONFIG,
-    phase: event.competitionPhase,
+    mode: cls.competitionMode,
+    config: cls.competitionConfig ?? DEFAULT_COMPETITION_CONFIG,
+    phase: cls.competitionPhase,
   });
 }
 
@@ -45,10 +39,15 @@ export async function POST(
 
   const body = await req.json();
 
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
   if (body.action === "enable") {
     const config = { ...DEFAULT_COMPETITION_CONFIG, ...body.config };
-    await prisma.event.update({
-      where: { id },
+    await prisma.eventClass.update({
+      where: { id: cls.id },
       data: {
         competitionMode: "groups_elimination",
         competitionConfig: config,
@@ -59,8 +58,8 @@ export async function POST(
   }
 
   if (body.action === "disable") {
-    await prisma.event.update({
-      where: { id },
+    await prisma.eventClass.update({
+      where: { id: cls.id },
       data: {
         competitionMode: null,
         competitionConfig: Prisma.DbNull,
@@ -81,14 +80,10 @@ export async function POST(
   }
 
   if (body.action === "update_config") {
-    const event = await prisma.event.findUnique({
-      where: { id },
-      select: { competitionConfig: true },
-    });
-    const current = (event?.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
+    const current = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
     const updated = { ...current, ...body.config };
-    await prisma.event.update({
-      where: { id },
+    await prisma.eventClass.update({
+      where: { id: cls.id },
       data: { competitionConfig: updated },
     });
     return NextResponse.json({ ok: true, config: updated });

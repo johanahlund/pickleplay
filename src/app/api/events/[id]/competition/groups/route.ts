@@ -9,6 +9,7 @@ import {
   calculateGroupStandings,
   CompetitionPair,
 } from "@/lib/competition";
+import { getEventClass } from "@/lib/eventClass";
 
 // GET: group standings
 export async function GET(
@@ -36,7 +37,12 @@ export async function GET(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const config = (event.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
+  const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
   // Build competition pairs
   const competitionPairs: CompetitionPair[] = event.pairs.map((p) => ({
@@ -96,7 +102,12 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const config = (event.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
+  const cls = await getEventClass(id);
+  if (!cls) {
+    return NextResponse.json({ error: "No class found" }, { status: 404 });
+  }
+
+  const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
   if (body.action === "seed") {
     // Seed pairs into groups
@@ -189,7 +200,7 @@ export async function POST(
             courtNum,
             round: matchup.round,
             groupLabel: label,
-            rankingMode: event.rankingMode,
+            rankingMode: cls.rankingMode,
             players: {
               create: [
                 { playerId: pair1.player1Id, team: 1 },
@@ -206,7 +217,11 @@ export async function POST(
 
     await prisma.event.update({
       where: { id },
-      data: { status: "active", competitionPhase: "groups" },
+      data: { status: "active" },
+    });
+    await prisma.eventClass.update({
+      where: { id: cls.id },
+      data: { competitionPhase: "groups" },
     });
 
     return NextResponse.json({ ok: true, matchesCreated: totalCreated });

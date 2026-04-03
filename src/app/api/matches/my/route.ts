@@ -19,7 +19,8 @@ export async function GET() {
       players: {
         include: { player: { select: { id: true, name: true, emoji: true } } },
       },
-      event: { select: { id: true, name: true, date: true, format: true } },
+      event: { select: { id: true, name: true, date: true } },
+      class: { select: { format: true } },
     },
   });
 

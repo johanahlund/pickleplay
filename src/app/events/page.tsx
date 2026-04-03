@@ -49,7 +49,18 @@ export default function EventsPage() {
     fetch("/api/events")
       .then((r) => r.json())
       .then((data) => {
-        setEvents(data);
+        // Derive format fields from default class
+        const enriched = (data || []).map((e: Event & { classes?: { isDefault: boolean; format: string; numSets: number; scoringType: string; pairingMode: string }[] }) => {
+          const cls = e.classes?.find((c) => c.isDefault) || e.classes?.[0];
+          if (cls) {
+            e.format = cls.format;
+            e.numSets = cls.numSets;
+            e.scoringType = cls.scoringType;
+            e.pairingMode = cls.pairingMode;
+          }
+          return e;
+        });
+        setEvents(enriched);
         setLoading(false);
       });
   }, []);

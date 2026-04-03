@@ -53,8 +53,9 @@ export async function POST(
   }
 
   // Determine status based on capacity
+  const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
   const activeCount = getActiveCount(event.players);
-  const isFull = event.maxPlayers !== null && activeCount >= event.maxPlayers;
+  const isFull = cls?.maxPlayers !== null && cls?.maxPlayers !== undefined && activeCount >= cls.maxPlayers;
   const status = isFull ? "waitlisted" : "registered";
 
   await prisma.eventPlayer.create({
@@ -107,8 +108,8 @@ export async function DELETE(
 
   // If an active player left, promote next waitlisted
   if (wasActive) {
-    const event = await prisma.event.findUnique({ where: { id } });
-    if (event?.maxPlayers) {
+    const evtCls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
+    if (evtCls?.maxPlayers) {
       await promoteNextWaitlisted(id);
     }
   }

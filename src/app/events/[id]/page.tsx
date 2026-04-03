@@ -59,6 +59,24 @@ interface ClubLocation {
   googleMapsUrl?: string | null;
 }
 
+interface EventClassData {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  format: string;
+  gender: string;
+  ageGroup: string;
+  numSets: number;
+  scoringType: string;
+  pairingMode: string;
+  rankingMode: string;
+  minPlayers?: number | null;
+  maxPlayers?: number | null;
+  competitionMode?: string | null;
+  competitionConfig?: Record<string, unknown> | null;
+  competitionPhase?: string | null;
+}
+
 interface Event {
   id: string;
   name: string;
@@ -66,11 +84,6 @@ interface Event {
   endDate: string | null;
   status: string;
   numCourts: number;
-  format: string;
-  numSets: number;
-  scoringType: string;
-  pairingMode: string;
-  rankingMode?: string;
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
@@ -79,10 +92,17 @@ interface Event {
   matches: Match[];
   helpers: EventHelper[];
   pairs: EventPair[];
+  classes: EventClassData[];
+  club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
+  // Legacy compat — derived from default class
+  format: string;
+  numSets: number;
+  scoringType: string;
+  pairingMode: string;
+  rankingMode?: string;
   competitionMode?: string | null;
   competitionConfig?: Record<string, unknown> | null;
   competitionPhase?: string | null;
-  club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
 }
 
 function toDateInput(iso: string) {
@@ -331,6 +351,18 @@ export default function EventDetailPage() {
       return;
     }
     const data = await r.json();
+    // Derive legacy fields from default class for backwards compat
+    const defaultClass = data.classes?.find((c: EventClassData) => c.isDefault) || data.classes?.[0];
+    if (defaultClass) {
+      data.format = defaultClass.format;
+      data.numSets = defaultClass.numSets;
+      data.scoringType = defaultClass.scoringType;
+      data.pairingMode = defaultClass.pairingMode;
+      data.rankingMode = defaultClass.rankingMode;
+      data.competitionMode = defaultClass.competitionMode;
+      data.competitionConfig = defaultClass.competitionConfig;
+      data.competitionPhase = defaultClass.competitionPhase;
+    }
     setEvent(data);
     setLoading(false);
   }, [id, router]);

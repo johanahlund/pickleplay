@@ -29,15 +29,13 @@ export async function POST(
   // Managers can force a status, otherwise auto-determine
   let status = requestedStatus || "registered";
   if (!requestedStatus) {
-    const event = await prisma.event.findUnique({
-      where: { id },
-      include: { players: { select: { status: true } } },
-    });
-    if (event?.maxPlayers) {
-      const activeCount = event.players.filter(
+    const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
+    if (cls?.maxPlayers) {
+      const players = await prisma.eventPlayer.findMany({ where: { eventId: id }, select: { status: true } });
+      const activeCount = players.filter(
         (p) => p.status === "registered" || p.status === "checked_in"
       ).length;
-      if (activeCount >= event.maxPlayers) {
+      if (activeCount >= cls.maxPlayers) {
         status = "waitlisted";
       }
     }

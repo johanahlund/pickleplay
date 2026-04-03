@@ -87,22 +87,8 @@ model Event {
   endDate      DateTime?
   status       String   @default("setup") // setup, active, completed
   numCourts    Int      @default(2)
-  format       String   @default("doubles") // doubles, singles
-  numSets      Int      @default(1) // 1, 2, or 3
-  scoringType  String   @default("normal_11") // normal_11, normal_15, rally_21, timed
-  timedMinutes Int?     // only when scoringType = "timed"
-  pairingMode  String   @default("random") // random, skill_balanced, mixed_gender, skill_mixed_gender, king_of_court, swiss
-  rankingMode  String   @default("ranked") // "ranked" | "approval" | "none"
-  minPlayers   Int?     // minimum players needed
-  maxPlayers   Int?     // maximum players allowed (null = unlimited)
-  openSignup   Boolean  @default(true)  // true = anyone can join, false = only manager can add players
-  visibility   String   @default("visible") // "visible" | "hidden" (hidden only shown to owner/helpers/players)
-
-  // Competition config (null = normal event)
-  competitionMode String?  // null | "groups_elimination"
-  competitionConfig Json?  // stores full competition settings as JSON
-  competitionPhase  String? // "groups" | "bracket_upper" | "bracket_lower" | "completed"
-
+  openSignup   Boolean  @default(true)
+  visibility   String   @default("visible") // "visible" | "hidden"
   createdAt    DateTime @default(now())
 
   createdById  String?
@@ -111,23 +97,61 @@ model Event {
   clubId       String?
   club         Club?    @relation(fields: [clubId], references: [id])
 
+  classes        EventClass[]
   players        EventPlayer[]
+  pairs          EventPair[]
   matches        Match[]
   helpers        EventHelper[]
-  pairs          EventPair[]
   whatsappGroups EventWhatsAppGroup[]
+}
+
+model EventClass {
+  id          String @id @default(cuid())
+  eventId     String
+  name        String @default("Open")
+  isDefault   Boolean @default(true) // the auto-created class
+
+  // Dimensions
+  format      String  @default("doubles") // doubles, singles
+  gender      String  @default("open")    // male, female, mix, open
+  ageGroup    String  @default("open")    // open, 18+, 50+, 60+, custom
+  ageMin      Int?
+  ageMax      Int?
+  skillMin    Float?  // DUPR min (e.g. 3.5)
+  skillMax    Float?  // DUPR max (e.g. 4.0)
+
+  // Format settings
+  numSets      Int      @default(1)
+  scoringType  String   @default("normal_11")
+  timedMinutes Int?
+  pairingMode  String   @default("random")
+  rankingMode  String   @default("ranked")
+  minPlayers   Int?
+  maxPlayers   Int?
+
+  // Competition
+  competitionMode   String?  // null | "groups_elimination"
+  competitionConfig Json?
+  competitionPhase  String?  // "groups" | "bracket_upper" | "bracket_lower" | "completed"
+
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  players  EventPlayer[]
+  pairs    EventPair[]
+  matches  Match[]
 }
 
 model EventPlayer {
   id         String   @id @default(cuid())
   eventId    String
+  classId    String?
   playerId   String
-  status     String   @default("registered") // "registered" | "waitlisted" | "checked_in" | "paused"
-  skillLevel Int?     // 1 = beginner, 2 = intermediate, 3 = advanced (per-event)
+  status     String   @default("registered")
+  skillLevel Int?
   joinedAt   DateTime @default(now())
 
-  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  class  EventClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  player Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, playerId])
 }
@@ -135,14 +159,16 @@ model EventPlayer {
 model EventPair {
   id        String @id @default(cuid())
   eventId   String
+  classId   String?
   player1Id String
   player2Id String
-  groupLabel String? // "A", "B", "C" etc — for competition group assignment
-  seed       Int?    // seeding position within group
+  groupLabel String?
+  seed       Int?
 
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  player1 Player @relation("pairPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
-  player2 Player @relation("pairPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
+  event   Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  class   EventClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  player1 Player      @relation("pairPlayer1", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2 Player      @relation("pairPlayer2", fields: [player2Id], references: [id], onDelete: Cascade)
 
   @@unique([eventId, player1Id, player2Id])
 }
@@ -161,22 +187,24 @@ model EventHelper {
 model Match {
   id        String   @id @default(cuid())
   eventId   String
+  classId   String?
   courtNum  Int
   round     Int
-  status         String   @default("pending") // pending, active, completed
-  rankingMode    String   @default("ranked") // "ranked" | "approval" | "none"
-  scoreConfirmed Boolean  @default(false)    // for approval mode: true once confirmed
-  eloChange      Float    @default(0) // stored for score edit reversal
+  status         String   @default("pending")
+  rankingMode    String   @default("ranked")
+  scoreConfirmed Boolean  @default(false)
+  eloChange      Float    @default(0)
 
   // Competition metadata
-  groupLabel     String?  // "A", "B" etc — which group this match belongs to
-  bracketStage   String?  // "upper_qf", "upper_sf", "upper_f", "upper_3rd", "lower_qf", etc.
-  bracketPosition Int?    // position within bracket stage (1, 2, 3...)
-  matchFormat    String?  // override format for this specific match (e.g. "bo3_11")
+  groupLabel     String?
+  bracketStage   String?
+  bracketPosition Int?
+  matchFormat    String?
 
   createdAt DateTime @default(now())
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  class   EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
   players MatchPlayer[]
 }
 

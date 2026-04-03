@@ -9,6 +9,7 @@ export async function GET() {
   const events = await prisma.event.findMany({
     orderBy: { createdAt: "desc" },
     include: {
+      classes: true,
       players: { include: { player: true } },
       helpers: { include: { player: true } },
       club: { select: { id: true, name: true, emoji: true } },
@@ -44,15 +45,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
 
+  // Create event
   const event = await prisma.event.create({
     data: {
       name: name.trim(),
       numCourts: numCourts || 2,
-      format: format || "doubles",
       createdById: user.id,
       ...(clubId ? { clubId } : {}),
       ...(date ? { date: new Date(date) } : {}),
       ...(endDate ? { endDate: new Date(endDate) } : {}),
+    },
+  });
+
+  // Create default "Open" class with format settings
+  const cls = await prisma.eventClass.create({
+    data: {
+      eventId: event.id,
+      name: "Open",
+      isDefault: true,
+      format: format || "doubles",
       ...(numSets ? { numSets } : {}),
       ...(scoringType ? { scoringType } : {}),
       ...(timedMinutes !== undefined && timedMinutes !== null ? { timedMinutes } : {}),
@@ -60,13 +71,24 @@ export async function POST(req: Request) {
       ...(rankingMode && ["ranked", "approval", "none"].includes(rankingMode) ? { rankingMode } : {}),
       ...(minPlayers !== undefined ? { minPlayers: minPlayers || null } : {}),
       ...(maxPlayers !== undefined ? { maxPlayers: maxPlayers || null } : {}),
-      players: {
-        create: (playerIds || []).map((pid: string) => ({
-          playerId: pid,
-        })),
-      },
     },
-    include: { players: { include: { player: true } } },
   });
-  return NextResponse.json(event);
+
+  // Add players to both event and class
+  for (const pid of (playerIds || [])) {
+    await prisma.eventPlayer.create({
+      data: { eventId: event.id, classId: cls.id, playerId: pid },
+    });
+  }
+
+  // Return event with class info
+  const result = await prisma.event.findUnique({
+    where: { id: event.id },
+    include: {
+      classes: true,
+      players: { include: { player: true } },
+      helpers: { include: { player: true } },
+    },
+  });
+  return NextResponse.json(result);
 }
