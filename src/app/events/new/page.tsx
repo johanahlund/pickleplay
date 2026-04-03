@@ -28,7 +28,7 @@ function getDefaultTime() {
   return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
 }
 
-const TOTAL_STEPS = 7;
+// TOTAL_STEPS is dynamic based on competitionEnabled
 
 export default function NewEventPageWrapper() {
   return (
@@ -67,6 +67,7 @@ function NewEventPage() {
   const [pairBuildMode, setPairBuildMode] = useState<"rating" | "random">("rating");
   const [pairPreferMixed, setPairPreferMixed] = useState(false);
   const [manualPairFirst, setManualPairFirst] = useState<string | null>(null);
+  const [competitionEnabled, setCompetitionEnabled] = useState(false);
   const [minPlayers, setMinPlayers] = useState<string>("");
   const [maxPlayers, setMaxPlayers] = useState<string>("");
   const [helperIds, setHelperIds] = useState<Set<string>>(new Set());
@@ -286,6 +287,15 @@ function NewEventPage() {
       });
     }
 
+    // Enable competition mode if selected
+    if (competitionEnabled) {
+      await fetch(`/api/events/${event.id}/competition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "enable" }),
+      });
+    }
+
     router.push(`/events/${event.id}`);
   };
 
@@ -296,7 +306,11 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["When", "Helper", "Courts", "Format", "Players", "Pairs", "Review"];
+  const baseSteps = ["When", "Helper", "Courts", "Format", "Players", "Pairs"];
+  const stepTitles = competitionEnabled
+    ? [...baseSteps, "Competition", "Review"]
+    : [...baseSteps, "Review"];
+  const TOTAL_STEPS = stepTitles.length;
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -754,6 +768,21 @@ function NewEventPage() {
                 {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
               </p>
             </div>
+            {format === "doubles" && (
+              <div className="border-t border-border pt-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
+                    onClick={() => setCompetitionEnabled(!competitionEnabled)}>
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${competitionEnabled ? "translate-x-5.5 left-0.5" : "left-0.5"}`}
+                      style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Competition Mode</span>
+                    <p className="text-xs text-muted">Groups → Elimination tournament</p>
+                  </div>
+                </label>
+              </div>
+            )}
           </>
         )}
 
@@ -990,8 +1019,28 @@ function NewEventPage() {
           </div>
         )}
 
-        {/* Step 7: Review */}
-        {step === 7 && (() => {
+        {/* Competition step (only when enabled, step 7) */}
+        {competitionEnabled && step === 7 && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Competition settings will be configured after creating the event.
+              The competition section on the event page lets you set up groups,
+              advancement rules, and bracket formats.
+            </p>
+            <div className="bg-card rounded-xl border border-border p-3 space-y-1 text-sm">
+              <div className="flex justify-between"><span className="text-muted">Mode</span><span className="font-medium">Groups → Elimination</span></div>
+              <div className="flex justify-between"><span className="text-muted">Pairs</span><span className="font-medium">{memoryPairs.length} pair{memoryPairs.length !== 1 ? "s" : ""}</span></div>
+            </div>
+            {memoryPairs.length < 4 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                You need at least 4 pairs for competition mode. Add more players and pairs in the previous steps.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Review (always last step) */}
+        {step === TOTAL_STEPS && (() => {
           const goEdit = (targetStep: number) => {
             setReturnToReview(true);
             setStep(targetStep);
@@ -1044,6 +1093,12 @@ function NewEventPage() {
                     <span className="text-sm font-medium">
                       {memoryPairs.length === 0 ? "Not set" : `${memoryPairs.length} pair${memoryPairs.length !== 1 ? "s" : ""}`}
                     </span>
+                  </button>
+                )}
+                {competitionEnabled && (
+                  <button type="button" onClick={() => goEdit(7)} className={rowClass}>
+                    <span className="text-sm text-muted">Competition</span>
+                    <span className="text-sm font-medium">Enabled</span>
                   </button>
                 )}
               </div>
