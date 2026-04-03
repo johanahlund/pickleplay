@@ -321,7 +321,7 @@ function NewEventPage() {
   return (
     <div className="space-y-3">
       {/* Sticky header: title + progress with labels + nav */}
-      <div className="sticky top-0 z-40 bg-background pb-2 -mx-4 px-4 pt-1">
+      <div className="sticky -top-1 z-40 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm">
         <p className="text-xs text-action font-medium italic text-center mb-1.5">New Event</p>
         <div className="flex items-center gap-2">
           {returnToReview && step !== TOTAL_STEPS ? (
@@ -387,6 +387,7 @@ function NewEventPage() {
             </>
           )}
         </div>
+        <p className="text-base font-bold text-foreground text-center mt-2">{stepTitles[step - 1]}</p>
       </div>
 
       {/* Step content */}
