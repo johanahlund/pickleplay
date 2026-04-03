@@ -789,13 +789,43 @@ export default function EventDetailPage() {
     </div>
   );
 
-  const backButton = (
-    <button
-      onClick={() => setActiveSection("overview")}
-      className="flex items-center gap-1 text-lg text-primary font-semibold mb-2 active:opacity-70"
-    >
-      ← Back
-    </button>
+  const sectionLabels: Record<string, string> = {
+    details: "Settings",
+    admins: "Organizer",
+    players: "Players",
+    pairs: "Pairs",
+    competition: "Competition",
+    rounds: "Matches",
+    manual: "Add Match",
+  };
+
+  const sectionOrder = ["details", "admins", "players", "pairs", "competition", "rounds", "manual"];
+
+  const sectionBar = (
+    <div className="sticky -top-1 z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm">
+      <div className="flex gap-1">
+        {sectionOrder
+          .filter((s) => {
+            if (s === "pairs" && event.format !== "doubles") return false;
+            if (s === "competition" && event.format !== "doubles") return false;
+            return true;
+          })
+          .map((s) => (
+            <div key={s} className="flex-1 text-center">
+              <div className={`h-1 rounded-full transition-all duration-300 ${s === activeSection ? "bg-action" : "bg-gray-200"}`} />
+              <span className={`text-[8px] leading-tight mt-0.5 block ${s === activeSection ? "text-action font-semibold" : "text-gray-300"}`}>
+                {sectionLabels[s]}
+              </span>
+            </div>
+          ))}
+      </div>
+      <button
+        onClick={() => setActiveSection("overview")}
+        className="w-full text-center mt-1.5"
+      >
+        <span className="text-base font-bold text-foreground">{sectionLabels[activeSection] || activeSection}</span>
+      </button>
+    </div>
   );
 
   // ── Section: Event Details ──
@@ -1028,113 +1058,7 @@ export default function EventDetailPage() {
             )}
           </div>
         )}
-        {/* WhatsApp Groups */}
-        <div>
-          <h4 className="text-sm font-medium text-muted mb-1">WhatsApp Groups ({waGroups.length})</h4>
-          {waGroups.length > 0 ? (
-            <div className="space-y-1">
-              {waGroups.map((g) => (
-                <div key={g.id} className="flex items-center gap-2 rounded-lg px-3 py-2">
-                  <span className="text-lg">💬</span>
-                  <span className="text-sm font-medium flex-1">{g.name}</span>
-                  <button
-                    onClick={() => sendToWhatsApp(g.id)}
-                    className="text-xs bg-green-500 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-600 transition-colors"
-                  >
-                    {copiedGroupId === g.id ? "Copied!" : "Send"}
-                  </button>
-                  {canManage && (
-                    <button
-                      onClick={async () => {
-                        await fetch(`/api/events/${id}/whatsapp-groups`, {
-                          method: "DELETE",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ whatsappGroupId: g.id }),
-                        });
-                        fetchWaGroups();
-                      }}
-                      className="text-xs text-danger px-2 py-1.5 rounded-lg hover:bg-red-50 font-medium"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted py-2">No groups linked</p>
-          )}
-        </div>
-
-        {/* Link / Create WhatsApp Group */}
-        {canManage && (
-          <div>
-            <h4 className="text-sm font-medium text-muted mb-1">Link Group</h4>
-            {(() => {
-              const unlinked = allWaGroups.filter(
-                (g) => !waGroups.some((wg) => wg.id === g.id)
-              );
-              return (
-                <div className="space-y-2">
-                  {unlinked.length > 0 && (
-                    <div className="space-y-1">
-                      {unlinked.map((g) => (
-                        <button
-                          key={g.id}
-                          onClick={async () => {
-                            await fetch(`/api/events/${id}/whatsapp-groups`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ whatsappGroupId: g.id }),
-                            });
-                            fetchWaGroups();
-                          }}
-                          className="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 text-sm transition-colors"
-                        >
-                          <span>💬</span>
-                          <span className="font-medium">{g.name}</span>
-                          <span className="ml-auto text-xs text-primary">+ Link</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newGroupName}
-                      onChange={(e) => setNewGroupName(e.target.value)}
-                      placeholder="New group name..."
-                      className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!newGroupName.trim()) return;
-                        const r = await fetch("/api/whatsapp-groups", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ name: newGroupName.trim() }),
-                        });
-                        const group = await r.json();
-                        // Auto-link to this event
-                        await fetch(`/api/events/${id}/whatsapp-groups`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ whatsappGroupId: group.id }),
-                        });
-                        setNewGroupName("");
-                        fetchWaGroups();
-                      }}
-                      disabled={!newGroupName.trim()}
-                      className="bg-action text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
-                    >
-                      Create
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
+        {/* WhatsApp Groups hidden from UI */}
       </div>
     );
   };
@@ -1589,8 +1513,7 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {eventHeader}
-        {backButton}
+        {sectionBar}
         {activeSection === "details" && renderDetails()}
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
