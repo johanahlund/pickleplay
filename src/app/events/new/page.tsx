@@ -27,7 +27,7 @@ function getDefaultTime() {
   return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
 }
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 export default function NewEventPageWrapper() {
   return (
@@ -277,7 +277,7 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["When", "Helper", "Courts", "Format", "Players", "Review"];
+  const stepTitles = ["When", "Helper", "Courts", "Format", "Players", "Pairs", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -655,34 +655,6 @@ function NewEventPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
-              <div className="flex gap-2">
-                {[
-                  { value: "ranked", label: "Ranked" },
-                  { value: "approval", label: "Approval" },
-                  { value: "none", label: "Unranked" },
-                ].map((m) => (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => setRankingMode(m.value)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      rankingMode === m.value
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted mt-1.5">
-                {rankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
-                {rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
-                {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
-              </p>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
               <div className="flex gap-1.5">
                 {[
@@ -727,10 +699,38 @@ function NewEventPage() {
                 ) : null;
               })()}
             </div>
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
+              <div className="flex gap-2">
+                {[
+                  { value: "ranked", label: "Ranked" },
+                  { value: "approval", label: "Approval" },
+                  { value: "none", label: "Unranked" },
+                ].map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setRankingMode(m.value)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                      rankingMode === m.value
+                        ? "bg-selected text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-1.5">
+                {rankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
+                {rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
+                {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
+              </p>
+            </div>
           </>
         )}
 
-        {/* Step 6: Players */}
+        {/* Step 5: Players */}
         {step === 5 && (() => {
           const filtered = getFilteredPlayers();
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
@@ -832,76 +832,102 @@ function NewEventPage() {
           );
         })()}
 
+        {/* Step 6: Pairs */}
+        {step === 6 && format === "doubles" && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              Pairs can be configured after creating the event. Skip this step if you want to set up pairs later.
+            </p>
+            <div className="bg-gray-50 rounded-lg p-3 text-sm text-muted text-center">
+              Pair management is available on the event page after creation
+            </div>
+          </div>
+        )}
+        {step === 6 && format !== "doubles" && (
+          <div className="text-sm text-muted text-center py-4">
+            Pairs are only available for doubles events. You can skip this step.
+          </div>
+        )}
+
         {/* Step 7: Review */}
-        {step === 6 && (() => {
+        {step === 7 && (() => {
           const goEdit = (targetStep: number) => {
             setReturnToReview(true);
             setStep(targetStep);
           };
-          const rowClass = "flex justify-between items-center py-2.5 px-2 -mx-2 border-b border-border rounded-lg hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors";
+          const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+          const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
+          const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
+          const genderLabel = genderMode === "mix" ? "Mixed" : "Random";
+          const scoringDisplay = `${numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(scoringType).toLowerCase()}`;
           return (
-            <div className="space-y-1">
-              <p className="text-xs text-muted mb-2">Tap any row to edit</p>
-              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Name</span>
-                <span className="text-sm font-medium">{name}</span>
-              </button>
-              {selectedClub && (
-                <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
-                  <span className="text-sm text-muted">Club</span>
-                  <span className="text-sm font-medium">{selectedClub.emoji} {selectedClub.name}</span>
+            <div className="space-y-3">
+              <p className="text-xs text-muted">Tap any row to edit</p>
+
+              {/* Organizer & Courts */}
+              <div className={frameClass}>
+                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                  <span className="text-sm text-muted">Name</span>
+                  <span className="text-sm font-medium">{name}</span>
                 </button>
-              )}
-              <button type="button" onClick={() => goEdit(2)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Helper</span>
-                <span className="text-sm font-medium flex items-center gap-1">{helperPlayer ? <><PlayerAvatar name={helperPlayer.name} size="xs" /> {helperPlayer.name}</> : "None"}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">WhatsApp</span>
-                <span className="text-sm font-medium">
-                  {selectedWaGroupIds.size > 0
-                    ? `${selectedWaGroupIds.size} group${selectedWaGroupIds.size > 1 ? "s" : ""}`
-                    : "None"}
-                </span>
-              </button>
-              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Date</span>
-                <span className="text-sm font-medium">{new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(1)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Time</span>
-                <span className="text-sm font-medium">{time} – {endTime}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Courts</span>
-                <span className="text-sm font-medium">{numCourts}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Format</span>
-                <span className="text-sm font-medium capitalize">{format}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Sets</span>
-                <span className="text-sm font-medium">{numSets === 1 ? "1 Set" : "Best of 3"}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Scoring</span>
-                <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Pairing</span>
-                <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Rankings</span>
-                <span className="text-sm font-medium">
-                  {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}
-                </span>
-              </button>
-              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full border-b-0"}>
-                <span className="text-sm text-muted">Players</span>
-                <span className="text-sm font-medium">{selectedIds.size} selected</span>
-              </button>
+                {selectedClub && (
+                  <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                    <span className="text-sm text-muted">Club</span>
+                    <span className="text-sm font-medium">{selectedClub.emoji} {selectedClub.name}</span>
+                  </button>
+                )}
+                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                  <span className="text-sm text-muted">Date</span>
+                  <span className="text-sm font-medium">{new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(1)} className={rowClass}>
+                  <span className="text-sm text-muted">Time</span>
+                  <span className="text-sm font-medium">{time} – {endTime}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(2)} className={rowClass}>
+                  <span className="text-sm text-muted">Organizer</span>
+                  <span className="text-sm font-medium flex items-center gap-1">{helperPlayer ? <><PlayerAvatar name={helperPlayer.name} size="xs" /> {helperPlayer.name}</> : "Just you"}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(3)} className={rowClass}>
+                  <span className="text-sm text-muted">Courts</span>
+                  <span className="text-sm font-medium">{numCourts}</span>
+                </button>
+              </div>
+
+              {/* Players */}
+              <div className={frameClass}>
+                <button type="button" onClick={() => goEdit(5)} className={rowClass}>
+                  <span className="text-sm text-muted">Players</span>
+                  <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                </button>
+              </div>
+
+              {/* Default Format */}
+              <div className={frameClass}>
+                <p className={frameTitleClass}>Default Format</p>
+                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                  <span className="text-sm text-muted">Format</span>
+                  <span className="text-sm font-medium capitalize">{format}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                  <span className="text-sm text-muted">Gender</span>
+                  <span className="text-sm font-medium">{genderLabel}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                  <span className="text-sm text-muted">Scoring</span>
+                  <span className="text-sm font-medium">{scoringDisplay}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                  <span className="text-sm text-muted">Pairing</span>
+                  <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
+                </button>
+                <button type="button" onClick={() => goEdit(4)} className={rowClass}>
+                  <span className="text-sm text-muted">Rankings</span>
+                  <span className="text-sm font-medium">
+                    {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}
+                  </span>
+                </button>
+              </div>
             </div>
           );
         })()}

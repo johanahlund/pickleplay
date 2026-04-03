@@ -1622,8 +1622,9 @@ export default function EventDetailPage() {
   const rankingLabel = (v: string) =>
     ({ ranked: "Ranked", approval: "Approval", none: "Not counted" }[v] || v);
 
-  const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 rounded-lg hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
-  const sectionTitle = "text-[10px] text-muted px-3 pt-3 pb-1 uppercase tracking-wider";
+  const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+  const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
+  const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
@@ -1633,26 +1634,26 @@ export default function EventDetailPage() {
       : ownerName
     : "—";
 
+  const scoringDisplay = `${event.numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(event.scoringType).toLowerCase()}`;
+
   return (
     <div className="space-y-3">
       {eventHeader}
 
-      {/* Summary rows */}
-      <div className="bg-card rounded-xl border border-border p-1 space-y-0">
-
-        {/* Organizer */}
+      {/* Organizer & Courts */}
+      <div className={frameClass}>
         <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
           <span className="text-sm text-muted">Organizer</span>
           <span className="text-sm font-medium truncate ml-4 text-right">{organizerText}</span>
         </button>
-
-        {/* Courts */}
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Courts</span>
           <span className="text-sm font-medium">{event.numCourts}</span>
         </button>
+      </div>
 
-        {/* Players */}
+      {/* Players & Pairs */}
+      <div className={frameClass}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
           <span className="text-sm text-muted">Players</span>
           <span className="text-sm font-medium">
@@ -1661,8 +1662,6 @@ export default function EventDetailPage() {
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
         </button>
-
-        {/* Pairs — doubles only */}
         {event.format === "doubles" && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
             <span className="text-sm text-muted">Pairs</span>
@@ -1673,7 +1672,6 @@ export default function EventDetailPage() {
             </span>
           </button>
         )}
-
         {/* Competition */}
         {event.format === "doubles" && event.pairs.length >= 4 && (
           <button onClick={() => setActiveSection("competition")} className={rowClass}>
@@ -1691,33 +1689,31 @@ export default function EventDetailPage() {
             </span>
           </button>
         )}
+      </div>
 
-        {/* Format group */}
-        <p className={sectionTitle}>Format</p>
-
+      {/* Default Format */}
+      <div className={frameClass}>
+        <p className={frameTitleClass}>Default Format</p>
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
           <span className="text-sm font-medium capitalize">{event.format}</span>
         </button>
-
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Scoring</span>
-          <span className="text-sm font-medium">{scoringLabel(event.scoringType)} &middot; {event.numSets === 1 ? "1 set" : "Best of 3"}</span>
+          <span className="text-sm font-medium">{scoringDisplay}</span>
         </button>
-
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
         </button>
-
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Rankings</span>
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
+      </div>
 
-        {/* Matches */}
-        <p className={sectionTitle}>Matches</p>
-
+      {/* Matches */}
+      <div className={frameClass}>
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-sm text-muted">Matches</span>
           <span className="text-sm font-medium">
