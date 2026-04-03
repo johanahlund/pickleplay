@@ -331,7 +331,7 @@ function NewEventPage() {
   return (
     <div className="space-y-3">
       {/* Sticky header: title + progress with labels + nav */}
-      <div className="sticky -top-1 z-40 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm">
+      <div className="sticky z-40 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
         <p className="text-xs text-action font-medium italic text-center mb-1.5">New Event</p>
         <div className="flex items-center gap-2">
           {returnToReview && step !== TOTAL_STEPS ? (
@@ -397,7 +397,9 @@ function NewEventPage() {
             </>
           )}
         </div>
-        <p className="text-base font-bold text-foreground text-center mt-2">{stepTitles[step - 1]}</p>
+        <p className="text-base font-bold text-foreground text-center mt-2">
+          {stepTitles[step - 1] === "Format" ? "Default Format for the Event" : stepTitles[step - 1]}
+        </p>
       </div>
 
       {/* Step content */}
@@ -736,8 +738,15 @@ function NewEventPage() {
                 ) : null;
               })()}
             </div>
+          </>
+        )}
+
+        {/* Rankings section (part of step 4 but separate card) */}
+        {step === 4 && (
+          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
+              <label className="block text-sm font-medium text-foreground mb-0.5">Rankings</label>
+              <p className="text-xs text-muted mb-2">Will matches count towards app player rankings?</p>
               <div className="flex gap-2">
                 {[
                   { value: "ranked", label: "Ranked" },
@@ -779,7 +788,7 @@ function NewEventPage() {
                 </label>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {/* Step 5: Players */}

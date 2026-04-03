@@ -836,7 +836,7 @@ export default function EventDetailPage() {
   const sectionOrder = ["when", "admins", "courts", "format", "players", "pairs", "competition", "rounds", "manual"];
 
   const sectionBar = (
-    <div className="sticky -top-1 z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm">
+    <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
       <div className="flex gap-1">
         {sectionOrder
           .filter((s) => {
