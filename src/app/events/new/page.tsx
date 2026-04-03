@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
+import { generatePairs, PairPlayer } from "@/lib/pairgen";
 
 interface Player {
   id: string;
@@ -62,6 +63,10 @@ function NewEventPage() {
   const [pairingMode, setPairingMode] = useState("random");
   const [rankingMode, setRankingMode] = useState("ranked");
   const [genderMode, setGenderMode] = useState<"mix" | "random">("random");
+  const [memoryPairs, setMemoryPairs] = useState<{ player1Id: string; player2Id: string }[]>([]);
+  const [pairBuildMode, setPairBuildMode] = useState<"rating" | "random">("rating");
+  const [pairPreferMixed, setPairPreferMixed] = useState(false);
+  const [manualPairFirst, setManualPairFirst] = useState<string | null>(null);
   const [minPlayers, setMinPlayers] = useState<string>("");
   const [maxPlayers, setMaxPlayers] = useState<string>("");
   const [helperId, setHelperId] = useState<string | null>(null);
@@ -264,6 +269,15 @@ function NewEventPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ whatsappGroupId: gid }),
+      });
+    }
+
+    // Save in-memory pairs
+    for (const pair of memoryPairs) {
+      await fetch(`/api/events/${event.id}/pairs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player1Id: pair.player1Id, player2Id: pair.player2Id }),
       });
     }
 
@@ -833,16 +847,130 @@ function NewEventPage() {
         })()}
 
         {/* Step 6: Pairs */}
-        {step === 6 && format === "doubles" && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted">
-              Pairs can be configured after creating the event. Skip this step if you want to set up pairs later.
-            </p>
-            <div className="bg-gray-50 rounded-lg p-3 text-sm text-muted text-center">
-              Pair management is available on the event page after creation
+        {step === 6 && format === "doubles" && (() => {
+          const selectedPlayers = players.filter((p) => selectedIds.has(p.id));
+          const pairedIds = new Set(memoryPairs.flatMap((p) => [p.player1Id, p.player2Id]));
+          const unpaired = selectedPlayers.filter((p) => !pairedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
+
+          const autoGenerate = () => {
+            const pairPlayers: PairPlayer[] = selectedPlayers.map((p) => ({
+              id: p.id, name: p.name, rating: p.rating, gender: p.gender,
+            }));
+            const result = generatePairs(pairPlayers, { mode: pairBuildMode, preferMixed: pairPreferMixed });
+            setMemoryPairs(result);
+            setManualPairFirst(null);
+          };
+
+          return (
+            <div className="space-y-3">
+              {selectedPlayers.length < 4 ? (
+                <p className="text-sm text-muted text-center py-4">Need at least 4 players to build pairs. You can skip this step.</p>
+              ) : (
+                <>
+                  {/* Current pairs */}
+                  {memoryPairs.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-muted">Pairs ({memoryPairs.length})</span>
+                        <button type="button" onClick={() => { setMemoryPairs([]); setManualPairFirst(null); }}
+                          className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Clear all</button>
+                      </div>
+                      {memoryPairs.map((pair, i) => {
+                        const p1 = players.find((p) => p.id === pair.player1Id);
+                        const p2 = players.find((p) => p.id === pair.player2Id);
+                        if (!p1 || !p2) return null;
+                        return (
+                          <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5">
+                            <div className="flex-1 flex items-center gap-1.5 text-sm">
+                              <span>{p1.emoji}</span>
+                              <span className="font-medium">{p1.name}</span>
+                            </div>
+                            <span className="text-xs text-muted">+</span>
+                            <div className="flex-1 flex items-center gap-1.5 text-sm">
+                              <span>{p2.emoji}</span>
+                              <span className="font-medium">{p2.name}</span>
+                            </div>
+                            <span className="text-xs text-muted">{Math.round(p1.rating + p2.rating)}</span>
+                            <button type="button" onClick={() => setMemoryPairs(memoryPairs.filter((_, j) => j !== i))}
+                              className="text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-50">✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Unpaired — tap to pair manually */}
+                  {unpaired.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted">
+                        {manualPairFirst ? "Tap a second player to complete the pair" : "Tap two players to pair them"}
+                      </span>
+                      {unpaired.map((p) => (
+                        <button key={p.id} type="button"
+                          onClick={() => {
+                            if (manualPairFirst === p.id) {
+                              setManualPairFirst(null);
+                            } else if (manualPairFirst) {
+                              setMemoryPairs([...memoryPairs, { player1Id: manualPairFirst, player2Id: p.id }]);
+                              setManualPairFirst(null);
+                            } else {
+                              setManualPairFirst(p.id);
+                            }
+                          }}
+                          className={`w-full text-left py-2 px-3 rounded-lg flex items-center gap-2 transition-colors text-sm ${
+                            manualPairFirst === p.id
+                              ? "bg-selected/10 border border-selected/30"
+                              : manualPairFirst
+                                ? "hover:bg-green-50 active:bg-green-100 border border-transparent"
+                                : "hover:bg-gray-50 border border-transparent"
+                          }`}>
+                          <span className="text-lg">{p.emoji}</span>
+                          <span className="font-medium flex-1">{p.name}</span>
+                          {p.gender && <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{p.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                          <span className="text-xs text-muted">{Math.round(p.rating)}</span>
+                          {manualPairFirst === p.id && <span className="text-xs text-selected font-medium">Selected</span>}
+                          {manualPairFirst && manualPairFirst !== p.id && <span className="text-xs text-green-600">Tap to pair</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Auto-generate */}
+                  {unpaired.length >= 2 && (
+                    <div className="border-t border-border pt-3 space-y-2">
+                      <span className="text-xs text-muted font-medium">Auto-generate</span>
+                      <div className="flex gap-2">
+                        {(["rating", "random"] as const).map((m) => (
+                          <button key={m} type="button" onClick={() => setPairBuildMode(m)}
+                            className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${pairBuildMode === m ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+                            {m === "rating" ? "By Rating" : "Random"}
+                          </button>
+                        ))}
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={pairPreferMixed} onChange={(e) => setPairPreferMixed(e.target.checked)}
+                          className="rounded border-border" />
+                        Prefer mixed gender (M + F)
+                      </label>
+                      <button type="button" onClick={autoGenerate}
+                        className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm active:bg-action-dark">
+                        {memoryPairs.length > 0 ? "Regenerate All Pairs" : "Generate Pairs"}
+                      </button>
+                    </div>
+                  )}
+
+                  {unpaired.length === 0 && memoryPairs.length > 0 && (
+                    <p className="text-xs text-green-600 text-center font-medium">All players paired!</p>
+                  )}
+                  {unpaired.length === 1 && (
+                    <p className="text-xs text-amber-600 text-center">1 player left unpaired (odd number)</p>
+                  )}
+                </>
+              )}
+              <p className="text-xs text-muted text-center">You can also set up or adjust pairs after creating the event.</p>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {step === 6 && format !== "doubles" && (
           <div className="text-sm text-muted text-center py-4">
             Pairs are only available for doubles events. You can skip this step.
@@ -894,12 +1022,20 @@ function NewEventPage() {
                 </button>
               </div>
 
-              {/* Players */}
+              {/* Players & Pairs */}
               <div className={frameClass}>
                 <button type="button" onClick={() => goEdit(5)} className={rowClass}>
                   <span className="text-sm text-muted">Players</span>
                   <span className="text-sm font-medium">{selectedIds.size} selected</span>
                 </button>
+                {format === "doubles" && (
+                  <button type="button" onClick={() => goEdit(6)} className={rowClass}>
+                    <span className="text-sm text-muted">Pairs</span>
+                    <span className="text-sm font-medium">
+                      {memoryPairs.length === 0 ? "Not set" : `${memoryPairs.length} pair${memoryPairs.length !== 1 ? "s" : ""}`}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Default Format */}
