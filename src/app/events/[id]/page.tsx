@@ -308,7 +308,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "details" | "admins" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "courts" | "format" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -790,8 +790,10 @@ export default function EventDetailPage() {
   );
 
   const sectionLabels: Record<string, string> = {
-    details: "Settings",
+    when: "When",
     admins: "Organizer",
+    courts: "Courts",
+    format: "Format",
     players: "Players",
     pairs: "Pairs",
     competition: "Competition",
@@ -799,7 +801,7 @@ export default function EventDetailPage() {
     manual: "Add Match",
   };
 
-  const sectionOrder = ["details", "admins", "players", "pairs", "competition", "rounds", "manual"];
+  const sectionOrder = ["when", "admins", "courts", "format", "players", "pairs", "competition", "rounds", "manual"];
 
   const sectionBar = (
     <div className="sticky -top-1 z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm">
@@ -828,143 +830,148 @@ export default function EventDetailPage() {
     </div>
   );
 
-  // ── Section: Event Details ──
-  const renderDetails = () => (
-    <>
-      {editingEvent ? (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
-            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Date</label>
-            <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
-              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
-          </div>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">From</label>
-              <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
-            </div>
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-muted mb-1">To</label>
-              <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Courts</label>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4].map((n) => (
-                <button key={n} type="button" onClick={() => setEditCourts(n)}
-                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{n}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Sets</label>
-            <div className="flex gap-2">
-              {[1, 3].map((n) => (
-                <button key={n} type="button" onClick={() => setEditNumSets(n)}
-                  className={`flex-1 py-2 rounded-lg font-medium transition-all ${editNumSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                  {n === 1 ? "1 Set" : "Best of 3"}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[{ value: "normal_11", label: "11" }, { value: "normal_15", label: "15" }, { value: "rally_21", label: "R21" }, { value: "timed", label: "Time" }].map((s) => (
-                <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
-                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{s.label}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: "random", label: "🎲 Random" }, { value: "skill_balanced", label: "📊 Skill" },
-                { value: "mixed_gender", label: "👫 Mixed" }, { value: "skill_mixed_gender", label: "📊👫 Skill+Mix" },
-                { value: "king_of_court", label: "👑 King" }, { value: "swiss", label: "🏆 Swiss" },
-                { value: "manual", label: "✏️ Manual" },
-              ].map((m) => (
-                <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
-                  className={`py-2 rounded-lg font-medium transition-all text-sm ${editPairingMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{m.label}</button>
-              ))}
-            </div>
-          </div>
-          {canManage && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-muted mb-1">Signup</label>
-                <div className="flex gap-2">
-                  {[{ value: true, label: "Open (anyone can join)" }, { value: false, label: "Closed (invite only)" }].map((o) => (
-                    <button key={String(o.value)} type="button" onClick={() => setEditOpenSignup(o.value)}
-                      className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editOpenSignup === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{o.label}</button>
-                  ))}
-                </div>
-              </div>
-              {!editOpenSignup && (
-                <div>
-                  <label className="block text-sm font-medium text-muted mb-1">Visibility</label>
-                  <div className="flex gap-2">
-                    {[{ value: "visible", label: "Visible to all" }, { value: "hidden", label: "Hidden" }].map((v) => (
-                      <button key={v.value} type="button" onClick={() => setEditVisibility(v.value)}
-                        className={`flex-1 py-2 rounded-lg font-medium transition-all text-sm ${editVisibility === v.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{v.label}</button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted mt-1">Hidden events are only visible to the organizer, helpers, and added players</p>
-                </div>
-              )}
-            </>
-          )}
-          <div className="flex gap-2">
-            <button onClick={saveEditEvent} className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
-            <button onClick={() => setEditingEvent(false)} className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm">Cancel</button>
-          </div>
+  // ── Section: When (name + date/time) ──
+  const renderWhen = () => (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
+        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Date</label>
+        <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-muted mb-1">From</label>
+          <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)}
+            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
-      ) : (
-        <div>
-          <h2 className="text-2xl font-bold">{event.name}</h2>
-          <p className="text-base text-muted">
-            {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
-            at {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}{" "}
-            &middot; {event.numCourts} court{event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
-          </p>
-          <p className="text-sm text-muted mt-0.5">
-            {event.numSets === 1 ? "1 set" : `Best of ${event.numSets}`} &middot;{" "}
-            {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"} &middot;{" "}
-            {event.pairingMode === "random" ? "Random" : event.pairingMode === "skill_balanced" ? "Skill Balanced" : event.pairingMode === "mixed_gender" ? "Mixed Gender" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mixed" : event.pairingMode === "king_of_court" ? "King of Court" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
-          </p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${event.openSignup ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-              {event.openSignup ? "Open" : "Closed"}
-            </span>
-            {!event.openSignup && event.visibility === "hidden" && (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-200 text-gray-600">Hidden</span>
-            )}
-            {(isOwner || isAdmin) && (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
-                {isOwner ? "You are the owner" : "Admin"}
-              </span>
-            )}
-            {isHelper && !isOwner && !isAdmin && (
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Helper</span>
-            )}
-          </div>
-          {hasMatches && canManage && (
-            <button onClick={(e) => { e.stopPropagation(); resetEvent(); }} disabled={resetting}
-              className="w-full mt-4 bg-red-50 text-danger border border-red-200 py-3 rounded-xl font-medium text-base active:bg-red-100 transition-colors disabled:opacity-50">
-              {resetting ? "Resetting..." : "🗑️ Reset Event (Delete All Matches)"}
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-muted mb-1">To</label>
+          <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)}
+            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+        </div>
+      </div>
+      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
+    </div>
+  );
+
+  // ── Section: Courts ──
+  const renderCourts = () => (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Number of Courts</label>
+        <div className="flex gap-2">
+          {[1, 2, 3, 4].map((n) => (
+            <button key={n} type="button" onClick={() => setEditCourts(n)}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all ${editCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>{n}</button>
+          ))}
+        </div>
+      </div>
+      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
+    </div>
+  );
+
+  // ── Section: Format (matches wizard step 4) ──
+  const pairingOptions = [
+    { value: "random", icon: "🎲", label: "Random", desc: "Random matchups, everyone plays" },
+    { value: "skill_balanced", icon: "📊", label: "Skill", desc: "Similar ratings play each other" },
+    { value: "mixed_gender", icon: "👫", label: "Mixed", desc: "Each team has one male + one female" },
+    { value: "skill_mixed_gender", icon: "📊👫", label: "Skill + Mix", desc: "Balanced ratings with mixed gender teams" },
+    { value: "king_of_court", icon: "👑", label: "King", desc: "Winners move up courts, losers move down" },
+    { value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Teams with similar records play each other" },
+    { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
+  ];
+
+  const renderFormat = () => (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Format</label>
+        <div className="flex gap-2">
+          {(["doubles", "singles"] as const).map((f) => (
+            <button key={f} type="button" onClick={() => { /* format change not supported after creation */ }}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${event.format === f ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+              {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
             </button>
-          )}
+          ))}
         </div>
-      )}
-    </>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Sets</label>
+        <div className="flex gap-2">
+          {[1, 3].map((n) => (
+            <button key={n} type="button" onClick={() => setEditNumSets(n)}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editNumSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+              {n === 1 ? "1 Set" : "Best of 3"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
+        <div className="flex gap-2">
+          {[
+            { value: "normal_11", label: "11" },
+            { value: "normal_15", label: "15" },
+            { value: "rally_21", label: "R21" },
+            { value: "timed", label: "Time" },
+          ].map((s) => (
+            <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
+        <div className="flex gap-1.5">
+          {pairingOptions.map((m) => (
+            <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
+              className={`flex-1 py-2 rounded-lg text-center transition-all ${
+                editPairingMode === m.value ? "bg-selected text-white ring-1 ring-selected/50" : "bg-gray-100 hover:bg-gray-200"
+              }`} title={m.label}>
+              <span className="text-lg">{m.icon}</span>
+            </button>
+          ))}
+        </div>
+        {(() => {
+          const sel = pairingOptions.find((m) => m.value === editPairingMode);
+          return sel ? (
+            <div className="mt-1.5">
+              <span className="text-sm font-medium">{sel.label}</span>
+              <span className="text-xs text-muted ml-1.5">{sel.desc}</span>
+            </div>
+          ) : null;
+        })()}
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
+        <div className="flex gap-2">
+          {[
+            { value: "ranked", label: "Ranked" },
+            { value: "approval", label: "Approval" },
+            { value: "none", label: "Unranked" },
+          ].map((m) => (
+            <button key={m.value} type="button" onClick={() => { /* rankingMode edit — save via editPairingMode for now */ }}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                (event.rankingMode || "ranked") === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted mt-1.5">
+          {(event.rankingMode || "ranked") === "ranked" && "Scores count towards player ratings immediately after each match."}
+          {event.rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
+          {event.rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
+        </p>
+      </div>
+      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
+    </div>
   );
 
   // ── Section: Administrators ──
@@ -1514,7 +1521,9 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {sectionBar}
-        {activeSection === "details" && renderDetails()}
+        {activeSection === "when" && renderWhen()}
+        {activeSection === "courts" && renderCourts()}
+        {activeSection === "format" && renderFormat()}
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
@@ -1571,7 +1580,7 @@ export default function EventDetailPage() {
             <span className="text-sm font-medium">{event.club!.emoji} {event.club!.name}</span>
           </div>
         )}
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("when"); }} className={rowClass}>
           <span className="text-sm text-muted">When</span>
           <span className="text-sm font-medium">{whenDisplay}</span>
         </button>
@@ -1584,7 +1593,7 @@ export default function EventDetailPage() {
             )}
           </span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("courts"); }} className={rowClass}>
           <span className="text-sm text-muted">Courts</span>
           <span className="text-sm font-medium">{event.numCourts}</span>
         </button>
@@ -1632,19 +1641,19 @@ export default function EventDetailPage() {
       {/* Default Format */}
       <div className={frameClass}>
         <p className={frameTitleClass}>Default Format</p>
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
           <span className="text-sm font-medium capitalize">{event.format}</span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
           <span className="text-sm text-muted">Scoring</span>
           <span className="text-sm font-medium">{scoringDisplay}</span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
           <span className="text-sm text-muted">Rankings</span>
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
