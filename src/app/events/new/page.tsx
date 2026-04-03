@@ -27,7 +27,7 @@ function getDefaultTime() {
   return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
 }
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 6;
 
 export default function NewEventPageWrapper() {
   return (
@@ -277,7 +277,7 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["When", "Helper", "Courts", "Format", "Pairing", "Players", "Review"];
+  const stepTitles = ["When", "Helper", "Courts", "Format", "Players", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -682,40 +682,56 @@ function NewEventPage() {
                 {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
               </p>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
+              <div className="flex gap-1.5">
+                {[
+                  { value: "random", icon: "🎲", label: "Random", desc: "Random matchups, everyone plays" },
+                  { value: "skill_balanced", icon: "📊", label: "Skill", desc: "Similar ratings play each other" },
+                  { value: "mixed_gender", icon: "👫", label: "Mixed", desc: "Each team has one male + one female" },
+                  { value: "skill_mixed_gender", icon: "📊👫", label: "Skill + Mix", desc: "Balanced ratings with mixed gender teams" },
+                  { value: "king_of_court", icon: "👑", label: "King", desc: "Winners move up courts, losers move down" },
+                  { value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Teams with similar records play each other" },
+                  { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
+                ].map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setPairingMode(m.value)}
+                    className={`flex-1 py-2 rounded-lg text-center transition-all ${
+                      pairingMode === m.value
+                        ? "bg-selected text-white ring-1 ring-selected/50"
+                        : "bg-gray-100 hover:bg-gray-200"
+                    }`}
+                    title={m.label}
+                  >
+                    <span className="text-lg">{m.icon}</span>
+                  </button>
+                ))}
+              </div>
+              {(() => {
+                const selected = [
+                  { value: "random", label: "Random", desc: "Random matchups, everyone plays" },
+                  { value: "skill_balanced", label: "Skill Balanced", desc: "Similar ratings play each other" },
+                  { value: "mixed_gender", label: "Mixed Gender", desc: "Each team has one male + one female" },
+                  { value: "skill_mixed_gender", label: "Skill + Mixed", desc: "Balanced ratings with mixed gender teams" },
+                  { value: "king_of_court", label: "King of Court", desc: "Winners move up courts, losers move down" },
+                  { value: "swiss", label: "Swiss", desc: "Teams with similar records play each other" },
+                  { value: "manual", label: "Manual", desc: "Create matches one by one" },
+                ].find((m) => m.value === pairingMode);
+                return selected ? (
+                  <div className="mt-1.5">
+                    <span className="text-sm font-medium">{selected.label}</span>
+                    <span className="text-xs text-muted ml-1.5">{selected.desc}</span>
+                  </div>
+                ) : null;
+              })()}
+            </div>
           </>
         )}
 
-        {/* Step 5: Pairing Mode */}
-        {step === 5 && (
-          <div className="space-y-1.5">
-            {[
-              { value: "random", label: "🎲 Random", desc: "Random matchups, everyone plays" },
-              { value: "skill_balanced", label: "📊 Skill Balanced", desc: "Similar ratings play each other" },
-              { value: "mixed_gender", label: "👫 Mixed Gender", desc: "Each team has M + F" },
-              { value: "skill_mixed_gender", label: "📊👫 Skill + Mixed", desc: "Balanced ratings with M + F teams" },
-              { value: "king_of_court", label: "👑 King of Court", desc: "Winners stay, losers rotate" },
-              { value: "swiss", label: "🏆 Swiss", desc: "Pair by win/loss record" },
-              { value: "manual", label: "✏️ Manual", desc: "Add matches one by one" },
-            ].map((m) => (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setPairingMode(m.value)}
-                className={`w-full text-left py-2.5 px-3 rounded-lg transition-all ${
-                  pairingMode === m.value
-                    ? "bg-selected/10 border border-selected/30"
-                    : "bg-gray-50 border border-transparent hover:bg-gray-100"
-                }`}
-              >
-                <div className="font-medium text-sm">{m.label}</div>
-                <div className="text-xs text-muted">{m.desc}</div>
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* Step 6: Players */}
-        {step === 6 && (() => {
+        {step === 5 && (() => {
           const filtered = getFilteredPlayers();
           const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
           return (
@@ -752,13 +768,23 @@ function NewEventPage() {
                 ))}
               </div>
 
-              {/* Context label */}
-              <p className="text-xs text-muted">
-                {showAllPlayers ? "Showing all players" :
-                 showClubPlayers ? `Showing ${selectedClub?.name || "club"} members` :
-                 recentPlayerIds.size > 0 ? "Showing players from your last 2 events" :
-                 "Showing all players"}
-              </p>
+              {/* Recent / All toggle */}
+              {recentPlayerIds.size > 0 && (
+                <div className="flex gap-1">
+                  {(["recent", "all"] as const).map((t) => {
+                    const playerTier = showAllPlayers ? "all" : "recent";
+                    return (
+                      <button key={t} type="button"
+                        onClick={() => { setShowAllPlayers(t === "all"); setShowClubPlayers(false); }}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          playerTier === t ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                        }`}>
+                        {t === "recent" ? "Recent" : "All"}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {players.length === 0 ? (
                 <p className="text-sm text-muted py-4 text-center">
@@ -802,48 +828,12 @@ function NewEventPage() {
                   ))}
                 </div>
               )}
-
-              {/* Tier navigation */}
-              {(() => {
-                const playerTier = showAllPlayers ? "all" : showClubPlayers ? "club" : "recent";
-                return (
-                  <div className="flex gap-2 mt-1">
-                    {playerTier !== "recent" && recentPlayerIds.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowAllPlayers(false); setShowClubPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
-                        className="flex-1 py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
-                      >
-                        Recent
-                      </button>
-                    )}
-                    {playerTier !== "club" && selectedClubId && clubMemberIds.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowClubPlayers(true); setShowAllPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
-                        className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-                      >
-                        Club Members
-                      </button>
-                    )}
-                    {playerTier !== "all" && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowAllPlayers(true); setShowClubPlayers(false); setPlayerSearch(""); setPlayerGenderFilter(null); }}
-                        className="flex-1 py-2 rounded-lg text-xs font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-                      >
-                        All Players
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
             </>
           );
         })()}
 
         {/* Step 7: Review */}
-        {step === 7 && (() => {
+        {step === 6 && (() => {
           const goEdit = (targetStep: number) => {
             setReturnToReview(true);
             setStep(targetStep);
@@ -883,20 +873,12 @@ function NewEventPage() {
                 <span className="text-sm font-medium">{time} – {endTime}</span>
               </button>
               <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Format</span>
-                <span className="text-sm font-medium capitalize">{format}</span>
-              </button>
-              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Courts</span>
                 <span className="text-sm font-medium">{numCourts}</span>
               </button>
-              <button type="button" onClick={() => goEdit(3)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Players</span>
-                <span className="text-sm font-medium">
-                  {minPlayers || maxPlayers
-                    ? `${minPlayers || "–"} / ${maxPlayers || "–"}`
-                    : "No limit"}
-                </span>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Format</span>
+                <span className="text-sm font-medium capitalize">{format}</span>
               </button>
               <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Sets</span>
@@ -907,16 +889,16 @@ function NewEventPage() {
                 <span className="text-sm font-medium">{scoringLabel(scoringType)}</span>
               </button>
               <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
-                <span className="text-sm text-muted">Rankings</span>
-                <span className="text-sm font-medium">
-                  {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Not counted"}
-                </span>
-              </button>
-              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full"}>
                 <span className="text-sm text-muted">Pairing</span>
                 <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
               </button>
-              <button type="button" onClick={() => goEdit(6)} className={rowClass + " w-full border-b-0"}>
+              <button type="button" onClick={() => goEdit(4)} className={rowClass + " w-full"}>
+                <span className="text-sm text-muted">Rankings</span>
+                <span className="text-sm font-medium">
+                  {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}
+                </span>
+              </button>
+              <button type="button" onClick={() => goEdit(5)} className={rowClass + " w-full border-b-0"}>
                 <span className="text-sm text-muted">Players</span>
                 <span className="text-sm font-medium">{selectedIds.size} selected</span>
               </button>
