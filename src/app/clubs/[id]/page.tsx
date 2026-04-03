@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -511,32 +512,45 @@ export default function ClubDetailPage() {
     return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
-  return (
-    <div className="space-y-3">
-      {/* Tab bar + info icon */}
-      <div className="flex items-center gap-2">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-1">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => { setTab(t.key); setShowInfo(false); }}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                !showInfo && tab === t.key ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => setShowInfo(!showInfo)}
-          className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
-            showInfo ? "bg-selected text-white" : "bg-gray-100 text-muted hover:text-foreground"
+  // Portal the tab bar into the header's #club-tab-bar div
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = document.getElementById("club-tab-bar");
+    setPortalTarget(el);
+  }, []);
+
+  const tabBar = (
+    <div className="flex items-center gap-2">
+      <div className={`flex gap-1 ${portalTarget ? "bg-white/10" : "bg-gray-100"} rounded-xl p-1 flex-1`}>
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => { setTab(t.key); setShowInfo(false); }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              !showInfo && tab === t.key
+                ? portalTarget ? "bg-white text-black shadow-sm" : "bg-white text-foreground shadow-sm"
+                : portalTarget ? "text-white/70 hover:text-white" : "text-muted hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowInfo(!showInfo)}
+        className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+          showInfo ? "bg-selected text-white" : portalTarget ? "bg-white/10 text-white/70 hover:text-white" : "bg-gray-100 text-muted hover:text-foreground"
           }`}
         >
           ℹ
         </button>
       </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* Tab bar — portaled into header if available, otherwise inline */}
+      {portalTarget ? createPortal(tabBar, portalTarget) : tabBar}
 
       {/* ── Club Info Panel ── */}
       {showInfo && (

@@ -163,13 +163,13 @@ export function Header() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 bg-primary text-white px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-md">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-black text-white px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-md">
         <div className="max-w-[600px] mx-auto">
           {/* Top row: app name + user */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight">PickleJ</h1>
-              <span className="text-xs opacity-80 font-mono">v{APP_VERSION}</span>
+              <h1 className="text-lg font-bold tracking-tight">PickleJ</h1>
+              <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
             </div>
             {!isAuthPage && session?.user && (
               <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export function Header() {
                 </button>
                 <button
                   onClick={() => signOut({ callbackUrl: "/signin" })}
-                  className="text-xs bg-white/20 px-2 py-1 rounded-md hover:bg-white/30 transition-colors"
+                  className="text-[10px] bg-white/15 px-2 py-0.5 rounded-md hover:bg-white/25 transition-colors"
                 >
                   Sign Out
                 </button>
@@ -190,23 +190,27 @@ export function Header() {
             )}
           </div>
 
-          {/* Club context row */}
+          {/* Club context row + tab bar */}
           {activeClubId && clubName && (
-            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-white/20">
-              <button
-                onClick={() => router.push("/clubs")}
-                className="text-white/80 hover:text-white text-sm font-medium"
-              >
-                ←
-              </button>
-              <button
-                onClick={() => router.push(`/clubs/${activeClubId}`)}
-                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-              >
-                <span className="text-sm">{clubEmoji}</span>
-                <span className="text-sm font-semibold opacity-90">{clubName}</span>
-              </button>
-            </div>
+            <>
+              <div className="flex items-center gap-2 mt-1 pt-1 border-t border-white/10">
+                <button
+                  onClick={() => router.push("/clubs")}
+                  className="text-white/70 hover:text-white text-sm font-medium"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => router.push(`/clubs/${activeClubId}`)}
+                  className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+                >
+                  <span className="text-sm">{clubEmoji}</span>
+                  <span className="text-sm font-semibold opacity-90">{clubName}</span>
+                </button>
+              </div>
+              {/* Club tab bar — rendered via a global event so the club page can inject tabs */}
+              <div id="club-tab-bar" className="mt-1.5" />
+            </>
           )}
         </div>
       </header>
