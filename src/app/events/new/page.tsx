@@ -276,7 +276,7 @@ function NewEventPage() {
     }
   };
 
-  const stepTitles = ["When", "Helper", "Format", "Scoring", "Pairing", "Players", "Review"];
+  const stepTitles = ["When", "Helper", "Courts", "Scoring", "Pairing", "Players", "Review"];
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
@@ -516,28 +516,9 @@ function NewEventPage() {
           );
         })()}
 
-        {/* Step 3: Format */}
+        {/* Step 3: Courts & Players */}
         {step === 3 && (
           <>
-            <div>
-              <label className="block text-sm font-medium text-muted mb-1">Format</label>
-              <div className="flex gap-2">
-                {(["doubles", "singles"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFormat(f)}
-                    className={`flex-1 py-3 rounded-lg font-medium transition-all capitalize ${
-                      format === f
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
-                  </button>
-                ))}
-              </div>
-            </div>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Number of Courts</label>
               <div className="flex gap-2">
@@ -588,6 +569,25 @@ function NewEventPage() {
         {/* Step 4: Scoring */}
         {step === 4 && (
           <>
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Format</label>
+              <div className="flex gap-2">
+                {(["doubles", "singles"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFormat(f)}
+                    className={`flex-1 py-3 rounded-lg font-medium transition-all capitalize ${
+                      format === f
+                        ? "bg-selected text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
+                  >
+                    {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Sets per Match</label>
               <div className="flex gap-2">
