@@ -8,31 +8,36 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 
 // ── Long press to delete ──
-function LongPressDelete({ children, canDelete, onDelete }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void }) {
+function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void; confirmMessage: string }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moved = useRef(false);
+  const [pressing, setPressing] = useState(false);
 
   const onTouchStart = () => {
     if (!canDelete) return;
     moved.current = false;
+    setPressing(true);
     timer.current = setTimeout(() => {
       if (!moved.current) {
+        setPressing(false);
         if (navigator.vibrate) navigator.vibrate(50);
-        if (confirm("Delete this?")) onDelete();
+        if (confirm(confirmMessage)) onDelete();
       }
     }, 600);
   };
   const onTouchMove = () => {
     moved.current = true;
+    setPressing(false);
     if (timer.current) clearTimeout(timer.current);
   };
   const onTouchEnd = () => {
+    setPressing(false);
     if (timer.current) clearTimeout(timer.current);
   };
 
   return (
     <div
-      className="select-none"
+      className={`select-none rounded-xl transition-all duration-200 ${pressing ? "ring-2 ring-danger/50 bg-red-50/50 scale-[0.98]" : ""}`}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -690,7 +695,8 @@ export default function ClubDetailPage() {
             posts.map((post) => {
               const canDeletePost = post.author.id === userId || canManage;
               return (
-                <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}>
+                <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}
+                  confirmMessage={`Delete this entire post by ${post.author.name}?\n\n"${post.content.slice(0, 80)}${post.content.length > 80 ? "..." : ""}"\n\n${post.comments.length > 0 ? `This will also delete ${post.comments.length} comment${post.comments.length !== 1 ? "s" : ""}.` : ""}This cannot be undone.`}>
                   <div className="bg-card rounded-xl border border-border p-3 space-y-2">
                     {/* Post header */}
                     <div className="flex items-center gap-2">
@@ -710,7 +716,8 @@ export default function ClubDetailPage() {
                         {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => {
                           const canDeleteComment = c.author.id === userId || canManage;
                           return (
-                            <LongPressDelete key={c.id} canDelete={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}>
+                            <LongPressDelete key={c.id} canDelete={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}
+                              confirmMessage={`Delete this comment by ${c.author.name}?\n\n"${c.content.slice(0, 80)}${c.content.length > 80 ? "..." : ""}"`}>
                               <div className="flex items-start gap-2">
                                 <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
                                 <div className="flex-1 min-w-0">
