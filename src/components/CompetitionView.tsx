@@ -208,13 +208,12 @@ export function CompetitionView({
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-muted mb-1">Groups</label>
-            <div className="flex gap-2">
-              {[2, 3, 4].map((n) => (
-                <button key={n} onClick={() => setLocalConfig({ ...localConfig, numGroups: n })}
-                  className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${localConfig.numGroups === n ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                  {n} groups
-                </button>
-              ))}
+            <div className="flex items-center gap-0">
+              <button onClick={() => setLocalConfig({ ...localConfig, numGroups: Math.max(1, localConfig.numGroups - 1) })}
+                className="w-12 h-12 rounded-l-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">−</button>
+              <div className="w-12 h-12 bg-selected text-white font-bold text-2xl flex items-center justify-center">{localConfig.numGroups}</div>
+              <button onClick={() => setLocalConfig({ ...localConfig, numGroups: Math.min(10, localConfig.numGroups + 1) })}
+                className="w-12 h-12 rounded-r-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">+</button>
             </div>
           </div>
 
