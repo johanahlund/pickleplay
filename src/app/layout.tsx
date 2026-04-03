@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#16a34a",
+  themeColor: "#000000",
   viewportFit: "cover",
 };
 
@@ -39,7 +39,7 @@ export default function RootLayout({
       <body className="antialiased">
         <Providers>
           <Header />
-          <main className="px-4 pt-[calc(5.5rem+env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
+          <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
           <BottomNav />
         </Providers>
         <ServiceWorkerRegister />

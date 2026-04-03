@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -118,6 +118,23 @@ export function Header() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Dynamically set main content padding based on header height
+  const updateMainPadding = useCallback(() => {
+    if (headerRef.current) {
+      const h = headerRef.current.offsetHeight;
+      const main = document.getElementById("main-content");
+      if (main) main.style.paddingTop = `${h + 8}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    updateMainPadding();
+    const observer = new ResizeObserver(updateMainPadding);
+    if (headerRef.current) observer.observe(headerRef.current);
+    return () => observer.disconnect();
+  }, [updateMainPadding, clubName]);
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
   const isClubsListPage = pathname === "/clubs";
@@ -163,7 +180,7 @@ export function Header() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 bg-black text-white px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-md">
+      <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-black text-white px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-md">
         <div className="max-w-[600px] mx-auto">
           {/* Top row: app name + user */}
           <div className="flex items-center justify-between">
