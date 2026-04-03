@@ -37,13 +37,22 @@ function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { ch
 
   return (
     <div
-      className={`select-none rounded-xl transition-all duration-200 ${pressing ? "ring-2 ring-danger/50 bg-red-50/50 scale-[0.98]" : ""}`}
+      className={`group/lp relative select-none rounded-xl transition-all duration-200 ${pressing ? "ring-2 ring-danger/50 bg-red-50/50 scale-[0.98]" : ""}`}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onContextMenu={(e) => { if (canDelete) e.preventDefault(); }}
     >
       {children}
+      {/* Desktop hover delete button */}
+      {canDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); if (confirm(confirmMessage)) onDelete(); }}
+          className="absolute top-2 right-2 hidden group-hover/lp:block text-xs px-2 py-1 rounded-lg bg-red-50 text-danger hover:bg-red-100 opacity-0 group-hover/lp:opacity-100 transition-opacity shadow-sm"
+        >
+          Delete
+        </button>
+      )}
     </div>
   );
 }
@@ -164,7 +173,7 @@ function SwipeableMemberRow({
   return (
     <div
       ref={rowRef}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg transition-transform select-none bg-card border border-border"
+      className="group flex items-center gap-2 px-3 py-2 rounded-lg transition-transform select-none bg-card border border-border"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -201,6 +210,23 @@ function SwipeableMemberRow({
         <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize w-16 text-center">
           {member.role}
         </span>
+      )}
+      {/* Desktop hover action */}
+      {canManage && member.role !== "owner" && !isSelf && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm(`Remove ${p.name} from this club?`)) {
+              if (confirm(`Are you sure? This will remove ${p.name} permanently.`)) {
+                onRemove();
+              }
+            }
+          }}
+          className="hidden group-hover:block text-xs px-2 py-1 rounded bg-red-50 text-danger hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Remove member"
+        >
+          Remove
+        </button>
       )}
     </div>
   );
@@ -904,7 +930,7 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          <p className="text-xs text-muted">{filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}{canManage ? " · swipe left to remove" : ""}</p>
+          <p className="text-xs text-muted">{filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}{canManage ? " · swipe or hover to remove" : ""}</p>
 
           {/* Column header */}
           <div className="flex items-center gap-2 px-3 py-1 text-[10px] text-muted uppercase tracking-wider">

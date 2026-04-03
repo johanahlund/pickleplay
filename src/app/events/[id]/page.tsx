@@ -213,7 +213,7 @@ function SwipeablePlayerRow({
   return (
     <div
       ref={rowRef}
-      className={`flex items-center gap-2 rounded-lg px-3 py-1 transition-all select-none ${
+      className={`group flex items-center gap-2 rounded-lg px-3 py-1 transition-all select-none ${
         localPaused ? "opacity-40 bg-gray-100" : ""
       }`}
       onTouchStart={handleTouchStart}
@@ -254,6 +254,21 @@ function SwipeablePlayerRow({
         <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
           Paused
         </span>
+      )}
+      {/* Desktop hover actions (hidden on touch) */}
+      {canManage && (
+        <div className="hidden group-hover:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={(e) => { e.stopPropagation(); onPause(); setLocalPaused((p) => !p); }}
+            className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title={localPaused ? "Unpause" : "Pause"}>
+            {localPaused ? "Unpause" : "Pause"}
+          </button>
+          {!hasMatches && (
+            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Remove ${ep.player.name} from this event?`)) onRemove(); }}
+              className="text-xs px-2 py-1 rounded bg-red-50 text-danger hover:bg-red-100" title="Remove">
+              Remove
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1333,7 +1348,7 @@ export default function EventDetailPage() {
           )}
         </div>
         {canManage && (
-          <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""}</p>
+          <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""} · Hover for actions on desktop</p>
         )}
         {session?.user && !canManage && event.openSignup && (
           <div>
