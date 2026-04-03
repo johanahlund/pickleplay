@@ -274,6 +274,21 @@ export default function ClubDetailPage() {
     }
     return "feed";
   });
+
+  // Sync tab from URL on every render (covers soft navigation from header tabs)
+  useEffect(() => {
+    const check = () => {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("tab");
+      if (t && ["feed", "events", "members", "rankings"].includes(t)) {
+        setTab((prev) => prev !== t ? t as Tab : prev);
+      }
+    };
+    check();
+    // Also listen for popstate (back/forward)
+    window.addEventListener("popstate", check);
+    return () => window.removeEventListener("popstate", check);
+  });
   const [events, setEvents] = useState<EventInfo[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
