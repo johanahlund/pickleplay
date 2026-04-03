@@ -452,6 +452,17 @@ export default function ClubDetailPage() {
     .filter((p) => !addMemberSearch || p.name.toLowerCase().includes(addMemberSearch.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // Portal the tab bar into the header's #club-tab-bar div
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const find = () => {
+      const el = document.getElementById("club-tab-bar");
+      if (el) { setPortalTarget(el); return; }
+      setTimeout(find, 100);
+    };
+    find();
+  }, []);
+
   if (loading || !club) return <div className="text-center py-12 text-muted">Loading...</div>;
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
@@ -512,12 +523,7 @@ export default function ClubDetailPage() {
     return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
-  // Portal the tab bar into the header's #club-tab-bar div
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = document.getElementById("club-tab-bar");
-    setPortalTarget(el);
-  }, []);
+  // (portal state moved before early return — see below)
 
   const tabBar = (
     <div className="flex items-center gap-2">
