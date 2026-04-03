@@ -758,8 +758,7 @@ export default function EventDetailPage() {
   const location = event.club?.locations?.[0];
 
   const eventHeader = (
-    <div className="flex items-center gap-3 bg-card rounded-xl border border-border p-3">
-      <button onClick={closeEvent} className="text-lg text-muted hover:text-foreground transition-colors">✕</button>
+    <div className="bg-card rounded-xl border border-border p-3">
       <div className="flex-1 min-w-0">
         <h2 className="font-bold text-lg truncate">{event.name}</h2>
         <p className="text-xs text-muted">
