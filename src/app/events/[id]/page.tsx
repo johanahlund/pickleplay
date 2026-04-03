@@ -821,12 +821,11 @@ export default function EventDetailPage() {
             </div>
           ))}
       </div>
-      <button
-        onClick={() => setActiveSection("overview")}
-        className="w-full text-center mt-1.5"
-      >
+      <div className="flex items-center justify-between mt-1.5">
+        <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium active:opacity-70">← Overview</button>
         <span className="text-base font-bold text-foreground">{sectionLabels[activeSection] || activeSection}</span>
-      </button>
+        <span className="w-16" />
+      </div>
     </div>
   );
 
