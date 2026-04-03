@@ -21,11 +21,11 @@ function getDefaultDate() {
 }
 
 function getDefaultTime() {
-  const now = new Date();
-  const mins = now.getMinutes();
-  const roundedMins = mins < 30 ? 30 : 0;
-  const hours = mins < 30 ? now.getHours() : now.getHours() + 1;
-  return `${String(hours % 24).padStart(2, "0")}:${String(roundedMins).padStart(2, "0")}`;
+  return "09:00";
+}
+
+function getDefaultEndTime() {
+  return "11:00";
 }
 
 // TOTAL_STEPS is dynamic based on competitionEnabled
@@ -51,11 +51,7 @@ function NewEventPage() {
   const [format, setFormat] = useState<"doubles" | "singles">("doubles");
   const [date, setDate] = useState(getDefaultDate);
   const [time, setTime] = useState(getDefaultTime);
-  const [endTime, setEndTime] = useState(() => {
-    const t = getDefaultTime();
-    const [h, m] = t.split(":").map(Number);
-    return `${String((h + 2) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  });
+  const [endTime, setEndTime] = useState(getDefaultEndTime);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [numSets, setNumSets] = useState(1);
