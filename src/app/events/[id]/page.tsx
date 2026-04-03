@@ -38,6 +38,12 @@ interface EventHelper {
   player: Player;
 }
 
+interface ClubLocation {
+  id: string;
+  name: string;
+  googleMapsUrl?: string | null;
+}
+
 interface Event {
   id: string;
   name: string;
@@ -53,9 +59,11 @@ interface Event {
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
+  createdBy?: { id: string; name: string; emoji: string } | null;
   players: { player: Player; status: string }[];
   matches: Match[];
   helpers: EventHelper[];
+  club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
 }
 
 function toDateInput(iso: string) {
@@ -647,6 +655,8 @@ export default function EventDetailPage() {
     }
   };
 
+  const location = event.club?.locations?.[0];
+
   const eventHeader = (
     <div className="flex items-center gap-3 bg-card rounded-xl border border-border p-3">
       <button onClick={closeEvent} className="text-lg text-muted hover:text-foreground transition-colors">✕</button>
@@ -654,7 +664,9 @@ export default function EventDetailPage() {
         <h2 className="font-bold text-lg truncate">{event.name}</h2>
         <p className="text-xs text-muted">
           {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-          {" "}&middot; {event.format} &middot; {event.players.length} players
+          {" at "}
+          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+          {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
           {event.status !== "setup" && (
             <span className={`ml-1.5 inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
               event.status === "active" ? "bg-green-100 text-green-700" :
@@ -663,6 +675,17 @@ export default function EventDetailPage() {
             }`}>{event.status}</span>
           )}
         </p>
+        {location && (
+          <p className="text-xs text-muted mt-0.5">
+            {location.googleMapsUrl ? (
+              <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                📍 {location.name}
+              </a>
+            ) : (
+              <span>📍 {location.name}</span>
+            )}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1322,31 +1345,51 @@ export default function EventDetailPage() {
     ({ ranked: "Ranked", approval: "Approval", none: "Not counted" }[v] || v);
 
   const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 rounded-lg hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+  const sectionTitle = "text-[10px] text-muted px-3 pt-3 pb-1 uppercase tracking-wider";
+
+  const ownerName = event.createdBy?.name;
+  const helperNames = event.helpers.map((h) => h.player.name);
+  const organizerText = ownerName
+    ? helperNames.length > 0
+      ? `${ownerName} (${helperNames.join(", ")})`
+      : ownerName
+    : "—";
 
   return (
     <div className="space-y-3">
       {eventHeader}
 
-      {/* Summary rows — tap to edit */}
+      {/* Summary rows */}
       <div className="bg-card rounded-xl border border-border p-1 space-y-0">
-        <p className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider">Tap any row to edit</p>
 
+        {/* Organizer */}
+        <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
+          <span className="text-sm text-muted">Organizer</span>
+          <span className="text-sm font-medium truncate ml-4 text-right">{organizerText}</span>
+        </button>
+
+        {/* Courts */}
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
-          <span className="text-sm text-muted">Date</span>
+          <span className="text-sm text-muted">Courts</span>
+          <span className="text-sm font-medium">{event.numCourts}</span>
+        </button>
+
+        {/* Players */}
+        <button onClick={() => setActiveSection("players")} className={rowClass}>
+          <span className="text-sm text-muted">Players</span>
           <span className="text-sm font-medium">
-            {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-            {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+            {activePlayers.length}
+            {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
+            {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
         </button>
+
+        {/* Format group */}
+        <p className={sectionTitle}>Format</p>
 
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
           <span className="text-sm font-medium capitalize">{event.format}</span>
-        </button>
-
-        <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
-          <span className="text-sm text-muted">Courts</span>
-          <span className="text-sm font-medium">{event.numCourts}</span>
         </button>
 
         <button onClick={() => { startEditEvent(); setActiveSection("details"); }} className={rowClass}>
@@ -1364,25 +1407,8 @@ export default function EventDetailPage() {
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
 
-        {canManage && (
-          <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
-            <span className="text-sm text-muted">Helpers</span>
-            <span className="text-sm font-medium">
-              {event.helpers.length > 0
-                ? event.helpers.map((h) => h.player.name).join(", ")
-                : "None"}
-            </span>
-          </button>
-        )}
-
-        <button onClick={() => setActiveSection("players")} className={rowClass}>
-          <span className="text-sm text-muted">Players</span>
-          <span className="text-sm font-medium">
-            {activePlayers.length}
-            {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
-            {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
-          </span>
-        </button>
+        {/* Matches */}
+        <p className={sectionTitle}>Matches</p>
 
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-sm text-muted">Matches</span>

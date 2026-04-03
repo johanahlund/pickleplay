@@ -16,6 +16,8 @@ export async function GET(
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
       helpers: { include: { player: true } },
+      createdBy: { select: { id: true, name: true, emoji: true } },
+      club: { select: { id: true, name: true, emoji: true, locations: true } },
     },
   });
   if (!event) {
