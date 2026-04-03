@@ -351,6 +351,55 @@ export function CompetitionView({
             3rd place match (upper bracket)
           </label>
 
+          {/* Lower bracket config */}
+          {localConfig.advanceToLower > 0 && (() => {
+            const numLower = localConfig.numGroups * localConfig.advanceToLower;
+            const lowerStages = getBracketStages(numLower);
+            if (lowerStages.length === 0) return null;
+            return (
+              <>
+                <div className="border-t border-border pt-3 mt-2">
+                  <p className="text-xs font-semibold text-muted mb-2 uppercase tracking-wider">Lower Bracket</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted mb-1">Lower bracket match format</label>
+                  <div className="space-y-1">
+                    {lowerStages.map((stage) => (
+                      <div key={stage} className="flex items-center gap-2">
+                        <span className="text-xs text-muted w-16">{BRACKET_STAGE_LABELS[stage] || stage}</span>
+                        <select
+                          value={localConfig.lowerBracketFormats[stage] || "to_11"}
+                          onChange={(e) => {
+                            const newFormats = { ...localConfig.lowerBracketFormats };
+                            newFormats[stage] = e.target.value;
+                            const stageIdx = lowerStages.indexOf(stage);
+                            for (let i = stageIdx + 1; i < lowerStages.length; i++) {
+                              if (!localConfig.lowerBracketFormats[lowerStages[i]]) {
+                                newFormats[lowerStages[i]] = e.target.value;
+                              }
+                            }
+                            setLocalConfig({ ...localConfig, lowerBracketFormats: newFormats });
+                          }}
+                          className="flex-1 text-xs border border-border rounded-lg px-2 py-1.5"
+                        >
+                          {MATCH_FORMATS.map((f) => (
+                            <option key={f.value} value={f.value}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={localConfig.lowerThirdPlace}
+                    onChange={(e) => setLocalConfig({ ...localConfig, lowerThirdPlace: e.target.checked })}
+                    className="rounded border-border" />
+                  3rd place match (lower bracket)
+                </label>
+              </>
+            );
+          })()}
+
           <div className="flex gap-2">
             <button onClick={async () => {
               await api("/competition", { action: "update_config", config: localConfig });
@@ -369,7 +418,13 @@ export function CompetitionView({
             <div className="flex justify-between"><span className="text-muted">Advance lower</span><span className="font-medium">{config.advanceToLower} per group</span></div>
           )}
           <div className="flex justify-between"><span className="text-muted">Bracket seeding</span><span className="font-medium capitalize">{config.bracketSeeding.replace("_", " ")}</span></div>
-          <div className="flex justify-between"><span className="text-muted">3rd place</span><span className="font-medium">{config.upperThirdPlace ? "Yes" : "No"}</span></div>
+          <div className="flex justify-between"><span className="text-muted">3rd place (upper)</span><span className="font-medium">{config.upperThirdPlace ? "Yes" : "No"}</span></div>
+          {config.advanceToLower > 0 && (
+            <>
+              <div className="flex justify-between"><span className="text-muted">Lower bracket</span><span className="font-medium">{config.advanceToLower} per group</span></div>
+              <div className="flex justify-between"><span className="text-muted">3rd place (lower)</span><span className="font-medium">{config.lowerThirdPlace ? "Yes" : "No"}</span></div>
+            </>
+          )}
           <div className="flex justify-between">
             <span className="text-muted">Tiebreakers</span>
             <span className="font-medium text-xs">{config.tiebreakers.map((t) => t.replace("_", " ")).join(" → ")}</span>

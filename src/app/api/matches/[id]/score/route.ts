@@ -155,12 +155,116 @@ export async function POST(
   }
   // "none" — no ELO, no confirmation needed
 
+  // ── Post-score hooks ──
+  await handlePostScore(match.id);
+
   return NextResponse.json({
     ok: true,
     winnerTeam,
     eloChange: change,
     rankingMode: match.rankingMode,
   });
+}
+
+/**
+ * After scoring a match:
+ * 1. Bracket progression — fill winner/loser into next bracket match
+ * 2. Dynamic court assignment — assign freed court to next pending match
+ */
+async function handlePostScore(matchId: string) {
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: {
+      players: true,
+      event: { select: { id: true, competitionMode: true, competitionConfig: true } },
+    },
+  });
+  if (!match || !match.event) return;
+
+  // 1. Bracket progression
+  if (match.bracketStage && match.bracketPosition) {
+    const { getNextBracketMatch, getMatchWinnerLoser } = await import("@/lib/competition/progression");
+
+    const prefix = match.bracketStage.startsWith("upper_") ? "upper" : "lower";
+    const config = match.event.competitionConfig as Record<string, unknown> | null;
+    const hasThirdPlace = prefix === "upper"
+      ? !!(config?.upperThirdPlace ?? true)
+      : !!(config?.lowerThirdPlace ?? false);
+
+    const { winnerNext, loserNext } = getNextBracketMatch(
+      match.bracketStage, match.bracketPosition, prefix, hasThirdPlace
+    );
+
+    const { winnerPlayerIds, loserPlayerIds } = getMatchWinnerLoser(match.players);
+
+    // Fill winner into next match
+    if (winnerNext) {
+      await fillBracketSlot(
+        match.eventId, winnerNext.bracketStage, winnerNext.bracketPosition,
+        winnerNext.team, winnerPlayerIds
+      );
+    }
+
+    // Fill loser into 3rd place match
+    if (loserNext) {
+      await fillBracketSlot(
+        match.eventId, loserNext.bracketStage, loserNext.bracketPosition,
+        loserNext.team, loserPlayerIds
+      );
+    }
+  }
+
+  // 2. Dynamic court assignment — assign this court to next pending match
+  const allMatches = await prisma.match.findMany({
+    where: { eventId: match.eventId },
+    include: { players: true },
+    orderBy: [{ round: "asc" }, { courtNum: "asc" }],
+  });
+
+  const { findNextPendingMatch } = await import("@/lib/competition/progression");
+  const nextMatch = findNextPendingMatch(
+    allMatches.map((m) => ({
+      ...m,
+      players: m.players.map((p) => ({ playerId: p.playerId, team: p.team, score: p.score })),
+    })),
+    match.courtNum
+  );
+
+  if (nextMatch && nextMatch.courtNum !== match.courtNum) {
+    await prisma.match.update({
+      where: { id: nextMatch.id },
+      data: { courtNum: match.courtNum },
+    });
+  }
+}
+
+/**
+ * Add players to a bracket match slot (team 1 or team 2).
+ */
+async function fillBracketSlot(
+  eventId: string,
+  bracketStage: string,
+  bracketPosition: number,
+  team: number,
+  playerIds: string[]
+) {
+  const targetMatch = await prisma.match.findFirst({
+    where: { eventId, bracketStage, bracketPosition },
+    include: { players: true },
+  });
+
+  if (!targetMatch) return;
+
+  // Check if this team slot is already filled
+  const existingTeamPlayers = targetMatch.players.filter((p) => p.team === team);
+  if (existingTeamPlayers.length > 0) return; // already filled
+
+  // Add players to the match
+  for (const playerId of playerIds) {
+    await prisma.matchPlayer.create({
+      data: { matchId: targetMatch.id, playerId, team },
+    });
+  }
 }
 
 // PUT: Edit score on a completed match (admin only) — reverses old ELO, applies new
