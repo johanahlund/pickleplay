@@ -1689,7 +1689,7 @@ export default function EventDetailPage() {
           </button>
         )}
         {/* Competition */}
-        {event.format === "doubles" && event.pairs.length >= 4 && (
+        {event.format === "doubles" && (
           <button onClick={() => setActiveSection("competition")} className={rowClass}>
             <span className="text-sm text-muted">Competition</span>
             <span className="text-sm font-medium">
