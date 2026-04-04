@@ -1120,25 +1120,53 @@ export default function EventDetailPage() {
                 <button onClick={clearAllPairs} className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Clear All</button>
               )}
             </div>
-            {event.pairs.map((pair) => (
-              <div key={pair.id} className="flex items-center gap-2 bg-card rounded-xl border border-border p-3">
-                <div className="flex-1 flex items-center gap-1.5">
-                  <span className="text-lg">{pair.player1.emoji}</span>
-                  <span className="text-sm font-medium">{pair.player1.name}</span>
-                  {pair.player1.gender && <span className={`text-xs ${pair.player1.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player1.gender === "M" ? "\u2642" : "\u2640"}</span>}
+            {event.pairs.map((pair) => {
+              const ep1 = event.players.find((ep) => ep.player.id === pair.player1.id);
+              const ep2 = event.players.find((ep) => ep.player.id === pair.player2.id);
+              const lvl1 = ep1?.skillLevel;
+              const lvl2 = ep2?.skillLevel;
+              const pairLevel = lvl1 && lvl2 ? Math.round((lvl1 + lvl2) / 2) : lvl1 || lvl2 || null;
+              return (
+                <div key={pair.id} className="bg-card rounded-xl border border-border p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                      <span className="text-lg shrink-0">{pair.player1.emoji}</span>
+                      <span className="text-sm font-medium truncate">{pair.player1.name}</span>
+                      {pair.player1.gender && <span className={`text-xs shrink-0 ${pair.player1.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player1.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                    </div>
+                    <span className="text-xs text-muted font-medium shrink-0">+</span>
+                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                      <span className="text-lg shrink-0">{pair.player2.emoji}</span>
+                      <span className="text-sm font-medium truncate">{pair.player2.name}</span>
+                      {pair.player2.gender && <span className={`text-xs shrink-0 ${pair.player2.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player2.gender === "M" ? "\u2642" : "\u2640"}</span>}
+                    </div>
+                    {canManage && (
+                      <button onClick={() => removePair(pair.id)} className="text-xs text-danger px-1.5 py-1 rounded hover:bg-red-50 shrink-0">✕</button>
+                    )}
+                  </div>
+                  {/* Skill level + rating */}
+                  <div className="flex items-center gap-1.5">
+                    {canManage ? (
+                      <>
+                        <span className="text-[10px] text-muted">Level:</span>
+                        {[1, 2, 3].map((lvl) => (
+                          <button key={lvl} onClick={async () => {
+                            await setSkillLevel(pair.player1.id, lvl1 === lvl && lvl2 === lvl ? null : lvl);
+                            await setSkillLevel(pair.player2.id, lvl1 === lvl && lvl2 === lvl ? null : lvl);
+                          }}
+                            className={`w-6 h-6 rounded text-[10px] font-bold transition-all ${
+                              pairLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                            }`}>{lvl}</button>
+                        ))}
+                      </>
+                    ) : pairLevel ? (
+                      <span className="text-[10px] text-muted">Level {pairLevel}</span>
+                    ) : null}
+                    <span className="text-xs text-muted ml-auto">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
+                  </div>
                 </div>
-                <span className="text-xs text-muted font-medium">+</span>
-                <div className="flex-1 flex items-center gap-1.5">
-                  <span className="text-lg">{pair.player2.emoji}</span>
-                  <span className="text-sm font-medium">{pair.player2.name}</span>
-                  {pair.player2.gender && <span className={`text-xs ${pair.player2.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player2.gender === "M" ? "\u2642" : "\u2640"}</span>}
-                </div>
-                <span className="text-xs text-muted">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
-                {canManage && (
-                  <button onClick={() => removePair(pair.id)} className="text-xs text-danger px-1.5 py-1 rounded hover:bg-red-50">✕</button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
