@@ -227,8 +227,8 @@ export function Header() {
                 </button>
               </div>
               {/* Club tab bar — always visible when in club context */}
-              <div className="mt-1.5">
-                <div id="club-tab-bar-portal" />
+              <div className="mt-1.5 relative">
+                <div id="club-tab-bar-portal" className="relative z-10" />
                 {/* Fallback tabs when portal isn't filled (e.g., on event page) */}
                 <div id="club-tab-bar-fallback" className="flex gap-1 bg-white/10 rounded-xl p-1">
                   {[
