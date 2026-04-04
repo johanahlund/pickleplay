@@ -796,13 +796,8 @@ function NewEventPage() {
                 ) : null;
               })()}
             </div>
-          </>
-        )}
-
-        {/* Rankings section (part of step 4 but separate card) */}
-        {step === 4 && (
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-            <div>
+            {/* Rankings */}
+            <div className="border-t border-border pt-3 mt-1">
               <label className="block text-sm font-medium text-foreground mb-0.5">Rankings</label>
               <p className="text-xs text-muted mb-2">Will matches count towards app player rankings?</p>
               <div className="flex gap-2">
@@ -831,12 +826,14 @@ function NewEventPage() {
                 {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
               </p>
             </div>
+
+            {/* Competition toggle */}
             {format === "doubles" && (
               <div className="border-t border-border pt-3">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
                     onClick={() => setCompetitionEnabled(!competitionEnabled)}>
-                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${competitionEnabled ? "translate-x-5.5 left-0.5" : "left-0.5"}`}
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform`}
                       style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
                   </div>
                   <div>
@@ -846,7 +843,7 @@ function NewEventPage() {
                 </label>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {/* Step 5: Players */}
