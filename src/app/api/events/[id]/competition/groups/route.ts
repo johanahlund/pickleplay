@@ -119,12 +119,17 @@ export async function POST(
     }
 
     const competitionPairs: CompetitionPair[] = event.pairs.map((p) => {
-      // For skill_level seeding, use the event player skill levels
+      const ep1 = event.players.find((ep) => ep.playerId === p.player1Id);
+      const ep2 = event.players.find((ep) => ep.playerId === p.player2Id);
+      // Pair skill level: both players should have the same level (set from pair row)
+      // Use the average, fallback to 2 (mid)
+      const lvl1 = ep1?.skillLevel ?? 2;
+      const lvl2 = ep2?.skillLevel ?? 2;
+      const pairLevel = Math.round((lvl1 + lvl2) / 2);
+
       let seed: number | undefined;
       if (config.groupSeeding === "skill_level") {
-        const ep1 = event.players.find((ep) => ep.playerId === p.player1Id);
-        const ep2 = event.players.find((ep) => ep.playerId === p.player2Id);
-        seed = ((ep1?.skillLevel ?? 2) + (ep2?.skillLevel ?? 2));
+        seed = pairLevel;
       }
 
       return {
