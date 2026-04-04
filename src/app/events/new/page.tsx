@@ -54,6 +54,8 @@ function NewEventPage() {
   const [endTime, setEndTime] = useState(getDefaultEndTime);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(false);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
@@ -293,7 +295,9 @@ function NewEventPage() {
       });
     }
 
-    router.push(`/events/${event.id}`);
+    setCreatedEventId(event.id);
+    setCreated(true);
+    setTimeout(() => router.push(`/events/${event.id}`), 1500);
   };
 
   const canAdvance = () => {
@@ -311,6 +315,28 @@ function NewEventPage() {
     : [...baseSteps, "Review"];
   const TOTAL_STEPS = stepTitles.length;
   const stepNum = (name: string) => stepTitles.indexOf(name) + 1;
+
+  if (created) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <div className="text-6xl animate-bounce">🎉</div>
+        <h2 className="text-2xl font-bold text-foreground">Event Created!</h2>
+        <p className="text-muted text-sm">{name}</p>
+        <p className="text-xs text-muted">
+          {selectedIds.size} player{selectedIds.size !== 1 ? "s" : ""}
+          {memoryPairs.length > 0 ? ` · ${memoryPairs.length} pairs` : ""}
+          {competitionEnabled ? " · Competition" : ""}
+        </p>
+        <p className="text-xs text-muted animate-pulse">Opening event...</p>
+        <button
+          onClick={() => createdEventId && router.push(`/events/${createdEventId}`)}
+          className="text-sm text-action font-medium mt-2"
+        >
+          Go to event now
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div className="text-center py-12 text-muted">Loading...</div>;
