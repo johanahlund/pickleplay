@@ -716,12 +716,22 @@ export default function EventDetailPage() {
   };
 
   const setSkillLevel = async (playerId: string, skillLevel: number | null) => {
-    await fetch(`/api/events/${id}/players/${playerId}/level`, {
+    // Optimistic update
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          ep.player.id === playerId ? { ...ep, skillLevel } : ep
+        ),
+      };
+    });
+    // Save in background
+    fetch(`/api/events/${id}/players/${playerId}/level`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skillLevel }),
     });
-    await fetchEvent();
   };
 
   const addManualMatch = async () => {
