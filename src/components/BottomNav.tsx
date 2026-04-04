@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 const tabs = [
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
@@ -13,14 +14,20 @@ const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
 
   // Hide nav on auth/claim pages
   if (HIDDEN_PATHS.some((p) => pathname.startsWith(p))) return null;
 
+  const allTabs = isAdmin
+    ? [...tabs, { href: "/players", label: "Players", icon: "👤" }]
+    : tabs;
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-[600px] mx-auto flex justify-around items-center h-16">
-        {tabs.map((tab) => {
+        {allTabs.map((tab) => {
           const isActive =
             tab.href === "/"
               ? pathname === "/"
