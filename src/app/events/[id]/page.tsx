@@ -158,13 +158,17 @@ function SwipeablePlayerRow({
   showContact,
   onPause,
   onRemove,
+  skillLevel,
+  onSkillLevel,
 }: {
-  ep: { player: Player; status: string };
+  ep: { player: Player; status: string; skillLevel?: number | null };
   canManage: boolean;
   hasMatches: boolean;
   showContact: boolean;
   onPause: () => void;
   onRemove: () => void;
+  skillLevel?: number | null;
+  onSkillLevel?: (level: number | null) => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
@@ -275,6 +279,18 @@ function SwipeablePlayerRow({
           Paused
         </span>
       )}
+      {/* Skill level */}
+      {canManage && onSkillLevel && (
+        <div className="flex gap-0.5">
+          {[1, 2, 3].map((lvl) => (
+            <button key={lvl} onClick={(e) => { e.stopPropagation(); onSkillLevel(skillLevel === lvl ? null : lvl); }}
+              className={`w-5 h-5 rounded text-[9px] font-bold ${skillLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-muted"}`}>{lvl}</button>
+          ))}
+        </div>
+      )}
+      {!canManage && skillLevel && (
+        <span className="text-[9px] text-muted bg-gray-100 px-1.5 py-0.5 rounded">Lvl {skillLevel}</span>
+      )}
       {/* Desktop hover actions (hidden on touch) */}
       {canManage && (
         <div className="hidden group-hover:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -314,6 +330,9 @@ export default function EventDetailPage() {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [bulkGenderFilter, setBulkGenderFilter] = useState<string | null>(null);
+  const [bulkSearch, setBulkSearch] = useState("");
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
@@ -1320,7 +1339,80 @@ export default function EventDetailPage() {
     );
   };
 
+  const renderBulkSelect = () => {
+    const eventPlayerIds = new Set(event.players.map((ep) => ep.player.id));
+    const filtered = allPlayers
+      .filter((p) => !bulkSearch || p.name.toLowerCase().includes(bulkSearch.toLowerCase()))
+      .filter((p) => !bulkGenderFilter || p.gender === bulkGenderFilter)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const selectedList = allPlayers.filter((p) => eventPlayerIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">Select Players</h3>
+          <button onClick={() => setBulkSelectMode(false)}
+            className="text-xs text-primary font-medium">Done</button>
+        </div>
+        <div className="flex gap-2 -mx-1">
+          {/* Left: filter + select */}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex gap-1">
+              {(["M", "F"] as const).map((g) => (
+                <button key={g} type="button" onClick={() => setBulkGenderFilter(bulkGenderFilter === g ? null : g)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${bulkGenderFilter === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+                  {g === "M" ? "♂" : "♀"}
+                </button>
+              ))}
+            </div>
+            <ClearInput value={bulkSearch} onChange={setBulkSearch} placeholder="Search..." className="text-xs" />
+            <div className="space-y-0 max-h-72 overflow-y-auto">
+              {filtered.map((p) => {
+                const inEvent = eventPlayerIds.has(p.id);
+                return (
+                  <button key={p.id} type="button"
+                    onClick={async () => {
+                      if (inEvent) {
+                        await removePlayer(p.id, p.name);
+                      } else {
+                        await addPlayerToEvent(p.id);
+                      }
+                    }}
+                    className={`w-full flex items-center gap-1.5 py-1.5 px-2 rounded transition-all ${inEvent ? "bg-selected/10" : "hover:bg-gray-50"}`}>
+                    <span className={`w-3.5 h-3.5 rounded border-[1.5px] flex items-center justify-center text-[8px] font-bold shrink-0 ${inEvent ? "bg-selected border-selected text-white" : "border-gray-300"}`}>
+                      {inEvent ? "✓" : ""}
+                    </span>
+                    <span className="text-xs font-medium flex-1 text-left truncate">{p.name}</span>
+                    {p.gender && <span className={`text-[9px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{p.gender === "M" ? "♂" : "♀"}</span>}
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && <p className="text-xs text-muted py-3 text-center">No matches</p>}
+            </div>
+          </div>
+          {/* Right: selected */}
+          <div className="w-[42%] shrink-0 bg-gray-50 rounded-lg p-2 space-y-1">
+            <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">In event ({selectedList.length})</span>
+            <div className="max-h-80 overflow-y-auto space-y-0">
+              {selectedList.map((p) => (
+                <button key={p.id} type="button"
+                  onClick={async () => { await removePlayer(p.id, p.name); }}
+                  className="w-full flex items-center gap-1 py-1 px-1.5 rounded hover:bg-red-50 hover:text-danger transition-colors group">
+                  <span className="text-xs font-medium flex-1 text-left leading-tight truncate">{p.name}</span>
+                  {p.gender && <span className={`text-[9px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"} group-hover:hidden`}>{p.gender === "M" ? "♂" : "♀"}</span>}
+                  <span className="text-[9px] text-danger hidden group-hover:block">✕</span>
+                </button>
+              ))}
+              {selectedList.length === 0 && <p className="text-[10px] text-muted py-2 text-center">None</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderPlayers = () => {
+    if (bulkSelectMode && canManage) return renderBulkSelect();
     if (showAddPlayer && canManage) return renderAddPlayers();
 
     return (
@@ -1330,10 +1422,16 @@ export default function EventDetailPage() {
             Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </h3>
           {canManage && (
-            <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
-              className="text-lg text-primary font-semibold px-4 py-2 rounded-lg hover:bg-primary/10 transition-colors">
-              + Add
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+                className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+                Select
+              </button>
+              <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
+                className="text-lg text-primary font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+                + Add
+              </button>
+            </div>
           )}
         </div>
         {canManage && (
@@ -1358,6 +1456,8 @@ export default function EventDetailPage() {
             .map((ep) => (
             <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
               showContact={isAdmin || ep.player.id === userId}
+              skillLevel={ep.skillLevel}
+              onSkillLevel={(lvl) => setSkillLevel(ep.player.id, lvl)}
               onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
           ))}
         </div>
