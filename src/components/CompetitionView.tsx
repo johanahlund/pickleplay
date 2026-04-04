@@ -95,6 +95,7 @@ export function CompetitionView({
   const [loading, setLoading] = useState(false);
   const [editingConfig, setEditingConfig] = useState(false);
   const [localConfig, setLocalConfig] = useState<CompetitionConfig>(config);
+  const [movingPairId, setMovingPairId] = useState<string | null>(null);
 
   const api = async (path: string, body: object) => {
     setLoading(true);
@@ -487,10 +488,49 @@ export function CompetitionView({
         </div>
       ) : (
         <>
+          {/* Clear / Redraw */}
+          {canManage && !hasGroupMatches && (
+            <div className="flex gap-2">
+              <button onClick={() => api("/competition/groups", { action: "seed" })}
+                disabled={loading}
+                className="flex-1 py-2 text-xs font-medium text-action border border-action/30 rounded-lg hover:bg-action/5 disabled:opacity-50">
+                Redraw Groups
+              </button>
+              <button onClick={() => {
+                const hasResults = groupMatches.some((m) => m.status === "completed");
+                const msg = hasResults
+                  ? "WARNING: This will delete ALL group matches including scored results and reverse any rating changes. This cannot be undone!\n\nClear all groups?"
+                  : "Clear all group assignments?";
+                if (confirm(msg)) api("/competition/groups", { action: "clear" });
+              }}
+                disabled={loading}
+                className="py-2 px-3 text-xs font-medium text-danger border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                Clear Groups
+              </button>
+            </div>
+          )}
+
+          {/* Move pair selector */}
+          {movingPairId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-medium text-amber-800">Move to which group?</p>
+              <div className="flex gap-2">
+                {groupLabels.map((label) => (
+                  <button key={label} onClick={async () => {
+                    await api("/competition/groups", { action: "move_pair", pairId: movingPairId, targetGroup: label });
+                    setMovingPairId(null);
+                  }} className="flex-1 py-2 rounded-lg text-sm font-bold bg-white border border-amber-300 hover:bg-amber-100 transition-colors">
+                    {label}
+                  </button>
+                ))}
+                <button onClick={() => setMovingPairId(null)} className="px-3 py-2 text-xs text-muted hover:text-foreground">Cancel</button>
+              </div>
+            </div>
+          )}
+
           {/* Group tables */}
           {groupLabels.map((label) => {
             const standings = getGroupStandings(label);
-            const groupMatchList = groupMatches.filter((m) => m.groupLabel === label);
             return (
               <div key={label} className="bg-card rounded-xl border border-border overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-border">
@@ -510,14 +550,16 @@ export function CompetitionView({
                       <th className="text-center py-1.5">W</th>
                       <th className="text-center py-1.5">L</th>
                       <th className="text-center py-1.5">+/-</th>
+                      {canManage && !hasGroupMatches && <th className="w-6"></th>}
                     </tr>
                   </thead>
                   <tbody>
                     {standings.map((s, i) => {
                       const isAdvancing = i < config.advanceToUpper;
                       const isLower = i >= config.advanceToUpper && i < config.advanceToUpper + config.advanceToLower;
+                      const isMoving = movingPairId === s.pairId;
                       return (
-                        <tr key={s.pairId} className={`border-b border-border last:border-b-0 ${isAdvancing ? "bg-green-50" : isLower ? "bg-amber-50" : ""}`}>
+                        <tr key={s.pairId} className={`border-b border-border last:border-b-0 ${isMoving ? "bg-amber-100" : isAdvancing ? "bg-green-50" : isLower ? "bg-amber-50" : ""}`}>
                           <td className="px-3 py-2 font-bold text-muted">{i + 1}</td>
                           <td className="py-2">
                             <span className="font-medium">{s.pair.player1.emoji}{s.pair.player2.emoji} {pairName(s.pair)}</span>
@@ -526,6 +568,15 @@ export function CompetitionView({
                           <td className="text-center py-2 font-bold">{s.wins}</td>
                           <td className="text-center py-2">{s.losses}</td>
                           <td className="text-center py-2 font-medium">{s.pointDiff > 0 ? "+" : ""}{s.pointDiff}</td>
+                          {canManage && !hasGroupMatches && (
+                            <td className="py-2 pr-2">
+                              <button onClick={() => setMovingPairId(isMoving ? null : s.pairId)}
+                                className={`text-[10px] px-1.5 py-0.5 rounded ${isMoving ? "bg-amber-200 text-amber-800" : "text-muted hover:text-foreground hover:bg-gray-100"}`}
+                                title="Move to another group">
+                                ↔
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

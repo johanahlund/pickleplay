@@ -232,5 +232,31 @@ export async function POST(
     return NextResponse.json({ ok: true, matchesCreated: totalCreated });
   }
 
+  if (body.action === "clear") {
+    // Clear all group assignments
+    await prisma.eventPair.updateMany({
+      where: { eventId: id },
+      data: { groupLabel: null, seed: null },
+    });
+    // Delete group matches
+    await prisma.match.deleteMany({
+      where: { eventId: id, groupLabel: { not: null } },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "move_pair") {
+    // Move a pair to a different group
+    const { pairId, targetGroup } = body;
+    if (!pairId || !targetGroup) {
+      return NextResponse.json({ error: "pairId and targetGroup required" }, { status: 400 });
+    }
+    await prisma.eventPair.update({
+      where: { id: pairId },
+      data: { groupLabel: targetGroup },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
