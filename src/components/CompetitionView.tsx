@@ -489,9 +489,14 @@ export function CompetitionView({
       ) : (
         <>
           {/* Clear / Redraw */}
-          {canManage && !hasGroupMatches && (
+          {canManage && (
             <div className="flex gap-2">
-              <button onClick={() => api("/competition/groups", { action: "seed" })}
+              <button onClick={() => {
+                const msg = hasGroupMatches
+                  ? "This will delete all current group matches and redraw groups. Continue?"
+                  : "Redraw all groups?";
+                if (confirm(msg)) api("/competition/groups", { action: "seed" });
+              }}
                 disabled={loading}
                 className="flex-1 py-2 text-xs font-medium text-action border border-action/30 rounded-lg hover:bg-action/5 disabled:opacity-50">
                 Redraw Groups
@@ -499,8 +504,10 @@ export function CompetitionView({
               <button onClick={() => {
                 const hasResults = groupMatches.some((m) => m.status === "completed");
                 const msg = hasResults
-                  ? "WARNING: This will delete ALL group matches including scored results and reverse any rating changes. This cannot be undone!\n\nClear all groups?"
-                  : "Clear all group assignments?";
+                  ? "WARNING: This will delete ALL group matches including scored results. This cannot be undone!\n\nClear all groups?"
+                  : hasGroupMatches
+                    ? "This will delete all group matches and clear group assignments. Continue?"
+                    : "Clear all group assignments?";
                 if (confirm(msg)) api("/competition/groups", { action: "clear" });
               }}
                 disabled={loading}
@@ -550,7 +557,7 @@ export function CompetitionView({
                       <th className="text-center py-1.5">W</th>
                       <th className="text-center py-1.5">L</th>
                       <th className="text-center py-1.5">+/-</th>
-                      {canManage && !hasGroupMatches && <th className="w-6"></th>}
+                      {canManage && <th className="w-6"></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -568,7 +575,7 @@ export function CompetitionView({
                           <td className="text-center py-2 font-bold">{s.wins}</td>
                           <td className="text-center py-2">{s.losses}</td>
                           <td className="text-center py-2 font-medium">{s.pointDiff > 0 ? "+" : ""}{s.pointDiff}</td>
-                          {canManage && !hasGroupMatches && (
+                          {canManage && (
                             <td className="py-2 pr-2">
                               <button onClick={() => setMovingPairId(isMoving ? null : s.pairId)}
                                 className={`text-[10px] px-1.5 py-0.5 rounded ${isMoving ? "bg-amber-200 text-amber-800" : "text-muted hover:text-foreground hover:bg-gray-100"}`}
