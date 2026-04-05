@@ -69,6 +69,10 @@ interface EventClassData {
   numSets: number;
   scoringType: string;
   pairingMode: string;
+  playMode?: string;
+  prioSpeed?: boolean;
+  prioFairness?: boolean;
+  prioSkill?: boolean;
   rankingMode: string;
   minPlayers?: number | null;
   maxPlayers?: number | null;
@@ -339,6 +343,10 @@ export default function EventDetailPage() {
   const [editNumSets, setEditNumSets] = useState(1);
   const [editScoringType, setEditScoringType] = useState("normal_11");
   const [editPairingMode, setEditPairingMode] = useState("random");
+  const [editPlayMode, setEditPlayMode] = useState("round_based");
+  const [editPrioSpeed, setEditPrioSpeed] = useState(true);
+  const [editPrioFairness, setEditPrioFairness] = useState(true);
+  const [editPrioSkill, setEditPrioSkill] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
@@ -590,6 +598,11 @@ export default function EventDetailPage() {
     setEditNumSets(event.numSets);
     setEditScoringType(event.scoringType);
     setEditPairingMode(event.pairingMode);
+    const cls = event.classes?.[0];
+    setEditPlayMode(cls?.playMode || "round_based");
+    setEditPrioSpeed(cls?.prioSpeed ?? true);
+    setEditPrioFairness(cls?.prioFairness ?? true);
+    setEditPrioSkill(cls?.prioSkill ?? false);
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
     if (event.endDate) {
@@ -619,6 +632,10 @@ export default function EventDetailPage() {
         numSets: editNumSets,
         scoringType: editScoringType,
         pairingMode: editPairingMode,
+        playMode: editPlayMode,
+        prioSpeed: editPrioSpeed,
+        prioFairness: editPrioFairness,
+        prioSkill: editPrioSkill,
         openSignup: editOpenSignup,
         visibility: editVisibility,
       }),
@@ -1008,6 +1025,50 @@ export default function EventDetailPage() {
           ) : null;
         })()}
       </div>
+      {/* Play Mode */}
+      <div className="border-t border-border pt-3 mt-1">
+        <label className="block text-sm font-medium text-muted mb-1">Play Mode</label>
+        <div className="flex gap-2">
+          {([
+            { value: "round_based", label: "Round-based" },
+            { value: "continuous", label: "Continuous" },
+          ] as const).map((m) => (
+            <button key={m.value} type="button" onClick={() => setEditPlayMode(m.value)}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                editPlayMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>{m.label}</button>
+          ))}
+        </div>
+        <p className="text-xs text-muted mt-1">
+          {editPlayMode === "round_based" ? "All matches finish before next round starts." : "New match starts immediately when a court is free."}
+        </p>
+      </div>
+
+      {/* Priority toggles */}
+      {editPlayMode === "continuous" && (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-muted">Prioritize</label>
+          {[
+            { key: "speed", value: editPrioSpeed, set: setEditPrioSpeed, label: "Speed", desc: "Fill courts immediately" },
+            { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
+            { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "Skill", desc: "Group by level" },
+          ].map((p) => (
+            <button key={p.key} type="button" onClick={() => p.set(!p.value)}
+              className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
+                p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
+              }`}>
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold ${
+                p.value ? "bg-selected border-selected text-white" : "border-gray-300"
+              }`}>{p.value ? "✓" : ""}</div>
+              <div className="text-left">
+                <span className="text-sm font-medium">{p.label}</span>
+                <span className="text-xs text-muted ml-1.5">{p.desc}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
         <div className="flex gap-2">
@@ -1016,7 +1077,7 @@ export default function EventDetailPage() {
             { value: "approval", label: "Approval" },
             { value: "none", label: "Unranked" },
           ].map((m) => (
-            <button key={m.value} type="button" onClick={() => { /* rankingMode edit — save via editPairingMode for now */ }}
+            <button key={m.value} type="button" onClick={() => { /* TODO: rankingMode edit */ }}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                 (event.rankingMode || "ranked") === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
               }`}>
