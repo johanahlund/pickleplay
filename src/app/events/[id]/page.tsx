@@ -328,6 +328,7 @@ export default function EventDetailPage() {
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCourts, setEditCourts] = useState(2);
   const [editDate, setEditDate] = useState("");
@@ -923,8 +924,14 @@ export default function EventDetailPage() {
       <div className="flex items-center justify-between mt-1.5">
         <span className="w-16" />
         <span className="text-sm font-bold text-foreground">{sectionLabels[activeSection] || activeSection}</span>
-        {saveSections.has(activeSection) && hasEdits ? (
-          <button onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
+        {saving ? (
+          <span className="text-xs font-medium text-green-600 px-3 py-1 shrink-0">Saved ✓</span>
+        ) : saveSections.has(activeSection) && hasEdits ? (
+          <button onClick={async () => {
+            setSaving(true);
+            await saveEditEvent();
+            setTimeout(() => { setSaving(false); setActiveSection("overview"); }, 800);
+          }}
             className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm shrink-0">
             Save
           </button>
