@@ -90,6 +90,10 @@ export async function PATCH(
   if (scoringType !== undefined) classData.scoringType = scoringType;
   if (timedMinutes !== undefined) classData.timedMinutes = timedMinutes;
   if (pairingMode !== undefined) classData.pairingMode = pairingMode;
+  if (body.playMode !== undefined) classData.playMode = body.playMode;
+  if (body.prioSpeed !== undefined) classData.prioSpeed = body.prioSpeed;
+  if (body.prioFairness !== undefined) classData.prioFairness = body.prioFairness;
+  if (body.prioSkill !== undefined) classData.prioSkill = body.prioSkill;
   if (rankingMode !== undefined) classData.rankingMode = rankingMode;
 
   const data = eventData; // for backwards compat with the update below

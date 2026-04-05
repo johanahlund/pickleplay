@@ -125,6 +125,10 @@ model EventClass {
   scoringType  String   @default("normal_11")
   timedMinutes Int?
   pairingMode  String   @default("random")
+  playMode     String   @default("round_based") // "round_based" | "continuous"
+  prioSpeed    Boolean  @default(true)
+  prioFairness Boolean  @default(true)
+  prioSkill    Boolean  @default(false)
   rankingMode  String   @default("ranked")
   minPlayers   Int?
   maxPlayers   Int?

@@ -59,6 +59,10 @@ function NewEventPage() {
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
   const [pairingMode, setPairingMode] = useState("random");
+  const [playMode, setPlayMode] = useState<"round_based" | "continuous">("round_based");
+  const [prioSpeed, setPrioSpeed] = useState(true);
+  const [prioFairness, setPrioFairness] = useState(true);
+  const [prioSkill, setPrioSkill] = useState(false);
   const [rankingMode, setRankingMode] = useState("ranked");
   const [genderMode, setGenderMode] = useState<"mix" | "random">("random");
   const [memoryPairs, setMemoryPairs] = useState<{ player1Id: string; player2Id: string }[]>([]);
@@ -254,6 +258,10 @@ function NewEventPage() {
         numSets,
         scoringType,
         pairingMode,
+        playMode,
+        prioSpeed,
+        prioFairness,
+        prioSkill,
         rankingMode,
         ...(minPlayers ? { minPlayers: parseInt(minPlayers) } : {}),
         ...(maxPlayers ? { maxPlayers: parseInt(maxPlayers) } : {}),
@@ -796,6 +804,50 @@ function NewEventPage() {
                 ) : null;
               })()}
             </div>
+            {/* Play mode */}
+            <div className="border-t border-border pt-3 mt-1">
+              <label className="block text-sm font-medium text-muted mb-1">Play Mode</label>
+              <div className="flex gap-2">
+                {([
+                  { value: "round_based", label: "Round-based" },
+                  { value: "continuous", label: "Continuous" },
+                ] as const).map((m) => (
+                  <button key={m.value} type="button" onClick={() => setPlayMode(m.value)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                      playMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}>{m.label}</button>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-1">
+                {playMode === "round_based" ? "All matches finish before next round starts." : "New match starts immediately when a court is free."}
+              </p>
+            </div>
+
+            {/* Priority toggles — shown for continuous mode */}
+            {playMode === "continuous" && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-muted">Prioritize</label>
+                {[
+                  { key: "speed", value: prioSpeed, set: setPrioSpeed, label: "Speed", desc: "Fill courts immediately" },
+                  { key: "fairness", value: prioFairness, set: setPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
+                  { key: "skill", value: prioSkill, set: setPrioSkill, label: "Skill", desc: "Group by level" },
+                ].map((p) => (
+                  <button key={p.key} type="button" onClick={() => p.set(!p.value)}
+                    className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
+                      p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
+                    }`}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold ${
+                      p.value ? "bg-selected border-selected text-white" : "border-gray-300"
+                    }`}>{p.value ? "✓" : ""}</div>
+                    <div className="text-left">
+                      <span className="text-sm font-medium">{p.label}</span>
+                      <span className="text-xs text-muted ml-1.5">{p.desc}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Rankings */}
             <div className="border-t border-border pt-3 mt-1">
               <label className="block text-sm font-medium text-foreground mb-0.5">Rankings</label>

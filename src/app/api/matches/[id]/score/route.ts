@@ -176,8 +176,8 @@ async function handlePostScore(matchId: string) {
     where: { id: matchId },
     include: {
       players: true,
-      event: { select: { id: true } },
-      class: { select: { competitionMode: true, competitionConfig: true } },
+      event: { select: { id: true, numCourts: true } },
+      class: { select: { competitionMode: true, competitionConfig: true, playMode: true, pairingMode: true, format: true, prioSpeed: true, prioFairness: true, prioSkill: true } },
     },
   });
   if (!match || !match.event) return;
@@ -236,6 +236,93 @@ async function handlePostScore(matchId: string) {
       where: { id: nextMatch.id },
       data: { courtNum: match.courtNum },
     });
+  }
+
+  // 3. Continuous rotation — auto-generate next match if continuous mode
+  if (match.class?.playMode === "continuous" && !match.bracketStage) {
+    const { generateNextMatch } = await import("@/lib/rotation");
+    const { getMatchWinnerLoser } = await import("@/lib/competition/progression");
+
+    // Get all event players with match stats
+    const eventPlayers = await prisma.eventPlayer.findMany({
+      where: { eventId: match.eventId, status: { in: ["registered", "checked_in"] } },
+      include: { player: true },
+    });
+
+    // Count matches and find last match time per player
+    const playerMatchCounts = new Map<string, number>();
+    const playerLastMatch = new Map<string, number>();
+    const playingNow = new Set<string>();
+
+    for (const m of allMatches) {
+      if (m.id === match.id) continue; // exclude the just-completed match
+      for (const mp of m.players) {
+        if (m.status === "completed") {
+          playerMatchCounts.set(mp.playerId, (playerMatchCounts.get(mp.playerId) || 0) + 1);
+          const ts = m.createdAt.getTime();
+          if (ts > (playerLastMatch.get(mp.playerId) || 0)) {
+            playerLastMatch.set(mp.playerId, ts);
+          }
+        }
+        if (m.status === "pending" || m.status === "active") {
+          playingNow.add(mp.playerId);
+        }
+      }
+    }
+
+    // Add counts from the just-completed match
+    for (const mp of match.players) {
+      playerMatchCounts.set(mp.playerId, (playerMatchCounts.get(mp.playerId) || 0) + 1);
+      playerLastMatch.set(mp.playerId, Date.now());
+    }
+
+    // Get winners/losers for King of Court
+    const { winnerPlayerIds, loserPlayerIds } = getMatchWinnerLoser(match.players);
+
+    const playerStats = eventPlayers.map((ep) => ({
+      id: ep.player.id,
+      name: ep.player.name,
+      rating: ep.player.rating,
+      gender: ep.player.gender,
+      skillLevel: ep.skillLevel,
+      matchesPlayed: playerMatchCounts.get(ep.player.id) || 0,
+      lastMatchEndedAt: playerLastMatch.get(ep.player.id) || 0,
+      isPlaying: playingNow.has(ep.player.id),
+    }));
+
+    const result = generateNextMatch(playerStats, {
+      format: (match.class.format || "doubles") as "singles" | "doubles",
+      pairingMode: match.class.pairingMode || "random",
+      prioSpeed: match.class.prioSpeed ?? true,
+      prioFairness: match.class.prioFairness ?? true,
+      prioSkill: match.class.prioSkill ?? false,
+      courtNum: match.courtNum,
+      numCourts: match.event.numCourts,
+      winners: winnerPlayerIds,
+      losers: loserPlayerIds,
+    });
+
+    if (result && !result.shouldWait) {
+      const maxRound = allMatches.length > 0
+        ? Math.max(...allMatches.map((m) => m.round))
+        : 0;
+
+      await prisma.match.create({
+        data: {
+          eventId: match.eventId,
+          classId: match.classId,
+          courtNum: result.courtNum,
+          round: maxRound + 1,
+          rankingMode: match.rankingMode,
+          players: {
+            create: [
+              ...result.team1.map((pid) => ({ playerId: pid, team: 1 })),
+              ...result.team2.map((pid) => ({ playerId: pid, team: 2 })),
+            ],
+          },
+        },
+      });
+    }
   }
 }
 
