@@ -318,11 +318,9 @@ function NewEventPage() {
   };
 
   const baseSteps = fixedPairs
-    ? ["When", "Helper", "Courts", "Format", "Players", "Pairs"]
-    : ["When", "Helper", "Courts", "Format", "Players"];
-  const stepTitles = competitionEnabled
-    ? [...baseSteps, "Competition", "Review"]
-    : [...baseSteps, "Review"];
+    ? ["When", "Organizer", "Scoring", "Pairing", "Players", "Pairs"]
+    : ["When", "Organizer", "Scoring", "Pairing", "Players"];
+  const stepTitles = [...baseSteps, "Competition", "Review"];
   const TOTAL_STEPS = stepTitles.length;
   const stepNum = (name: string) => stepTitles.indexOf(name) + 1;
 
@@ -398,7 +396,7 @@ function NewEventPage() {
         <div className="flex items-center justify-between mt-1.5">
           <span className="w-12" />
           <p className="text-sm font-bold text-foreground">
-            {stepTitles[step - 1] === "Format" ? "Default Format" : stepTitles[step - 1]}
+            {stepTitles[step - 1]}
           </p>
           {returnToReview && step !== TOTAL_STEPS ? (
             <button type="button" onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
@@ -423,7 +421,7 @@ function NewEventPage() {
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">
 
         {/* Step 1: Name & When */}
-        {step === 1 && (
+        {step === stepNum("When") && (
           <>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
@@ -467,6 +465,16 @@ function NewEventPage() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Courts</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4].map((n) => (
+                  <button key={n} type="button" onClick={() => { setNumCourts(n); setMaxPlayers(String(n * 4 + 2)); }}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all ${numCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>{n}</button>
+                ))}
+              </div>
+            </div>
+
             {selectedClub && (
               <p className="text-xs text-muted">Club: {selectedClub.emoji} {selectedClub.name}</p>
             )}
@@ -474,7 +482,7 @@ function NewEventPage() {
         )}
 
         {/* Step 2: Helper */}
-        {step === 2 && (() => {
+        {step === stepNum("Organizer") && (() => {
           const helperCandidates = getFilteredHelperCandidates();
           const helperTier = showAllHelpers ? "all" : showClubHelpers ? "club" : "recent";
           const toggleHelper = (pid: string) => {
@@ -574,72 +582,14 @@ function NewEventPage() {
         })()}
 
         {/* Step 3: Courts & Players */}
-        {step === 3 && (
-          <>
-            <div>
-              <label className="block text-sm font-medium text-muted mb-1">Number of Courts</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => { setNumCourts(n); setMaxPlayers(String(n * 4 + 2)); }}
-                    className={`flex-1 py-3 rounded-lg font-medium transition-all ${
-                      numCourts === n
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-muted mb-1">Min Players</label>
-                <input
-                  type="number"
-                  value={minPlayers}
-                  onChange={(e) => setMinPlayers(e.target.value)}
-                  placeholder="No min"
-                  min="1"
-                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-muted mb-1">Max Players</label>
-                <input
-                  type="number"
-                  value={maxPlayers}
-                  onChange={(e) => setMaxPlayers(e.target.value)}
-                  placeholder="No max"
-                  min="1"
-                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-muted">Players beyond max will be waitlisted</p>
-          </>
-        )}
-
-        {/* Step 4: Main Format */}
-        {step === 4 && (
+        {step === stepNum("Scoring") && (
           <>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Format</label>
               <div className="flex gap-2">
                 {(["doubles", "singles"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFormat(f)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      format === f
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
+                  <button key={f} type="button" onClick={() => setFormat(f)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${format === f ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
                     {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
                   </button>
                 ))}
@@ -648,67 +598,20 @@ function NewEventPage() {
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Gender</label>
               <div className="flex gap-2">
-                {([
-                  { value: "mix", label: "👫 Mix" },
-                  { value: "random", label: "🎲 Random" },
-                ] as const).map((g) => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    onClick={() => setGenderMode(g.value)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      genderMode === g.value
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
+                {([{ value: "mix", label: "👫 Mix" }, { value: "random", label: "🎲 Random" }] as const).map((g) => (
+                  <button key={g.value} type="button" onClick={() => setGenderMode(g.value)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${genderMode === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
                     {g.label}
                   </button>
                 ))}
               </div>
             </div>
-            {format === "doubles" && (
-              <div>
-                <label className="block text-sm font-medium text-muted mb-1">Pairs</label>
-                <div className="flex gap-2">
-                  {([
-                    { value: false, label: "New teams each round" },
-                    { value: true, label: "Fixed pairs" },
-                  ] as const).map((p) => (
-                    <button
-                      key={String(p.value)}
-                      type="button"
-                      onClick={() => {
-                        setFixedPairs(p.value);
-                        // If switching away from fixed pairs and Swiss is selected, reset to random
-                        if (!p.value && pairingMode === "swiss") setPairingMode("random");
-                      }}
-                      className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                        fixedPairs === p.value
-                          ? "bg-selected text-white"
-                          : "bg-gray-100 text-foreground hover:bg-gray-200"
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Sets</label>
               <div className="flex gap-2">
                 {[1, 3].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setNumSets(n)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      numSets === n
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
+                  <button key={n} type="button" onClick={() => setNumSets(n)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${numSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
                     {n === 1 ? "1 Set" : "Best of 3"}
                   </button>
                 ))}
@@ -725,16 +628,8 @@ function NewEventPage() {
                   { value: "rally_21", label: "R21" },
                   { value: "timed", label: "Time" },
                 ].map((s) => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => setScoringType(s.value)}
-                    className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${
-                      scoringType === s.value
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
+                  <button key={s.value} type="button" onClick={() => setScoringType(s.value)}
+                    className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${scoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
                     {s.label}
                   </button>
                 ))}
@@ -749,13 +644,36 @@ function NewEventPage() {
                     { value: "cap18", label: "Cap 18" },
                   ].map((w) => (
                     <button key={w.value} type="button" onClick={() => setWinBy(w.value)}
-                      className={`flex-1 py-1.5 rounded-lg font-medium transition-all text-xs ${
-                        winBy === w.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                      }`}>{w.label}</button>
+                      className={`flex-1 py-1.5 rounded-lg font-medium transition-all text-xs ${winBy === w.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+                      {w.label}
+                    </button>
                   ))}
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {/* Step 4: Main Format */}
+        {step === stepNum("Pairing") && (
+          <>
+            {format === "doubles" && (
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Pairs</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: false, label: "New teams each round" },
+                    { value: true, label: "Fixed pairs" },
+                  ] as const).map((p) => (
+                    <button key={String(p.value)} type="button"
+                      onClick={() => { setFixedPairs(p.value); if (!p.value && pairingMode === "swiss") setPairingMode("random"); }}
+                      className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${fixedPairs === p.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
               <div className="flex gap-1.5">
@@ -768,40 +686,31 @@ function NewEventPage() {
                   ...(fixedPairs ? [{ value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Fixed pairs matched by win/loss record" }] : []),
                   { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
                 ].map((m) => (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => setPairingMode(m.value)}
-                    className={`flex-1 py-2 rounded-lg text-center transition-all ${
-                      pairingMode === m.value
-                        ? "bg-selected text-white ring-1 ring-selected/50"
-                        : "bg-gray-100 hover:bg-gray-200"
-                    }`}
-                    title={m.label}
-                  >
+                  <button key={m.value} type="button" onClick={() => setPairingMode(m.value)}
+                    className={`flex-1 py-2 rounded-lg text-center transition-all ${pairingMode === m.value ? "bg-selected text-white ring-1 ring-selected/50" : "bg-gray-100 hover:bg-gray-200"}`}
+                    title={m.label}>
                     <span className="text-lg">{m.icon}</span>
                   </button>
                 ))}
               </div>
               {(() => {
-                const selected = [
+                const sel = [
                   { value: "random", label: "Random", desc: "Random matchups, everyone plays" },
                   { value: "skill_balanced", label: "Skill Balanced", desc: "Similar ratings play each other" },
                   { value: "mixed_gender", label: "Mixed Gender", desc: "Each team has one male + one female" },
                   { value: "skill_mixed_gender", label: "Skill + Mixed", desc: "Balanced ratings with mixed gender teams" },
                   { value: "king_of_court", label: "King of Court", desc: "Winners move up courts, losers move down" },
-                  { value: "swiss", label: "Swiss", desc: "Teams with similar records play each other" },
+                  { value: "swiss", label: "Swiss", desc: "Fixed pairs matched by win/loss record" },
                   { value: "manual", label: "Manual", desc: "Create matches one by one" },
                 ].find((m) => m.value === pairingMode);
-                return selected ? (
+                return sel ? (
                   <div className="mt-1.5">
-                    <span className="text-sm font-medium">{selected.label}</span>
-                    <span className="text-xs text-muted ml-1.5">{selected.desc}</span>
+                    <span className="text-sm font-medium">{sel.label}</span>
+                    <span className="text-xs text-muted ml-1.5">{sel.desc}</span>
                   </div>
                 ) : null;
               })()}
             </div>
-            {/* Play mode */}
             <div className="border-t border-border pt-3 mt-1">
               <label className="block text-sm font-medium text-muted mb-1">Play Mode</label>
               <div className="flex gap-2">
@@ -810,17 +719,15 @@ function NewEventPage() {
                   { value: "continuous", label: "Continuous" },
                 ] as const).map((m) => (
                   <button key={m.value} type="button" onClick={() => setPlayMode(m.value)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      playMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}>{m.label}</button>
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${playMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+                    {m.label}
+                  </button>
                 ))}
               </div>
               <p className="text-xs text-muted mt-1">
                 {playMode === "round_based" ? "All matches finish before next round starts." : "New match starts immediately when a court is free."}
               </p>
             </div>
-
-            {/* Priority toggles — shown for continuous mode */}
             {playMode === "continuous" && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-muted">Prioritize</label>
@@ -829,67 +736,17 @@ function NewEventPage() {
                   { key: "fairness", value: prioFairness, set: setPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
                   { key: "skill", value: prioSkill, set: setPrioSkill, label: "Skill", desc: "Group by level" },
                 ].map((p) => (
-                  <div key={p.key} className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
-                      p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
-                    }`}>
+                  <div key={p.key} className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"}`}>
                     <button type="button" onClick={() => p.set(!p.value)}
-                      className={`w-6 h-6 shrink-0 rounded border-2 flex items-center justify-center text-xs font-bold ${
-                        p.value ? "bg-selected border-selected text-white" : "border-gray-300"
-                      }`}>{p.value ? "✓" : ""}</button>
+                      className={`w-6 h-6 shrink-0 rounded border-2 flex items-center justify-center text-xs font-bold ${p.value ? "bg-selected border-selected text-white" : "border-gray-300"}`}>
+                      {p.value ? "✓" : ""}
+                    </button>
                     <div className="text-left">
                       <span className="text-sm font-medium">{p.label}</span>
                       <span className="text-xs text-muted ml-1.5">{p.desc}</span>
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Rankings */}
-            <div className="border-t border-border pt-3 mt-1">
-              <label className="block text-sm font-medium text-foreground mb-0.5">Rankings</label>
-              <p className="text-xs text-muted mb-2">Will matches count towards app player rankings?</p>
-              <div className="flex gap-2">
-                {[
-                  { value: "ranked", label: "Ranked" },
-                  { value: "approval", label: "Approval" },
-                  { value: "none", label: "Unranked" },
-                ].map((m) => (
-                  <button
-                    key={m.value}
-                    type="button"
-                    onClick={() => setRankingMode(m.value)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                      rankingMode === m.value
-                        ? "bg-selected text-white"
-                        : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted mt-1.5">
-                {rankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
-                {rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
-                {rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
-              </p>
-            </div>
-
-            {/* Competition toggle */}
-            {format === "doubles" && (
-              <div className="border-t border-border pt-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
-                    onClick={() => setCompetitionEnabled(!competitionEnabled)}>
-                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform`}
-                      style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium">Competition Mode</span>
-                    <p className="text-xs text-muted">Groups → Elimination tournament</p>
-                  </div>
-                </label>
               </div>
             )}
           </>
@@ -1031,24 +888,58 @@ function NewEventPage() {
             </div>
           );
         })()}
-        {/* Competition step */}
-        {competitionEnabled && step === stepNum("Competition") && (
-          <div className="space-y-3">
-            <p className="text-sm text-muted">
-              Competition settings will be configured after creating the event.
-              The competition section on the event page lets you set up groups,
-              advancement rules, and bracket formats.
-            </p>
-            <div className="bg-card rounded-xl border border-border p-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted">Mode</span><span className="font-medium">Groups → Elimination</span></div>
-              <div className="flex justify-between"><span className="text-muted">Pairs</span><span className="font-medium">{memoryPairs.length} pair{memoryPairs.length !== 1 ? "s" : ""}</span></div>
+        {/* Competition step (always shown — includes Ranking) */}
+        {step === stepNum("Competition") && (
+          <>
+            {/* Ranking */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-0.5">Rankings</label>
+              <p className="text-xs text-muted mb-2">Do matches count towards app player rankings?</p>
+              <div className="flex gap-2">
+                {[
+                  { value: "ranked", label: "Ranked" },
+                  { value: "approval", label: "Approval" },
+                  { value: "none", label: "Unranked" },
+                ].map((m) => (
+                  <button key={m.value} type="button" onClick={() => setRankingMode(m.value)}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${rankingMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-1.5">
+                {rankingMode === "ranked" && "Scores count towards player ratings immediately."}
+                {rankingMode === "approval" && "Scores need confirmation before affecting ratings."}
+                {rankingMode === "none" && "Scores recorded but don't affect ratings."}
+              </p>
             </div>
-            {memoryPairs.length < 4 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                You need at least 4 pairs for competition mode. Add more players and pairs in the previous steps.
+
+            {/* Competition toggle */}
+            {format === "doubles" && (
+              <div className="border-t border-border pt-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
+                    onClick={() => setCompetitionEnabled(!competitionEnabled)}>
+                    <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
+                      style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Competition Mode</span>
+                    <p className="text-xs text-muted">Groups → Elimination tournament</p>
+                  </div>
+                </label>
               </div>
             )}
-          </div>
+
+            {competitionEnabled && (
+              <div className="bg-gray-50 rounded-lg p-3 text-sm text-muted space-y-1">
+                <p>Competition settings (groups, brackets) can be configured after creation.</p>
+                {memoryPairs.length < 4 && (
+                  <p className="text-amber-700">Need at least 4 pairs for competition mode.</p>
+                )}
+              </div>
+            )}
+          </>
         )}
 
         {/* Review (always last step) */}
@@ -1078,7 +969,7 @@ function NewEventPage() {
                     {new Date(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} {time} – {endTime}
                   </span>
                 </button>
-                <button type="button" onClick={() => goEdit(stepNum("Helper"))} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Organizer"))} className={rowClass}>
                   <span className="text-sm text-muted">Organizer</span>
                   <span className="text-sm font-medium text-right">
                     <span>{session?.user?.name || "You"}</span>
@@ -1087,7 +978,7 @@ function NewEventPage() {
                     )}
                   </span>
                 </button>
-                <button type="button" onClick={() => goEdit(stepNum("Courts"))} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("When"))} className={rowClass}>
                   <span className="text-sm text-muted">Courts</span>
                   <span className="text-sm font-medium">{numCourts}</span>
                 </button>
@@ -1115,31 +1006,34 @@ function NewEventPage() {
                 )}
               </div>
 
-              {/* Default Format */}
+              {/* Scoring */}
               <div className={frameClass}>
-                <p className={frameTitleClass}>Default Format</p>
-                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
-                  <span className="text-sm text-muted">Format</span>
-                  <span className="text-sm font-medium capitalize">{format}</span>
-                </button>
-                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
-                  <span className="text-sm text-muted">Gender</span>
-                  <span className="text-sm font-medium">{genderLabel}</span>
-                </button>
-                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Scoring"))} className={rowClass}>
                   <span className="text-sm text-muted">Scoring</span>
-                  <span className="text-sm font-medium">{scoringDisplay}</span>
+                  <span className="text-sm font-medium capitalize">{format} · {scoringDisplay}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
+              </div>
+
+              {/* Pairing */}
+              <div className={frameClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Pairing"))} className={rowClass}>
                   <span className="text-sm text-muted">Pairing</span>
                   <span className="text-sm font-medium">{pairingLabel(pairingMode)}</span>
                 </button>
-                <button type="button" onClick={() => goEdit(stepNum("Format"))} className={rowClass}>
-                  <span className="text-sm text-muted">Rankings</span>
-                  <span className="text-sm font-medium">
-                    {rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}
-                  </span>
+              </div>
+
+              {/* Competition & Ranking */}
+              <div className={frameClass}>
+                <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
+                  <span className="text-sm text-muted">Ranking</span>
+                  <span className="text-sm font-medium">{rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}</span>
                 </button>
+                {competitionEnabled && (
+                  <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
+                    <span className="text-sm text-muted">Competition</span>
+                    <span className="text-sm font-medium">Enabled</span>
+                  </button>
+                )}
               </div>
             </div>
           );
