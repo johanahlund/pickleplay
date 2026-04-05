@@ -58,6 +58,7 @@ function NewEventPage() {
   const [createdEventId, setCreatedEventId] = useState<string | null>(null);
   const [numSets, setNumSets] = useState(1);
   const [scoringType, setScoringType] = useState("normal_11");
+  const [winBy, setWinBy] = useState("2");
   const [pairingMode, setPairingMode] = useState("random");
   const [playMode, setPlayMode] = useState<"round_based" | "continuous">("round_based");
   const [prioSpeed, setPrioSpeed] = useState(true);
@@ -353,7 +354,7 @@ function NewEventPage() {
   const helperPlayers = players.filter((p) => helperIds.has(p.id));
 
   const scoringLabel = (v: string) =>
-    ({ normal_11: "To 11", normal_15: "To 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
+    ({ normal_9: "To 9", normal_11: "To 11", normal_15: "To 15", rally_15: "Rally 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
 
   const pairingLabel = (v: string) =>
     ({
@@ -716,8 +717,10 @@ function NewEventPage() {
               <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
               <div className="flex gap-2">
                 {[
+                  { value: "normal_9", label: "9" },
                   { value: "normal_11", label: "11" },
                   { value: "normal_15", label: "15" },
+                  { value: "rally_15", label: "R15" },
                   { value: "rally_21", label: "R21" },
                   { value: "timed", label: "Time" },
                 ].map((s) => (
@@ -725,7 +728,7 @@ function NewEventPage() {
                     key={s.value}
                     type="button"
                     onClick={() => setScoringType(s.value)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                    className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${
                       scoringType === s.value
                         ? "bg-selected text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
@@ -734,6 +737,22 @@ function NewEventPage() {
                     {s.label}
                   </button>
                 ))}
+              </div>
+              <div className="mt-2">
+                <label className="block text-xs text-muted mb-1">Win by</label>
+                <div className="flex gap-1.5">
+                  {[
+                    { value: "1", label: "1" },
+                    { value: "2", label: "2" },
+                    ...(scoringType === "normal_11" ? [{ value: "cap15", label: "Cap 15" }] : []),
+                    { value: "cap18", label: "Cap 18" },
+                  ].map((w) => (
+                    <button key={w.value} type="button" onClick={() => setWinBy(w.value)}
+                      className={`flex-1 py-1.5 rounded-lg font-medium transition-all text-xs ${
+                        winBy === w.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                      }`}>{w.label}</button>
+                  ))}
+                </div>
               </div>
             </div>
             <div>

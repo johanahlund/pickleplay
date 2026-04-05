@@ -1052,13 +1052,15 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
         <div className="flex gap-2">
           {[
+            { value: "normal_9", label: "9" },
             { value: "normal_11", label: "11" },
             { value: "normal_15", label: "15" },
+            { value: "rally_15", label: "R15" },
             { value: "rally_21", label: "R21" },
             { value: "timed", label: "Time" },
           ].map((s) => (
             <button key={s.value} type="button" onClick={() => { setEditScoringType(s.value); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+              className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
               {s.label}
             </button>
           ))}
@@ -1880,7 +1882,7 @@ export default function EventDetailPage() {
   }
 
   const scoringLabel = (v: string) =>
-    ({ normal_11: "To 11", normal_15: "To 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
+    ({ normal_9: "To 9", normal_11: "To 11", normal_15: "To 15", rally_15: "Rally 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
   const pairingLabel = (v: string) =>
     ({ random: "Random", skill_balanced: "Skill Balanced", mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed", king_of_court: "King of Court", swiss: "Swiss", manual: "Manual" }[v] || v);
   const rankingLabel = (v: string) =>
