@@ -1858,6 +1858,27 @@ export default function EventDetailPage() {
       {/* Speaker */}
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
+      {/* Matches — first for quick access */}
+      <div className={frameClass}>
+        <button onClick={() => setActiveSection("rounds")} className={rowClass}>
+          <span className="text-sm text-muted">Matches</span>
+          <span className="text-sm font-medium">
+            {event.matches.length === 0
+              ? "None"
+              : (() => {
+                  const completed = event.matches.filter((m) => m.status === "completed").length;
+                  const pending = event.matches.filter((m) => m.status === "pending").length;
+                  const active = event.matches.filter((m) => m.status === "active").length;
+                  const parts = [];
+                  if (completed > 0) parts.push(`${completed} played`);
+                  if (active > 0) parts.push(`${active} active`);
+                  if (pending > 0) parts.push(`${pending} pending`);
+                  return parts.join(", ");
+                })()}
+          </span>
+        </button>
+      </div>
+
       {/* Players & Pairs */}
       <div className={frameClass}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
@@ -1918,27 +1939,6 @@ export default function EventDetailPage() {
         <button onClick={() => { startEditEvent(); setActiveSection("ranking"); }} className={rowClass}>
           <span className="text-sm text-muted">Ranking</span>
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
-        </button>
-      </div>
-
-      {/* Matches */}
-      <div className={frameClass}>
-        <button onClick={() => setActiveSection("rounds")} className={rowClass}>
-          <span className="text-sm text-muted">Matches</span>
-          <span className="text-sm font-medium">
-            {event.matches.length === 0
-              ? "None"
-              : (() => {
-                  const completed = event.matches.filter((m) => m.status === "completed").length;
-                  const pending = event.matches.filter((m) => m.status === "pending").length;
-                  const active = event.matches.filter((m) => m.status === "active").length;
-                  const parts = [];
-                  if (completed > 0) parts.push(`${completed} played`);
-                  if (active > 0) parts.push(`${active} active`);
-                  if (pending > 0) parts.push(`${pending} pending`);
-                  return parts.join(", ");
-                })()}
-          </span>
         </button>
       </div>
 

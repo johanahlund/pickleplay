@@ -196,39 +196,34 @@ export function SpeakerMode({ eventId, userId, userName, isManager }: SpeakerMod
     );
   }
 
-  // Manager view
+  // Manager view — compact one-line
   return (
-    <div className="bg-card rounded-xl border border-border p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔊</span>
-          <span className="text-sm font-medium">
-            {speakerUserId
-              ? isHost
-                ? "This device is the speaker"
-                : `Speaker: ${speakerUserName}`
-              : "No speaker set"}
-          </span>
-        </div>
-        {isHost && (
-          <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium animate-pulse">Live</span>
-        )}
-      </div>
-
+    <div className="flex items-center gap-2 bg-card rounded-xl border border-border px-3 py-2">
+      <span className="text-lg">🔊</span>
+      <span className="text-xs text-muted flex-1">
+        {speakerUserId
+          ? isHost
+            ? "This device"
+            : speakerUserName
+          : "No speaker"}
+      </span>
+      {isHost && (
+        <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium animate-pulse">Live</span>
+      )}
       {!speakerUserId ? (
         <button onClick={handleSetSpeaker}
-          className="w-full py-2 text-sm font-medium text-action border border-action/30 rounded-lg hover:bg-action/5">
-          Set this device as speaker
+          className="text-xs font-medium text-action hover:underline shrink-0">
+          This device
         </button>
       ) : isHost ? (
         <button onClick={handleClearSpeaker}
-          className="w-full py-2 text-sm font-medium text-danger border border-red-200 rounded-lg hover:bg-red-50">
-          Stop speaker mode
+          className="text-xs font-medium text-danger hover:underline shrink-0">
+          Stop
         </button>
       ) : (
         <button onClick={handleSetSpeaker}
-          className="w-full py-2 text-sm font-medium text-action border border-action/30 rounded-lg hover:bg-action/5">
-          Switch to this device
+          className="text-xs font-medium text-action hover:underline shrink-0">
+          Switch here
         </button>
       )}
     </div>
