@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
+import { PlayerSelector } from "@/components/PlayerSelector";
 import { generatePairs, PairPlayer } from "@/lib/pairgen";
 
 interface Player {
@@ -895,88 +896,15 @@ function NewEventPage() {
         )}
 
         {/* Step 5: Players */}
-        {step === stepNum("Players") && (() => {
-          const filtered = getFilteredPlayers();
-          const allVisibleSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id));
-          const selectedPlayersList = players.filter((p) => selectedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name));
-          return (
-            <div className="flex gap-2 -mx-1">
-              {/* Left column: filter + select */}
-              <div className="flex-1 min-w-0 space-y-1.5">
-                <div className="flex gap-1">
-                  {(["M", "F"] as const).map((g) => (
-                    <button key={g} type="button"
-                      onClick={() => setPlayerGenderFilter(playerGenderFilter === g ? null : g)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-                        playerGenderFilter === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
-                      }`}>
-                      {g === "M" ? "♂" : "♀"}
-                    </button>
-                  ))}
-                  {recentPlayerIds.size > 0 && (
-                    <>
-                      <button type="button"
-                        onClick={() => { setShowAllPlayers(false); setShowClubPlayers(false); }}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${!showAllPlayers ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                        Recent
-                      </button>
-                      <button type="button"
-                        onClick={() => { setShowAllPlayers(true); setShowClubPlayers(false); }}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${showAllPlayers ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                        All
-                      </button>
-                    </>
-                  )}
-                  <button type="button" onClick={selectAll} className="text-primary text-[10px] font-medium ml-auto">
-                    {allVisibleSelected ? "None" : "All"}
-                  </button>
-                </div>
-                <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search..." className="text-xs" />
-                <div className="space-y-0 max-h-72 overflow-y-auto">
-                  {filtered.map((p) => (
-                    <button key={p.id} type="button" onClick={() => togglePlayer(p.id)}
-                      className={`w-full flex items-center gap-1.5 py-1.5 px-2 rounded transition-all ${
-                        selectedIds.has(p.id) ? "bg-selected/10" : "hover:bg-gray-50"
-                      }`}>
-                      <span className={`w-3.5 h-3.5 rounded border-[1.5px] flex items-center justify-center text-[8px] font-bold shrink-0 ${
-                        selectedIds.has(p.id) ? "bg-selected border-selected text-white" : "border-gray-300"
-                      }`}>
-                        {selectedIds.has(p.id) ? "✓" : ""}
-                      </span>
-                      <span className="text-xs font-medium flex-1 text-left leading-tight truncate">{p.name}</span>
-                      {p.gender && (
-                        <span className={`text-[9px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                          {p.gender === "M" ? "♂" : "♀"}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                  {filtered.length === 0 && <p className="text-xs text-muted py-3 text-center">No matches</p>}
-                </div>
-              </div>
-
-              {/* Right column: selected players */}
-              <div className="w-[42%] shrink-0 bg-gray-50 rounded-lg p-2 space-y-1">
-                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">Selected ({selectedPlayersList.length})</span>
-                <div className="max-h-80 overflow-y-auto space-y-0">
-                  {selectedPlayersList.map((p) => (
-                    <button key={p.id} type="button" onClick={() => togglePlayer(p.id)}
-                      className="w-full flex items-center gap-1 py-1 px-1.5 rounded hover:bg-red-50 hover:text-danger transition-colors group">
-                      <span className="text-xs font-medium flex-1 text-left leading-tight truncate">{p.name}</span>
-                      {p.gender && (
-                        <span className={`text-[9px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"} group-hover:hidden`}>
-                          {p.gender === "M" ? "♂" : "♀"}
-                        </span>
-                      )}
-                      <span className="text-[9px] text-danger hidden group-hover:block">✕</span>
-                    </button>
-                  ))}
-                  {selectedPlayersList.length === 0 && <p className="text-[10px] text-muted py-2 text-center">None selected</p>}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {step === stepNum("Players") && (
+          <PlayerSelector
+            players={players as { id: string; name: string; gender?: string | null }[]}
+            selectedIds={selectedIds}
+            onToggle={togglePlayer}
+            onDeselectAll={() => setSelectedIds(new Set())}
+            recentIds={recentPlayerIds.size > 0 ? recentPlayerIds : undefined}
+          />
+        )}
 
         {/* Step 6: Pairs */}
         {step === stepNum("Pairs") && fixedPairs && format === "doubles" && (() => {
