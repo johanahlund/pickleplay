@@ -350,6 +350,8 @@ export default function EventDetailPage() {
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
   const [editPrioFairness, setEditPrioFairness] = useState(true);
   const [editPrioSkill, setEditPrioSkill] = useState(true);
+  const [editRankingMode, setEditRankingMode] = useState("ranked");
+  const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
@@ -358,7 +360,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "courts" | "format" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "courts" | "scoring" | "pairing" | "ranking" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -593,7 +595,7 @@ export default function EventDetailPage() {
   };
 
   // Sections that need explicit Save (edit fields + save button)
-  const saveSections = new Set(["when", "courts", "format"]);
+  const saveSections = new Set(["when", "courts", "scoring", "pairing", "ranking"]);
 
   const startEditEvent = () => {
     if (!event) return;
@@ -610,6 +612,7 @@ export default function EventDetailPage() {
     setEditPrioSpeed(cls?.prioSpeed ?? true);
     setEditPrioFairness(cls?.prioFairness ?? true);
     setEditPrioSkill(cls?.prioSkill ?? false);
+    setEditRankingMode(event.rankingMode || "ranked");
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
     if (event.endDate) {
@@ -643,6 +646,7 @@ export default function EventDetailPage() {
         prioSpeed: editPrioSpeed,
         prioFairness: editPrioFairness,
         prioSkill: editPrioSkill,
+        rankingMode: editRankingMode,
         openSignup: editOpenSignup,
         visibility: editVisibility,
       }),
@@ -881,7 +885,9 @@ export default function EventDetailPage() {
     when: "When",
     admins: "Organizer",
     courts: "Courts",
-    format: "Format",
+    scoring: "Scoring",
+    pairing: "Pairing",
+    ranking: "Ranking",
     players: "Players",
     pairs: "Pairs",
     competition: "Competition",
@@ -889,7 +895,7 @@ export default function EventDetailPage() {
     manual: "Add Match",
   };
 
-  const sectionOrder = ["when", "admins", "courts", "format", "players", "pairs", "competition", "rounds", "manual"];
+  const sectionOrder = ["when", "admins", "courts", "scoring", "pairing", "ranking", "players", "pairs", "competition", "rounds", "manual"];
 
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
@@ -1000,18 +1006,8 @@ export default function EventDetailPage() {
     </div>
   );
 
-  // ── Section: Format (matches wizard step 4) ──
-  const pairingOptions = [
-    { value: "random", icon: "🎲", label: "Random", desc: "Random matchups, everyone plays" },
-    { value: "skill_balanced", icon: "📊", label: "Skill", desc: "Similar ratings play each other" },
-    { value: "mixed_gender", icon: "👫", label: "Mixed", desc: "Each team has one male + one female" },
-    { value: "skill_mixed_gender", icon: "📊👫", label: "Skill + Mix", desc: "Balanced ratings with mixed gender teams" },
-    { value: "king_of_court", icon: "👑", label: "King", desc: "Winners move up courts, losers move down" },
-    { value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Teams with similar records play each other" },
-    { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
-  ];
-
-  const renderFormat = () => (
+  // ── Section: Scoring (format + sets + scoring) ──
+  const renderScoring = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Format</label>
@@ -1050,6 +1046,39 @@ export default function EventDetailPage() {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+
+  // ── Section: Pairing ──
+  const pairingOptions = [
+    { value: "random", icon: "🎲", label: "Random", desc: "Random matchups, everyone plays" },
+    { value: "skill_balanced", icon: "📊", label: "Skill", desc: "Similar ratings play each other" },
+    { value: "mixed_gender", icon: "👫", label: "Mixed", desc: "Each team has one male + one female" },
+    { value: "skill_mixed_gender", icon: "📊👫", label: "Skill + Mix", desc: "Balanced ratings with mixed gender teams" },
+    { value: "king_of_court", icon: "👑", label: "King", desc: "Winners move up courts, losers move down" },
+    { value: "swiss", icon: "🇨🇭", label: "Swiss", desc: "Fixed pairs matched by win/loss record" },
+    { value: "manual", icon: "✏️", label: "Manual", desc: "Create matches one by one" },
+  ];
+
+  const renderPairing = () => (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Skill source</label>
+        <div className="flex gap-2">
+          {([
+            { value: "rating", label: "App Rating" },
+            { value: "manual", label: "Manual Level (1-3)" },
+          ] as const).map((s) => (
+            <button key={s.value} type="button" onClick={() => { setEditSkillSource(s.value); setHasEdits(true); }}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                editSkillSource === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>{s.label}</button>
+          ))}
+        </div>
+        <p className="text-xs text-muted mt-1">
+          {editSkillSource === "rating" ? "Uses each player's app rating to determine skill level." : "You assign skill level 1-3 per player for this event."}
+        </p>
       </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
@@ -1117,28 +1146,32 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Rankings</label>
-        <div className="flex gap-2">
-          {[
-            { value: "ranked", label: "Ranked" },
-            { value: "approval", label: "Approval" },
-            { value: "none", label: "Unranked" },
-          ].map((m) => (
-            <button key={m.value} type="button" onClick={() => { /* TODO: rankingMode edit */ }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                (event.rankingMode || "ranked") === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-              }`}>
-              {m.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted mt-1.5">
-          {(event.rankingMode || "ranked") === "ranked" && "Scores count towards player ratings immediately after each match."}
-          {event.rankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
-          {event.rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
-        </p>
+    </div>
+  );
+
+  // ── Section: Ranking ──
+  const renderRanking = () => (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <p className="text-xs text-muted">Do matches count towards app player rankings?</p>
+      <div className="flex gap-2">
+        {[
+          { value: "ranked", label: "Ranked" },
+          { value: "approval", label: "Approval" },
+          { value: "none", label: "Unranked" },
+        ].map((m) => (
+          <button key={m.value} type="button" onClick={() => { setEditRankingMode(m.value); setHasEdits(true); }}
+            className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+              editRankingMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+            }`}>
+            {m.label}
+          </button>
+        ))}
       </div>
+      <p className="text-xs text-muted">
+        {editRankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
+        {editRankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
+        {editRankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
+      </p>
     </div>
   );
 
@@ -1805,7 +1838,9 @@ export default function EventDetailPage() {
         {sectionBar}
         {activeSection === "when" && renderWhen()}
         {activeSection === "courts" && renderCourts()}
-        {activeSection === "format" && renderFormat()}
+        {activeSection === "scoring" && renderScoring()}
+        {activeSection === "pairing" && renderPairing()}
+        {activeSection === "ranking" && renderRanking()}
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
@@ -1887,23 +1922,26 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Default Format */}
+      {/* Scoring */}
       <div className={frameClass}>
-        <p className={frameTitleClass}>Default Format</p>
-        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
-          <span className="text-sm text-muted">Format</span>
-          <span className="text-sm font-medium capitalize">{event.format}</span>
-        </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass}>
           <span className="text-sm text-muted">Scoring</span>
-          <span className="text-sm font-medium">{scoringDisplay}</span>
+          <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
+      </div>
+
+      {/* Pairing */}
+      <div className={frameClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
         </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("format"); }} className={rowClass}>
-          <span className="text-sm text-muted">Rankings</span>
+      </div>
+
+      {/* Ranking */}
+      <div className={frameClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("ranking"); }} className={rowClass}>
+          <span className="text-sm text-muted">Ranking</span>
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
       </div>
