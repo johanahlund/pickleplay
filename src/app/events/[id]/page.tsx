@@ -367,6 +367,7 @@ export default function EventDetailPage() {
   const [pairMixed, setPairMixed] = useState(false);
   const [generatingPairs, setGeneratingPairs] = useState(false);
   const [manualPairSelect, setManualPairSelect] = useState<string | null>(null);
+  const [pairingInProgress, setPairingInProgress] = useState<Set<string>>(new Set());
   const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
@@ -716,12 +717,15 @@ export default function EventDetailPage() {
   };
 
   const createManualPair = async (player1Id: string, player2Id: string) => {
+    // Instant visual feedback
+    setPairingInProgress(new Set([player1Id, player2Id]));
+    setManualPairSelect(null);
     await fetch(`/api/events/${id}/pairs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ player1Id, player2Id }),
     });
-    setManualPairSelect(null);
+    setPairingInProgress(new Set());
     await fetchEvent();
   };
 
@@ -1011,14 +1015,18 @@ export default function EventDetailPage() {
       {event.club?.locations && event.club.locations.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-muted mb-1">Location</label>
-          <div className="space-y-1">
-            {event.club.locations.map((loc: { id: string; name: string }) => (
-              <div key={loc.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-gray-50 text-sm">
-                <span>📍</span>
-                <span className="font-medium">{loc.name}</span>
-              </div>
-            ))}
-          </div>
+          {event.club.locations.length === 1 ? (
+            <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50 text-sm">
+              <span>📍</span>
+              <span className="font-medium">{event.club.locations[0].name}</span>
+            </div>
+          ) : (
+            <select className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+              {event.club.locations.map((loc: { id: string; name: string }) => (
+                <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
     </div>
@@ -1336,7 +1344,7 @@ export default function EventDetailPage() {
                   </div>
                   {/* Skill level + rating */}
                   <div className="flex items-center gap-1.5">
-                    {canManage ? (
+                    {editSkillSource === "manual" && canManage ? (
                       <>
                         <span className="text-[10px] text-muted">Level:</span>
                         {[1, 2, 3].map((lvl) => (
@@ -1349,7 +1357,7 @@ export default function EventDetailPage() {
                             }`}>{lvl}</button>
                         ))}
                       </>
-                    ) : pairLevel ? (
+                    ) : editSkillSource === "manual" && pairLevel ? (
                       <span className="text-[10px] text-muted">Level {pairLevel}</span>
                     ) : null}
                     <span className="text-xs text-muted ml-auto">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
@@ -1366,8 +1374,9 @@ export default function EventDetailPage() {
             <h4 className="text-sm font-medium text-muted">Unpaired ({unpaired.length})</h4>
             {canManage && (
               <div className="space-y-1">
-                {unpaired.map((ep) => (
+                {unpaired.filter((ep) => !pairingInProgress.has(ep.player.id)).map((ep) => (
                   <button key={ep.player.id}
+                    disabled={pairingInProgress.size > 0}
                     onClick={() => {
                       if (manualPairSelect === ep.player.id) {
                         setManualPairSelect(null);
