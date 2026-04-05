@@ -360,7 +360,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "courts" | "scoring" | "pairing" | "ranking" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "ranking" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -595,7 +595,7 @@ export default function EventDetailPage() {
   };
 
   // Sections that need explicit Save (edit fields + save button)
-  const saveSections = new Set(["when", "courts", "scoring", "pairing", "ranking"]);
+  const saveSections = new Set(["when", "scoring", "pairing", "ranking"]);
 
   const startEditEvent = () => {
     if (!event) return;
@@ -895,7 +895,6 @@ export default function EventDetailPage() {
   const sectionLabels: Record<string, string> = {
     when: "When",
     admins: "Organizer",
-    courts: "Courts",
     scoring: "Scoring",
     pairing: "Pairing",
     ranking: "Ranking",
@@ -906,7 +905,7 @@ export default function EventDetailPage() {
     manual: "Add Match",
   };
 
-  const sectionOrder = ["when", "admins", "courts", "scoring", "pairing", "ranking", "players", "pairs", "competition", "rounds", "manual"];
+  const sectionOrder = ["when", "admins", "scoring", "pairing", "ranking", "players", "pairs", "competition", "rounds", "manual"];
 
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
@@ -999,14 +998,8 @@ export default function EventDetailPage() {
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
       </div>
-    </div>
-  );
-
-  // ── Section: Courts ──
-  const renderCourts = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
       <div>
-        <label className="block text-sm font-medium text-muted mb-1">Number of Courts</label>
+        <label className="block text-sm font-medium text-muted mb-1">Courts</label>
         <div className="flex gap-2">
           {[1, 2, 3, 4].map((n) => (
             <button key={n} type="button" onClick={() => { setEditCourts(n); setHasEdits(true); }}
@@ -1014,6 +1007,19 @@ export default function EventDetailPage() {
           ))}
         </div>
       </div>
+      {event.club?.locations && event.club.locations.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-muted mb-1">Location</label>
+          <div className="space-y-1">
+            {event.club.locations.map((loc: { id: string; name: string }) => (
+              <div key={loc.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-gray-50 text-sm">
+                <span>📍</span>
+                <span className="font-medium">{loc.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1848,7 +1854,6 @@ export default function EventDetailPage() {
       <div className="space-y-2">
         {sectionBar}
         {activeSection === "when" && renderWhen()}
-        {activeSection === "courts" && renderCourts()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
         {activeSection === "ranking" && renderRanking()}
