@@ -73,19 +73,17 @@ export function PlayerSelector({
             </button>
           ))}
           {recentIds && recentIds.size > 0 && (
-            <>
-              <button type="button"
-                onClick={() => setShowAll(false)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${!showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                Recent
-              </button>
-              <button type="button"
-                onClick={() => setShowAll(true)}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                All
-              </button>
-            </>
+            <button type="button"
+              onClick={() => setShowAll(false)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${!showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+              Recent
+            </button>
           )}
+          <button type="button"
+            onClick={() => setShowAll(true)}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+            All
+          </button>
           <button type="button" onClick={handleSelectAllDisplayed}
             className="text-primary text-[10px] font-medium ml-auto whitespace-nowrap">
             {allFilteredSelected ? "Deselect all" : "Select displayed"}
