@@ -1094,18 +1094,18 @@ export default function EventDetailPage() {
             { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
             { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "Skill", desc: "Group by level" },
           ].map((p) => (
-            <button key={p.key} type="button" onClick={() => { p.set(!p.value); setHasEdits(true); }}
-              className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
+            <div key={p.key} className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
                 p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
               }`}>
-              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold ${
-                p.value ? "bg-selected border-selected text-white" : "border-gray-300"
-              }`}>{p.value ? "✓" : ""}</div>
+              <button type="button" onClick={() => { p.set(!p.value); setHasEdits(true); }}
+                className={`w-6 h-6 shrink-0 rounded border-2 flex items-center justify-center text-xs font-bold ${
+                  p.value ? "bg-selected border-selected text-white" : "border-gray-300"
+                }`}>{p.value ? "✓" : ""}</button>
               <div className="text-left">
                 <span className="text-sm font-medium">{p.label}</span>
                 <span className="text-xs text-muted ml-1.5">{p.desc}</span>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
