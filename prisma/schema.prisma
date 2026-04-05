@@ -89,6 +89,12 @@ model Event {
   numCourts    Int      @default(2)
   openSignup   Boolean  @default(true)
   visibility   String   @default("visible") // "visible" | "hidden"
+
+  // Speaker host
+  speakerUserId   String?  // player ID of the device acting as speaker
+  speakerUserName String?  // display name
+  pendingAnnouncement String? // text to speak, cleared after played
+
   createdAt    DateTime @default(now())
 
   createdById  String?

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { CompetitionView } from "@/components/CompetitionView";
+import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
 
 interface Player {
   id: string;
@@ -1609,7 +1610,12 @@ export default function EventDetailPage() {
                     {event.pairingMode === "king_of_court" && match.courtNum === event.numCourts && event.numCourts > 1 && <span className="ml-1 text-gray-400">🔰</span>}
                   </span>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => speakMatch(match, event)}
+                    <button onClick={() => {
+                      const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
+                      const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
+                      const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
+                      sendAnnouncement(id as string, text);
+                    }}
                       className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
                     {isCompleted && !isEditing && <span className="text-sm text-green-600 font-medium">✓ Final</span>}
                     {isCompleted && canManage && !isEditing && (
@@ -1801,6 +1807,9 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-3">
       {eventHeader}
+
+      {/* Speaker */}
+      <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
       {/* Organizer & Courts */}
       <div className={frameClass}>
