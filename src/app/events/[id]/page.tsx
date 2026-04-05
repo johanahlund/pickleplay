@@ -1546,16 +1546,10 @@ export default function EventDetailPage() {
             Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </h3>
           {canManage && (
-            <div className="flex gap-2">
-              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-                className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
-                Select
-              </button>
-              <button onClick={() => { setShowAddPlayer(true); fetchAllPlayers(); }}
-                className="text-lg text-primary font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
-                + Add
-              </button>
-            </div>
+            <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+              className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+              Select
+            </button>
           )}
         </div>
         {canManage && (
@@ -1580,8 +1574,8 @@ export default function EventDetailPage() {
             .map((ep) => (
             <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
               showContact={isAdmin || ep.player.id === userId}
-              skillLevel={ep.skillLevel}
-              onSkillLevel={(lvl) => setSkillLevel(ep.player.id, lvl)}
+              skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
+              onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
               onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
           ))}
         </div>
