@@ -1090,25 +1090,31 @@ export default function EventDetailPage() {
 
   const renderPairing = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Skill source</label>
-        <div className="flex gap-2">
-          {([
-            { value: "rating", label: "App Rating" },
-            { value: "manual", label: "Manual Level (1-3)" },
-          ] as const).map((s) => (
-            <button key={s.value} type="button" onClick={() => { setEditSkillSource(s.value); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                editSkillSource === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-              }`}>{s.label}</button>
-          ))}
+      {event.format === "doubles" && (
+        <div>
+          <label className="block text-sm font-medium text-muted mb-1">Team Formation</label>
+          <div className="flex gap-2">
+            {([
+              { value: "shuffle", label: "Shuffle" },
+              { value: "fixed", label: "Fixed" },
+            ] as const).map((t) => {
+              const isFixed = event.pairs.length > 0; // derive from current state
+              const current = t.value === "fixed" ? isFixed : !isFixed;
+              return (
+                <button key={t.value} type="button"
+                  className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${current ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted mt-1">
+            {event.pairs.length > 0 ? "Same partner all event. Manage pairs in the Pairs section." : "New teams formed each round."}
+          </p>
         </div>
-        <p className="text-xs text-muted mt-1">
-          {editSkillSource === "rating" ? "Uses each player's app rating to determine skill level." : "You assign skill level 1-3 per player for this event."}
-        </p>
-      </div>
+      )}
       <div>
-        <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
+        <label className="block text-sm font-medium text-muted mb-1">Match Pairing</label>
         <div className="flex gap-1.5">
           {pairingOptions.map((m) => (
             <button key={m.value} type="button" onClick={() => { setEditPairingMode(m.value); setHasEdits(true); }}
@@ -1128,6 +1134,24 @@ export default function EventDetailPage() {
             </div>
           ) : null;
         })()}
+      </div>
+      {/* Skill source */}
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Skill Source</label>
+        <div className="flex gap-2">
+          {([
+            { value: "rating", label: "App Rating" },
+            { value: "manual", label: "Manual Level (1-3)" },
+          ] as const).map((s) => (
+            <button key={s.value} type="button" onClick={() => { setEditSkillSource(s.value); setHasEdits(true); }}
+              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                editSkillSource === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>{s.label}</button>
+          ))}
+        </div>
+        <p className="text-xs text-muted mt-1">
+          {editSkillSource === "rating" ? "Uses app rating for skill level." : "You assign level 1-3 per player."}
+        </p>
       </div>
       {/* Play Mode */}
       <div className="border-t border-border pt-3 mt-1">

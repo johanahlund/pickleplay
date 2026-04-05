@@ -659,11 +659,11 @@ function NewEventPage() {
           <>
             {format === "doubles" && (
               <div>
-                <label className="block text-sm font-medium text-muted mb-1">Pairs</label>
+                <label className="block text-sm font-medium text-muted mb-1">Team Formation</label>
                 <div className="flex gap-2">
                   {([
-                    { value: false, label: "New teams each round" },
-                    { value: true, label: "Fixed pairs" },
+                    { value: false, label: "Shuffle" },
+                    { value: true, label: "Fixed" },
                   ] as const).map((p) => (
                     <button key={String(p.value)} type="button"
                       onClick={() => { setFixedPairs(p.value); if (!p.value && pairingMode === "swiss") setPairingMode("random"); }}
@@ -675,7 +675,7 @@ function NewEventPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
+              <label className="block text-sm font-medium text-muted mb-1">Match Pairing</label>
               <div className="flex gap-1.5">
                 {[
                   { value: "random", icon: "🎲", label: "Random", desc: "Random matchups, everyone plays" },
