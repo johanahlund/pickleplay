@@ -62,7 +62,7 @@ function NewEventPage() {
   const [playMode, setPlayMode] = useState<"round_based" | "continuous">("round_based");
   const [prioSpeed, setPrioSpeed] = useState(true);
   const [prioFairness, setPrioFairness] = useState(true);
-  const [prioSkill, setPrioSkill] = useState(false);
+  const [prioSkill, setPrioSkill] = useState(true);
   const [rankingMode, setRankingMode] = useState("ranked");
   const [genderMode, setGenderMode] = useState<"mix" | "random">("random");
   const [memoryPairs, setMemoryPairs] = useState<{ player1Id: string; player2Id: string }[]>([]);

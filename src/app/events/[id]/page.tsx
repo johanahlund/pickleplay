@@ -348,7 +348,7 @@ export default function EventDetailPage() {
   const [editPlayMode, setEditPlayMode] = useState("round_based");
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
   const [editPrioFairness, setEditPrioFairness] = useState(true);
-  const [editPrioSkill, setEditPrioSkill] = useState(false);
+  const [editPrioSkill, setEditPrioSkill] = useState(true);
   const [resetting, setResetting] = useState(false);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
@@ -914,7 +914,7 @@ export default function EventDetailPage() {
               }
             }}>
               <div className={`h-1 rounded-full transition-all duration-300 ${s === activeSection ? "bg-action" : "bg-gray-200"}`} />
-              <span className={`text-[8px] leading-tight mt-0.5 block ${s === activeSection ? "text-action font-semibold" : "text-muted hover:text-foreground"}`}>
+              <span className={`text-[8px] leading-tight mt-0.5 block ${s === activeSection ? "text-action font-bold" : "text-foreground/60 hover:text-foreground"}`}>
                 {sectionLabels[s]}
               </span>
             </button>
