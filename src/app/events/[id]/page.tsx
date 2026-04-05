@@ -363,7 +363,7 @@ export default function EventDetailPage() {
   const [numRounds, setNumRounds] = useState(3);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
-  const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
+  const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
   const [pairMixed, setPairMixed] = useState(false);
   const [generatingPairs, setGeneratingPairs] = useState(false);
   const [manualPairSelect, setManualPairSelect] = useState<string | null>(null);
@@ -1302,17 +1302,17 @@ export default function EventDetailPage() {
   const renderPairs = () => {
     const pairedPlayerIds = new Set<string>();
     event.pairs.forEach((p) => { pairedPlayerIds.add(p.player1.id); pairedPlayerIds.add(p.player2.id); });
-    const unpaired = event.players
-      .filter((ep) => (ep.status === "registered" || ep.status === "checked_in") && !pairedPlayerIds.has(ep.player.id))
+    const activePlayers2 = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+    const unpaired = activePlayers2.filter((ep) => !pairedPlayerIds.has(ep.player.id) && !pairingInProgress.has(ep.player.id))
       .sort((a, b) => a.player.name.localeCompare(b.player.name));
 
     return (
       <div className="space-y-4">
-        {/* Current pairs */}
+        {/* Selected Pairs */}
         {event.pairs.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold">Pairs ({event.pairs.length})</h3>
+              <h4 className="text-sm font-medium text-muted">Selected Pairs ({event.pairs.length})</h4>
               {canManage && (
                 <button onClick={clearAllPairs} className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Clear All</button>
               )}
@@ -1324,144 +1324,118 @@ export default function EventDetailPage() {
               const lvl2 = ep2?.skillLevel;
               const pairLevel = lvl1 && lvl2 ? Math.round((lvl1 + lvl2) / 2) : lvl1 || lvl2 || null;
               return (
-                <div key={pair.id} className="bg-card rounded-xl border border-border p-3 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                      <span className="text-lg shrink-0">{pair.player1.emoji}</span>
-                      <span className="text-sm font-medium truncate">{pair.player1.name}</span>
-                      {pair.player1.gender && <span className={`text-xs shrink-0 ${pair.player1.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player1.gender === "M" ? "\u2642" : "\u2640"}</span>}
-                    </div>
-                    <span className="text-xs text-muted font-medium shrink-0">+</span>
-                    <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                      <span className="text-lg shrink-0">{pair.player2.emoji}</span>
-                      <span className="text-sm font-medium truncate">{pair.player2.name}</span>
-                      {pair.player2.gender && <span className={`text-xs shrink-0 ${pair.player2.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{pair.player2.gender === "M" ? "\u2642" : "\u2640"}</span>}
-                    </div>
-                    {canManage && (
-                      <button onClick={() => removePair(pair.id)} className="text-xs text-danger px-1.5 py-1 rounded hover:bg-red-50 shrink-0">✕</button>
-                    )}
-                  </div>
-                  {/* Skill level + rating */}
-                  <div className="flex items-center gap-1.5">
-                    {editSkillSource === "manual" && canManage ? (
-                      <>
-                        <span className="text-[10px] text-muted">Level:</span>
-                        {[1, 2, 3].map((lvl) => (
-                          <button key={lvl} onClick={async () => {
-                            await setSkillLevel(pair.player1.id, lvl1 === lvl && lvl2 === lvl ? null : lvl);
-                            await setSkillLevel(pair.player2.id, lvl1 === lvl && lvl2 === lvl ? null : lvl);
-                          }}
-                            className={`w-6 h-6 rounded text-[10px] font-bold transition-all ${
-                              pairLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                            }`}>{lvl}</button>
-                        ))}
-                      </>
-                    ) : editSkillSource === "manual" && pairLevel ? (
-                      <span className="text-[10px] text-muted">Level {pairLevel}</span>
-                    ) : null}
-                    <span className="text-xs text-muted ml-auto">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
-                  </div>
+                <div key={pair.id} className="group flex items-center gap-2 bg-card rounded-lg border border-border px-3 py-2">
+                  <span className="text-sm shrink-0">{pair.player1.emoji}</span>
+                  <span className="text-xs font-medium truncate">{pair.player1.name}</span>
+                  <span className="text-[10px] text-muted">+</span>
+                  <span className="text-sm shrink-0">{pair.player2.emoji}</span>
+                  <span className="text-xs font-medium truncate">{pair.player2.name}</span>
+                  {editSkillSource === "manual" && pairLevel && (
+                    <span className="text-[9px] bg-gray-100 text-muted px-1 py-0.5 rounded">L{pairLevel}</span>
+                  )}
+                  <span className="text-[10px] text-muted ml-auto">{Math.round(pair.player1.rating + pair.player2.rating)}</span>
+                  {canManage && (
+                    <button onClick={() => removePair(pair.id)}
+                      className="hidden group-hover:block text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-50 shrink-0">Remove</button>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Unpaired players */}
-        {unpaired.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted">Unpaired ({unpaired.length})</h4>
-            {canManage && (
-              <div className="space-y-1">
-                {unpaired.filter((ep) => !pairingInProgress.has(ep.player.id)).map((ep) => (
-                  <button key={ep.player.id}
-                    disabled={pairingInProgress.size > 0}
-                    onClick={() => {
-                      if (manualPairSelect === ep.player.id) {
-                        setManualPairSelect(null);
-                      } else if (manualPairSelect) {
-                        createManualPair(manualPairSelect, ep.player.id);
-                      } else {
-                        setManualPairSelect(ep.player.id);
-                      }
-                    }}
-                    className={`w-full text-left py-2.5 px-3 rounded-lg flex items-center gap-2 transition-colors ${
-                      manualPairSelect === ep.player.id
-                        ? "bg-selected/10 border border-selected/30 ring-1 ring-selected/20"
-                        : manualPairSelect
-                          ? "hover:bg-green-50 active:bg-green-100 border border-transparent"
-                          : "hover:bg-gray-50 active:bg-gray-100 border border-transparent"
-                    }`}>
-                    <span className="text-2xl">{ep.player.emoji}</span>
-                    <span className="text-base font-medium flex-1">{ep.player.name}</span>
-                    {ep.player.gender && <span className={`text-xs ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{ep.player.gender === "M" ? "\u2642" : "\u2640"}</span>}
-                    <span className="text-xs text-muted">{Math.round(ep.player.rating)}</span>
-                    {manualPairSelect && manualPairSelect !== ep.player.id && (
-                      <span className="text-xs text-green-600 font-medium">Tap to pair</span>
-                    )}
-                    {manualPairSelect === ep.player.id && (
-                      <span className="text-xs text-selected font-medium">Selected</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!canManage && (
-              <div className="space-y-1">
-                {unpaired.map((ep) => (
-                  <div key={ep.player.id} className="flex items-center gap-2 px-3 py-2">
-                    <span className="text-2xl">{ep.player.emoji}</span>
-                    <span className="text-base font-medium">{ep.player.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Auto-generate controls */}
-        {canManage && unpaired.length >= 2 && (
+        {/* Generation Method */}
+        {canManage && (
           <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-            <h4 className="text-sm font-semibold">Auto-generate pairs</h4>
-            <div>
-              <label className="block text-xs text-muted mb-1">Balance by</label>
-              <div className="flex gap-2">
-                {([["rating", "Rating"], ["level", "Skill Level"], ["random", "Random"]] as const).map(([val, label]) => (
-                  <button key={val} onClick={() => setPairMode(val)}
-                    className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${pairMode === val ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <h4 className="text-sm font-semibold">Generation Method</h4>
+            <div className="flex gap-2">
+              {([["rating", "Rating"], ["level", "Skill"], ["random", "Random"], ["manual", "Manual"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setPairMode(val as "rating" | "random")}
+                  className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${pairMode === val ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+                  {label}
+                </button>
+              ))}
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={pairMixed} onChange={(e) => setPairMixed(e.target.checked)}
-                className="rounded border-border" />
-              Prefer mixed gender (M + F)
-            </label>
+
+            {/* Prefer mixed — not for Manual */}
+            {pairMode !== "manual" && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={pairMixed} onChange={(e) => setPairMixed(e.target.checked)} className="rounded border-border" />
+                Prefer mixed gender (M + F)
+              </label>
+            )}
+
+            {/* Rating or Random → Generate button */}
+            {(pairMode === "rating" || pairMode === "random") && (
+              <button onClick={generatePairsAuto} disabled={generatingPairs || activePlayers2.length < 2}
+                className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-base active:bg-action-dark disabled:opacity-50">
+                {generatingPairs ? "Generating..." : event.pairs.length > 0 ? "Regenerate Pairs" : "Generate Pairs"}
+              </button>
+            )}
+
+            {/* Skill → show players with level selectors then generate */}
             {pairMode === "level" && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted">Assign skill levels first:</p>
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted">Assign skill levels, then generate:</p>
                 {unpaired.map((ep) => {
                   const currentLevel = event.players.find((p) => p.player.id === ep.player.id)?.skillLevel;
                   return (
                     <div key={ep.player.id} className="flex items-center gap-2 py-1">
-                      <span className="text-sm flex-1">{ep.player.emoji} {ep.player.name}</span>
+                      <span className="text-xs font-medium flex-1 truncate">{ep.player.emoji} {ep.player.name}</span>
                       {[1, 2, 3].map((lvl) => (
                         <button key={lvl} onClick={() => setSkillLevel(ep.player.id, currentLevel === lvl ? null : lvl)}
-                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                            currentLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-foreground"
-                          }`}>{lvl}</button>
+                          className={`w-7 h-7 rounded text-xs font-bold transition-all ${currentLevel === lvl ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>{lvl}</button>
                       ))}
                     </div>
                   );
                 })}
+                <button onClick={generatePairsAuto} disabled={generatingPairs || unpaired.length < 2}
+                  className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm active:bg-action-dark disabled:opacity-50 mt-2">
+                  {generatingPairs ? "Generating..." : event.pairs.length > 0 ? "Regenerate Pairs" : "Generate Pairs"}
+                </button>
               </div>
             )}
-            <button onClick={generatePairsAuto} disabled={generatingPairs || unpaired.length < 2}
-              className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-base active:bg-action-dark disabled:opacity-50">
-              {generatingPairs ? "Generating..." : event.pairs.length > 0 ? "Regenerate All Pairs" : "Generate Pairs"}
-            </button>
+
+            {/* Manual → show unpaired players to tap-pair */}
+            {pairMode === "manual" && unpaired.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted">{manualPairSelect ? "Tap second player to pair" : "Tap two players to pair them"}</p>
+                {unpaired.map((ep) => (
+                  <button key={ep.player.id}
+                    disabled={pairingInProgress.size > 0}
+                    onClick={() => {
+                      if (manualPairSelect === ep.player.id) { setManualPairSelect(null); }
+                      else if (manualPairSelect) { createManualPair(manualPairSelect, ep.player.id); }
+                      else { setManualPairSelect(ep.player.id); }
+                    }}
+                    className={`w-full text-left py-2 px-3 rounded-lg flex items-center gap-2 transition-colors ${
+                      manualPairSelect === ep.player.id ? "bg-selected/10 border border-selected/30" : manualPairSelect ? "hover:bg-green-50 border border-transparent" : "hover:bg-gray-50 border border-transparent"
+                    }`}>
+                    <span className="text-lg">{ep.player.emoji}</span>
+                    <span className="text-sm font-medium flex-1">{ep.player.name}</span>
+                    {ep.player.gender && <span className={`text-[10px] ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{ep.player.gender === "M" ? "♂" : "♀"}</span>}
+                    {manualPairSelect === ep.player.id && <span className="text-xs text-selected font-medium">Selected</span>}
+                    {manualPairSelect && manualPairSelect !== ep.player.id && <span className="text-xs text-green-600">Pair</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {pairMode === "manual" && unpaired.length === 0 && event.pairs.length > 0 && (
+              <p className="text-xs text-green-600 text-center font-medium">All players paired!</p>
+            )}
+          </div>
+        )}
+
+        {!canManage && unpaired.length > 0 && (
+          <div className="space-y-1">
+            <h4 className="text-sm font-medium text-muted">Unpaired ({unpaired.length})</h4>
+            {unpaired.map((ep) => (
+              <div key={ep.player.id} className="flex items-center gap-2 px-3 py-1.5">
+                <span className="text-lg">{ep.player.emoji}</span>
+                <span className="text-sm font-medium">{ep.player.name}</span>
+              </div>
+            ))}
           </div>
         )}
 
