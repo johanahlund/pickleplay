@@ -841,36 +841,39 @@ export default function EventDetailPage() {
 
   const location = event.club?.locations?.[0];
 
+  const ownerName = event.createdBy?.name;
+  const helperNames = event.helpers.map((h) => h.player.name);
+
   const eventHeader = (
-    <div className="bg-card rounded-xl border border-border p-3">
+    <button onClick={() => { startEditEvent(); setActiveSection("when"); }}
+      className="w-full bg-card rounded-xl border border-border p-3 text-left active:bg-gray-50 transition-colors">
       <div className="flex-1 min-w-0">
-        <h2 className="font-bold text-lg truncate">{event.name}</h2>
-        <p className="text-xs text-muted">
-          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-          {" at "}
-          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-          {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-lg truncate">{event.name}</h2>
           {event.status !== "setup" && (
-            <span className={`ml-1.5 inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+            <span className={`ml-1.5 shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
               event.status === "active" ? "bg-green-100 text-green-700" :
               event.status === "completed" ? "bg-gray-100 text-muted" :
               "bg-blue-100 text-blue-700"
             }`}>{event.status}</span>
           )}
+        </div>
+        <p className="text-xs text-muted">
+          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+          {" at "}
+          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+          {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+          {" · "}{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
+        </p>
+        <p className="text-xs text-muted mt-0.5">
+          {ownerName || "—"}
+          {helperNames.length > 0 && <span className="text-muted"> ({helperNames.join(", ")})</span>}
         </p>
         {location && (
-          <p className="text-xs text-muted mt-0.5">
-            {location.googleMapsUrl ? (
-              <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                📍 {location.name}
-              </a>
-            ) : (
-              <span>📍 {location.name}</span>
-            )}
-          </p>
+          <p className="text-xs text-muted mt-0.5">📍 {location.name}</p>
         )}
       </div>
-    </div>
+    </button>
   );
 
   const sectionLabels: Record<string, string> = {
@@ -1829,16 +1832,7 @@ export default function EventDetailPage() {
   const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
   const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
-  const ownerName = event.createdBy?.name;
-  const helperNames = event.helpers.map((h) => h.player.name);
-
   const scoringDisplay = `${event.numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(event.scoringType).toLowerCase()}`;
-
-  // Show club only when not in club context (i.e., opened from "My Events")
-  const hasClubContext = typeof window !== "undefined" && !!sessionStorage.getItem("activeClubId");
-  const showClub = event.club && !hasClubContext;
-
-  const whenDisplay = `${new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}${event.endDate ? ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""}`;
 
   return (
     <div className="space-y-3">
@@ -1846,33 +1840,6 @@ export default function EventDetailPage() {
 
       {/* Speaker */}
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
-
-      {/* Organizer & Courts */}
-      <div className={frameClass}>
-        {showClub && (
-          <div className={rowClass}>
-            <span className="text-sm text-muted">Club</span>
-            <span className="text-sm font-medium">{event.club!.emoji} {event.club!.name}</span>
-          </div>
-        )}
-        <button onClick={() => { startEditEvent(); setActiveSection("when"); }} className={rowClass}>
-          <span className="text-sm text-muted">When</span>
-          <span className="text-sm font-medium">{whenDisplay}</span>
-        </button>
-        <button onClick={() => { fetchAllPlayers(); setAdminSearch(""); setActiveSection("admins"); }} className={rowClass}>
-          <span className="text-sm text-muted">Organizer</span>
-          <span className="text-sm font-medium text-right ml-4 truncate">
-            <span>{ownerName || "—"}</span>
-            {helperNames.length > 0 && (
-              <span className="block text-xs text-muted">({helperNames.join(", ")})</span>
-            )}
-          </span>
-        </button>
-        <button onClick={() => { startEditEvent(); setActiveSection("courts"); }} className={rowClass}>
-          <span className="text-sm text-muted">Courts</span>
-          <span className="text-sm font-medium">{event.numCourts}</span>
-        </button>
-      </div>
 
       {/* Players & Pairs */}
       <div className={frameClass}>
