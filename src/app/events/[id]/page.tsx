@@ -34,6 +34,8 @@ interface Match {
   round: number;
   status: string;
   players: MatchPlayer[];
+  scoreConfirmed?: boolean;
+  rankingMode?: string;
 }
 
 interface EventHelper {
@@ -916,7 +918,7 @@ export default function EventDetailPage() {
       <div className="flex gap-1">
         {sectionOrder
           .filter((s) => {
-            if (s === "pairs" && event.format !== "doubles") return false;
+            if (s === "pairs" && (event.format !== "doubles" || event.pairs.length === 0)) return false;
             // competition section always visible (contains ranking)
             return true;
           })
@@ -924,7 +926,7 @@ export default function EventDetailPage() {
             <button key={s} className="flex-1 text-center" onClick={() => {
               if (s === activeSection) return;
               if (hasEdits && saveSections.has(activeSection)) {
-                if (confirm("Save changes before leaving?")) {
+                if (confirm("You have unsaved changes. Save them?")) {
                   saveEditEvent().then(() => { startEditEvent(); setActiveSection(s as typeof activeSection); });
                 } else {
                   startEditEvent(); setActiveSection(s as typeof activeSection);
@@ -958,7 +960,7 @@ export default function EventDetailPage() {
         ) : (
           <button onClick={() => {
             if (hasEdits && saveSections.has(activeSection)) {
-              if (confirm("Save changes before leaving?")) {
+              if (confirm("You have unsaved changes. Save them?")) {
                 saveEditEvent().then(() => setActiveSection("overview"));
               } else {
                 setActiveSection("overview");
@@ -1669,7 +1671,23 @@ export default function EventDetailPage() {
                       sendAnnouncement(id as string, text);
                     }}
                       className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
-                    {isCompleted && !isEditing && <span className="text-sm text-green-600 font-medium">✓ Final</span>}
+                    {isCompleted && !isEditing && (
+                      <span className={`text-sm font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
+                        {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳ Pending" : "✓ Final"}
+                      </span>
+                    )}
+                    {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (
+                      <button onClick={async () => {
+                        await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" });
+                        await fetchEvent();
+                      }}
+                        className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium hover:bg-amber-200">
+                        Confirm
+                      </button>
+                    )}
+                    {isCompleted && match.rankingMode === "approval" && match.scoreConfirmed && (
+                      <span className="text-[10px] text-green-600">Confirmed</span>
+                    )}
                     {isCompleted && canManage && !isEditing && (
                       <button onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
                         className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
@@ -1911,13 +1929,11 @@ export default function EventDetailPage() {
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
         </button>
-        {event.format === "doubles" && (
+        {event.format === "doubles" && event.pairs.length > 0 && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
             <span className="text-sm text-muted">Pairs</span>
             <span className="text-sm font-medium">
-              {event.pairs.length === 0
-                ? "Not set"
-                : `${event.pairs.length} pair${event.pairs.length !== 1 ? "s" : ""}`}
+              {`${event.pairs.length} pair${event.pairs.length !== 1 ? "s" : ""}`}
             </span>
           </button>
         )}
