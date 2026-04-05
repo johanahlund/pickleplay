@@ -850,13 +850,14 @@ export default function EventDetailPage() {
   const helperNames = event.helpers.map((h) => h.player.name);
 
   const eventHeader = (
-    <button onClick={() => { startEditEvent(); setActiveSection("when"); }}
-      className="w-full bg-card rounded-xl border border-border p-3 text-left active:bg-gray-50 transition-colors">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
+    <div className="bg-card rounded-xl border border-border p-3 flex">
+      {/* Left side — tap to edit */}
+      <button onClick={() => { startEditEvent(); setActiveSection("when"); }}
+        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity">
+        <div className="flex items-center gap-2">
           <h2 className="font-bold text-lg truncate">{event.name}</h2>
           {event.status !== "setup" && (
-            <span className={`ml-1.5 shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
+            <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
               event.status === "active" ? "bg-green-100 text-green-700" :
               event.status === "completed" ? "bg-gray-100 text-muted" :
               "bg-blue-100 text-blue-700"
@@ -874,11 +875,21 @@ export default function EventDetailPage() {
           {ownerName || "—"}
           {helperNames.length > 0 && <span className="text-muted"> ({helperNames.join(", ")})</span>}
         </p>
-        {location && (
-          <p className="text-xs text-muted mt-0.5">📍 {location.name}</p>
-        )}
-      </div>
-    </button>
+      </button>
+      {/* Right side — location link */}
+      {location && (
+        <div className="shrink-0 flex items-end ml-2">
+          {location.googleMapsUrl ? (
+            <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+              📍 {location.name}
+            </a>
+          ) : (
+            <span className="text-xs text-muted whitespace-nowrap">📍 {location.name}</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 
   const sectionLabels: Record<string, string> = {
