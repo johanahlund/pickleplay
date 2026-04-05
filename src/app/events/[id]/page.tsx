@@ -361,7 +361,7 @@ export default function EventDetailPage() {
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
   const [numRounds, setNumRounds] = useState(3);
-  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "ranking" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -597,7 +597,7 @@ export default function EventDetailPage() {
   };
 
   // Sections that need explicit Save (edit fields + save button)
-  const saveSections = new Set(["when", "scoring", "pairing", "ranking"]);
+  const saveSections = new Set(["when", "scoring", "pairing", "competition"]);
 
   const startEditEvent = () => {
     if (!event) return;
@@ -902,7 +902,6 @@ export default function EventDetailPage() {
     admins: "Organizer",
     scoring: "Scoring",
     pairing: "Pairing",
-    ranking: "Ranking",
     players: "Players",
     pairs: "Pairs",
     competition: "Competition",
@@ -910,7 +909,7 @@ export default function EventDetailPage() {
     manual: "Add Match",
   };
 
-  const sectionOrder = ["when", "admins", "scoring", "pairing", "ranking", "players", "pairs", "competition", "rounds", "manual"];
+  const sectionOrder = ["when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds", "manual"];
 
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
@@ -918,7 +917,7 @@ export default function EventDetailPage() {
         {sectionOrder
           .filter((s) => {
             if (s === "pairs" && event.format !== "doubles") return false;
-            if (s === "competition" && event.format !== "doubles") return false;
+            // competition section always visible (contains ranking)
             return true;
           })
           .map((s) => (
@@ -1815,22 +1814,47 @@ export default function EventDetailPage() {
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
-        {activeSection === "ranking" && renderRanking()}
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
         {activeSection === "competition" && event && (
-          <CompetitionView
-            eventId={id as string}
-            pairs={event.pairs}
-            matches={event.matches as never}
-            competitionMode={event.competitionMode ?? null}
-            competitionConfig={event.competitionConfig as never}
-            competitionPhase={event.competitionPhase ?? null}
-            canManage={canManage}
-            numCourts={event.numCourts}
-            onRefresh={fetchEvent}
-          />
+          <div className="space-y-3">
+            {/* Ranking */}
+            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+              <p className="text-xs text-muted">Do matches count towards app player rankings?</p>
+              <div className="flex gap-2">
+                {[
+                  { value: "ranked", label: "Ranked" },
+                  { value: "approval", label: "Approval" },
+                  { value: "none", label: "Unranked" },
+                ].map((m) => (
+                  <button key={m.value} type="button" onClick={() => { setEditRankingMode(m.value); setHasEdits(true); }}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
+                      editRankingMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted">
+                {editRankingMode === "ranked" && "Scores count towards player ratings immediately."}
+                {editRankingMode === "approval" && "Scores need confirmation before affecting ratings."}
+                {editRankingMode === "none" && "Scores recorded but don't affect ratings."}
+              </p>
+            </div>
+            {/* Competition */}
+            <CompetitionView
+              eventId={id as string}
+              pairs={event.pairs}
+              matches={event.matches as never}
+              competitionMode={event.competitionMode ?? null}
+              competitionConfig={event.competitionConfig as never}
+              competitionPhase={event.competitionPhase ?? null}
+              canManage={canManage}
+              numCourts={event.numCourts}
+              onRefresh={fetchEvent}
+            />
+          </div>
         )}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
@@ -1899,7 +1923,11 @@ export default function EventDetailPage() {
             </span>
           </button>
         )}
-        {/* Competition */}
+        {/* Competition & Ranking */}
+        <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
+          <span className="text-sm text-muted">Ranking</span>
+          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+        </button>
         {event.format === "doubles" && (
           <button onClick={() => setActiveSection("competition")} className={rowClass}>
             <span className="text-sm text-muted">Competition</span>
@@ -1931,14 +1959,6 @@ export default function EventDetailPage() {
         <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
-        </button>
-      </div>
-
-      {/* Ranking */}
-      <div className={frameClass}>
-        <button onClick={() => { startEditEvent(); setActiveSection("ranking"); }} className={rowClass}>
-          <span className="text-sm text-muted">Ranking</span>
-          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
       </div>
 
