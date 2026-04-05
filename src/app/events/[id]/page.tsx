@@ -327,6 +327,7 @@ export default function EventDetailPage() {
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
+  const [hasEdits, setHasEdits] = useState(false);
   const [editName, setEditName] = useState("");
   const [editCourts, setEditCourts] = useState(2);
   const [editDate, setEditDate] = useState("");
@@ -590,8 +591,12 @@ export default function EventDetailPage() {
     await fetchEvent();
   };
 
+  // Sections that need explicit Save (edit fields + save button)
+  const saveSections = new Set(["when", "courts", "format"]);
+
   const startEditEvent = () => {
     if (!event) return;
+    setHasEdits(false);
     setEditName(event.name);
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
@@ -892,48 +897,81 @@ export default function EventDetailPage() {
             return true;
           })
           .map((s) => (
-            <div key={s} className="flex-1 text-center">
+            <button key={s} className="flex-1 text-center" onClick={() => {
+              if (s === activeSection) return;
+              if (hasEdits && saveSections.has(activeSection)) {
+                if (confirm("Save changes before leaving?")) {
+                  saveEditEvent().then(() => { startEditEvent(); setActiveSection(s as typeof activeSection); });
+                } else {
+                  startEditEvent(); setActiveSection(s as typeof activeSection);
+                }
+              } else {
+                if (saveSections.has(s)) startEditEvent();
+                setActiveSection(s as typeof activeSection);
+              }
+            }}>
               <div className={`h-1 rounded-full transition-all duration-300 ${s === activeSection ? "bg-action" : "bg-gray-200"}`} />
-              <span className={`text-[8px] leading-tight mt-0.5 block ${s === activeSection ? "text-action font-semibold" : "text-gray-300"}`}>
+              <span className={`text-[8px] leading-tight mt-0.5 block ${s === activeSection ? "text-action font-semibold" : "text-muted hover:text-foreground"}`}>
                 {sectionLabels[s]}
               </span>
-            </div>
+            </button>
           ))}
       </div>
       <div className="flex items-center justify-between mt-1.5">
-        <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium active:opacity-70">← Overview</button>
-        <span className="text-base font-bold text-foreground">{sectionLabels[activeSection] || activeSection}</span>
         <span className="w-16" />
+        <span className="text-sm font-bold text-foreground">{sectionLabels[activeSection] || activeSection}</span>
+        {saveSections.has(activeSection) && hasEdits ? (
+          <button onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
+            className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm shrink-0">
+            Save
+          </button>
+        ) : (
+          <button onClick={() => {
+            if (hasEdits && saveSections.has(activeSection)) {
+              if (confirm("Save changes before leaving?")) {
+                saveEditEvent().then(() => setActiveSection("overview"));
+              } else {
+                setActiveSection("overview");
+              }
+            } else {
+              setActiveSection("overview");
+            }
+          }}
+            className="px-3 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 shrink-0">
+            Overview
+          </button>
+        )}
       </div>
     </div>
   );
 
   // ── Section: When (name + date/time) ──
+  const edit = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setHasEdits(true); };
+
   const renderWhen = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
-        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+        <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
       </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Date</label>
-        <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)}
+        <input type="date" value={editDate} onChange={(e) => { setEditDate(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
       </div>
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="block text-sm font-medium text-muted mb-1">From</label>
-          <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)}
+          <input type="time" value={editTime} onChange={(e) => { setEditTime(e.target.value); setHasEdits(true); }}
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
         <div className="flex-1">
           <label className="block text-sm font-medium text-muted mb-1">To</label>
-          <input type="time" value={editEndTime} onChange={(e) => setEditEndTime(e.target.value)}
+          <input type="time" value={editEndTime} onChange={(e) => { setEditEndTime(e.target.value); setHasEdits(true); }}
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
       </div>
-      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
     </div>
   );
 
@@ -944,12 +982,11 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Number of Courts</label>
         <div className="flex gap-2">
           {[1, 2, 3, 4].map((n) => (
-            <button key={n} type="button" onClick={() => setEditCourts(n)}
+            <button key={n} type="button" onClick={() => { setEditCourts(n); setHasEdits(true); }}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-all ${editCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>{n}</button>
           ))}
         </div>
       </div>
-      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
     </div>
   );
 
@@ -981,7 +1018,7 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Sets</label>
         <div className="flex gap-2">
           {[1, 3].map((n) => (
-            <button key={n} type="button" onClick={() => setEditNumSets(n)}
+            <button key={n} type="button" onClick={() => { setEditNumSets(n); setHasEdits(true); }}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editNumSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
               {n === 1 ? "1 Set" : "Best of 3"}
             </button>
@@ -997,7 +1034,7 @@ export default function EventDetailPage() {
             { value: "rally_21", label: "R21" },
             { value: "timed", label: "Time" },
           ].map((s) => (
-            <button key={s.value} type="button" onClick={() => setEditScoringType(s.value)}
+            <button key={s.value} type="button" onClick={() => { setEditScoringType(s.value); setHasEdits(true); }}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
               {s.label}
             </button>
@@ -1008,7 +1045,7 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Pairing</label>
         <div className="flex gap-1.5">
           {pairingOptions.map((m) => (
-            <button key={m.value} type="button" onClick={() => setEditPairingMode(m.value)}
+            <button key={m.value} type="button" onClick={() => { setEditPairingMode(m.value); setHasEdits(true); }}
               className={`flex-1 py-2 rounded-lg text-center transition-all ${
                 editPairingMode === m.value ? "bg-selected text-white ring-1 ring-selected/50" : "bg-gray-100 hover:bg-gray-200"
               }`} title={m.label}>
@@ -1034,7 +1071,7 @@ export default function EventDetailPage() {
             { value: "round_based", label: "Round-based" },
             { value: "continuous", label: "Continuous" },
           ] as const).map((m) => (
-            <button key={m.value} type="button" onClick={() => setEditPlayMode(m.value)}
+            <button key={m.value} type="button" onClick={() => { setEditPlayMode(m.value); setHasEdits(true); }}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
                 editPlayMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
               }`}>{m.label}</button>
@@ -1054,7 +1091,7 @@ export default function EventDetailPage() {
             { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
             { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "Skill", desc: "Group by level" },
           ].map((p) => (
-            <button key={p.key} type="button" onClick={() => p.set(!p.value)}
+            <button key={p.key} type="button" onClick={() => { p.set(!p.value); setHasEdits(true); }}
               className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
                 p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
               }`}>
@@ -1092,7 +1129,6 @@ export default function EventDetailPage() {
           {event.rankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
         </p>
       </div>
-      <button onClick={saveEditEvent} className="w-full bg-action-dark text-white py-2 rounded-lg font-medium text-sm">Save</button>
     </div>
   );
 

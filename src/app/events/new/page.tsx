@@ -372,72 +372,49 @@ function NewEventPage() {
       <div className="sticky z-40 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
         <p className="text-xs text-action font-medium italic text-center mb-1.5">New Event</p>
         <div className="flex items-center gap-2">
+          {step > 1 && !returnToReview && (
+            <button type="button" onClick={() => setStep(step - 1)}
+              className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 transition-colors shrink-0">
+              Back
+            </button>
+          )}
+          <div className="flex-1">
+            <div className="flex gap-1">
+              {stepTitles.map((title, i) => (
+                <div key={i} className="flex-1 text-center">
+                  <div className={`h-1 rounded-full transition-all duration-300 ${
+                    returnToReview ? (i === step - 1 ? "bg-action" : "bg-gray-200") : (i < step ? "bg-action" : "bg-gray-200")
+                  }`} />
+                  <span className={`text-[9px] leading-tight mt-0.5 block ${
+                    i === step - 1 ? "text-action font-semibold" : i < step && !returnToReview ? "text-muted" : "text-gray-300"
+                  }`}>{title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-1.5">
+          <span className="w-12" />
+          <p className="text-sm font-bold text-foreground">
+            {stepTitles[step - 1] === "Format" ? "Default Format" : stepTitles[step - 1]}
+          </p>
           {returnToReview && step !== TOTAL_STEPS ? (
-            <>
-              <div className="flex-1">
-                <div className="flex gap-1">
-                  {stepTitles.map((title, i) => (
-                    <div key={i} className="flex-1 text-center">
-                      <div className={`h-1 rounded-full transition-all duration-300 ${i === step - 1 ? "bg-action" : "bg-gray-200"}`} />
-                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : "text-gray-300"}`}>{title}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
-                className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors shrink-0"
-              >
-                Review
-              </button>
-            </>
+            <button type="button" onClick={() => { setReturnToReview(false); setStep(TOTAL_STEPS); }}
+              className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors shrink-0">
+              Review
+            </button>
+          ) : step < TOTAL_STEPS ? (
+            <button type="button" onClick={() => canAdvance() && setStep(step + 1)} disabled={!canAdvance()}
+              className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 shrink-0">
+              Next
+            </button>
           ) : (
-            <>
-              {step > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setStep(step - 1)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 transition-colors shrink-0"
-                >
-                  Back
-                </button>
-              )}
-              <div className="flex-1">
-                <div className="flex gap-1">
-                  {stepTitles.map((title, i) => (
-                    <div key={i} className="flex-1 text-center">
-                      <div className={`h-1 rounded-full transition-all duration-300 ${i < step ? "bg-action" : "bg-gray-200"}`} />
-                      <span className={`text-[9px] leading-tight mt-0.5 block ${i === step - 1 ? "text-action font-semibold" : i < step ? "text-muted" : "text-gray-300"}`}>{title}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {step < TOTAL_STEPS ? (
-                <button
-                  type="button"
-                  onClick={() => canAdvance() && setStep(step + 1)}
-                  disabled={!canAdvance()}
-                  className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={createEvent}
-                  disabled={!name.trim() || creating}
-                  className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                >
-                  {creating ? "..." : "Create"}
-                </button>
-              )}
-            </>
+            <button type="button" onClick={createEvent} disabled={!name.trim() || creating}
+              className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 shrink-0">
+              {creating ? "..." : "Create"}
+            </button>
           )}
         </div>
-        <p className="text-base font-bold text-foreground text-center mt-2">
-          {stepTitles[step - 1] === "Format" ? "Default Format for the Event" : stepTitles[step - 1]}
-        </p>
       </div>
 
       {/* Step content */}
