@@ -240,7 +240,7 @@ export function Header() {
                     <button
                       key={t.key}
                       onClick={() => router.push(`/clubs/${activeClubId}?tab=${t.key}`)}
-                      className="flex-1 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-all"
+                      className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
                     >
                       {t.label}
                     </button>
