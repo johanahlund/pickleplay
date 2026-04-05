@@ -356,6 +356,7 @@ export default function EventDetailPage() {
   const [editRankingMode, setEditRankingMode] = useState("ranked");
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
+  const [matchTab, setMatchTab] = useState<"current" | "previous" | "future">("current");
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -908,10 +909,9 @@ export default function EventDetailPage() {
     pairs: "Pairs",
     competition: "Competition",
     rounds: "Matches",
-    manual: "Add Match",
   };
 
-  const sectionOrder = ["when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds", "manual"];
+  const sectionOrder = ["when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds"];
 
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
@@ -1592,190 +1592,236 @@ export default function EventDetailPage() {
   };
 
   // ── Section: Rounds ──
-  const renderRounds = () => (
-    <div className="space-y-4">
-      {/* Generate / Regenerate */}
-      {((!hasMatches && canManage && event.pairingMode !== "manual") || (allCompleted && canManage && event.pairingMode !== "manual")) && (
-        <div className="space-y-3">
-          {!isIncremental && (
-            <div className="flex items-center gap-3">
-              <label className="text-lg font-medium text-foreground">Rounds:</label>
-              <div className="flex items-center gap-0">
-                <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
-                  className="w-14 h-14 rounded-l-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300">−</button>
-                <div className="w-14 h-14 bg-selected text-white font-bold text-3xl flex items-center justify-center">{numRounds}</div>
-                <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
-                  className="w-14 h-14 rounded-r-xl bg-gray-200 text-foreground font-bold text-3xl flex items-center justify-center active:bg-gray-300">+</button>
+  const completedMatches = event.matches.filter((m) => m.status === "completed");
+  const activeMatches = event.matches.filter((m) => m.status === "active");
+  const pendingMatches = event.matches.filter((m) => m.status === "pending");
+  const freeCourts = Array.from({ length: event.numCourts }, (_, i) => i + 1)
+    .filter((c) => !activeMatches.some((m) => m.courtNum === c) && !pendingMatches.some((m) => m.courtNum === c && m.players.length >= 2));
+
+  const renderMatchCard = (match: Match) => {
+    const team1 = match.players.filter((p) => p.team === 1);
+    const team2 = match.players.filter((p) => p.team === 2);
+    const isCompleted = match.status === "completed";
+    const isEditing = editingMatchId === match.id;
+    const team1Score = isCompleted ? team1[0]?.score ?? 0 : null;
+    const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
+    const team1Won = team1Score !== null && team2Score !== null && team1Score > team2Score;
+    const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
+    const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
+    const canScore = canManage || isMatchPlayer;
+    const showInputs = canScore && (!isCompleted || isEditing);
+    const isNextMatch = nextMatchIdSet.has(match.id);
+    const isCourtFree = courtFreeMatchIds.has(match.id);
+
+    return (
+      <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
+        isCourtFree && !isCompleted
+          ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
+          : isNextMatch && !isCompleted
+            ? "border-blue-300 ring-1 ring-blue-200/50"
+            : "border-border"
+      }`}>
+        <div className={`px-3 py-2 border-b flex items-center justify-between ${
+          isCourtFree && !isCompleted
+            ? "bg-green-50 border-green-200"
+            : isNextMatch && !isCompleted
+              ? "bg-blue-50 border-blue-200"
+              : "bg-gray-50 border-border"
+        }`}>
+          <span className={`text-sm font-medium ${
+            isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
+          }`}>
+            Court {match.courtNum}
+            {isCourtFree && !isCompleted && " — Ready!"}
+            {isNextMatch && !isCourtFree && !isCompleted && " — Up next"}
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => {
+              const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
+              const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
+              const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
+              sendAnnouncement(id as string, text);
+            }}
+              className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
+            {isCompleted && !isEditing && (
+              <span className={`text-sm font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
+                {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳ Pending" : "✓ Final"}
+              </span>
+            )}
+            {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (
+              <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); }}
+                className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium hover:bg-amber-200">Confirm</button>
+            )}
+            {isCompleted && canManage && !isEditing && (
+              <button onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
+                className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
+            )}
+            {isEditing && <span className="text-sm text-amber-600 font-medium">Editing...</span>}
+            {canManage && (
+              <button onClick={() => deleteMatch(match.id)}
+                className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors" title="Delete match">🗑️</button>
+            )}
+          </div>
+        </div>
+        <div className="p-3">
+          <div className={`flex items-center gap-2 p-2 rounded-lg ${team1Won && !isEditing ? "bg-green-50" : ""}`}>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                {team1.map((mp) => (
+                  <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
+                    <PlayerAvatar name={mp.player.name} size="xs" />
+                    <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
+                  </span>
+                ))}
               </div>
             </div>
-          )}
-          <button onClick={generateMatches}
-            disabled={generating || (!allCompleted && activePlayers.length < minPlayers)}
-            className="w-full bg-action text-white py-3.5 rounded-xl font-semibold text-xl shadow-md active:bg-action-dark transition-colors disabled:opacity-50">
-            {generating ? "Generating..." : hasMatches
-              ? "🔄 Generate Next Rounds"
-              : `🎲 Generate ${isIncremental ? "Next Round" : `${numRounds} Round${numRounds > 1 ? "s" : ""}`}`}
-          </button>
-        </div>
-      )}
-
-      {/* Match cards by round */}
-      {rounds.map((round) => (
-        <div key={round} className="space-y-2">
-          <h3 className="text-base font-semibold text-muted uppercase tracking-wider">Round {round}</h3>
-          {matchesByRound[round].sort((a, b) => a.courtNum - b.courtNum).map((match) => {
-            const team1 = match.players.filter((p) => p.team === 1);
-            const team2 = match.players.filter((p) => p.team === 2);
-            const isCompleted = match.status === "completed";
-            const isEditing = editingMatchId === match.id;
-            const team1Score = isCompleted ? team1[0]?.score ?? 0 : null;
-            const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
-            const team1Won = team1Score !== null && team2Score !== null && team1Score > team2Score;
-            const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
-            const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
-            const canScore = canManage || isMatchPlayer;
-            const showInputs = canScore && (!isCompleted || isEditing);
-
-            const isNextMatch = nextMatchIdSet.has(match.id);
-            const isCourtFree = courtFreeMatchIds.has(match.id);
-
-            return (
-              <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
-                isCourtFree && !isCompleted
-                  ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
-                  : isNextMatch && !isCompleted
-                    ? "border-blue-300 ring-1 ring-blue-200/50"
-                    : "border-border"
-              }`}>
-                <div className={`px-3 py-2 border-b flex items-center justify-between ${
-                  isCourtFree && !isCompleted
-                    ? "bg-green-50 border-green-200"
-                    : isNextMatch && !isCompleted
-                      ? "bg-blue-50 border-blue-200"
-                      : "bg-gray-50 border-border"
-                }`}>
-                  <span className={`text-sm font-medium ${
-                    isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
-                  }`}>
-                    Court {match.courtNum}
-                    {isCourtFree && !isCompleted && " — Ready!"}
-                    {isNextMatch && !isCourtFree && !isCompleted && " — Up next"}
-                    {event.pairingMode === "king_of_court" && match.courtNum === 1 && <span className="ml-1 text-amber-500">👑</span>}
-                    {event.pairingMode === "king_of_court" && match.courtNum === event.numCourts && event.numCourts > 1 && <span className="ml-1 text-gray-400">🔰</span>}
+            {isCompleted && !isEditing ? (
+              <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team1Won ? "text-green-600" : "text-gray-400"}`}>{team1Score}</span>
+            ) : showInputs ? (
+              <input type="number" inputMode="numeric" value={scores[match.id]?.team1 ?? ""}
+                onChange={(e) => setMatchScore(match.id, "team1", e.target.value)}
+                className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
+            ) : (
+              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
+            )}
+          </div>
+          <div className="text-center text-sm text-muted font-medium my-1">vs</div>
+          <div className={`flex items-center gap-2 p-2 rounded-lg ${team2Won && !isEditing ? "bg-green-50" : ""}`}>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                {team2.map((mp) => (
+                  <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
+                    <PlayerAvatar name={mp.player.name} size="xs" />
+                    <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => {
-                      const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
-                      const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
-                      const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
-                      sendAnnouncement(id as string, text);
-                    }}
-                      className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
-                    {isCompleted && !isEditing && (
-                      <span className={`text-sm font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
-                        {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳ Pending" : "✓ Final"}
-                      </span>
-                    )}
-                    {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (
-                      <button onClick={async () => {
-                        await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" });
-                        await fetchEvent();
-                      }}
-                        className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium hover:bg-amber-200">
-                        Confirm
-                      </button>
-                    )}
-                    {isCompleted && match.rankingMode === "approval" && match.scoreConfirmed && (
-                      <span className="text-[10px] text-green-600">Confirmed</span>
-                    )}
-                    {isCompleted && canManage && !isEditing && (
-                      <button onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
-                        className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
-                    )}
-                    {isEditing && <span className="text-sm text-amber-600 font-medium">Editing...</span>}
-                    {canManage && (
-                      <button onClick={() => deleteMatch(match.id)}
-                        className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors" title="Delete match">🗑️</button>
-                    )}
-                  </div>
-                </div>
-                <div className="p-3">
-                  <div className={`flex items-center gap-2 p-2 rounded-lg ${team1Won && !isEditing ? "bg-green-50" : ""}`}>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {team1.map((mp) => (
-                          <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                            <PlayerAvatar name={mp.player.name} size="xs" />
-                            <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    {isCompleted && !isEditing ? (
-                      <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team1Won ? "text-green-600" : "text-gray-400"}`}>{team1Score}</span>
-                    ) : showInputs ? (
-                      <input type="number" inputMode="numeric" value={scores[match.id]?.team1 ?? ""}
-                        onChange={(e) => setMatchScore(match.id, "team1", e.target.value)}
-                        className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
-                    ) : (
-                      <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
-                    )}
-                  </div>
-                  <div className="text-center text-sm text-muted font-medium my-1">vs</div>
-                  <div className={`flex items-center gap-2 p-2 rounded-lg ${team2Won && !isEditing ? "bg-green-50" : ""}`}>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {team2.map((mp) => (
-                          <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                            <PlayerAvatar name={mp.player.name} size="xs" />
-                            <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    {isCompleted && !isEditing ? (
-                      <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team2Won ? "text-green-600" : "text-gray-400"}`}>{team2Score}</span>
-                    ) : showInputs ? (
-                      <input type="number" inputMode="numeric" value={scores[match.id]?.team2 ?? ""}
-                        onChange={(e) => setMatchScore(match.id, "team2", e.target.value)}
-                        className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
-                    ) : (
-                      <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
-                    )}
-                  </div>
-                  {showInputs && !isEditing && scores[match.id]?.team1 && scores[match.id]?.team2 && (
-                    <button onClick={() => submitScore(match.id)}
-                      className="w-full mt-2 bg-action-dark text-white py-2.5 rounded-lg font-medium text-base transition-colors">Submit Score</button>
-                  )}
-                  {isEditing && (
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => editScore(match.id)} disabled={!scores[match.id]?.team1 || !scores[match.id]?.team2}
-                        className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-base disabled:opacity-50">Save Edit</button>
-                      <button onClick={cancelEditMatch}
-                        className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-base">Cancel</button>
-                    </div>
-                  )}
-                </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+            {isCompleted && !isEditing ? (
+              <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team2Won ? "text-green-600" : "text-gray-400"}`}>{team2Score}</span>
+            ) : showInputs ? (
+              <input type="number" inputMode="numeric" value={scores[match.id]?.team2 ?? ""}
+                onChange={(e) => setMatchScore(match.id, "team2", e.target.value)}
+                className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
+            ) : (
+              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
+            )}
+          </div>
+          {showInputs && !isEditing && scores[match.id]?.team1 && scores[match.id]?.team2 && (
+            <button onClick={() => submitScore(match.id)}
+              className="w-full mt-2 bg-action-dark text-white py-2.5 rounded-lg font-medium text-base transition-colors">Submit Score</button>
+          )}
+          {isEditing && (
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => editScore(match.id)} disabled={!scores[match.id]?.team1 || !scores[match.id]?.team2}
+                className="flex-1 bg-action-dark text-white py-2 rounded-lg font-medium text-base disabled:opacity-50">Save Edit</button>
+              <button onClick={cancelEditMatch}
+                className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-base">Cancel</button>
+            </div>
+          )}
         </div>
-      ))}
-      {!hasMatches && (
-        <div className="text-center py-8 text-muted text-lg">No matches yet</div>
+      </div>
+    );
+  };
+
+  const renderRounds = () => (
+    <div className="space-y-4">
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+        {([
+          { key: "current", label: "Current", count: activeMatches.length },
+          { key: "previous", label: "Previous", count: completedMatches.length },
+          { key: "future", label: "Future", count: pendingMatches.length },
+        ] as const).map((t) => (
+          <button key={t.key} onClick={() => setMatchTab(t.key)}
+            className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+              matchTab === t.key ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
+            }`}>
+            {t.label} {t.count > 0 && <span className="text-[10px] opacity-70">({t.count})</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Court availability alert */}
+      {freeCourts.length > 0 && matchTab !== "previous" && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2">
+          <span className="text-lg">🟢</span>
+          <span className="text-sm font-medium text-green-800">
+            {freeCourts.length === 1
+              ? `Court ${freeCourts[0]} is available!`
+              : `Courts ${freeCourts.join(", ")} are available!`}
+          </span>
+        </div>
       )}
 
-      {/* Add match actions */}
-      {canManage && (
-        <div className="space-y-2 pt-2">
-          <button
-            onClick={() => setActiveSection("manual")}
-            className="w-full py-3 text-center rounded-xl text-sm font-semibold border border-primary text-primary hover:bg-primary/5 active:bg-primary/10 transition-colors"
-          >
-            + Add Individual Match
-          </button>
+      {/* Current tab — active matches */}
+      {matchTab === "current" && (
+        <div className="space-y-2">
+          {activeMatches.length === 0 ? (
+            <p className="text-center py-6 text-muted text-sm">No matches in progress</p>
+          ) : (
+            activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)
+          )}
         </div>
       )}
+
+      {/* Previous tab — completed matches */}
+      {matchTab === "previous" && (
+        <div className="space-y-2">
+          {completedMatches.length === 0 ? (
+            <p className="text-center py-6 text-muted text-sm">No completed matches yet</p>
+          ) : (
+            [...completedMatches].sort((a, b) => b.round - a.round || a.courtNum - b.courtNum).map(renderMatchCard)
+          )}
+        </div>
+      )}
+
+      {/* Future tab — actions + pending matches */}
+      {matchTab === "future" && (
+        <div className="space-y-3">
+          {/* Action buttons */}
+          {canManage && (
+            <div className="space-y-2">
+              {event.pairingMode !== "manual" && (
+                <>
+                  {!isIncremental && (
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="text-sm font-medium text-foreground">Rounds:</label>
+                      <div className="flex items-center gap-0">
+                        <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))}
+                          className="w-10 h-10 rounded-l-xl bg-gray-200 text-foreground font-bold text-xl flex items-center justify-center active:bg-gray-300">−</button>
+                        <div className="w-10 h-10 bg-selected text-white font-bold text-xl flex items-center justify-center">{numRounds}</div>
+                        <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))}
+                          className="w-10 h-10 rounded-r-xl bg-gray-200 text-foreground font-bold text-xl flex items-center justify-center active:bg-gray-300">+</button>
+                      </div>
+                    </div>
+                  )}
+                  <button onClick={generateMatches}
+                    disabled={generating || activePlayers.length < minPlayers}
+                    className="w-full bg-action text-white py-3 rounded-xl font-semibold text-base shadow-md active:bg-action-dark transition-colors disabled:opacity-50">
+                    {generating ? "Generating..." : isIncremental ? "Generate Next Round" : `Generate ${numRounds} Round${numRounds > 1 ? "s" : ""}`}
+                  </button>
+                </>
+              )}
+              <button onClick={() => setActiveSection("manual")}
+                className="w-full py-2.5 text-center rounded-xl text-sm font-semibold border border-primary text-primary hover:bg-primary/5 active:bg-primary/10 transition-colors">
+                + Add Manual Match
+              </button>
+            </div>
+          )}
+
+          {/* Pending matches */}
+          {pendingMatches.length === 0 ? (
+            <p className="text-center py-4 text-muted text-sm">No pending matches</p>
+          ) : (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-muted uppercase tracking-wider">Pending ({pendingMatches.length})</h4>
+              {pendingMatches.sort((a, b) => a.round - b.round || a.courtNum - b.courtNum).map(renderMatchCard)}
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 
