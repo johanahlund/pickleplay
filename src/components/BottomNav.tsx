@@ -93,16 +93,6 @@ export function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-[600px] mx-auto flex justify-around items-center h-16">
-        {/* Active event button — prominent */}
-        {activeEvent && !isOnActiveEvent && (
-          <Link
-            href={`/events/${activeEvent.id}`}
-            className="flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-white bg-green-600 shadow-md animate-pulse-slow relative"
-          >
-            <span className="text-xl">⚡</span>
-            <span className="text-[10px] font-bold truncate max-w-[60px]">{activeEvent.name}</span>
-          </Link>
-        )}
         {allTabs.map((tab) => {
           const isActive =
             tab.href === "/"
@@ -123,6 +113,16 @@ export function BottomNav() {
             </Link>
           );
         })}
+        {/* Active event — right of My Events */}
+        {activeEvent && !isOnActiveEvent && (
+          <Link
+            href={`/events/${activeEvent.id}`}
+            className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-white bg-green-600 shadow-md animate-pulse-slow"
+          >
+            <span className="text-lg">⚡</span>
+            <span className="text-[9px] font-bold truncate max-w-[50px]">Live</span>
+          </Link>
+        )}
       </div>
     </nav>
   );
