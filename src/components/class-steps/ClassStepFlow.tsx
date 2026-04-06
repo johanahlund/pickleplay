@@ -130,8 +130,10 @@ export function ClassStepFlow({
     ...(hasLowerBracket ? [{ id: "manage-lower", label: "Lower Bracket", shortLabel: "Lower", type: "action" as const }] : []),
   ];
 
-  const [currentStepIdx, setCurrentStepIdx] = useState(0);
-  const currentStep = steps[currentStepIdx] || steps[0];
+  // -1 = overview, 0+ = steps
+  const [currentStepIdx, setCurrentStepIdx] = useState(-1);
+  const isOverview = currentStepIdx === -1;
+  const currentStep = isOverview ? null : (steps[currentStepIdx] || steps[0]);
 
   // Auto-enable competition mode if not set
   useEffect(() => {
@@ -170,7 +172,12 @@ export function ClassStepFlow({
     }).then(() => onRefresh());
   }, [eventId, propsCls.id, onRefresh]);
 
+  const PHASE_LABELS: Record<string, string> = {
+    open: "Open", closed: "Closed", groups: "Group", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Completed",
+  };
+
   const renderStep = () => {
+    if (!currentStep) return null;
     switch (currentStep.id) {
       case "category":
         return <StepCategory cls={cls} canManage={canManage} updateField={updateField} />;
@@ -215,46 +222,145 @@ export function ClassStepFlow({
     }
   };
 
+  const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+  const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
+
+  const groupMatches = classMatches.filter((m) => m.groupLabel);
+  const bracketMatches = classMatches.filter((m) => m.bracketStage);
+
+  const renderOverview = () => (
+    <div className="space-y-3">
+      {/* Category summary */}
+      <div className={frameClass}>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
+          <span className="text-sm text-muted">Status</span>
+          <span className="text-sm font-medium">{PHASE_LABELS[cls.competitionPhase || "open"] || "Setup"}</span>
+        </button>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
+          <span className="text-sm text-muted">Format</span>
+          <span className="text-sm font-medium capitalize">{cls.format} · {cls.gender}{cls.ageGroup !== "open" ? ` · ${cls.ageGroup}` : ""}</span>
+        </button>
+        {cls.skillMin && (
+          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
+            <span className="text-sm text-muted">Level</span>
+            <span className="text-sm font-medium">DUPR {cls.skillMin?.toFixed(1)}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Groups & Advancement */}
+      <div className={frameClass}>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "groups"))} className={rowClass}>
+          <span className="text-sm text-muted">Groups</span>
+          <span className="text-sm font-medium">{config.numGroups} groups · {config.matchesPerMatchup === 1 ? "once" : "twice"} · {config.groupSeeding}</span>
+        </button>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
+          <span className="text-sm text-muted">Advancement</span>
+          <span className="text-sm font-medium">{config.advanceToUpper} upper{config.advanceToLower > 0 ? ` · ${config.advanceToLower} lower` : ""}{config.wildcardCount > 0 ? ` · ${config.wildcardCount} WC` : ""}</span>
+        </button>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "upper-config"))} className={rowClass}>
+          <span className="text-sm text-muted">Upper Bracket</span>
+          <span className="text-sm font-medium">{config.upperThirdPlace ? "3rd place" : "No 3rd place"}</span>
+        </button>
+        {hasLowerBracket && (
+          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
+            <span className="text-sm text-muted">Lower Bracket</span>
+            <span className="text-sm font-medium">{config.lowerThirdPlace ? "3rd place" : "No 3rd place"}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Players & Matches */}
+      <div className={frameClass}>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "players"))} className={rowClass}>
+          <span className="text-sm text-muted">Players</span>
+          <span className="text-sm font-medium">
+            {classPairs.length} pair{classPairs.length !== 1 ? "s" : ""}
+            {(cls.minPlayers || cls.maxPlayers) ? ` · ${cls.minPlayers || "?"}–${cls.maxPlayers || "∞"}` : ""}
+          </span>
+        </button>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "draw-groups"))} className={rowClass}>
+          <span className="text-sm text-muted">Group Matches</span>
+          <span className="text-sm font-medium">
+            {groupMatches.length === 0 ? "Not started" : `${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
+          </span>
+        </button>
+        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-upper"))} className={rowClass}>
+          <span className="text-sm text-muted">Upper Bracket</span>
+          <span className="text-sm font-medium">
+            {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
+          </span>
+        </button>
+        {hasLowerBracket && (
+          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-lower"))} className={rowClass}>
+            <span className="text-sm text-muted">Lower Bracket</span>
+            <span className="text-sm font-medium">
+              {bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length} played`}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* Back to classes list */}
+      <button onClick={onBack}
+        className="w-full py-2.5 text-xs text-action font-medium rounded-xl border border-action/30 hover:bg-action/5">
+        ← Back to Classes
+      </button>
+
+      {/* Delete class */}
+      {canManage && !cls.isDefault && (
+        <button onClick={() => {
+          if (confirm(`Delete class "${cls.name}"? Players and matches in this class will be unlinked.`)) {
+            fetch(`/api/events/${eventId}/classes`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ classId: cls.id }),
+            }).then(() => { onRefresh(); onBack(); });
+          }
+        }}
+          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50">
+          Delete Class
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
-      {/* Step bar */}
-      <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
-        <div className="flex gap-0.5">
-          {steps.map((step, i) => (
-            <button key={step.id} className="flex-1 text-center min-w-0" onClick={() => setCurrentStepIdx(i)}>
-              <div className={`h-1 rounded-full transition-all duration-300 ${
-                i === currentStepIdx ? "bg-action" :
-                step.type === "action" ? "bg-green-200" : "bg-gray-200"
-              }`} />
-              <span className={`text-[7px] leading-tight mt-0.5 block truncate ${
-                i === currentStepIdx ? "text-action font-bold" : "text-foreground/50"
-              }`}>
-                {step.shortLabel}
-              </span>
+      {/* Step bar — hidden on overview */}
+      {!isOverview && (
+        <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
+          <div className="flex gap-0.5">
+            {steps.map((step, i) => (
+              <button key={step.id} className="flex-1 text-center min-w-0" onClick={() => setCurrentStepIdx(i)}>
+                <div className={`h-1 rounded-full transition-all duration-300 ${
+                  i === currentStepIdx ? "bg-action" :
+                  step.type === "action" ? "bg-green-200" : "bg-gray-200"
+                }`} />
+                <span className={`text-[7px] leading-tight mt-0.5 block truncate ${
+                  i === currentStepIdx ? "text-action font-bold" : "text-foreground/50"
+                }`}>
+                  {step.shortLabel}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="w-16" />
+            <span className="text-sm font-bold text-foreground">{currentStep?.label}</span>
+            <button onClick={() => setCurrentStepIdx(-1)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-action text-action active:bg-action/10 shrink-0 leading-tight text-center">
+              Class<br/>Overview
             </button>
-          ))}
-        </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <button onClick={onBack} className="text-xs text-action font-medium shrink-0">← Classes</button>
-          <span className="text-sm font-bold text-foreground">{currentStep.label}</span>
-          <div className="flex gap-1 shrink-0">
-            {currentStepIdx > 0 && (
-              <button onClick={() => setCurrentStepIdx(currentStepIdx - 1)}
-                className="text-xs text-muted px-2 py-1 rounded hover:bg-gray-100">‹ Prev</button>
-            )}
-            {currentStepIdx < steps.length - 1 && (
-              <button onClick={() => setCurrentStepIdx(currentStepIdx + 1)}
-                className="text-xs text-action font-medium px-2 py-1 rounded hover:bg-action/5">Next ›</button>
-            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Class name header */}
       <h3 className="text-base font-bold">{cls.name}</h3>
 
-      {/* Step content */}
-      {renderStep()}
+      {/* Step content or overview */}
+      {isOverview ? renderOverview() : renderStep()}
     </div>
   );
 }
