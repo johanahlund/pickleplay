@@ -224,6 +224,7 @@ export function ClassStepFlow({
 
   const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
   const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
+  const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
   const groupMatches = classMatches.filter((m) => m.groupLabel);
   const bracketMatches = classMatches.filter((m) => m.bracketStage);
@@ -232,6 +233,7 @@ export function ClassStepFlow({
     <div className="space-y-3">
       {/* Category summary */}
       <div className={frameClass}>
+        <div className={frameTitleClass}>Category</div>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
           <span className="text-sm text-muted">Status</span>
           <span className="text-sm font-medium">{PHASE_LABELS[cls.competitionPhase || "open"] || "Setup"}</span>
@@ -250,6 +252,7 @@ export function ClassStepFlow({
 
       {/* Groups & Advancement */}
       <div className={frameClass}>
+        <div className={frameTitleClass}>Competition</div>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "groups"))} className={rowClass}>
           <span className="text-sm text-muted">Groups</span>
           <span className="text-sm font-medium">{config.numGroups} groups · {config.matchesPerMatchup === 1 ? "once" : "twice"} · {config.groupSeeding}</span>
@@ -272,6 +275,7 @@ export function ClassStepFlow({
 
       {/* Players & Matches */}
       <div className={frameClass}>
+        <div className={frameTitleClass}>Players & Matches</div>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "players"))} className={rowClass}>
           <span className="text-sm text-muted">Players</span>
           <span className="text-sm font-medium">
