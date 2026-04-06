@@ -241,7 +241,7 @@ export function Header() {
                     return (
                     <button
                       key={t.key}
-                      onClick={() => router.push(`/clubs/${activeClubId}?tab=${t.key}`)}
+                      onClick={() => { window.location.href = `/clubs/${activeClubId}?tab=${t.key}`; }}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive ? "bg-white text-black" : "text-white hover:opacity-80"}`}
                     >
                       {t.label}
