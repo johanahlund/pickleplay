@@ -106,9 +106,23 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const { classId, copyFromId } = await req.json();
-  if (!classId || !copyFromId) {
-    return NextResponse.json({ error: "classId and copyFromId required" }, { status: 400 });
+  const body = await req.json();
+  const { classId, copyFromId } = body;
+  if (!classId) return NextResponse.json({ error: "classId required" }, { status: 400 });
+
+  // Direct field updates (no copyFromId)
+  if (!copyFromId) {
+    const allowed = ["name", "format", "gender", "ageGroup", "numSets", "scoringType", "timedMinutes",
+      "pairingMode", "playMode", "prioSpeed", "prioFairness", "prioSkill", "rankingMode",
+      "minPlayers", "maxPlayers", "belowMinAction", "mergeWithClassId",
+      "upperBracketMergeClassId", "lowerBracketMergeClassId"];
+    const data: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined) data[key] = body[key];
+    }
+    if (Object.keys(data).length === 0) return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    const updated = await prisma.eventClass.update({ where: { id: classId }, data });
+    return NextResponse.json(updated);
   }
 
   const source = await prisma.eventClass.findUnique({ where: { id: copyFromId } });

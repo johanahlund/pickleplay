@@ -40,42 +40,45 @@ interface ClassDetailViewProps {
 }
 
 const SCORING_LABELS: Record<string, string> = {
-  normal_9: "To 9", normal_11: "To 11", normal_15: "To 15",
-  rally_15: "Rally 15", rally_21: "Rally 21", timed: "Timed",
+  normal_9: "9", normal_11: "11", normal_15: "15",
+  rally_15: "R15", rally_21: "R21", timed: "Time",
 };
 
-const PAIRING_LABELS: Record<string, string> = {
-  random: "Random", skill_balanced: "Skill Balanced",
-  mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed",
-  king_of_court: "King of Court", swiss: "Swiss", manual: "Manual",
-};
+const PAIRING_OPTIONS = [
+  { value: "random", icon: "🎲", label: "Random" },
+  { value: "skill_balanced", icon: "📊", label: "Skill" },
+  { value: "mixed_gender", icon: "👫", label: "Mixed" },
+  { value: "skill_mixed_gender", icon: "📊👫", label: "Skill+Mix" },
+  { value: "king_of_court", icon: "👑", label: "King" },
+  { value: "swiss", icon: "🇨🇭", label: "Swiss" },
+  { value: "manual", icon: "✏️", label: "Manual" },
+];
 
 export function ClassDetailView({
   eventId, cls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
 }: ClassDetailViewProps) {
-  const [editing, setEditing] = useState(false);
-  const [editMin, setEditMin] = useState(String(cls.minPlayers || ""));
-  const [editMax, setEditMax] = useState(String(cls.maxPlayers || ""));
-  const [editBelowMin, setEditBelowMin] = useState(cls.belowMinAction || "tbd");
-  const [editMergeWith, setEditMergeWith] = useState(cls.mergeWithClassId || "");
 
-  const scoringDisplay = `${cls.numSets === 1 ? "1 set" : "Best of 3"} ${(SCORING_LABELS[cls.scoringType] || cls.scoringType).toLowerCase()}`;
-
-  const saveClassSettings = async () => {
+  const updateField = async (field: string, value: unknown) => {
     await fetch(`/api/events/${eventId}/classes`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        classId: cls.id,
-        copyFromId: undefined, // not copying, just updating
-      }),
+      body: JSON.stringify({ classId: cls.id, [field]: value }),
     });
-    // TODO: add direct class field updates
-    setEditing(false);
     onRefresh();
   };
 
-  const rowClass = "flex justify-between items-center py-2 px-3 border-b border-border last:border-b-0";
+  const Toggle = ({ field, value, options }: { field: string; value: string | number; options: { value: string | number; label: string }[] }) => (
+    <div className="flex gap-1.5">
+      {options.map((o) => (
+        <button key={String(o.value)} onClick={() => canManage && updateField(field, o.value)}
+          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+            value === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+          } ${!canManage ? "cursor-default" : ""}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-3">
@@ -86,74 +89,94 @@ export function ClassDetailView({
         <span className="w-16" />
       </div>
 
-      {/* Class info */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Format</span>
-          <span className="text-sm font-medium capitalize">{cls.format}</span>
+      {/* Format */}
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div>
+          <label className="block text-xs text-muted mb-1">Format</label>
+          <Toggle field="format" value={cls.format} options={[{ value: "doubles", label: "🤝 Doubles" }, { value: "singles", label: "👤 Singles" }]} />
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Gender</span>
-          <span className="text-sm font-medium capitalize">{cls.gender}</span>
+        <div>
+          <label className="block text-xs text-muted mb-1">Gender</label>
+          <Toggle field="gender" value={cls.gender} options={[{ value: "open", label: "Open" }, { value: "male", label: "Male" }, { value: "female", label: "Female" }, { value: "mix", label: "Mixed" }]} />
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Age Group</span>
-          <span className="text-sm font-medium">{cls.ageGroup}</span>
+        <div>
+          <label className="block text-xs text-muted mb-1">Age Group</label>
+          <Toggle field="ageGroup" value={cls.ageGroup} options={[{ value: "open", label: "Open" }, { value: "18+", label: "18+" }, { value: "50+", label: "50+" }, { value: "60+", label: "60+" }]} />
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Scoring</span>
-          <span className="text-sm font-medium">{scoringDisplay}</span>
+      </div>
+
+      {/* Scoring */}
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div>
+          <label className="block text-xs text-muted mb-1">Sets</label>
+          <Toggle field="numSets" value={cls.numSets} options={[{ value: 1, label: "1 Set" }, { value: 3, label: "Best of 3" }]} />
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Pairing</span>
-          <span className="text-sm font-medium">{PAIRING_LABELS[cls.pairingMode] || cls.pairingMode}</span>
+        <div>
+          <label className="block text-xs text-muted mb-1">Scoring</label>
+          <Toggle field="scoringType" value={cls.scoringType} options={Object.entries(SCORING_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Play Mode</span>
-          <span className="text-sm font-medium capitalize">{(cls.playMode || "round_based").replace("_", " ")}</span>
+      </div>
+
+      {/* Pairing */}
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div>
+          <label className="block text-xs text-muted mb-1">Pairing</label>
+          <div className="flex gap-1.5">
+            {PAIRING_OPTIONS.map((m) => (
+              <button key={m.value} onClick={() => canManage && updateField("pairingMode", m.value)}
+                className={`flex-1 py-2 rounded-lg text-center transition-all ${
+                  cls.pairingMode === m.value ? "bg-selected text-white" : "bg-gray-100 hover:bg-gray-200"
+                }`} title={m.label}>
+                <span className="text-base">{m.icon}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Ranking</span>
-          <span className="text-sm font-medium capitalize">{cls.rankingMode}</span>
+        <div>
+          <label className="block text-xs text-muted mb-1">Play Mode</label>
+          <Toggle field="playMode" value={cls.playMode || "round_based"} options={[{ value: "round_based", label: "Round-based" }, { value: "continuous", label: "Continuous" }]} />
+        </div>
+        <div>
+          <label className="block text-xs text-muted mb-1">Ranking</label>
+          <Toggle field="rankingMode" value={cls.rankingMode} options={[{ value: "ranked", label: "Ranked" }, { value: "approval", label: "Approval" }, { value: "none", label: "Unranked" }]} />
         </div>
       </div>
 
       {/* Limits */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Min {cls.format === "doubles" ? "teams" : "players"}</span>
-          <span className="text-sm font-medium">{cls.minPlayers || "No min"}</span>
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <h4 className="text-xs text-muted font-medium">Limits</h4>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[10px] text-muted mb-1">Min {cls.format === "doubles" ? "teams" : "players"}</label>
+            <input type="number" value={cls.minPlayers || ""} placeholder="No min" min="1"
+              onChange={(e) => canManage && updateField("minPlayers", e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[10px] text-muted mb-1">Max {cls.format === "doubles" ? "teams" : "players"}</label>
+            <input type="number" value={cls.maxPlayers || ""} placeholder="No max" min="1"
+              onChange={(e) => canManage && updateField("maxPlayers", e.target.value ? parseInt(e.target.value) : null)}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
         </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">Max {cls.format === "doubles" ? "teams" : "players"}</span>
-          <span className="text-sm font-medium">{cls.maxPlayers || "No max"}</span>
-        </div>
-        <div className={rowClass}>
-          <span className="text-sm text-muted">If below min</span>
-          <span className="text-sm font-medium">
-            {cls.belowMinAction === "cancel" ? "Cancel class" :
-             cls.belowMinAction === "merge" ? `Merge with ${allClasses.find((c) => c.id === cls.mergeWithClassId)?.name || "..."}` :
-             "To be decided"}
-          </span>
+        <div>
+          <label className="block text-[10px] text-muted mb-1">If below minimum</label>
+          <Toggle field="belowMinAction" value={cls.belowMinAction || "tbd"} options={[
+            { value: "tbd", label: "To be decided" },
+            { value: "cancel", label: "Cancel" },
+            { value: "merge", label: "Merge" },
+          ]} />
         </div>
       </div>
 
-      {/* Cross-class bracket merge */}
-      {cls.competitionMode && allClasses.length > 1 && (
+      {/* Cross-class merge */}
+      {cls.competitionMode && allClasses.length > 1 && canManage && (
         <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-          <h4 className="text-sm font-semibold">Bracket Merge</h4>
-          <p className="text-[10px] text-muted">Link this class's elimination brackets with another class.</p>
+          <h4 className="text-xs text-muted font-medium">Bracket Merge</h4>
           <div>
-            <label className="block text-[10px] text-muted mb-1">Upper bracket → merge with lower bracket of:</label>
+            <label className="block text-[10px] text-muted mb-1">Upper bracket → merge with:</label>
             <select value={cls.upperBracketMergeClassId || ""}
-              onChange={async (e) => {
-                await fetch(`/api/events/${eventId}/classes`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ classId: cls.id, copyFromId: undefined }),
-                });
-                onRefresh();
-              }}
+              onChange={(e) => updateField("upperBracketMergeClassId", e.target.value || null)}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm">
               <option value="">None</option>
               {allClasses.filter((c) => c.id !== cls.id).map((c) => (
@@ -162,11 +185,9 @@ export function ClassDetailView({
             </select>
           </div>
           <div>
-            <label className="block text-[10px] text-muted mb-1">Lower bracket → merge with upper bracket of:</label>
+            <label className="block text-[10px] text-muted mb-1">Lower bracket → merge with:</label>
             <select value={cls.lowerBracketMergeClassId || ""}
-              onChange={async (e) => {
-                onRefresh();
-              }}
+              onChange={(e) => updateField("lowerBracketMergeClassId", e.target.value || null)}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm">
               <option value="">None</option>
               {allClasses.filter((c) => c.id !== cls.id).map((c) => (
@@ -177,10 +198,10 @@ export function ClassDetailView({
         </div>
       )}
 
-      {/* Players in this class */}
+      {/* Players */}
       <ClassPlayers eventId={eventId} classId={cls.id} format={cls.format} canManage={canManage} onRefresh={onRefresh} />
 
-      {/* Competition settings for this class */}
+      {/* Competition (groups, brackets) */}
       {cls.competitionMode && (
         <CompetitionView
           eventId={eventId}
@@ -195,14 +216,14 @@ export function ClassDetailView({
         />
       )}
 
-      {/* Copy settings from another class */}
+      {/* Copy from another class */}
       {canManage && allClasses.length > 1 && (
         <div className="bg-card rounded-xl border border-border p-3">
-          <label className="block text-xs text-muted mb-1">Copy all settings from another class</label>
+          <label className="block text-xs text-muted mb-1">Copy all settings from</label>
           <div className="flex gap-1.5">
             {allClasses.filter((c) => c.id !== cls.id).map((source) => (
               <button key={source.id} onClick={async () => {
-                if (confirm(`Copy all competition settings from "${source.name}" to "${cls.name}"?`)) {
+                if (confirm(`Copy all settings from "${source.name}"?`)) {
                   await fetch(`/api/events/${eventId}/classes`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -211,7 +232,7 @@ export function ClassDetailView({
                   onRefresh();
                 }
               }}
-                className="flex-1 py-2 rounded-lg text-xs font-medium bg-action/5 text-action border border-action/20 hover:bg-action/10 transition-colors">
+                className="flex-1 py-2 rounded-lg text-xs font-medium bg-action/5 text-action border border-action/20 hover:bg-action/10">
                 {source.name}
               </button>
             ))}
