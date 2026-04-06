@@ -124,25 +124,18 @@ export function CompetitionView({
           Run a Groups → Elimination tournament. Pairs are divided into groups
           for round-robin play, then top teams advance to a knockout bracket.
         </p>
-        {pairs.length < 2 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-            <p className="font-medium">Set up pairs first</p>
-            <p className="text-xs mt-1">Go back and create at least 4 pairs in the Pairs section before enabling competition mode.</p>
-          </div>
-        ) : pairs.length < 4 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-            <p className="font-medium">Need more pairs</p>
-            <p className="text-xs mt-1">You have {pairs.length} pair{pairs.length !== 1 ? "s" : ""}. Add at least {4 - pairs.length} more to enable competition mode.</p>
-          </div>
-        ) : (
-          <button
-            onClick={() => api("/competition", { action: "enable" })}
-            disabled={loading}
-            className="w-full bg-action text-white py-2.5 rounded-xl font-semibold active:bg-action-dark disabled:opacity-50"
-          >
-            Enable Competition Mode ({pairs.length} pairs)
-          </button>
+        {pairs.length < 4 && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+            {pairs.length === 0 ? "No pairs set up yet. You can set up pairs later." : `${pairs.length} pair${pairs.length !== 1 ? "s" : ""} — you may want to add more for group play.`}
+          </p>
         )}
+        <button
+          onClick={() => api("/competition", { action: "enable" })}
+          disabled={loading}
+          className="w-full bg-action text-white py-2.5 rounded-xl font-semibold active:bg-action-dark disabled:opacity-50"
+        >
+            Enable Competition Mode{pairs.length > 0 ? ` (${pairs.length} pairs)` : ""}
+          </button>
       </div>
     );
   }

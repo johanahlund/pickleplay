@@ -969,8 +969,8 @@ export default function EventDetailPage() {
               setActiveSection("overview");
             }
           }}
-            className="px-3 py-1 rounded-lg text-xs font-medium border border-border text-foreground active:bg-gray-100 shrink-0">
-            Overview
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-action text-action active:bg-action/10 shrink-0">
+            ← Overview
           </button>
         )}
       </div>

@@ -236,15 +236,18 @@ export function Header() {
                     { key: "events", label: "Events" },
                     { key: "members", label: "Members" },
                     { key: "rankings", label: "Rankings" },
-                  ].map((t) => (
+                  ].map((t) => {
+                    const isActive = (t.key === "events" && pathname.startsWith("/events/"));
+                    return (
                     <button
                       key={t.key}
                       onClick={() => router.push(`/clubs/${activeClubId}?tab=${t.key}`)}
-                      className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white hover:opacity-80 transition-all"
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive ? "bg-white text-black" : "text-white hover:opacity-80"}`}
                     >
                       {t.label}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>
