@@ -11,6 +11,7 @@ export async function GET(
     where: { id },
     include: {
       classes: true,
+      sessions: { orderBy: { date: "asc" } },
       players: { include: { player: true } },
       matches: {
         include: { players: { include: { player: true } } },

@@ -105,6 +105,11 @@ model Event {
   clubId       String?
   club         Club?    @relation(fields: [clubId], references: [id])
 
+  // Multi-week competition: sessions link to parent
+  parentEventId String?
+  parentEvent   Event?   @relation("eventSessions", fields: [parentEventId], references: [id])
+  sessions      Event[]  @relation("eventSessions")
+
   classes        EventClass[]
   players        EventPlayer[]
   pairs          EventPair[]
@@ -144,6 +149,10 @@ model EventClass {
   // Below-min action
   belowMinAction    String?  // "cancel" | "merge" | "tbd"
   mergeWithClassId  String?  // class to merge with if belowMinAction = "merge"
+
+  // Cross-class elimination merge
+  upperBracketMergeClassId  String?  // merge upper bracket with this class's lower bracket
+  lowerBracketMergeClassId  String?  // merge lower bracket with this class's upper bracket
 
   // Competition
   competitionMode   String?  // null | "groups_elimination"
@@ -216,12 +225,37 @@ model Match {
   bracketStage   String?
   bracketPosition Int?
   matchFormat    String?
+  sessionId      String?  // which session this match is scheduled in
 
   createdAt DateTime @default(now())
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class   EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
   players MatchPlayer[]
+}
+
+model CompetitionResult {
+  id               String @id @default(cuid())
+  eventId          String
+  classId          String
+  playerId         String
+  pairId           String?
+
+  // Group stage results
+  groupLabel       String?
+  groupPosition    Int?     // 1st, 2nd, 3rd in group
+  groupWins        Int      @default(0)
+  groupLosses      Int      @default(0)
+  groupPointDiff   Int      @default(0)
+
+  // Elimination results
+  bracketLevel     String?  // "upper" | "lower"
+  bracketReached   String?  // "r16", "qf", "sf", "f", "winner"
+  finalPlacement   Int?     // 1st, 2nd, 3rd, etc.
+
+  createdAt        DateTime @default(now())
+
+  @@unique([eventId, classId, playerId])
 }
 
 model MatchPlayer {
