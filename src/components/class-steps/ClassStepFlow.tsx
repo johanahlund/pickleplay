@@ -193,9 +193,7 @@ export function ClassStepFlow({
           <StepPlayers
             eventId={eventId}
             cls={cls}
-            allClasses={allClasses.map((c) => ({ id: c.id, name: c.name }))}
             canManage={canManage}
-            updateField={updateField}
             onRefresh={onRefresh}
           />
         );
