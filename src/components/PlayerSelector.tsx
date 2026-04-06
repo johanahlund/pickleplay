@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { ClearInput } from "./ClearInput";
 import { PlayerAvatar } from "./PlayerAvatar";
 
@@ -20,6 +20,89 @@ interface PlayerSelectorProps {
   recentIds?: Set<string>;
 }
 
+function SwipeRow({ player, direction, onAction }: {
+  player: Player;
+  direction: "right" | "left"; // right = add (swipe →), left = remove (swipe ←)
+  onAction: () => void;
+}) {
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const [offsetX, setOffsetX] = useState(0);
+  const [swiped, setSwiped] = useState(false);
+  const locked = useRef(false);
+  const THRESHOLD = 50;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    locked.current = false;
+    setSwiped(false);
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (startX.current === null || startY.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    if (!locked.current && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (!locked.current) {
+      if (Math.abs(dy) > Math.abs(dx)) { startX.current = null; return; }
+      locked.current = true;
+    }
+    e.preventDefault();
+    if (direction === "right" && dx > 0) setOffsetX(Math.min(dx, 100));
+    else if (direction === "left" && dx < 0) setOffsetX(Math.max(dx, -100));
+    else setOffsetX(0);
+  }, [direction]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (Math.abs(offsetX) > THRESHOLD) {
+      setSwiped(true);
+      setOffsetX(direction === "right" ? 150 : -150);
+      setTimeout(() => { onAction(); setOffsetX(0); setSwiped(false); }, 200);
+    } else {
+      setOffsetX(0);
+    }
+    startX.current = null;
+    locked.current = false;
+  }, [offsetX, direction, onAction]);
+
+  const active = direction === "right" ? offsetX > THRESHOLD : offsetX < -THRESHOLD;
+
+  return (
+    <div className={`relative overflow-hidden rounded-lg ${swiped ? "max-h-0 opacity-0 transition-all duration-200" : "max-h-20"}`}>
+      {offsetX !== 0 && (
+        <div className={`absolute inset-y-0 flex items-center text-[10px] font-semibold ${
+          direction === "right" ? "left-2 text-green-600" : "right-2 text-danger"
+        }`}>
+          {direction === "right" ? "Add →" : "← Remove"}
+        </div>
+      )}
+      <div
+        className={`flex items-center gap-1.5 py-1.5 px-2 transition-transform ${active ? (direction === "right" ? "bg-green-50" : "bg-red-50") : "bg-card"}`}
+        style={{ transform: `translateX(${offsetX}px)`, transitionDuration: startX.current ? "0ms" : "200ms" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <PlayerAvatar name={player.name} size="xs" />
+        <span className="text-xs font-medium flex-1 truncate">{player.name}</span>
+        {player.gender && (
+          <span className={`text-[9px] ${player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+            {player.gender === "M" ? "♂" : "♀"}
+          </span>
+        )}
+        {/* Desktop button */}
+        <button onClick={onAction}
+          className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 hidden sm:block ${
+            direction === "right" ? "text-action hover:bg-action/10" : "text-danger hover:bg-red-50"
+          }`}>
+          {direction === "right" ? "+" : "×"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PlayerSelector({
   players,
   selectedIds,
@@ -31,105 +114,26 @@ export function PlayerSelector({
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(!recentIds || recentIds.size === 0);
 
-  // Swipe state
-  const touchStart = useRef<{ x: number; id: string } | null>(null);
-  const [swipingId, setSwipingId] = useState<string | null>(null);
-  const [swipeDir, setSwipeDir] = useState<"left" | "right" | null>(null);
-
-  const handleTouchStart = (id: string, x: number) => {
-    touchStart.current = { x, id };
-    setSwipingId(null);
-    setSwipeDir(null);
+  const baseFilter = (p: Player) => {
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (genderFilter && p.gender !== genderFilter) return false;
+    return true;
   };
 
-  const handleTouchMove = (id: string, x: number) => {
-    if (!touchStart.current || touchStart.current.id !== id) return;
-    const dx = x - touchStart.current.x;
-    if (Math.abs(dx) > 30) {
-      setSwipingId(id);
-      setSwipeDir(dx > 0 ? "right" : "left");
-    } else {
-      setSwipingId(null);
-      setSwipeDir(null);
-    }
-  };
-
-  const handleTouchEnd = (id: string, isSelected: boolean) => {
-    if (swipingId === id && swipeDir) {
-      // Swipe right on unselected = add, swipe left on selected = remove
-      if (swipeDir === "right" && !isSelected) onToggle(id);
-      if (swipeDir === "left" && isSelected) onToggle(id);
-    }
-    touchStart.current = null;
-    setSwipingId(null);
-    setSwipeDir(null);
-  };
-
-  // Unselected players (available to add)
   const available = players
     .filter((p) => !selectedIds.has(p.id))
     .filter((p) => {
       if (!showAll && recentIds && recentIds.size > 0 && !recentIds.has(p.id)) return false;
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (genderFilter && p.gender !== genderFilter) return false;
-      return true;
+      return baseFilter(p);
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Selected players (already added)
   const selected = players
     .filter((p) => selectedIds.has(p.id))
-    .filter((p) => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (genderFilter && p.gender !== genderFilter) return false;
-      return true;
-    })
+    .filter(baseFilter)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const isRecent = !showAll && recentIds && recentIds.size > 0;
-
-  const renderRow = (p: Player, isSelected: boolean) => {
-    const isSwiping = swipingId === p.id;
-    const addSwipe = isSwiping && swipeDir === "right" && !isSelected;
-    const removeSwipe = isSwiping && swipeDir === "left" && isSelected;
-
-    return (
-      <div
-        key={p.id}
-        className={`flex items-center gap-2 py-2 px-2.5 rounded-lg transition-all ${
-          addSwipe ? "bg-green-50 translate-x-2" :
-          removeSwipe ? "bg-red-50 -translate-x-2" :
-          ""
-        }`}
-        onTouchStart={(e) => handleTouchStart(p.id, e.touches[0].clientX)}
-        onTouchMove={(e) => handleTouchMove(p.id, e.touches[0].clientX)}
-        onTouchEnd={() => handleTouchEnd(p.id, isSelected)}
-      >
-        <PlayerAvatar name={p.name} size="xs" />
-        <span className="text-sm font-medium flex-1 truncate">{p.name}</span>
-        {p.gender && (
-          <span className={`text-[10px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-            {p.gender === "M" ? "♂" : "♀"}
-          </span>
-        )}
-        {/* Desktop: click button */}
-        {!isSelected ? (
-          <button onClick={() => onToggle(p.id)}
-            className="text-[10px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10 shrink-0">
-            + Add
-          </button>
-        ) : (
-          <button onClick={() => onToggle(p.id)}
-            className="text-[10px] text-danger font-medium px-2 py-0.5 rounded hover:bg-red-50 shrink-0">
-            Remove
-          </button>
-        )}
-        {/* Swipe indicator */}
-        {addSwipe && <span className="text-xs text-green-600 font-medium shrink-0">→ Add</span>}
-        {removeSwipe && <span className="text-xs text-danger font-medium shrink-0">← Remove</span>}
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-2">
@@ -143,8 +147,7 @@ export function PlayerSelector({
             {g === "M" ? "♂" : "♀"}
           </button>
         ))}
-        <button type="button"
-          onClick={() => setShowAll(true)}
+        <button type="button" onClick={() => setShowAll(true)}
           className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
           All
         </button>
@@ -163,28 +166,32 @@ export function PlayerSelector({
       </div>
       <ClearInput value={search} onChange={setSearch} placeholder="Search..." className="text-xs" />
 
-      {/* Added players */}
-      {selected.length > 0 && (
-        <div>
+      {/* Two columns: Available | Added */}
+      <div className="flex gap-2">
+        {/* Left: Available */}
+        <div className="flex-1 min-w-0">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
-            Added ({selected.length}){" "}
-            <span className="normal-case text-muted font-normal">swipe ← to remove</span>
+            Available ({available.length})
           </div>
-          <div className="max-h-40 overflow-y-auto">
-            {selected.map((p) => renderRow(p, true))}
+          <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
+            {available.map((p) => (
+              <SwipeRow key={p.id} player={p} direction="right" onAction={() => onToggle(p.id)} />
+            ))}
+            {available.length === 0 && <p className="text-[10px] text-muted py-4 text-center">No players</p>}
           </div>
         </div>
-      )}
 
-      {/* Available players */}
-      <div>
-        <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
-          Available ({available.length}){" "}
-          <span className="normal-case text-muted font-normal">swipe → to add</span>
-        </div>
-        <div className="max-h-72 overflow-y-auto">
-          {available.map((p) => renderRow(p, false))}
-          {available.length === 0 && <p className="text-xs text-muted py-3 text-center">No matches</p>}
+        {/* Right: Added */}
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
+            Added ({selected.length})
+          </div>
+          <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
+            {selected.map((p) => (
+              <SwipeRow key={p.id} player={p} direction="left" onAction={() => onToggle(p.id)} />
+            ))}
+            {selected.length === 0 && <p className="text-[10px] text-muted py-4 text-center">None yet</p>}
+          </div>
         </div>
       </div>
     </div>
