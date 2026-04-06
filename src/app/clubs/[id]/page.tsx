@@ -983,7 +983,24 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          <p className="text-xs text-muted">{filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}{canManage ? " · swipe or hover to remove" : ""}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted">{filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}{canManage ? " · swipe or hover to remove" : ""}</p>
+            {canManage && (
+              <button onClick={async () => {
+                const r = await fetch(`/api/clubs/${club.id}/invite`, { method: "POST" });
+                if (r.ok) {
+                  const invite = await r.json();
+                  const url = `${window.location.origin}/clubs/join/${invite.token}`;
+                  if (navigator.clipboard) {
+                    await navigator.clipboard.writeText(url);
+                    alert("Invite link copied!");
+                  } else {
+                    prompt("Copy this invite link:", url);
+                  }
+                }
+              }} className="text-xs text-action font-medium">Copy Invite Link</button>
+            )}
+          </div>
 
           {/* Column header */}
           <div className="flex items-center gap-2 px-3 py-1 text-[10px] text-muted uppercase tracking-wider">

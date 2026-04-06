@@ -49,6 +49,7 @@ model Player {
   clubMembers   ClubMember[]
   clubRatings   ClubPlayerRating[]
   createdClubs  Club[]        @relation("createdClubs")
+  clubInvites   ClubInvite[]  @relation("ClubInviteCreator")
   clubPosts     ClubPost[]
   clubComments  ClubComment[]
 }
@@ -71,6 +72,7 @@ model Club {
   whatsappGroups WhatsAppGroup[]
   posts          ClubPost[]
   locations      ClubLocation[]
+  invites        ClubInvite[]
 }
 
 model ClubPlayerRating {
@@ -108,6 +110,21 @@ model ClubMember {
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([clubId, playerId])
+}
+
+model ClubInvite {
+  id        String   @id @default(cuid())
+  clubId    String
+  token     String   @unique @default(cuid())
+  createdBy String
+  expiresAt DateTime?
+  usedCount Int      @default(0)
+  maxUses   Int?     // null = unlimited
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  club    Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  creator Player @relation("ClubInviteCreator", fields: [createdBy], references: [id])
 }
 
 model Event {
