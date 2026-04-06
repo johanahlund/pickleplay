@@ -23,6 +23,8 @@ interface EventClassData {
   competitionMode?: string | null;
   competitionConfig?: Record<string, unknown> | null;
   competitionPhase?: string | null;
+  upperBracketMergeClassId?: string | null;
+  lowerBracketMergeClassId?: string | null;
 }
 
 interface ClassDetailViewProps {
@@ -135,6 +137,45 @@ export function ClassDetailView({
           </span>
         </div>
       </div>
+
+      {/* Cross-class bracket merge */}
+      {cls.competitionMode && allClasses.length > 1 && (
+        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+          <h4 className="text-sm font-semibold">Bracket Merge</h4>
+          <p className="text-[10px] text-muted">Link this class's elimination brackets with another class.</p>
+          <div>
+            <label className="block text-[10px] text-muted mb-1">Upper bracket → merge with lower bracket of:</label>
+            <select value={cls.upperBracketMergeClassId || ""}
+              onChange={async (e) => {
+                await fetch(`/api/events/${eventId}/classes`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ classId: cls.id, copyFromId: undefined }),
+                });
+                onRefresh();
+              }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="">None</option>
+              {allClasses.filter((c) => c.id !== cls.id).map((c) => (
+                <option key={c.id} value={c.id}>{c.name} (lower bracket)</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] text-muted mb-1">Lower bracket → merge with upper bracket of:</label>
+            <select value={cls.lowerBracketMergeClassId || ""}
+              onChange={async (e) => {
+                onRefresh();
+              }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="">None</option>
+              {allClasses.filter((c) => c.id !== cls.id).map((c) => (
+                <option key={c.id} value={c.id}>{c.name} (upper bracket)</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Players in this class */}
       <ClassPlayers eventId={eventId} classId={cls.id} format={cls.format} canManage={canManage} onRefresh={onRefresh} />

@@ -10,6 +10,8 @@ import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
 import { ClassesManager } from "@/components/ClassesManager";
 import { ClassDetailView } from "@/components/ClassDetailView";
+import { SessionsManager } from "@/components/SessionsManager";
+import { CompetitionResults } from "@/components/CompetitionResults";
 
 interface Player {
   id: string;
@@ -1965,13 +1967,27 @@ export default function EventDetailPage() {
 
             {/* Classes — only when competition mode is on */}
             {event.competitionMode && !selectedClassId && (
-              <ClassesManager
-                eventId={id as string}
-                classes={event.classes || []}
-                canManage={canManage}
-                onRefresh={fetchEvent}
-                onClassSelect={(classId) => setSelectedClassId(classId)}
-              />
+              <>
+                <ClassesManager
+                  eventId={id as string}
+                  classes={event.classes || []}
+                  canManage={canManage}
+                  onRefresh={fetchEvent}
+                  onClassSelect={(classId) => setSelectedClassId(classId)}
+                />
+                <SessionsManager
+                  eventId={id as string}
+                  sessions={(event as { sessions?: { id: string; name: string; date: string; endDate?: string | null; numCourts: number; status: string; _count?: { matches: number } }[] }).sessions || []}
+                  canManage={canManage}
+                  onRefresh={fetchEvent}
+                />
+                <CompetitionResults
+                  eventId={id as string}
+                  classes={(event.classes || []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))}
+                  players={event.players.map((ep) => ({ playerId: ep.player.id, player: { id: ep.player.id, name: ep.player.name, emoji: ep.player.emoji } }))}
+                  canManage={canManage}
+                />
+              </>
             )}
             {event.competitionMode && selectedClassId && (() => {
               const cls = event.classes?.find((c: { id: string }) => c.id === selectedClassId);
