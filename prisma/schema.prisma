@@ -163,7 +163,7 @@ model EventClass {
 
   // Format settings
   scoringFormat String  @default("1x11") // e.g. "1x11", "3x11", "1xR15", "3xR21"
-  winBy         String  @default("2") // "1", "2", "cap15", "cap18"
+  winBy         String  @default("2") // "1", "2", "cap13", "cap15", "cap17", "cap18", "cap23", "cap25"
   timedMinutes  Int?
   pairingMode  String   @default("random")
   playMode     String   @default("round_based") // "round_based" | "continuous"

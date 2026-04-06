@@ -651,8 +651,12 @@ function NewEventPage() {
                 className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
                 <option value="1">1</option>
                 <option value="2">2</option>
-                {scoringFormat === "1x11" && <option value="cap15">Cap 15</option>}
+                <option value="cap13">Cap 13</option>
+                <option value="cap15">Cap 15</option>
+                <option value="cap17">Cap 17</option>
                 <option value="cap18">Cap 18</option>
+                <option value="cap23">Cap 23</option>
+                <option value="cap25">Cap 25</option>
               </select>
             </div>
           </>
