@@ -1179,10 +1179,11 @@ export default function EventDetailPage() {
       )}
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Match Pairing</label>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {pairingOptions.map((m) => (
             <button key={m.value} type="button" onClick={() => { setEditPairingMode(m.value); setHasEdits(true); }}
-              className={`flex-1 py-2 rounded-lg text-center transition-all ${
+              aria-label={m.label}
+              className={`flex-1 min-w-[40px] py-2 rounded-lg text-center transition-all ${
                 editPairingMode === m.value ? "bg-selected text-white ring-1 ring-selected/50" : "bg-gray-100 hover:bg-gray-200"
               }`} title={m.label}>
               <span className="text-lg">{m.icon}</span>

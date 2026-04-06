@@ -108,7 +108,7 @@ export function BottomNav() {
                   : "text-muted hover:text-foreground"
               }`}
             >
-              <span className="text-xl">{tab.icon}</span>
+              <span className="text-xl" aria-hidden="true">{tab.icon}</span>
               <span className="text-[11px]">{tab.label}</span>
             </Link>
           );
@@ -118,8 +118,9 @@ export function BottomNav() {
           <Link
             href={`/events/${activeEvent.id}`}
             className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-white bg-green-600 shadow-md animate-pulse-slow"
+            aria-label={`Active event: ${activeEvent.name}`}
           >
-            <span className="text-lg">⚡</span>
+            <span className="text-lg" aria-hidden="true">⚡</span>
             <span className="text-[9px] font-bold truncate max-w-[50px]">Live</span>
           </Link>
         )}

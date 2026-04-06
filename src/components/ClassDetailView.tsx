@@ -121,10 +121,11 @@ export function ClassDetailView({
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">
         <div>
           <label className="block text-xs text-muted mb-1">Pairing</label>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
             {PAIRING_OPTIONS.map((m) => (
               <button key={m.value} onClick={() => canManage && updateField("pairingMode", m.value)}
-                className={`flex-1 py-2 rounded-lg text-center transition-all ${
+                aria-label={m.label}
+                className={`flex-1 min-w-[40px] py-2 rounded-lg text-center transition-all ${
                   cls.pairingMode === m.value ? "bg-selected text-white" : "bg-gray-100 hover:bg-gray-200"
                 }`} title={m.label}>
                 <span className="text-base">{m.icon}</span>

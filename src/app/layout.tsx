@@ -4,6 +4,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/Header";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ToastProvider } from "@/components/Toast";
 
 export const metadata: Metadata = {
   title: "PickleJ",
@@ -38,9 +39,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <Providers>
-          <Header />
-          <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
-          <BottomNav />
+          <ToastProvider>
+            <Header />
+            <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
+            <BottomNav />
+          </ToastProvider>
         </Providers>
         <ServiceWorkerRegister />
       </body>

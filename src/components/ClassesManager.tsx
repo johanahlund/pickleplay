@@ -139,7 +139,7 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh, onClass
             <div className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
               onClick={() => onClassSelect?.(cls.id)}>
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium">{cls.name}</span>
+                <span className="text-sm font-medium truncate">{cls.name}</span>
                 <div className="flex gap-1.5 mt-0.5">
                   <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
                   {(cls.minPlayers || cls.maxPlayers) && (

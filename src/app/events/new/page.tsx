@@ -311,10 +311,9 @@ function NewEventPage() {
   };
 
   const canAdvance = () => {
-    switch (step) {
-      case 1: return name.trim().length > 0;
-      default: return true;
-    }
+    if (step === 1) return name.trim().length > 0 && date.length > 0;
+    if (step === stepNum("Players")) return selectedIds.size >= 2;
+    return true;
   };
 
   const baseSteps = fixedPairs

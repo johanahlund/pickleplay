@@ -209,6 +209,7 @@ export function Header() {
                   onClick={() => router.push("/profile")}
                   className="text-sm opacity-90 hover:opacity-100 transition-opacity"
                   title="My profile"
+                  aria-label={`Profile for ${session.user.name}`}
                 >
                   {session.user.name}
                 </button>
@@ -216,6 +217,7 @@ export function Header() {
                   onClick={() => router.push("/profile")}
                   className="relative text-lg opacity-90 hover:opacity-100"
                   title="Notifications"
+                  aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
                 >
                   🔔
                   {unreadCount > 0 && (
