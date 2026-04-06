@@ -85,15 +85,23 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
     onRefresh();
   };
 
-  const forcePair = async (player1Id: string, player2Id: string) => {
-    await fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
+  const forcePair = (player1Id: string, player2Id: string) => {
+    // Optimistic: add pair immediately
+    const p1 = players.find((p) => p.playerId === player1Id)?.player;
+    const p2 = players.find((p) => p.playerId === player2Id)?.player;
+    if (p1 && p2) {
+      setPairs((prev) => [...prev, {
+        id: `temp-${Date.now()}`, player1: p1, player2: p2,
+        player1Id, player2Id, classId: cls.id,
+      }]);
+    }
+    setManualPairSelection(null);
+    // Fire API in background
+    fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
-    });
-    setManualPairSelection(null);
-    fetchData();
-    onRefresh();
+    }).then(() => { fetchData(); onRefresh(); });
   };
 
   const unpair = async (pairId: string) => {
@@ -164,7 +172,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
               <span className="text-sm font-medium flex-1">{pair.player1.name} & {pair.player2.name}</span>
               {canManage && (
                 <button onClick={() => unpair(pair.id)}
-                  className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Unpair</button>
+                  className="text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Unpair</button>
               )}
             </div>
           ))}
