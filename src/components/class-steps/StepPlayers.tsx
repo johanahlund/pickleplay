@@ -87,7 +87,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
     onRefresh();
   };
 
-  const forcePair = (player1Id: string, player2Id: string) => {
+  const forcePair = async (player1Id: string, player2Id: string) => {
     setPairingBusy(true);
     // Optimistic: add pair immediately
     const p1 = players.find((p) => p.playerId === player1Id)?.player;
@@ -99,20 +99,21 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       }]);
     }
     setPairSelection(new Set());
-    // Fire API — no refetch, trust optimistic state
-    fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
+    // Await API so data is saved before user navigates away
+    await fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
-    }).finally(() => setPairingBusy(false));
+    });
+    setPairingBusy(false);
   };
 
-  const unpair = (pairId: string) => {
+  const unpair = async (pairId: string) => {
     if (!confirm("Remove this pair?")) return;
     // Optimistic: remove pair immediately
     setPairs((prev) => prev.filter((p) => p.id !== pairId));
-    // Fire API — no refetch, trust optimistic state
-    fetch(`/api/events/${eventId}/pairs`, {
+    // Await API so data is saved before user navigates away
+    await fetch(`/api/events/${eventId}/pairs`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pairId }),
