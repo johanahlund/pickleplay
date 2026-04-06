@@ -766,7 +766,10 @@ function NewEventPage() {
             players={players as { id: string; name: string; gender?: string | null }[]}
             selectedIds={selectedIds}
             onToggle={togglePlayer}
-            onDeselectAll={() => setSelectedIds(new Set())}
+            onSelectAll={() => {
+              const recent = recentPlayerIds.size > 0 ? recentPlayerIds : new Set(players.map((p) => p.id));
+              setSelectedIds(new Set([...selectedIds, ...recent]));
+            }}
             recentIds={recentPlayerIds.size > 0 ? recentPlayerIds : undefined}
           />
         )}

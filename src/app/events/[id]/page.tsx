@@ -1575,7 +1575,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Select Players</h3>
+          <h3 className="text-lg font-bold">Add Players</h3>
           <button onClick={() => setBulkSelectMode(false)}
             className="text-xs text-primary font-medium">Done</button>
         </div>
@@ -1609,7 +1609,7 @@ export default function EventDetailPage() {
           {canManage && (
             <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
               className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
-              Select
+              Add
             </button>
           )}
         </div>
