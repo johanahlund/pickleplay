@@ -8,6 +8,7 @@ import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
+import { ClassesManager } from "@/components/ClassesManager";
 
 interface Player {
   id: string;
@@ -1934,25 +1935,7 @@ export default function EventDetailPage() {
             {event.competitionMode && (
               <>
                 {/* Classes */}
-                <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-                  <h4 className="text-sm font-semibold">Event Classes</h4>
-                  {event.classes && event.classes.length > 0 ? (
-                    <div className="space-y-1.5">
-                      {event.classes.map((cls: { id: string; name: string; format: string; gender: string; ageGroup: string; isDefault: boolean }) => (
-                        <div key={cls.id} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50">
-                          <span className="text-sm font-medium flex-1">{cls.name}</span>
-                          <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
-                          {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Default</span>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted">No classes configured</p>
-                  )}
-                  {canManage && (
-                    <p className="text-xs text-muted">Class management (add Male/Female/Mix, age groups, skill ranges) coming soon.</p>
-                  )}
-                </div>
+                <ClassesManager eventId={id as string} classes={event.classes || []} canManage={canManage} onRefresh={fetchEvent} />
 
                 <CompetitionView
                   eventId={id as string}
