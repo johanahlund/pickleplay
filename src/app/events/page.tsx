@@ -22,6 +22,7 @@ interface Event {
   createdById: string | null;
   clubId: string | null;
   club?: { id: string; name: string; emoji: string } | null;
+  classes?: { isDefault: boolean; format: string; numSets: number; scoringType: string; pairingMode: string; competitionMode?: string | null }[];
   players: { player: { name: string; emoji: string }; playerId: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
@@ -44,6 +45,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
 
   useEffect(() => {
     fetch("/api/events")
@@ -109,8 +111,26 @@ export default function EventsPage() {
     return true;
   };
 
+  // Club context from sessionStorage
+  const activeClubId = typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null;
+
   const filteredEvents = events
-    .filter((e) => e.name.toLowerCase().includes(searchQuery.toLowerCase()) && matchesDateFilter(e.date, dateFilter))
+    .filter((e) => {
+      if (!e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (!matchesDateFilter(e.date, dateFilter)) return false;
+      // Club filter
+      if (activeClubId && e.clubId !== activeClubId) return false;
+      // Type filter
+      if (typeFilter === "competitions") {
+        const hasCompetition = e.classes?.some((c) => c.competitionMode);
+        if (!hasCompetition) return false;
+      }
+      if (typeFilter === "events") {
+        const hasCompetition = e.classes?.some((c) => c.competitionMode);
+        if (hasCompetition) return false;
+      }
+      return true;
+    })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   if (loading) {
@@ -130,6 +150,20 @@ export default function EventsPage() {
       </div>
 
       <div className="space-y-2">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {([
+            { value: "all", label: "All" },
+            { value: "events", label: "Events" },
+            { value: "competitions", label: "Competitions" },
+          ] as const).map((t) => (
+            <button key={t.value} onClick={() => setTypeFilter(t.value)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                typeFilter === t.value ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
         <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search events..." className="text-sm" />
         <div className="flex flex-wrap gap-1.5">
           {[
@@ -181,6 +215,9 @@ export default function EventsPage() {
                     <h3 className="font-semibold text-lg flex items-center gap-2">
                       {event.name}
                       {timeStatus === "active" && <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />}
+                      {event.classes?.some((c) => c.competitionMode) && (
+                        <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Competition</span>
+                      )}
                       {event.club && (
                         <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
                           {event.club.emoji} {event.club.name}
