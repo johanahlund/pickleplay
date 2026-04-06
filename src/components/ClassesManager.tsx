@@ -13,6 +13,10 @@ interface EventClass {
   scoringType: string;
   pairingMode: string;
   competitionMode?: string | null;
+  minPlayers?: number | null;
+  maxPlayers?: number | null;
+  belowMinAction?: string | null;
+  mergeWithClassId?: string | null;
 }
 
 interface ClassesManagerProps {
@@ -20,6 +24,7 @@ interface ClassesManagerProps {
   classes: EventClass[];
   canManage: boolean;
   onRefresh: () => void;
+  onClassSelect?: (classId: string) => void;
 }
 
 const GENDER_OPTIONS = [
@@ -49,13 +54,17 @@ function classLabel(cls: EventClass): string {
   return parts.join(" ") || cls.name;
 }
 
-export function ClassesManager({ eventId, classes, canManage, onRefresh }: ClassesManagerProps) {
+export function ClassesManager({ eventId, classes, canManage, onRefresh, onClassSelect }: ClassesManagerProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newFormat, setNewFormat] = useState("doubles");
   const [newGender, setNewGender] = useState("open");
   const [newAge, setNewAge] = useState("open");
   const [copyFromId, setCopyFromId] = useState<string>("");
+  const [newMin, setNewMin] = useState("");
+  const [newMax, setNewMax] = useState("");
+  const [newBelowMin, setNewBelowMin] = useState("tbd");
+  const [newMergeWith, setNewMergeWith] = useState("");
   const [creating, setCreating] = useState(false);
   const [copyingForId, setCopyingForId] = useState<string | null>(null);
 
@@ -70,6 +79,10 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
         format: newFormat,
         gender: newGender,
         ageGroup: newAge,
+        ...(newMin ? { minPlayers: parseInt(newMin) } : {}),
+        ...(newMax ? { maxPlayers: parseInt(newMax) } : {}),
+        belowMinAction: newBelowMin,
+        ...(newBelowMin === "merge" && newMergeWith ? { mergeWithClassId: newMergeWith } : {}),
         ...(copyFromId ? { copyFromId } : {}),
       }),
     });
@@ -123,20 +136,29 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
       <div className="space-y-1.5">
         {classes.map((cls) => (
           <div key={cls.id} className="space-y-1">
-            <div className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50">
-              <span className="text-sm font-medium flex-1">{cls.name}</span>
-              <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
-              {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Default</span>}
+            <div className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+              onClick={() => onClassSelect?.(cls.id)}>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium">{cls.name}</span>
+                <div className="flex gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
+                  {(cls.minPlayers || cls.maxPlayers) && (
+                    <span className="text-[10px] text-muted">· {cls.minPlayers || "?"}-{cls.maxPlayers || "∞"} {cls.format === "doubles" ? "teams" : "players"}</span>
+                  )}
+                </div>
+              </div>
+              {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">Default</span>}
               {canManage && classes.length > 1 && (
-                <button onClick={() => setCopyingForId(copyingForId === cls.id ? null : cls.id)}
-                  className={`text-[10px] px-1.5 py-0.5 rounded ${copyingForId === cls.id ? "bg-action/10 text-action" : "hidden group-hover:block text-muted hover:text-foreground hover:bg-gray-200"}`}>
+                <button onClick={(e) => { e.stopPropagation(); setCopyingForId(copyingForId === cls.id ? null : cls.id); }}
+                  className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${copyingForId === cls.id ? "bg-action/10 text-action" : "hidden group-hover:block text-muted hover:text-foreground hover:bg-gray-200"}`}>
                   Copy from
                 </button>
               )}
               {canManage && !cls.isDefault && (
-                <button onClick={() => deleteClass(cls.id, cls.name)}
-                  className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Remove</button>
+                <button onClick={(e) => { e.stopPropagation(); deleteClass(cls.id, cls.name); }}
+                  className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50 shrink-0">Remove</button>
               )}
+              <span className="text-muted text-sm shrink-0">›</span>
             </div>
             {/* Copy from selector */}
             {copyingForId === cls.id && (
@@ -215,6 +237,42 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
               <p className="text-[10px] text-muted mt-0.5">Copies: scoring, sets, pairing mode, play mode, competition config</p>
             </div>
           )}
+
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs text-muted mb-1">Min {newFormat === "doubles" ? "teams" : "players"}</label>
+              <input type="number" value={newMin} onChange={(e) => setNewMin(e.target.value)} placeholder="No min" min="1"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs text-muted mb-1">Max {newFormat === "doubles" ? "teams" : "players"}</label>
+              <input type="number" value={newMax} onChange={(e) => setNewMax(e.target.value)} placeholder="No max" min="1"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">If below minimum</label>
+            <div className="flex gap-1.5">
+              {[
+                { value: "tbd", label: "To be decided" },
+                { value: "cancel", label: "Cancel class" },
+                { value: "merge", label: "Merge with..." },
+              ].map((a) => (
+                <button key={a.value} type="button" onClick={() => setNewBelowMin(a.value)}
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-medium transition-all ${newBelowMin === a.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+            {newBelowMin === "merge" && classes.length > 0 && (
+              <select value={newMergeWith} onChange={(e) => setNewMergeWith(e.target.value)}
+                className="w-full mt-1.5 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <option value="">Select class to merge with</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
+          </div>
 
           <div>
             <label className="block text-xs text-muted mb-1">Class Name</label>

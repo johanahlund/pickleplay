@@ -64,6 +64,8 @@ model ClubLocation {
   clubId        String
   name          String
   googleMapsUrl String?
+  city          String?
+  country       String?
 
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 }
@@ -85,10 +87,10 @@ model Event {
   name         String
   date         DateTime @default(now())
   endDate      DateTime?
-  status       String   @default("setup") // setup, active, completed
+  status       String   @default("draft") // draft, visible, open, closed, active, completed
   numCourts    Int      @default(2)
-  openSignup   Boolean  @default(true)
-  visibility   String   @default("visible") // "visible" | "hidden"
+  openSignup   Boolean  @default(true)  // kept for backwards compat
+  visibility   String   @default("visible") // kept for backwards compat
 
   // Speaker host
   speakerUserId   String?  // player ID of the device acting as speaker
@@ -138,6 +140,10 @@ model EventClass {
   rankingMode  String   @default("ranked")
   minPlayers   Int?
   maxPlayers   Int?
+
+  // Below-min action
+  belowMinAction    String?  // "cancel" | "merge" | "tbd"
+  mergeWithClassId  String?  // class to merge with if belowMinAction = "merge"
 
   // Competition
   competitionMode   String?  // null | "groups_elimination"

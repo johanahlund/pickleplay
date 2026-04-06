@@ -26,7 +26,7 @@ export async function POST(
   }
 
   const body = await req.json();
-  const { name, format, gender, ageGroup, ageMin, ageMax, skillMin, skillMax, copyFromId } = body;
+  const { name, format, gender, ageGroup, ageMin, ageMax, skillMin, skillMax, minPlayers, maxPlayers, belowMinAction, mergeWithClassId, copyFromId } = body;
 
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -43,6 +43,10 @@ export async function POST(
     ...(ageMax !== undefined ? { ageMax } : {}),
     ...(skillMin !== undefined ? { skillMin } : {}),
     ...(skillMax !== undefined ? { skillMax } : {}),
+    ...(minPlayers !== undefined ? { minPlayers } : {}),
+    ...(maxPlayers !== undefined ? { maxPlayers } : {}),
+    ...(belowMinAction ? { belowMinAction } : {}),
+    ...(mergeWithClassId ? { mergeWithClassId } : {}),
   };
 
   // Copy competition settings from another class

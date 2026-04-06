@@ -334,6 +334,7 @@ export default function EventDetailPage() {
   const [hasEdits, setHasEdits] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editStatus, setEditStatus] = useState("draft");
   const [editCourts, setEditCourts] = useState(2);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
@@ -607,6 +608,7 @@ export default function EventDetailPage() {
     if (!event) return;
     setHasEdits(false);
     setEditName(event.name);
+    setEditStatus(event.status);
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
@@ -642,6 +644,7 @@ export default function EventDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: editName.trim(),
+        status: editStatus,
         numCourts: editCourts,
         date: eventDate.toISOString(),
         endDate: eventEndDate.toISOString(),
@@ -1031,6 +1034,33 @@ export default function EventDetailPage() {
           )}
         </div>
       )}
+      {/* Event status */}
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Status</label>
+        <div className="flex gap-1 flex-wrap">
+          {[
+            { value: "draft", label: "Draft" },
+            { value: "visible", label: "Visible" },
+            { value: "open", label: "Open" },
+            { value: "closed", label: "Closed" },
+            { value: "active", label: "Active" },
+            { value: "completed", label: "Done" },
+          ].map((s) => (
+            <button key={s.value} type="button" onClick={() => { setEditStatus(s.value); setHasEdits(true); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${editStatus === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted mt-1">
+          {editStatus === "draft" && "Only organizers can see this event."}
+          {editStatus === "visible" && "Everyone can see but can't sign up yet."}
+          {editStatus === "open" && "Players can sign up."}
+          {editStatus === "closed" && "No more signups. Ready to start."}
+          {editStatus === "active" && "Event is running."}
+          {editStatus === "completed" && "Event is finished."}
+        </p>
+      </div>
       {/* Competition toggle */}
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-3 cursor-pointer">
