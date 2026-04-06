@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { PlayerSelector } from "../PlayerSelector";
+import { PlayerAvatar } from "../PlayerAvatar";
 
 interface Player {
   id: string;
@@ -168,7 +169,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pairs</div>
           {pairs.map((pair) => (
             <div key={pair.id} className="group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
-              <span className="text-sm">{pair.player1.emoji}{pair.player2.emoji}</span>
+              <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
               <span className="text-sm font-medium flex-1">{pair.player1.name} & {pair.player2.name}</span>
               {canManage && (
                 <button onClick={() => unpair(pair.id)}
@@ -185,12 +186,13 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
           <div className="text-[10px] text-amber-700 px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pending Requests</div>
           {pendingRequests.map((r) => (
             <div key={r.id} className="flex items-center gap-2 py-2 px-3 border-b border-amber-100 last:border-b-0 bg-amber-50/50">
-              <span className="text-sm">{r.requester.emoji}</span>
+              <PlayerAvatar name={r.requester.name} size="xs" />
               <span className="text-sm flex-1">
                 <span className="font-medium">{r.requester.name}</span>
                 <span className="text-muted"> → </span>
-                <span className="font-medium">{r.requested.name}</span> {r.requested.emoji}
+                <span className="font-medium">{r.requested.name}</span>
               </span>
+              <PlayerAvatar name={r.requested.name} size="xs" />
               {canManage && (
                 <>
                   <button onClick={() => acceptRequest(r.id)}
@@ -228,7 +230,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
                 className={`w-full flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 transition-colors ${
                   isSelected ? "bg-action/10" : canManage ? "hover:bg-gray-50" : ""
                 }`}>
-                <span className="text-lg">{ep.player.emoji}</span>
+                <PlayerAvatar name={ep.player.name} size="xs" />
                 <span className="text-sm font-medium flex-1 text-left">{ep.player.name}</span>
                 {ep.player.gender && (
                   <span className={`text-[10px] ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
