@@ -116,7 +116,7 @@ export async function PATCH(
       "numSets", "scoringType", "timedMinutes",
       "pairingMode", "playMode", "prioSpeed", "prioFairness", "prioSkill", "rankingMode",
       "minPlayers", "maxPlayers", "belowMinAction", "mergeWithClassId",
-      "upperBracketMergeClassId", "lowerBracketMergeClassId"];
+      "upperBracketMergeClassId", "lowerBracketMergeClassId", "competitionPhase"];
     const data: Record<string, unknown> = {};
     for (const key of allowed) {
       if (body[key] !== undefined) data[key] = body[key];
