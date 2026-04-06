@@ -12,10 +12,20 @@ model Player {
   id           String   @id @default(cuid())
   name         String
   emoji        String   @default("🏓")
-  rating       Float    @default(1000)
+  rating       Float    @default(1000)  // legacy, kept for backwards compat
   wins         Int      @default(0)
   losses       Int      @default(0)
   createdAt    DateTime @default(now())
+
+  // Global rating (from cross-club matches)
+  globalRating           Float?   // null = not yet established
+  globalRatingConfidence Int      @default(0) // 0=none, 1-3=estimated, 4+=direct
+  globalWins             Int      @default(0)
+  globalLosses           Int      @default(0)
+
+  // DUPR
+  duprId       String?  // DUPR player ID
+  duprRating   Float?   // synced from DUPR
 
   // Auth
   email        String?  @unique
@@ -37,6 +47,7 @@ model Player {
   pairsAsPlayer1 EventPair[]  @relation("pairPlayer1")
   pairsAsPlayer2 EventPair[]  @relation("pairPlayer2")
   clubMembers   ClubMember[]
+  clubRatings   ClubPlayerRating[]
   createdClubs  Club[]        @relation("createdClubs")
   clubPosts     ClubPost[]
   clubComments  ClubComment[]
@@ -47,16 +58,33 @@ model Club {
   name        String
   emoji       String   @default("🏓")
   description String?
+  ratingOffset Float?  // club rating - global rating offset (calculated)
+  ratingBridgePlayers Int @default(0) // how many players have global ratings
   createdAt   DateTime @default(now())
 
   createdById String?
   createdBy   Player?  @relation("createdClubs", fields: [createdById], references: [id])
 
   members        ClubMember[]
+  playerRatings  ClubPlayerRating[]
   events         Event[]
   whatsappGroups WhatsAppGroup[]
   posts          ClubPost[]
   locations      ClubLocation[]
+}
+
+model ClubPlayerRating {
+  id       String @id @default(cuid())
+  clubId   String
+  playerId String
+  rating   Float  @default(1000)
+  wins     Int    @default(0)
+  losses   Int    @default(0)
+
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, playerId])
 }
 
 model ClubLocation {
@@ -226,6 +254,7 @@ model Match {
   bracketPosition Int?
   matchFormat    String?
   sessionId      String?  // which session this match is scheduled in
+  isCrossClub    Boolean  @default(false) // players from different clubs
 
   createdAt DateTime @default(now())
 

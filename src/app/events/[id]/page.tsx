@@ -19,6 +19,9 @@ interface Player {
   emoji: string;
   photoUrl?: string | null;
   rating: number;
+  globalRating?: number | null;
+  globalRatingConfidence?: number;
+  duprRating?: number | null;
   role?: string;
   gender?: string | null;
   phone?: string | null;

@@ -144,8 +144,10 @@ export async function POST(
   });
 
   if (match.rankingMode === "ranked") {
-    // Apply ELO immediately
-    change = await applyElo(id);
+    // Apply ratings (club + global + legacy)
+    const { updateRatings } = await import("@/lib/ratings");
+    const result = await updateRatings(id);
+    change = result.change;
   } else if (match.rankingMode === "approval") {
     // Score saved but ELO not applied — awaiting confirmation
     await prisma.match.update({
