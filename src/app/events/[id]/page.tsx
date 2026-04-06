@@ -9,6 +9,7 @@ import { PlayerSelector } from "@/components/PlayerSelector";
 import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
 import { ClassesManager } from "@/components/ClassesManager";
+import { ClassDetailView } from "@/components/ClassDetailView";
 
 interface Player {
   id: string;
@@ -359,6 +360,7 @@ export default function EventDetailPage() {
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "future">("current");
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -1962,9 +1964,32 @@ export default function EventDetailPage() {
             </div>
 
             {/* Classes — only when competition mode is on */}
-            {event.competitionMode && (
-              <ClassesManager eventId={id as string} classes={event.classes || []} canManage={canManage} onRefresh={fetchEvent} />
+            {event.competitionMode && !selectedClassId && (
+              <ClassesManager
+                eventId={id as string}
+                classes={event.classes || []}
+                canManage={canManage}
+                onRefresh={fetchEvent}
+                onClassSelect={(classId) => setSelectedClassId(classId)}
+              />
             )}
+            {event.competitionMode && selectedClassId && (() => {
+              const cls = event.classes?.find((c: { id: string }) => c.id === selectedClassId);
+              if (!cls) return null;
+              return (
+                <ClassDetailView
+                  eventId={id as string}
+                  cls={cls as never}
+                  allClasses={(event.classes || []) as never}
+                  pairs={event.pairs}
+                  matches={event.matches}
+                  canManage={canManage}
+                  numCourts={event.numCourts}
+                  onBack={() => setSelectedClassId(null)}
+                  onRefresh={fetchEvent}
+                />
+              );
+            })()}
           </div>
         )}
         {activeSection === "rounds" && renderRounds()}
