@@ -907,7 +907,7 @@ export default function EventDetailPage() {
     pairing: "Pairing",
     players: "Players",
     pairs: "Pairs",
-    competition: "Competition",
+    competition: event.competitionMode ? "Competition" : "Ranked",
     rounds: "Matches",
   };
 
@@ -1906,7 +1906,7 @@ export default function EventDetailPage() {
         {activeSection === "pairs" && renderPairs()}
         {activeSection === "competition" && event && (
           <div className="space-y-3">
-            {/* Ranking */}
+            {/* Ranking — always shown */}
             <div className="bg-card rounded-xl border border-border p-4 space-y-3">
               <p className="text-xs text-muted">Do matches count towards app player rankings?</p>
               <div className="flex gap-2">
@@ -1929,18 +1929,44 @@ export default function EventDetailPage() {
                 {editRankingMode === "none" && "Scores recorded but don't affect ratings."}
               </p>
             </div>
-            {/* Competition */}
-            <CompetitionView
-              eventId={id as string}
-              pairs={event.pairs}
-              matches={event.matches as never}
-              competitionMode={event.competitionMode ?? null}
-              competitionConfig={event.competitionConfig as never}
-              competitionPhase={event.competitionPhase ?? null}
-              canManage={canManage}
-              numCourts={event.numCourts}
-              onRefresh={fetchEvent}
-            />
+
+            {/* Competition — only when mode is on */}
+            {event.competitionMode && (
+              <>
+                {/* Classes */}
+                <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+                  <h4 className="text-sm font-semibold">Event Classes</h4>
+                  {event.classes && event.classes.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {event.classes.map((cls: { id: string; name: string; format: string; gender: string; ageGroup: string; isDefault: boolean }) => (
+                        <div key={cls.id} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50">
+                          <span className="text-sm font-medium flex-1">{cls.name}</span>
+                          <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
+                          {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Default</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted">No classes configured</p>
+                  )}
+                  {canManage && (
+                    <p className="text-xs text-muted">Class management (add Male/Female/Mix, age groups, skill ranges) coming soon.</p>
+                  )}
+                </div>
+
+                <CompetitionView
+                  eventId={id as string}
+                  pairs={event.pairs}
+                  matches={event.matches as never}
+                  competitionMode={event.competitionMode ?? null}
+                  competitionConfig={event.competitionConfig as never}
+                  competitionPhase={event.competitionPhase ?? null}
+                  canManage={canManage}
+                  numCourts={event.numCourts}
+                  onRefresh={fetchEvent}
+                />
+              </>
+            )}
           </div>
         )}
         {activeSection === "rounds" && renderRounds()}
