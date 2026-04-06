@@ -304,12 +304,6 @@ export function ClassStepFlow({
         )}
       </div>
 
-      {/* Back to classes list */}
-      <button onClick={onBack}
-        className="w-full py-2.5 text-xs text-action font-medium rounded-xl border border-action/30 hover:bg-action/5">
-        ← Back to Classes
-      </button>
-
       {/* Delete class */}
       {canManage && !cls.isDefault && (
         <button onClick={() => {
@@ -360,7 +354,15 @@ export function ClassStepFlow({
       )}
 
       {/* Class name header */}
-      <h3 className="text-base font-bold">{cls.name}</h3>
+      {isOverview ? (
+        <div className="flex items-center justify-between">
+          <button onClick={onBack} className="text-xs text-action font-medium shrink-0">← Classes</button>
+          <h3 className="text-base font-bold text-center">{cls.name}</h3>
+          <span className="w-16" />
+        </div>
+      ) : (
+        <h3 className="text-base font-bold">{cls.name}</h3>
+      )}
 
       {/* Step content or overview */}
       {isOverview ? renderOverview() : renderStep()}

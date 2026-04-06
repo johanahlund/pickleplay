@@ -151,10 +151,15 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
 
       <div>
         <label className="block text-xs text-muted mb-1">Matches per matchup in group</label>
-        <Toggle value={config.matchesPerMatchup} options={[
-          { value: 1, label: "Once" },
-          { value: 2, label: "Twice" },
-        ]} onChange={(v) => updateConfig({ matchesPerMatchup: v as number })} />
+        <select
+          disabled={!canManage}
+          value={config.matchesPerMatchup}
+          onChange={(e) => updateConfig({ matchesPerMatchup: parseInt(e.target.value) })}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value={1}>Once</option>
+          <option value={2}>Twice</option>
+        </select>
       </div>
 
       <div>
