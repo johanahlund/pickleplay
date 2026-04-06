@@ -182,7 +182,7 @@ export function ClassStepFlow({
       case "category":
         return <StepCategory cls={cls} canManage={canManage} updateField={updateField} />;
       case "groups":
-        return <StepGroups config={config} maxTeams={cls.maxPlayers ?? null} registeredTeams={classPairs.length} canManage={canManage} updateConfig={updateConfig} />;
+        return <StepGroups config={config} cls={cls} maxTeams={cls.maxPlayers ?? null} registeredTeams={classPairs.length} canManage={canManage} updateField={updateField} updateConfig={updateConfig} />;
       case "advancement":
         return <StepAdvancement config={config} canManage={canManage} updateConfig={updateConfig} />;
       case "upper-config":

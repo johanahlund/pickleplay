@@ -4,9 +4,14 @@ import { CompetitionConfig } from "@/lib/competition/types";
 
 interface StepGroupsProps {
   config: CompetitionConfig;
+  cls: {
+    numSets: number;
+    scoringType: string;
+  };
   maxTeams: number | null;
   registeredTeams: number;
   canManage: boolean;
+  updateField: (field: string, value: unknown) => void;
   updateConfig: (partial: Partial<CompetitionConfig>) => void;
 }
 
@@ -23,7 +28,16 @@ function distributionNote(total: number, numGroups: number): string | null {
   return `${remainder} group${remainder > 1 ? "s" : ""} with ${bigger} teams, ${numGroups - remainder} with ${perGroup}`;
 }
 
-export function StepGroups({ config, maxTeams, registeredTeams, canManage, updateConfig }: StepGroupsProps) {
+const SCORING_OPTIONS = [
+  { value: "normal_9", label: "To 9" },
+  { value: "normal_11", label: "To 11" },
+  { value: "normal_15", label: "To 15" },
+  { value: "rally_15", label: "Rally 15" },
+  { value: "rally_21", label: "Rally 21" },
+  { value: "timed", label: "Timed" },
+];
+
+export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, updateField, updateConfig }: StepGroupsProps) {
   const Toggle = ({ value, options, onChange }: {
     value: string | number;
     options: { value: string | number; label: string }[];
@@ -91,6 +105,29 @@ export function StepGroups({ config, maxTeams, registeredTeams, canManage, updat
             )}
           </div>
         </div>
+      </div>
+
+      {/* Scoring */}
+      <div>
+        <label className="block text-xs text-muted mb-1">Sets</label>
+        <Toggle value={cls.numSets} options={[
+          { value: 1, label: "1 Set" },
+          { value: 3, label: "Best of 3" },
+        ]} onChange={(v) => updateField("numSets", v)} />
+      </div>
+
+      <div>
+        <label className="block text-xs text-muted mb-1">Scoring</label>
+        <select
+          disabled={!canManage}
+          value={cls.scoringType}
+          onChange={(e) => updateField("scoringType", e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          {SCORING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       <div>
