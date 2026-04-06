@@ -41,40 +41,36 @@ export function BottomNav() {
           e.players?.some((p: { playerId?: string; player?: { id: string } }) => (p.playerId || p.player?.id) === userId)
         );
 
-        // Find active event: currently running or ended within 4 hours
-        // Unless a new event starts within 2 hours
+        // Priority: 1) Currently running, 2) Ended within 4h (unless next starts in 2h), 3) Next upcoming
         let best: { event: typeof myEvents[0]; priority: number } | null = null;
+
+        // Find next upcoming event (closest future start)
+        const futureEvents = myEvents
+          .filter((e: { date: string }) => new Date(e.date).getTime() > now)
+          .sort((a: { date: string }, b: { date: string }) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const nextEvent = futureEvents[0];
+        const nextStartsIn2h = nextEvent && new Date(nextEvent.date).getTime() - now < 2 * HOUR;
 
         for (const e of myEvents) {
           const start = new Date(e.date).getTime();
           const end = e.endDate ? new Date(e.endDate).getTime() : start + 2 * HOUR;
 
-          // Currently active (between start and end)
+          // 1) Currently active (between start and end)
           if (now >= start && now <= end) {
-            const priority = 100;
-            if (!best || priority > best.priority) best = { event: e, priority };
+            if (!best || 100 > best.priority) best = { event: e, priority: 100 };
             continue;
           }
 
-          // Ended within last 4 hours
-          if (now > end && now - end < 4 * HOUR) {
-            // But check if another event starts within 2 hours
-            const upcomingSoon = myEvents.some((other: { date: string }) => {
-              const otherStart = new Date(other.date).getTime();
-              return otherStart > now && otherStart - now < 2 * HOUR;
-            });
-            if (!upcomingSoon) {
-              const priority = 50;
-              if (!best || priority > best.priority) best = { event: e, priority };
-            }
+          // 2) Ended within last 4 hours — but not if next event starts within 2h
+          if (now > end && now - end < 4 * HOUR && !nextStartsIn2h) {
+            if (!best || 50 > best.priority) best = { event: e, priority: 50 };
             continue;
           }
+        }
 
-          // Starting within 2 hours
-          if (start > now && start - now < 2 * HOUR) {
-            const priority = 80;
-            if (!best || priority > best.priority) best = { event: e, priority };
-          }
+        // 3) Next upcoming event (if nothing active or recent)
+        if (!best && nextEvent) {
+          best = { event: nextEvent, priority: 30 };
         }
 
         if (best) {
