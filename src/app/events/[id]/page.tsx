@@ -1931,24 +1931,9 @@ export default function EventDetailPage() {
               </p>
             </div>
 
-            {/* Competition — only when mode is on */}
+            {/* Classes — only when competition mode is on */}
             {event.competitionMode && (
-              <>
-                {/* Classes */}
-                <ClassesManager eventId={id as string} classes={event.classes || []} canManage={canManage} onRefresh={fetchEvent} />
-
-                <CompetitionView
-                  eventId={id as string}
-                  pairs={event.pairs}
-                  matches={event.matches as never}
-                  competitionMode={event.competitionMode ?? null}
-                  competitionConfig={event.competitionConfig as never}
-                  competitionPhase={event.competitionPhase ?? null}
-                  canManage={canManage}
-                  numCourts={event.numCourts}
-                  onRefresh={fetchEvent}
-                />
-              </>
+              <ClassesManager eventId={id as string} classes={event.classes || []} canManage={canManage} onRefresh={fetchEvent} />
             )}
           </div>
         )}
