@@ -1034,13 +1034,16 @@ export default function EventDetailPage() {
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-3 cursor-pointer">
           <div className={`w-11 h-6 rounded-full transition-colors relative ${event.competitionMode ? "bg-action" : "bg-gray-200"}`}
-            onClick={async () => {
-              await fetch(`/api/events/${id}/competition`, {
+            onClick={() => {
+              const newMode = event.competitionMode ? null : "groups_elimination";
+              // Optimistic update
+              setEvent((prev) => prev ? { ...prev, competitionMode: newMode } : prev);
+              // Save in background
+              fetch(`/api/events/${id}/competition`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: event.competitionMode ? "disable" : "enable" }),
-              });
-              await fetchEvent();
+              }).then(() => fetchEvent());
             }}>
             <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
               style={{ transform: event.competitionMode ? "translateX(22px)" : "translateX(0)" }} />
