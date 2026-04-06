@@ -97,23 +97,29 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       }]);
     }
     setManualPairSelection(null);
-    // Fire API in background
+    // Fire API in background — delayed refetch to avoid race condition
     fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
-    }).then(() => { fetchData(); onRefresh(); });
+    }).then(() => {
+      // Wait for DB to settle before syncing
+      setTimeout(() => { fetchData(); onRefresh(); }, 500);
+    });
   };
 
-  const unpair = async (pairId: string) => {
+  const unpair = (pairId: string) => {
     if (!confirm("Remove this pair?")) return;
-    await fetch(`/api/events/${eventId}/pairs`, {
+    // Optimistic: remove pair immediately
+    setPairs((prev) => prev.filter((p) => p.id !== pairId));
+    // Fire API in background
+    fetch(`/api/events/${eventId}/pairs`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pairId }),
+    }).then(() => {
+      setTimeout(() => { fetchData(); onRefresh(); }, 500);
     });
-    fetchData();
-    onRefresh();
   };
 
   const acceptRequest = async (requestId: string) => {
