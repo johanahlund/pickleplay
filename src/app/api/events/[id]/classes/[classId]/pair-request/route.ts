@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { sendNotification } from "@/lib/notify";
 
 // GET: list pair requests for a class
 export async function GET(
@@ -75,6 +76,15 @@ export async function POST(
       data: { eventId: id, classId, requesterId: user.id, requestedId: partnerId },
     });
 
+    // Notify the requested player
+    await sendNotification(
+      partnerId,
+      "pair_request",
+      `${user.name} wants to partner with you`,
+      "Tap to view and accept or decline",
+      `/events/${id}`
+    );
+
     return NextResponse.json(request);
   }
 
@@ -123,6 +133,15 @@ export async function POST(
         player2Id: request.requestedId,
       },
     });
+
+    // Notify the requester
+    await sendNotification(
+      request.requesterId,
+      "pair_accepted",
+      `${user.name} accepted your partner request!`,
+      "You're now paired for this class",
+      `/events/${id}`
+    );
 
     return NextResponse.json({ ok: true, status: "accepted" });
   }

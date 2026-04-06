@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 
-const APP_VERSION = "3.2.0";
+const APP_VERSION = "4.0.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
@@ -116,6 +116,7 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -138,6 +139,19 @@ export function Header() {
   }, [updateMainPadding, clubName]);
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
+
+  // Poll for unread notifications
+  useEffect(() => {
+    if (!session?.user) return;
+    const check = () => {
+      fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
+        if (Array.isArray(data)) setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
+      }).catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, [session?.user]);
   const isClubsListPage = pathname === "/clubs";
 
   // Detect if we're inside a club from the URL
@@ -192,11 +206,23 @@ export function Header() {
             {!isAuthPage && session?.user && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowPasswordModal(true)}
+                  onClick={() => router.push("/profile")}
                   className="text-sm opacity-90 hover:opacity-100 transition-opacity"
-                  title="Change password"
+                  title="My profile"
                 >
                   {session.user.name}
+                </button>
+                <button
+                  onClick={() => router.push("/profile")}
+                  className="relative text-lg opacity-90 hover:opacity-100"
+                  title="Notifications"
+                >
+                  🔔
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => signOut({ callbackUrl: "/signin" })}

@@ -193,6 +193,17 @@ model EventClass {
   matches  Match[]
 }
 
+model Notification {
+  id        String   @id @default(cuid())
+  playerId  String
+  type      String   // "pair_request" | "pair_accepted" | "match_ready" | "event_invite"
+  title     String
+  body      String?
+  linkUrl   String?  // where to navigate when tapped
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
 model PairRequest {
   id          String   @id @default(cuid())
   eventId     String
