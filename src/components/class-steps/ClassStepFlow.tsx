@@ -95,11 +95,25 @@ interface StepDef {
 }
 
 export function ClassStepFlow({
-  eventId, cls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
+  eventId, cls: propsCls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
 }: ClassStepFlowProps) {
-  const config: CompetitionConfig = cls.competitionConfig
+  // Optimistic state: local overrides applied instantly before API responds
+  const [fieldOverrides, setFieldOverrides] = useState<Record<string, unknown>>({});
+  const [configOverrides, setConfigOverrides] = useState<Partial<CompetitionConfig>>({});
+
+  // Merge optimistic overrides into cls
+  const cls: EventClassData = { ...propsCls, ...fieldOverrides } as EventClassData;
+
+  // Reset overrides when props change (API refresh arrived)
+  useEffect(() => {
+    setFieldOverrides({});
+    setConfigOverrides({});
+  }, [propsCls]);
+
+  const baseConfig: CompetitionConfig = cls.competitionConfig
     ? { ...DEFAULT_COMPETITION_CONFIG, ...(cls.competitionConfig as unknown as Partial<CompetitionConfig>) }
     : DEFAULT_COMPETITION_CONFIG;
+  const config: CompetitionConfig = { ...baseConfig, ...configOverrides };
 
   const hasLowerBracket = config.advanceToLower > 0;
 
@@ -121,36 +135,40 @@ export function ClassStepFlow({
 
   // Auto-enable competition mode if not set
   useEffect(() => {
-    if (!cls.competitionMode && canManage) {
+    if (!propsCls.competitionMode && canManage) {
       fetch(`/api/events/${eventId}/competition`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "enable", classId: cls.id }),
+        body: JSON.stringify({ action: "enable", classId: propsCls.id }),
       }).then(() => onRefresh());
     }
-  }, [cls.competitionMode, cls.id, eventId, canManage, onRefresh]);
+  }, [propsCls.competitionMode, propsCls.id, eventId, canManage, onRefresh]);
 
   // Filter pairs and matches to this class
   const classPairs = pairs.filter((p) => !p.classId || p.classId === cls.id);
   const classMatches = matches.filter((m) => !m.classId || m.classId === cls.id);
 
-  const updateField = useCallback(async (field: string, value: unknown) => {
-    await fetch(`/api/events/${eventId}/classes`, {
+  const updateField = useCallback((field: string, value: unknown) => {
+    // Optimistic: update local state instantly
+    setFieldOverrides((prev) => ({ ...prev, [field]: value }));
+    // Fire API in background
+    fetch(`/api/events/${eventId}/classes`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ classId: cls.id, [field]: value }),
-    });
-    onRefresh();
-  }, [eventId, cls.id, onRefresh]);
+      body: JSON.stringify({ classId: propsCls.id, [field]: value }),
+    }).then(() => onRefresh());
+  }, [eventId, propsCls.id, onRefresh]);
 
-  const updateConfig = useCallback(async (partial: Partial<CompetitionConfig>) => {
-    await fetch(`/api/events/${eventId}/competition`, {
+  const updateConfig = useCallback((partial: Partial<CompetitionConfig>) => {
+    // Optimistic: merge into local config instantly
+    setConfigOverrides((prev) => ({ ...prev, ...partial }));
+    // Fire API in background
+    fetch(`/api/events/${eventId}/competition`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "update_config", config: partial, classId: cls.id }),
-    });
-    onRefresh();
-  }, [eventId, cls.id, onRefresh]);
+      body: JSON.stringify({ action: "update_config", config: partial, classId: propsCls.id }),
+    }).then(() => onRefresh());
+  }, [eventId, propsCls.id, onRefresh]);
 
   const renderStep = () => {
     switch (currentStep.id) {
