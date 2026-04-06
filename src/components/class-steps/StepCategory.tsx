@@ -16,14 +16,14 @@ interface StepCategoryProps {
 
 const DUPR_LEVELS = [null, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5];
 
-const PHASE_LABELS: Record<string, { label: string; color: string }> = {
-  open: { label: "Open", color: "bg-green-100 text-green-700" },
-  closed: { label: "Closed", color: "bg-amber-100 text-amber-700" },
-  groups: { label: "Group", color: "bg-blue-100 text-blue-700" },
-  bracket_upper: { label: "Bracket", color: "bg-purple-100 text-purple-700" },
-  bracket_lower: { label: "Bracket", color: "bg-purple-100 text-purple-700" },
-  completed: { label: "Completed", color: "bg-gray-100 text-gray-600" },
-};
+const STATUS_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "open", label: "Open" },
+  { value: "closed", label: "Closed" },
+  { value: "groups", label: "Group" },
+  { value: "bracket", label: "Bracket" },
+  { value: "completed", label: "Completed" },
+];
 
 export function StepCategory({ cls, canManage, updateField }: StepCategoryProps) {
 
@@ -40,7 +40,9 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
     </div>
   );
 
-  const phase = cls.competitionPhase || "open";
+  // Normalize bracket_upper/bracket_lower to bracket for display
+  const rawPhase = cls.competitionPhase || "draft";
+  const phase = rawPhase.startsWith("bracket") ? "bracket" : rawPhase;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
@@ -53,7 +55,7 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
           onChange={(e) => updateField("competitionPhase", e.target.value)}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
-          {Object.entries(PHASE_LABELS).map(([value, { label }]) => (
+          {STATUS_OPTIONS.map(({ value, label }) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>

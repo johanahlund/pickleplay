@@ -173,7 +173,7 @@ export function ClassStepFlow({
   }, [eventId, propsCls.id, onRefresh]);
 
   const PHASE_LABELS: Record<string, string> = {
-    open: "Open", closed: "Closed", groups: "Group", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Completed",
+    draft: "Draft", open: "Open", closed: "Closed", groups: "Group", bracket: "Bracket", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Completed",
   };
 
   const renderStep = () => {
