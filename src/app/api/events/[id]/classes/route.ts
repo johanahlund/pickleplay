@@ -91,3 +91,41 @@ export async function DELETE(
   await prisma.eventClass.delete({ where: { id: classId } });
   return NextResponse.json({ ok: true });
 }
+
+// PATCH: copy competition settings from another class
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try { await requireEventManager(id); } catch {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+
+  const { classId, copyFromId } = await req.json();
+  if (!classId || !copyFromId) {
+    return NextResponse.json({ error: "classId and copyFromId required" }, { status: 400 });
+  }
+
+  const source = await prisma.eventClass.findUnique({ where: { id: copyFromId } });
+  if (!source) return NextResponse.json({ error: "Source class not found" }, { status: 404 });
+
+  await prisma.eventClass.update({
+    where: { id: classId },
+    data: {
+      numSets: source.numSets,
+      scoringType: source.scoringType,
+      timedMinutes: source.timedMinutes,
+      pairingMode: source.pairingMode,
+      playMode: source.playMode,
+      prioSpeed: source.prioSpeed,
+      prioFairness: source.prioFairness,
+      prioSkill: source.prioSkill,
+      rankingMode: source.rankingMode,
+      competitionMode: source.competitionMode,
+      competitionConfig: source.competitionConfig ?? undefined,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}

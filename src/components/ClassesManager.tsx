@@ -57,6 +57,7 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
   const [newAge, setNewAge] = useState("open");
   const [copyFromId, setCopyFromId] = useState<string>("");
   const [creating, setCreating] = useState(false);
+  const [copyingForId, setCopyingForId] = useState<string | null>(null);
 
   const addClass = async () => {
     if (!newName.trim()) return;
@@ -76,6 +77,16 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
     setShowAdd(false);
     setNewName("");
     setCopyFromId("");
+    onRefresh();
+  };
+
+  const copySettings = async (classId: string, copyFromId: string) => {
+    await fetch(`/api/events/${eventId}/classes`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ classId, copyFromId }),
+    });
+    setCopyingForId(null);
     onRefresh();
   };
 
@@ -111,13 +122,38 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh }: Class
       {/* Existing classes */}
       <div className="space-y-1.5">
         {classes.map((cls) => (
-          <div key={cls.id} className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50">
-            <span className="text-sm font-medium flex-1">{cls.name}</span>
-            <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
-            {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Default</span>}
-            {canManage && !cls.isDefault && (
-              <button onClick={() => deleteClass(cls.id, cls.name)}
-                className="hidden group-hover:block text-xs text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Remove</button>
+          <div key={cls.id} className="space-y-1">
+            <div className="group flex items-center gap-2 py-2 px-3 rounded-lg bg-gray-50">
+              <span className="text-sm font-medium flex-1">{cls.name}</span>
+              <span className="text-[10px] text-muted">{cls.format} · {cls.gender} · {cls.ageGroup}</span>
+              {cls.isDefault && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Default</span>}
+              {canManage && classes.length > 1 && (
+                <button onClick={() => setCopyingForId(copyingForId === cls.id ? null : cls.id)}
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${copyingForId === cls.id ? "bg-action/10 text-action" : "hidden group-hover:block text-muted hover:text-foreground hover:bg-gray-200"}`}>
+                  Copy from
+                </button>
+              )}
+              {canManage && !cls.isDefault && (
+                <button onClick={() => deleteClass(cls.id, cls.name)}
+                  className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Remove</button>
+              )}
+            </div>
+            {/* Copy from selector */}
+            {copyingForId === cls.id && (
+              <div className="flex gap-1.5 px-3 pb-1">
+                {classes.filter((c) => c.id !== cls.id).map((source) => (
+                  <button key={source.id} onClick={() => {
+                    if (confirm(`Copy competition settings from "${source.name}" to "${cls.name}"?`)) {
+                      copySettings(cls.id, source.id);
+                    }
+                  }}
+                    className="flex-1 py-1.5 rounded-lg text-[10px] font-medium bg-action/5 text-action border border-action/20 hover:bg-action/10 transition-colors">
+                    {source.name}
+                  </button>
+                ))}
+                <button onClick={() => setCopyingForId(null)}
+                  className="text-[10px] text-muted px-2 hover:text-foreground">Cancel</button>
+              </div>
             )}
           </div>
         ))}
