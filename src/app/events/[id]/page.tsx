@@ -1530,6 +1530,7 @@ export default function EventDetailPage() {
         <PlayerSelector
           players={allPlayers as { id: string; name: string; gender?: string | null }[]}
           selectedIds={eventPlayerIds}
+          recentIds={eventPlayerIds}
           onToggle={async (pid) => {
             if (eventPlayerIds.has(pid)) {
               const p = allPlayers.find((pl) => pl.id === pid);
