@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { PlayerSelector } from "../PlayerSelector";
 import { PlayerAvatar } from "../PlayerAvatar";
 
@@ -48,6 +48,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [manualPairSelection, setManualPairSelection] = useState<string | null>(null);
+  const pairingLock = useRef(false);
 
   const fetchData = useCallback(async () => {
     const [eventRes, reqRes] = await Promise.all([
@@ -87,6 +88,8 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   };
 
   const forcePair = (player1Id: string, player2Id: string) => {
+    // Lock to prevent rapid clicks
+    pairingLock.current = true;
     // Optimistic: add pair immediately
     const p1 = players.find((p) => p.playerId === player1Id)?.player;
     const p2 = players.find((p) => p.playerId === player2Id)?.player;
@@ -103,8 +106,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
     }).then(() => {
-      // Wait for DB to settle before syncing
-      setTimeout(() => { fetchData(); onRefresh(); }, 500);
+      setTimeout(() => { pairingLock.current = false; fetchData(); onRefresh(); }, 500);
     });
   };
 
@@ -224,7 +226,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
             return (
               <button key={ep.playerId}
                 onClick={() => {
-                  if (!canManage) return;
+                  if (!canManage || pairingLock.current) return;
                   if (!manualPairSelection) {
                     setManualPairSelection(ep.playerId);
                   } else if (manualPairSelection === ep.playerId) {
