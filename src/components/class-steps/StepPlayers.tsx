@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { PlayerSelector } from "../PlayerSelector";
 import { PlayerAvatar } from "../PlayerAvatar";
 
@@ -47,9 +47,8 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [manualPairSelection, setManualPairSelection] = useState<string | null>(null);
+  const [pairSelection, setPairSelection] = useState<Set<string>>(new Set());
   const [pairingBusy, setPairingBusy] = useState(false);
-  const pairingLock = useRef(false);
 
   const fetchData = useCallback(async () => {
     const [eventRes, reqRes] = await Promise.all([
@@ -89,8 +88,6 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   };
 
   const forcePair = (player1Id: string, player2Id: string) => {
-    // Lock to prevent rapid clicks
-    pairingLock.current = true;
     setPairingBusy(true);
     // Optimistic: add pair immediately
     const p1 = players.find((p) => p.playerId === player1Id)?.player;
@@ -101,28 +98,24 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
         player1Id, player2Id, classId: cls.id,
       }]);
     }
-    setManualPairSelection(null);
-    // Fire API in background — delayed refetch to avoid race condition
+    setPairSelection(new Set());
+    // Fire API — no refetch, trust optimistic state
     fetch(`/api/events/${eventId}/classes/${cls.id}/pair-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
-    }).then(() => {
-      setTimeout(() => { pairingLock.current = false; setPairingBusy(false); fetchData(); onRefresh(); }, 500);
-    });
+    }).finally(() => setPairingBusy(false));
   };
 
   const unpair = (pairId: string) => {
     if (!confirm("Remove this pair?")) return;
     // Optimistic: remove pair immediately
     setPairs((prev) => prev.filter((p) => p.id !== pairId));
-    // Fire API in background
+    // Fire API — no refetch, trust optimistic state
     fetch(`/api/events/${eventId}/pairs`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pairId }),
-    }).then(() => {
-      setTimeout(() => { fetchData(); onRefresh(); }, 500);
     });
   };
 
@@ -221,24 +214,24 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">
             Unpaired Players
-            {canManage && <span className="text-action ml-1 normal-case">(tap two to pair)</span>}
+            {canManage && pairSelection.size === 0 && <span className="text-action ml-1 normal-case">(select two to pair)</span>}
           </div>
           {unpairedPlayers.map((ep) => {
-            const isSelected = manualPairSelection === ep.playerId;
+            const isSelected = pairSelection.has(ep.playerId);
             return (
               <button key={ep.playerId}
+                disabled={pairingBusy || (!isSelected && pairSelection.size >= 2)}
                 onClick={() => {
-                  if (!canManage || pairingLock.current) return;
-                  if (!manualPairSelection) {
-                    setManualPairSelection(ep.playerId);
-                  } else if (manualPairSelection === ep.playerId) {
-                    setManualPairSelection(null);
-                  } else {
-                    forcePair(manualPairSelection, ep.playerId);
-                  }
+                  if (!canManage) return;
+                  setPairSelection((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(ep.playerId)) { next.delete(ep.playerId); }
+                    else if (next.size < 2) { next.add(ep.playerId); }
+                    return next;
+                  });
                 }}
                 className={`w-full flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 transition-colors ${
-                  isSelected ? "bg-action/10" : canManage ? "hover:bg-gray-50" : ""
+                  isSelected ? "bg-action/10" : pairSelection.size >= 2 ? "opacity-40" : canManage ? "hover:bg-gray-50" : ""
                 }`}>
                 <PlayerAvatar name={ep.player.name} size="xs" />
                 <span className="text-sm font-medium flex-1 text-left">{ep.player.name}</span>
@@ -248,18 +241,30 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
                   </span>
                 )}
                 <span className="text-xs text-muted">{Math.round(ep.player.rating)}</span>
-                {isSelected && <span className="text-[10px] text-action font-medium">Selected</span>}
+                {isSelected && <span className="text-[10px] text-action font-medium">✓</span>}
               </button>
             );
           })}
+          {/* Pair button — shown when 2 selected */}
+          {pairSelection.size === 2 && !pairingBusy && (
+            <div className="px-3 py-2.5 flex gap-2">
+              <button
+                onClick={() => {
+                  const [a, b] = [...pairSelection];
+                  forcePair(a, b);
+                }}
+                className="flex-1 bg-action text-white py-2 rounded-lg text-sm font-semibold active:bg-action-dark">
+                Pair Selected
+              </button>
+              <button onClick={() => setPairSelection(new Set())}
+                className="px-4 py-2 rounded-lg text-sm text-muted bg-gray-100 hover:bg-gray-200">
+                Clear
+              </button>
+            </div>
+          )}
           {pairingBusy && (
             <div className="px-3 py-2 bg-green-50 text-xs text-green-700 font-medium animate-pulse">
               Pairing...
-            </div>
-          )}
-          {manualPairSelection && !pairingBusy && (
-            <div className="px-3 py-2 bg-action/5 text-xs text-action font-medium">
-              Tap another player to pair, or tap again to deselect
             </div>
           )}
         </div>
