@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 
 interface StepCategoryProps {
   cls: {
@@ -15,26 +14,7 @@ interface StepCategoryProps {
   updateField: (field: string, value: unknown) => void;
 }
 
-const LEVEL_OPTIONS = [
-  { label: "Open", min: null, max: null },
-  { label: "2.5-3.5", min: 2.5, max: 3.5 },
-  { label: "3.0-4.0", min: 3.0, max: 4.0 },
-  { label: "3.5-4.5", min: 3.5, max: 4.5 },
-  { label: "3.5+", min: 3.5, max: null },
-  { label: "4.0+", min: 4.0, max: null },
-  { label: "4.5+", min: 4.5, max: null },
-];
-
-function getLevelLabel(skillMin: number | null | undefined, skillMax: number | null | undefined): string {
-  const sMin = skillMin ?? null;
-  const sMax = skillMax ?? null;
-  const match = LEVEL_OPTIONS.find((p) => p.min === sMin && p.max === sMax);
-  if (match) return match.label;
-  if (sMin && sMax) return `${sMin}-${sMax}`;
-  if (sMin) return `${sMin}+`;
-  if (sMax) return `Up to ${sMax}`;
-  return "Open";
-}
+const DUPR_LEVELS = [null, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5];
 
 const PHASE_LABELS: Record<string, { label: string; color: string }> = {
   groups: { label: "Group Stage", color: "bg-blue-100 text-blue-700" },
@@ -44,9 +24,6 @@ const PHASE_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export function StepCategory({ cls, canManage, updateField }: StepCategoryProps) {
-  const currentLevel = getLevelLabel(cls.skillMin, cls.skillMax);
-  const isCustom = !LEVEL_OPTIONS.some((p) => p.label === currentLevel);
-  const [showCustom, setShowCustom] = useState(isCustom);
 
   const Toggle = ({ field, value, options }: { field: string; value: string; options: { value: string; label: string }[] }) => (
     <div className="flex gap-1.5">
@@ -110,44 +87,18 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
         <label className="block text-xs text-muted mb-1">Level (DUPR)</label>
         <select
           disabled={!canManage}
-          value={showCustom ? "__custom__" : currentLevel}
+          value={cls.skillMin ?? ""}
           onChange={(e) => {
-            if (e.target.value === "__custom__") {
-              setShowCustom(true);
-              return;
-            }
-            setShowCustom(false);
-            const preset = LEVEL_OPTIONS.find((p) => p.label === e.target.value);
-            if (preset) {
-              updateField("skillMin", preset.min);
-              updateField("skillMax", preset.max);
-            }
+            const val = e.target.value ? parseFloat(e.target.value) : null;
+            updateField("skillMin", val);
+            updateField("skillMax", null);
           }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
-          {LEVEL_OPTIONS.map((p) => (
-            <option key={p.label} value={p.label}>{p.label}</option>
+          {DUPR_LEVELS.map((lvl) => (
+            <option key={lvl ?? "open"} value={lvl ?? ""}>{lvl ? lvl.toFixed(1) : "Open"}</option>
           ))}
-          <option value="__custom__">Custom range...</option>
         </select>
-        {showCustom && (
-          <div className="flex gap-3 mt-2">
-            <div className="flex-1">
-              <label className="block text-[10px] text-muted mb-1">Min DUPR</label>
-              <input type="number" step="0.5" min="1" max="8" value={cls.skillMin ?? ""}
-                placeholder="No min"
-                onChange={(e) => canManage && updateField("skillMin", e.target.value ? parseFloat(e.target.value) : null)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div className="flex-1">
-              <label className="block text-[10px] text-muted mb-1">Max DUPR</label>
-              <input type="number" step="0.5" min="1" max="8" value={cls.skillMax ?? ""}
-                placeholder="No max"
-                onChange={(e) => canManage && updateField("skillMax", e.target.value ? parseFloat(e.target.value) : null)}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
