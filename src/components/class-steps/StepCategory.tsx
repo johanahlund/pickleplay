@@ -8,6 +8,8 @@ interface StepCategoryProps {
     ageGroup: string;
     skillMin?: number | null;
     skillMax?: number | null;
+    minPlayers?: number | null;
+    maxPlayers?: number | null;
     competitionPhase?: string | null;
   };
   canManage: boolean;
@@ -141,6 +143,24 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
             <option key={lvl ?? "open"} value={lvl ?? ""}>{lvl ? lvl.toFixed(1) : "Open"}</option>
           ))}
         </select>
+      </div>
+
+      {/* Min / Max */}
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="block text-xs text-muted mb-1">Min {cls.format === "doubles" ? "teams" : "players"}</label>
+          <input type="number" value={cls.minPlayers || ""} placeholder="No min" min="1"
+            disabled={!canManage}
+            onChange={(e) => updateField("minPlayers", e.target.value ? parseInt(e.target.value) : null)}
+            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium" />
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs text-muted mb-1">Max {cls.format === "doubles" ? "teams" : "players"}</label>
+          <input type="number" value={cls.maxPlayers || ""} placeholder="No max" min="1"
+            disabled={!canManage}
+            onChange={(e) => updateField("maxPlayers", e.target.value ? parseInt(e.target.value) : null)}
+            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium" />
+        </div>
       </div>
 
       {/* Class name (auto-generated, editable) */}
