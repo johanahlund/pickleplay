@@ -13,8 +13,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const eventPlayer = await prisma.eventPlayer.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId } },
+  const eventPlayer = await prisma.eventPlayer.findFirst({
+    where: { eventId: id, playerId },
   });
 
   if (!eventPlayer) {
@@ -40,8 +40,8 @@ export async function DELETE(
 
   const wasActive = eventPlayer.status === "registered" || eventPlayer.status === "checked_in";
 
-  await prisma.eventPlayer.delete({
-    where: { eventId_playerId: { eventId: id, playerId } },
+  await prisma.eventPlayer.deleteMany({
+    where: { eventId: id, playerId },
   });
 
   // Promote next waitlisted player if an active player was removed

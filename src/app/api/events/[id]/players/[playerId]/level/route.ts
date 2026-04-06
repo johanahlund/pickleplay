@@ -19,8 +19,8 @@ export async function PATCH(
     return NextResponse.json({ error: "skillLevel must be 1, 2, 3, or null" }, { status: 400 });
   }
 
-  const ep = await prisma.eventPlayer.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId } },
+  const ep = await prisma.eventPlayer.findFirst({
+    where: { eventId: id, playerId },
   });
   if (!ep) {
     return NextResponse.json({ error: "Player not in event" }, { status: 404 });

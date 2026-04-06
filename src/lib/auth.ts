@@ -91,8 +91,8 @@ export async function requireEventManager(eventId: string) {
   });
   if (event?.createdById === user.id) return user;
 
-  const helper = await prisma.eventHelper.findUnique({
-    where: { eventId_playerId: { eventId, playerId: user.id } },
+  const helper = await prisma.eventHelper.findFirst({
+    where: { eventId, playerId: user.id },
   });
   if (helper) return user;
 

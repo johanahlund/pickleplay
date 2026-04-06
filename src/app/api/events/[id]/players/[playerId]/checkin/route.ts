@@ -14,8 +14,8 @@ export async function POST(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const ep = await prisma.eventPlayer.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId } },
+  const ep = await prisma.eventPlayer.findFirst({
+    where: { eventId: id, playerId },
   });
 
   if (!ep) {

@@ -19,8 +19,8 @@ export async function POST(
     return NextResponse.json({ error: "playerId required" }, { status: 400 });
   }
 
-  const existing = await prisma.eventHelper.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId } },
+  const existing = await prisma.eventHelper.findFirst({
+    where: { eventId: id, playerId },
   });
   if (existing) {
     return NextResponse.json({ error: "Already a helper" }, { status: 400 });

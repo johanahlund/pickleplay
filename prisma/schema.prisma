@@ -169,7 +169,7 @@ model EventPlayer {
   class  EventClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
   player Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, playerId])
+  @@unique([eventId, playerId, classId])
 }
 
 model EventPair {

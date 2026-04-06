@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CompetitionView } from "./CompetitionView";
+import { ClassPlayers } from "./ClassPlayers";
 
 interface EventClassData {
   id: string;
@@ -136,10 +137,7 @@ export function ClassDetailView({
       </div>
 
       {/* Players in this class */}
-      <div className="bg-card rounded-xl border border-border p-4">
-        <h4 className="text-sm font-semibold mb-2">Players</h4>
-        <p className="text-xs text-muted">Player management per class coming next.</p>
-      </div>
+      <ClassPlayers eventId={eventId} classId={cls.id} format={cls.format} canManage={canManage} onRefresh={onRefresh} />
 
       {/* Competition settings for this class */}
       {cls.competitionMode && (

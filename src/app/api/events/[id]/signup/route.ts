@@ -45,8 +45,8 @@ export async function POST(
     return NextResponse.json({ error: "This event is closed — only the organizer can add players" }, { status: 403 });
   }
 
-  const existing = await prisma.eventPlayer.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId: user.id } },
+  const existing = await prisma.eventPlayer.findFirst({
+    where: { eventId: id, playerId: user.id },
   });
   if (existing) {
     return NextResponse.json({ error: "Already signed up" }, { status: 400 });
@@ -79,8 +79,8 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const ep = await prisma.eventPlayer.findUnique({
-    where: { eventId_playerId: { eventId: id, playerId: user.id } },
+  const ep = await prisma.eventPlayer.findFirst({
+    where: { eventId: id, playerId: user.id },
   });
   if (!ep) {
     return NextResponse.json({ error: "Not signed up" }, { status: 400 });
