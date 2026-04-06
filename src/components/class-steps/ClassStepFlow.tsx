@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   CompetitionConfig,
   DEFAULT_COMPETITION_CONFIG,
+  getBracketStages,
+  BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
 import { StepCategory } from "./StepCategory";
 import { StepGroups } from "./StepGroups";
@@ -114,6 +116,7 @@ export function ClassStepFlow({
     : DEFAULT_COMPETITION_CONFIG;
   const config: CompetitionConfig = { ...baseConfig, ...configOverrides };
 
+  const hasUpperBracket = config.advanceToUpper > 0;
   const hasLowerBracket = config.advanceToLower > 0;
 
   // Build dynamic step list
@@ -258,16 +261,30 @@ export function ClassStepFlow({
           <span className="text-sm text-muted">Advancement</span>
           <span className="text-sm font-medium">{config.advanceToUpper} upper{config.advanceToLower > 0 ? ` · ${config.advanceToLower} lower` : ""}{config.wildcardCount > 0 ? ` · ${config.wildcardCount} WC` : ""}</span>
         </button>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "upper-config"))} className={rowClass}>
-          <span className="text-sm text-muted">Upper Bracket</span>
-          <span className="text-sm font-medium">{config.upperThirdPlace ? "3rd place" : "No 3rd place"}</span>
-        </button>
-        {hasLowerBracket && (
-          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
-            <span className="text-sm text-muted">Lower Bracket</span>
-            <span className="text-sm font-medium">{config.lowerThirdPlace ? "3rd place" : "No 3rd place"}</span>
-          </button>
-        )}
+        {hasUpperBracket && (() => {
+          const upperTeams = config.numGroups * config.advanceToUpper + config.wildcardCount;
+          const stages = getBracketStages(upperTeams);
+          const roundLabels = stages.map((s) => BRACKET_STAGE_LABELS[s] || s);
+          if (config.upperThirdPlace) roundLabels.push("3rd place");
+          return (
+            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "upper-config"))} className={rowClass}>
+              <span className="text-sm text-muted">Upper Bracket</span>
+              <span className="text-sm font-medium">{roundLabels.join(" · ")}</span>
+            </button>
+          );
+        })()}
+        {hasLowerBracket && (() => {
+          const lowerTeams = config.numGroups * config.advanceToLower;
+          const stages = getBracketStages(lowerTeams);
+          const roundLabels = stages.map((s) => BRACKET_STAGE_LABELS[s] || s);
+          if (config.lowerThirdPlace) roundLabels.push("3rd place");
+          return (
+            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
+              <span className="text-sm text-muted">Lower Bracket</span>
+              <span className="text-sm font-medium">{roundLabels.join(" · ")}</span>
+            </button>
+          );
+        })()}
       </div>
 
       {/* Players & Matches */}
