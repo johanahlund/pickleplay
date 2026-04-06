@@ -125,12 +125,17 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
 
       <div>
         <label className="block text-xs text-muted mb-1">Win by</label>
-        <Toggle value={cls.winBy || "2"} options={[
-          { value: "1", label: "1" },
-          { value: "2", label: "2" },
-          ...(cls.scoringType === "normal_11" ? [{ value: "cap15", label: "Cap 15" }] : []),
-          { value: "cap18", label: "Cap 18" },
-        ]} onChange={(v) => updateField("winBy", v)} />
+        <select
+          disabled={!canManage}
+          value={cls.winBy || "2"}
+          onChange={(e) => updateField("winBy", e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value="1">1</option>
+          <option value="2">2</option>
+          {cls.scoringType === "normal_11" && <option value="cap15">Cap 15</option>}
+          <option value="cap18">Cap 18</option>
+        </select>
       </div>
 
       <div>
