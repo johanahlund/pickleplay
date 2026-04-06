@@ -28,7 +28,7 @@ export async function GET(
 
   const cls = await getEventClass(id);
   const format = (cls?.format || "doubles") as string;
-  const scoringType = cls?.scoringType || "normal_11";
+  const scoringFormat = cls?.scoringFormat || "1x11";
 
   const rows = event.matches.map((match) => {
     const team1 = match.players.filter((p) => p.team === 1);
@@ -39,7 +39,7 @@ export async function GET(
     return {
       matchDate: match.createdAt.toISOString().split("T")[0],
       matchType: (format === "singles" ? "SINGLES" : "DOUBLES") as "SINGLES" | "DOUBLES",
-      scoringFormat: toDuprScoringFormat(scoringType),
+      scoringFormat: toDuprScoringFormat(scoringFormat),
       team1Player1Name: team1[0]?.player.name || "",
       team1Player1DuprId: team1[0]?.player.duprId || "",
       team1Player2Name: team1[1]?.player.name || "",

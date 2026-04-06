@@ -162,10 +162,9 @@ model EventClass {
   skillMax    Float?  // DUPR max (e.g. 4.0)
 
   // Format settings
-  numSets      Int      @default(1)
-  scoringType  String   @default("normal_11")
-  winBy        String   @default("2") // "1", "2", "cap15", "cap18"
-  timedMinutes Int?
+  scoringFormat String  @default("1x11") // e.g. "1x11", "3x11", "1xR15", "3xR21"
+  winBy         String  @default("2") // "1", "2", "cap15", "cap18"
+  timedMinutes  Int?
   pairingMode  String   @default("random")
   playMode     String   @default("round_based") // "round_based" | "continuous"
   prioSpeed    Boolean  @default(true)

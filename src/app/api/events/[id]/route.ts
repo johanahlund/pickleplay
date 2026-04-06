@@ -62,7 +62,7 @@ export async function PATCH(
 
   const body = await req.json();
   const { name, numCourts, date, endDate, openSignup, visibility } = body;
-  const { numSets, scoringType, timedMinutes, pairingMode, rankingMode } = body;
+  const { scoringFormat, numSets, scoringType, timedMinutes, pairingMode, rankingMode } = body;
 
   // Event-level fields
   const eventData: Record<string, unknown> = {};
@@ -88,8 +88,11 @@ export async function PATCH(
 
   // Class-level fields (update default class)
   const classData: Record<string, unknown> = {};
-  if (numSets !== undefined) classData.numSets = numSets;
-  if (scoringType !== undefined) classData.scoringType = scoringType;
+  if (scoringFormat !== undefined) classData.scoringFormat = scoringFormat;
+  // Legacy compat: convert old numSets+scoringType to scoringFormat
+  if (!scoringFormat && numSets !== undefined && scoringType !== undefined) {
+    classData.scoringFormat = `${numSets}x${scoringType.replace("normal_", "").replace("rally_", "R")}`;
+  }
   if (timedMinutes !== undefined) classData.timedMinutes = timedMinutes;
   if (pairingMode !== undefined) classData.pairingMode = pairingMode;
   if (body.playMode !== undefined) classData.playMode = body.playMode;

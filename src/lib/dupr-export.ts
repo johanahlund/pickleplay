@@ -56,9 +56,9 @@ export function generateDuprCsv(matches: DuprMatchRow[]): string {
 }
 
 /**
- * Map our scoring type to DUPR format
+ * Map our scoring format to DUPR format
  */
-export function toDuprScoringFormat(scoringType: string): "STANDARD" | "RALLY" {
-  if (scoringType.startsWith("rally")) return "RALLY";
+export function toDuprScoringFormat(scoringFormat: string): "STANDARD" | "RALLY" {
+  if (scoringFormat.includes("R")) return "RALLY";
   return "STANDARD";
 }

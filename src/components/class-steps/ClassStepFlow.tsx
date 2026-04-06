@@ -59,8 +59,7 @@ interface EventClassData {
   ageGroup: string;
   skillMin?: number | null;
   skillMax?: number | null;
-  numSets: number;
-  scoringType: string;
+  scoringFormat: string;
   pairingMode: string;
   playMode?: string;
   rankingMode: string;

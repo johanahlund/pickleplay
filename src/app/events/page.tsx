@@ -13,8 +13,7 @@ interface Event {
   status: string;
   numCourts: number;
   format: string;
-  numSets: number;
-  scoringType: string;
+  scoringFormat: string;
   timedMinutes: number | null;
   pairingMode: string;
   openSignup: boolean;
@@ -22,7 +21,7 @@ interface Event {
   createdById: string | null;
   clubId: string | null;
   club?: { id: string; name: string; emoji: string } | null;
-  classes?: { isDefault: boolean; format: string; numSets: number; scoringType: string; pairingMode: string; competitionMode?: string | null }[];
+  classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null }[];
   players: { player: { name: string; emoji: string }; playerId: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
@@ -52,12 +51,11 @@ export default function EventsPage() {
       .then((r) => r.json())
       .then((data) => {
         // Derive format fields from default class
-        const enriched = (data || []).map((e: Event & { classes?: { isDefault: boolean; format: string; numSets: number; scoringType: string; pairingMode: string }[] }) => {
+        const enriched = (data || []).map((e: Event & { classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string }[] }) => {
           const cls = e.classes?.find((c) => c.isDefault) || e.classes?.[0];
           if (cls) {
             e.format = cls.format;
-            e.numSets = cls.numSets;
-            e.scoringType = cls.scoringType;
+            e.scoringFormat = cls.scoringFormat;
             e.pairingMode = cls.pairingMode;
           }
           return e;
@@ -240,10 +238,7 @@ export default function EventsPage() {
                     </p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
-                        {event.numSets === 1 ? "1 set" : `Bo${event.numSets}`}
-                      </span>
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
-                        {event.scoringType === "normal_11" ? "11" : event.scoringType === "normal_15" ? "15" : event.scoringType === "rally_21" ? "R21" : "Time"}
+                        {event.scoringFormat || "1x11"}
                       </span>
                       {event.pairingMode !== "random" && (
                         <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">

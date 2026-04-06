@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, numCourts, format, playerIds, date, endDate, numSets, scoringType, timedMinutes, pairingMode, playMode, prioSpeed, prioFairness, prioSkill, rankingMode, minPlayers, maxPlayers, clubId } = await req.json();
+  const { name, numCourts, format, playerIds, date, endDate, scoringFormat, numSets, scoringType, timedMinutes, pairingMode, playMode, prioSpeed, prioFairness, prioSkill, rankingMode, minPlayers, maxPlayers, clubId } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -64,8 +64,7 @@ export async function POST(req: Request) {
       name: "Open",
       isDefault: true,
       format: format || "doubles",
-      ...(numSets ? { numSets } : {}),
-      ...(scoringType ? { scoringType } : {}),
+      ...(scoringFormat ? { scoringFormat } : numSets && scoringType ? { scoringFormat: `${numSets}x${scoringType.replace("normal_", "").replace("rally_", "R")}` } : {}),
       ...(timedMinutes !== undefined && timedMinutes !== null ? { timedMinutes } : {}),
       ...(pairingMode ? { pairingMode } : {}),
       ...(playMode ? { playMode } : {}),

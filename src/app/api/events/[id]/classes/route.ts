@@ -55,8 +55,7 @@ export async function POST(
     if (source) {
       data = {
         ...data,
-        numSets: source.numSets,
-        scoringType: source.scoringType,
+        scoringFormat: source.scoringFormat,
         timedMinutes: source.timedMinutes,
         pairingMode: source.pairingMode,
         playMode: source.playMode,
@@ -113,7 +112,7 @@ export async function PATCH(
   // Direct field updates (no copyFromId)
   if (!copyFromId) {
     const allowed = ["name", "format", "gender", "ageGroup", "skillMin", "skillMax",
-      "numSets", "scoringType", "winBy", "timedMinutes",
+      "scoringFormat", "winBy", "timedMinutes",
       "pairingMode", "playMode", "prioSpeed", "prioFairness", "prioSkill", "rankingMode",
       "minPlayers", "maxPlayers", "belowMinAction", "mergeWithClassId",
       "upperBracketMergeClassId", "lowerBracketMergeClassId", "competitionPhase"];
@@ -132,8 +131,7 @@ export async function PATCH(
   await prisma.eventClass.update({
     where: { id: classId },
     data: {
-      numSets: source.numSets,
-      scoringType: source.scoringType,
+      scoringFormat: source.scoringFormat,
       timedMinutes: source.timedMinutes,
       pairingMode: source.pairingMode,
       playMode: source.playMode,

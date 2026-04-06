@@ -2,16 +2,17 @@ import { describe, it, expect } from "vitest";
 import { generateDuprCsv, toDuprScoringFormat } from "../dupr-export";
 
 describe("toDuprScoringFormat", () => {
-  it("maps standard scoring types to STANDARD", () => {
-    expect(toDuprScoringFormat("normal_11")).toBe("STANDARD");
-    expect(toDuprScoringFormat("normal_15")).toBe("STANDARD");
-    expect(toDuprScoringFormat("normal_9")).toBe("STANDARD");
-    expect(toDuprScoringFormat("timed")).toBe("STANDARD");
+  it("maps standard scoring formats to STANDARD", () => {
+    expect(toDuprScoringFormat("1x11")).toBe("STANDARD");
+    expect(toDuprScoringFormat("3x15")).toBe("STANDARD");
+    expect(toDuprScoringFormat("1x9")).toBe("STANDARD");
+    expect(toDuprScoringFormat("1x7")).toBe("STANDARD");
   });
 
-  it("maps rally scoring types to RALLY", () => {
-    expect(toDuprScoringFormat("rally_21")).toBe("RALLY");
-    expect(toDuprScoringFormat("rally_15")).toBe("RALLY");
+  it("maps rally scoring formats to RALLY", () => {
+    expect(toDuprScoringFormat("1xR21")).toBe("RALLY");
+    expect(toDuprScoringFormat("3xR15")).toBe("RALLY");
+    expect(toDuprScoringFormat("1xR15")).toBe("RALLY");
   });
 });
 

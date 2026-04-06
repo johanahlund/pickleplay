@@ -5,8 +5,7 @@ import { CompetitionConfig } from "@/lib/competition/types";
 interface StepGroupsProps {
   config: CompetitionConfig;
   cls: {
-    numSets: number;
-    scoringType: string;
+    scoringFormat: string;
     winBy?: string;
   };
   maxTeams: number | null;
@@ -24,13 +23,25 @@ function groupSizes(total: number, numGroups: number): number[] {
   return Array.from({ length: numGroups }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
-const SCORING_OPTIONS = [
-  { value: "normal_9", label: "To 9" },
-  { value: "normal_11", label: "To 11" },
-  { value: "normal_15", label: "To 15" },
-  { value: "rally_15", label: "Rally 15" },
-  { value: "rally_21", label: "Rally 21" },
-  { value: "timed", label: "Timed" },
+const SCORING_FORMAT_OPTIONS = [
+  { group: "Normal — 1 Set", options: [
+    { value: "1x7", label: "1 set to 7" },
+    { value: "1x9", label: "1 set to 9" },
+    { value: "1x11", label: "1 set to 11" },
+    { value: "1x15", label: "1 set to 15" },
+  ]},
+  { group: "Normal — Best of 3", options: [
+    { value: "3x11", label: "Best of 3 to 11" },
+    { value: "3x15", label: "Best of 3 to 15" },
+  ]},
+  { group: "Rally — 1 Set", options: [
+    { value: "1xR15", label: "1 set rally to 15" },
+    { value: "1xR21", label: "1 set rally to 21" },
+  ]},
+  { group: "Rally — Best of 3", options: [
+    { value: "3xR15", label: "Best of 3 rally to 15" },
+    { value: "3xR21", label: "Best of 3 rally to 21" },
+  ]},
 ];
 
 export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, updateField, updateConfig }: StepGroupsProps) {
@@ -102,23 +113,19 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
 
       {/* Scoring */}
       <div>
-        <label className="block text-xs text-muted mb-1">Sets</label>
-        <Toggle value={cls.numSets} options={[
-          { value: 1, label: "1 Set" },
-          { value: 3, label: "Best of 3" },
-        ]} onChange={(v) => updateField("numSets", v)} />
-      </div>
-
-      <div>
         <label className="block text-xs text-muted mb-1">Scoring</label>
         <select
           disabled={!canManage}
-          value={cls.scoringType}
-          onChange={(e) => updateField("scoringType", e.target.value)}
+          value={cls.scoringFormat || "1x11"}
+          onChange={(e) => updateField("scoringFormat", e.target.value)}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
-          {SCORING_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
+          {SCORING_FORMAT_OPTIONS.map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.options.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
@@ -133,7 +140,7 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
         >
           <option value="1">1</option>
           <option value="2">2</option>
-          {cls.scoringType === "normal_11" && <option value="cap15">Cap 15</option>}
+          {(cls.scoringFormat || "1x11") === "1x11" && <option value="cap15">Cap 15</option>}
           <option value="cap18">Cap 18</option>
         </select>
       </div>

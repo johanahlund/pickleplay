@@ -9,8 +9,7 @@ interface EventClass {
   format: string;
   gender: string;
   ageGroup: string;
-  numSets: number;
-  scoringType: string;
+  scoringFormat: string;
   pairingMode: string;
   competitionMode?: string | null;
   minPlayers?: number | null;

@@ -57,8 +57,7 @@ function NewEventPage() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(false);
   const [createdEventId, setCreatedEventId] = useState<string | null>(null);
-  const [numSets, setNumSets] = useState(1);
-  const [scoringType, setScoringType] = useState("normal_11");
+  const [scoringFormat, setScoringFormat] = useState("1x11");
   const [winBy, setWinBy] = useState("2");
   const [pairingMode, setPairingMode] = useState("random");
   const [playMode, setPlayMode] = useState<"round_based" | "continuous">("round_based");
@@ -257,8 +256,7 @@ function NewEventPage() {
         format,
         date: eventDate.toISOString(),
         endDate: eventEndDate.toISOString(),
-        numSets,
-        scoringType,
+        scoringFormat,
         pairingMode,
         playMode,
         prioSpeed,
@@ -352,8 +350,10 @@ function NewEventPage() {
 
   const helperPlayers = players.filter((p) => helperIds.has(p.id));
 
-  const scoringLabel = (v: string) =>
-    ({ normal_9: "To 9", normal_11: "To 11", normal_15: "To 15", rally_15: "Rally 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
+  const scoringFormatLabel = (v: string) => {
+    const labels: Record<string, string> = { "1x7": "1 set to 7", "1x9": "1 set to 9", "1x11": "1 set to 11", "1x15": "1 set to 15", "3x11": "Bo3 to 11", "3x15": "Bo3 to 15", "1xR15": "Rally to 15", "1xR21": "Rally to 21", "3xR15": "Bo3 rally 15", "3xR21": "Bo3 rally 21" };
+    return labels[v] || v;
+  };
 
   const pairingLabel = (v: string) =>
     ({
@@ -622,49 +622,38 @@ function NewEventPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Sets</label>
-              <div className="flex gap-2">
-                {[1, 3].map((n) => (
-                  <button key={n} type="button" onClick={() => setNumSets(n)}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${numSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-                    {n === 1 ? "1 Set" : "Best of 3"}
-                  </button>
-                ))}
-              </div>
+              <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
+              <select value={scoringFormat} onChange={(e) => setScoringFormat(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+                <optgroup label="Normal — 1 Set">
+                  <option value="1x7">1 set to 7</option>
+                  <option value="1x9">1 set to 9</option>
+                  <option value="1x11">1 set to 11</option>
+                  <option value="1x15">1 set to 15</option>
+                </optgroup>
+                <optgroup label="Normal — Best of 3">
+                  <option value="3x11">Best of 3 to 11</option>
+                  <option value="3x15">Best of 3 to 15</option>
+                </optgroup>
+                <optgroup label="Rally — 1 Set">
+                  <option value="1xR15">1 set rally to 15</option>
+                  <option value="1xR21">1 set rally to 21</option>
+                </optgroup>
+                <optgroup label="Rally — Best of 3">
+                  <option value="3xR15">Best of 3 rally to 15</option>
+                  <option value="3xR21">Best of 3 rally to 21</option>
+                </optgroup>
+              </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
-              <div className="flex gap-2">
-                {[
-                  { value: "normal_9", label: "9" },
-                  { value: "normal_11", label: "11" },
-                  { value: "normal_15", label: "15" },
-                  { value: "rally_15", label: "R15" },
-                  { value: "rally_21", label: "R21" },
-                  { value: "timed", label: "Time" },
-                ].map((s) => (
-                  <button key={s.value} type="button" onClick={() => setScoringType(s.value)}
-                    className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${scoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2">
-                <label className="block text-xs text-muted mb-1">Win by</label>
-                <div className="flex gap-1.5">
-                  {[
-                    { value: "1", label: "1" },
-                    { value: "2", label: "2" },
-                    ...(scoringType === "normal_11" ? [{ value: "cap15", label: "Cap 15" }] : []),
-                    { value: "cap18", label: "Cap 18" },
-                  ].map((w) => (
-                    <button key={w.value} type="button" onClick={() => setWinBy(w.value)}
-                      className={`flex-1 py-1.5 rounded-lg font-medium transition-all text-xs ${winBy === w.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-                      {w.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <label className="block text-xs text-muted mb-1">Win by</label>
+              <select value={winBy} onChange={(e) => setWinBy(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                {scoringFormat === "1x11" && <option value="cap15">Cap 15</option>}
+                <option value="cap18">Cap 18</option>
+              </select>
             </div>
           </>
         )}
@@ -950,7 +939,7 @@ function NewEventPage() {
           const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
           const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
           const genderLabel = genderMode === "mix" ? "Mixed" : "Random";
-          const scoringDisplay = `${numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(scoringType).toLowerCase()}`;
+          const scoringDisplay = scoringFormatLabel(scoringFormat);
           return (
             <div className="space-y-3">
               <p className="text-xs text-muted">Tap any row to edit</p>

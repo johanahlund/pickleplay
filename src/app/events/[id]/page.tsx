@@ -77,8 +77,7 @@ interface EventClassData {
   format: string;
   gender: string;
   ageGroup: string;
-  numSets: number;
-  scoringType: string;
+  scoringFormat: string;
   pairingMode: string;
   playMode?: string;
   prioSpeed?: boolean;
@@ -111,8 +110,7 @@ interface Event {
   club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
   // Legacy compat — derived from default class
   format: string;
-  numSets: number;
-  scoringType: string;
+  scoringFormat: string;
   pairingMode: string;
   rankingMode?: string;
   competitionMode?: string | null;
@@ -354,8 +352,7 @@ export default function EventDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
-  const [editNumSets, setEditNumSets] = useState(1);
-  const [editScoringType, setEditScoringType] = useState("normal_11");
+  const [editScoringFormat, setEditScoringFormat] = useState("1x11");
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [editPlayMode, setEditPlayMode] = useState("round_based");
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
@@ -401,8 +398,7 @@ export default function EventDetailPage() {
     const defaultClass = data.classes?.find((c: EventClassData) => c.isDefault) || data.classes?.[0];
     if (defaultClass) {
       data.format = defaultClass.format;
-      data.numSets = defaultClass.numSets;
-      data.scoringType = defaultClass.scoringType;
+      data.scoringFormat = defaultClass.scoringFormat;
       data.pairingMode = defaultClass.pairingMode;
       data.rankingMode = defaultClass.rankingMode;
       data.competitionMode = defaultClass.competitionMode;
@@ -619,8 +615,7 @@ export default function EventDetailPage() {
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
-    setEditNumSets(event.numSets);
-    setEditScoringType(event.scoringType);
+    setEditScoringFormat(event.scoringFormat || "1x11");
     setEditPairingMode(event.pairingMode);
     const cls = event.classes?.[0];
     setEditPlayMode(cls?.playMode || "round_based");
@@ -655,8 +650,7 @@ export default function EventDetailPage() {
         numCourts: editCourts,
         date: eventDate.toISOString(),
         endDate: eventEndDate.toISOString(),
-        numSets: editNumSets,
-        scoringType: editScoringType,
+        scoringFormat: editScoringFormat,
         pairingMode: editPairingMode,
         playMode: editPlayMode,
         prioSpeed: editPrioSpeed,
@@ -1110,33 +1104,28 @@ export default function EventDetailPage() {
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-muted mb-1">Sets</label>
-        <div className="flex gap-2">
-          {[1, 3].map((n) => (
-            <button key={n} type="button" onClick={() => { setEditNumSets(n); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${editNumSets === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-              {n === 1 ? "1 Set" : "Best of 3"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
         <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
-        <div className="flex gap-2">
-          {[
-            { value: "normal_9", label: "9" },
-            { value: "normal_11", label: "11" },
-            { value: "normal_15", label: "15" },
-            { value: "rally_15", label: "R15" },
-            { value: "rally_21", label: "R21" },
-            { value: "timed", label: "Time" },
-          ].map((s) => (
-            <button key={s.value} type="button" onClick={() => { setEditScoringType(s.value); setHasEdits(true); }}
-              className={`flex-1 py-2 rounded-lg font-medium transition-all text-xs ${editScoringType === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <select value={editScoringFormat} onChange={(e) => { setEditScoringFormat(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <optgroup label="Normal — 1 Set">
+            <option value="1x7">1 set to 7</option>
+            <option value="1x9">1 set to 9</option>
+            <option value="1x11">1 set to 11</option>
+            <option value="1x15">1 set to 15</option>
+          </optgroup>
+          <optgroup label="Normal — Best of 3">
+            <option value="3x11">Best of 3 to 11</option>
+            <option value="3x15">Best of 3 to 15</option>
+          </optgroup>
+          <optgroup label="Rally — 1 Set">
+            <option value="1xR15">1 set rally to 15</option>
+            <option value="1xR21">1 set rally to 21</option>
+          </optgroup>
+          <optgroup label="Rally — Best of 3">
+            <option value="3xR15">Best of 3 rally to 15</option>
+            <option value="3xR21">Best of 3 rally to 21</option>
+          </optgroup>
+        </select>
       </div>
     </div>
   );
@@ -2023,8 +2012,10 @@ export default function EventDetailPage() {
     );
   }
 
-  const scoringLabel = (v: string) =>
-    ({ normal_9: "To 9", normal_11: "To 11", normal_15: "To 15", rally_15: "Rally 15", rally_21: "Rally 21", timed: "Timed" }[v] || v);
+  const scoringFormatLabel = (v: string) => {
+    const labels: Record<string, string> = { "1x7": "1 set to 7", "1x9": "1 set to 9", "1x11": "1 set to 11", "1x15": "1 set to 15", "3x11": "Bo3 to 11", "3x15": "Bo3 to 15", "1xR15": "Rally to 15", "1xR21": "Rally to 21", "3xR15": "Bo3 rally 15", "3xR21": "Bo3 rally 21" };
+    return labels[v] || v;
+  };
   const pairingLabel = (v: string) =>
     ({ random: "Random", skill_balanced: "Skill Balanced", mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed", king_of_court: "King of Court", swiss: "Swiss", manual: "Manual" }[v] || v);
   const rankingLabel = (v: string) =>
@@ -2034,7 +2025,7 @@ export default function EventDetailPage() {
   const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
   const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
-  const scoringDisplay = `${event.numSets === 1 ? "1 set" : "Best of 3"} ${scoringLabel(event.scoringType).toLowerCase()}`;
+  const scoringDisplay = scoringFormatLabel(event.scoringFormat || "1x11");
 
   return (
     <div className="space-y-3">
