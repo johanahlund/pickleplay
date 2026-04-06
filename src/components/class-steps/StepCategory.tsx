@@ -1,8 +1,8 @@
 "use client";
 
-
 interface StepCategoryProps {
   cls: {
+    name: string;
     format: string;
     gender: string;
     ageGroup: string;
@@ -25,12 +25,42 @@ const STATUS_OPTIONS = [
   { value: "completed", label: "Completed" },
 ];
 
+const GENDER_LABELS: Record<string, string> = {
+  open: "", male: "Men's", female: "Women's", mix: "Mixed",
+};
+
+function buildClassName(format: string, gender: string, ageGroup: string, skillMin: number | null | undefined): string {
+  const parts: string[] = [];
+  if (ageGroup !== "open") parts.push(ageGroup);
+  if (skillMin) parts.push(skillMin.toFixed(1));
+  if (gender !== "open") parts.push(GENDER_LABELS[gender] || gender);
+  parts.push(format === "doubles" ? "Doubles" : "Singles");
+  return parts.join(" ");
+}
+
 export function StepCategory({ cls, canManage, updateField }: StepCategoryProps) {
+  // Normalize bracket_upper/bracket_lower to bracket for display
+  const rawPhase = cls.competitionPhase || "draft";
+  const phase = rawPhase.startsWith("bracket") ? "bracket" : rawPhase;
+
+  const autoName = (overrides: Partial<{ format: string; gender: string; ageGroup: string; skillMin: number | null }> = {}) => {
+    const name = buildClassName(
+      overrides.format ?? cls.format,
+      overrides.gender ?? cls.gender,
+      overrides.ageGroup ?? cls.ageGroup,
+      overrides.skillMin !== undefined ? overrides.skillMin : (cls.skillMin ?? null),
+    );
+    updateField("name", name);
+  };
 
   const Toggle = ({ field, value, options }: { field: string; value: string; options: { value: string; label: string }[] }) => (
     <div className="flex gap-1.5">
       {options.map((o) => (
-        <button key={o.value} onClick={() => canManage && updateField(field, o.value)}
+        <button key={o.value} onClick={() => {
+          if (!canManage) return;
+          updateField(field, o.value);
+          autoName({ [field]: o.value });
+        }}
           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
             value === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
           } ${!canManage ? "cursor-default" : ""}`}>
@@ -39,10 +69,6 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
       ))}
     </div>
   );
-
-  // Normalize bracket_upper/bracket_lower to bracket for display
-  const rawPhase = cls.competitionPhase || "draft";
-  const phase = rawPhase.startsWith("bracket") ? "bracket" : rawPhase;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
@@ -82,7 +108,10 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
         <select
           disabled={!canManage}
           value={cls.ageGroup}
-          onChange={(e) => updateField("ageGroup", e.target.value)}
+          onChange={(e) => {
+            updateField("ageGroup", e.target.value);
+            autoName({ ageGroup: e.target.value });
+          }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
           <option value="open">Open</option>
@@ -104,6 +133,7 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
             const val = e.target.value ? parseFloat(e.target.value) : null;
             updateField("skillMin", val);
             updateField("skillMax", null);
+            autoName({ skillMin: val });
           }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
@@ -111,6 +141,18 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
             <option key={lvl ?? "open"} value={lvl ?? ""}>{lvl ? lvl.toFixed(1) : "Open"}</option>
           ))}
         </select>
+      </div>
+
+      {/* Class name (auto-generated, editable) */}
+      <div>
+        <label className="block text-xs text-muted mb-1">Class Name</label>
+        <input
+          type="text"
+          disabled={!canManage}
+          value={cls.name}
+          onChange={(e) => updateField("name", e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        />
       </div>
     </div>
   );
