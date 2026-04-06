@@ -55,23 +55,6 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
     updateField("name", name);
   };
 
-  const Toggle = ({ field, value, options, onAfterChange }: { field: string; value: string; options: { value: string; label: string }[]; onAfterChange?: (v: string) => void }) => (
-    <div className="flex gap-1.5">
-      {options.map((o) => (
-        <button key={o.value} onClick={() => {
-          if (!canManage) return;
-          updateField(field, o.value);
-          autoName({ [field]: o.value });
-          onAfterChange?.(o.value);
-        }}
-          className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-            value === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-          } ${!canManage ? "cursor-default" : ""}`}>
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
@@ -92,14 +75,21 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
 
       <div>
         <label className="block text-xs text-muted mb-1">Format</label>
-        <Toggle field="format" value={cls.format} options={[
-          { value: "doubles", label: "Doubles" },
-          { value: "singles", label: "Singles" },
-        ]} onAfterChange={(v) => {
-          if (v === "singles" && cls.gender === "mix") {
-            updateField("gender", "open");
-          }
-        }} />
+        <select
+          disabled={!canManage}
+          value={cls.format}
+          onChange={(e) => {
+            updateField("format", e.target.value);
+            autoName({ format: e.target.value });
+            if (e.target.value === "singles" && cls.gender === "mix") {
+              updateField("gender", "open");
+            }
+          }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value="doubles">Doubles</option>
+          <option value="singles">Singles</option>
+        </select>
       </div>
       <div>
         <label className="block text-xs text-muted mb-1">Gender</label>
