@@ -37,15 +37,18 @@ export async function GET(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const cls = await getEventClass(id);
+  const url = new URL(_req.url);
+  const classId = url.searchParams.get("classId");
+  const cls = await getEventClass(id, classId);
   if (!cls) {
     return NextResponse.json({ error: "No class found" }, { status: 404 });
   }
 
   const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
-  // Build competition pairs
-  const competitionPairs: CompetitionPair[] = event.pairs.map((p) => ({
+  // Build competition pairs (filter by classId if multi-class)
+  const classPairs = classId ? event.pairs.filter((p) => p.classId === classId) : event.pairs;
+  const competitionPairs: CompetitionPair[] = classPairs.map((p) => ({
     id: p.id,
     player1Id: p.player1Id,
     player2Id: p.player2Id,
@@ -102,23 +105,26 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const cls = await getEventClass(id);
+  const cls = await getEventClass(id, body.classId);
   if (!cls) {
     return NextResponse.json({ error: "No class found" }, { status: 404 });
   }
 
   const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
+  // Filter pairs by classId if multi-class
+  const classPairs = body.classId ? event.pairs.filter((p: { classId?: string | null }) => p.classId === body.classId) : event.pairs;
+
   if (body.action === "seed") {
     // Seed pairs into groups
-    if (event.pairs.length < config.numGroups * 2) {
+    if (classPairs.length < config.numGroups * 2) {
       return NextResponse.json(
         { error: `Need at least ${config.numGroups * 2} pairs for ${config.numGroups} groups` },
         { status: 400 }
       );
     }
 
-    const competitionPairs: CompetitionPair[] = event.pairs.map((p) => {
+    const competitionPairs: CompetitionPair[] = classPairs.map((p: typeof event.pairs[0]) => {
       const ep1 = event.players.find((ep) => ep.playerId === p.player1Id);
       const ep2 = event.players.find((ep) => ep.playerId === p.player2Id);
       // Pair skill level: both players should have the same level (set from pair row)
@@ -156,8 +162,8 @@ export async function POST(
 
   if (body.action === "generate_matches") {
     // Generate round-robin matches for all groups
-    const competitionPairs: CompetitionPair[] = event.pairs
-      .filter((p) => p.groupLabel)
+    const competitionPairs: CompetitionPair[] = classPairs
+      .filter((p: typeof event.pairs[0]) => p.groupLabel)
       .map((p) => ({
         id: p.id,
         player1Id: p.player1Id,

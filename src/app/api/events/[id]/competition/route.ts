@@ -39,7 +39,7 @@ export async function POST(
 
   const body = await req.json();
 
-  const cls = await getEventClass(id);
+  const cls = await getEventClass(id, body.classId);
   if (!cls) {
     return NextResponse.json({ error: "No class found" }, { status: 404 });
   }

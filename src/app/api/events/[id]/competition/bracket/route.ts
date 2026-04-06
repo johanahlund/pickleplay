@@ -44,16 +44,20 @@ export async function POST(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const cls = await getEventClass(id);
+  const cls = await getEventClass(id, body.classId);
   if (!cls) {
     return NextResponse.json({ error: "No class found" }, { status: 404 });
   }
 
   const config = (cls.competitionConfig as unknown as CompetitionConfig) ?? DEFAULT_COMPETITION_CONFIG;
 
+  // Filter by classId if multi-class
+  const classPairs = body.classId ? event.pairs.filter((p: { classId?: string | null }) => p.classId === body.classId) : event.pairs;
+  const classMatches = body.classId ? event.matches.filter((m: { classId?: string | null }) => m.classId === body.classId) : event.matches;
+
   if (body.action === "advance") {
     // Check all group matches are completed
-    const groupMatches = event.matches.filter((m) => m.groupLabel);
+    const groupMatches = classMatches.filter((m: typeof event.matches[0]) => m.groupLabel);
     const incomplete = groupMatches.filter((m) => m.status !== "completed");
     if (incomplete.length > 0) {
       return NextResponse.json(
@@ -63,7 +67,7 @@ export async function POST(
     }
 
     // Build competition pairs
-    const competitionPairs: CompetitionPair[] = event.pairs.map((p) => ({
+    const competitionPairs: CompetitionPair[] = classPairs.map((p: typeof event.pairs[0]) => ({
       id: p.id,
       player1Id: p.player1Id,
       player2Id: p.player2Id,
@@ -77,7 +81,7 @@ export async function POST(
     groupLabels.sort();
 
     const allStandings = groupLabels.map((label) =>
-      calculateGroupStandings(competitionPairs, event.matches, label, config.tiebreakers)
+      calculateGroupStandings(competitionPairs, classMatches, label, config.tiebreakers)
     );
 
     // Determine advancement

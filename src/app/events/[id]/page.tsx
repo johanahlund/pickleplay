@@ -9,7 +9,7 @@ import { PlayerSelector } from "@/components/PlayerSelector";
 import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
 import { ClassesManager } from "@/components/ClassesManager";
-import { ClassDetailView } from "@/components/ClassDetailView";
+import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
 
@@ -1933,6 +1933,28 @@ export default function EventDetailPage() {
   );
 
   // ── Main render ──
+  // When a class is selected in competition, show ClassStepFlow instead of section bar
+  if (activeSection === "competition" && selectedClassId && event) {
+    const cls = event.classes?.find((c: { id: string }) => c.id === selectedClassId);
+    if (cls) {
+      return (
+        <div className="space-y-2">
+          <ClassStepFlow
+            eventId={id as string}
+            cls={cls as never}
+            allClasses={(event.classes || []) as never}
+            pairs={event.pairs}
+            matches={event.matches}
+            canManage={canManage}
+            numCourts={event.numCourts}
+            onBack={() => setSelectedClassId(null)}
+            onRefresh={fetchEvent}
+          />
+        </div>
+      );
+    }
+  }
+
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
@@ -1970,7 +1992,7 @@ export default function EventDetailPage() {
             </div>
 
             {/* Classes — only when competition mode is on */}
-            {event.competitionMode && !selectedClassId && (
+            {event.competitionMode && (
               <>
                 <ClassesManager
                   eventId={id as string}
@@ -1993,23 +2015,6 @@ export default function EventDetailPage() {
                 />
               </>
             )}
-            {event.competitionMode && selectedClassId && (() => {
-              const cls = event.classes?.find((c: { id: string }) => c.id === selectedClassId);
-              if (!cls) return null;
-              return (
-                <ClassDetailView
-                  eventId={id as string}
-                  cls={cls as never}
-                  allClasses={(event.classes || []) as never}
-                  pairs={event.pairs}
-                  matches={event.matches}
-                  canManage={canManage}
-                  numCourts={event.numCourts}
-                  onBack={() => setSelectedClassId(null)}
-                  onRefresh={fetchEvent}
-                />
-              );
-            })()}
           </div>
         )}
         {activeSection === "rounds" && renderRounds()}

@@ -112,7 +112,8 @@ export async function PATCH(
 
   // Direct field updates (no copyFromId)
   if (!copyFromId) {
-    const allowed = ["name", "format", "gender", "ageGroup", "numSets", "scoringType", "timedMinutes",
+    const allowed = ["name", "format", "gender", "ageGroup", "skillMin", "skillMax",
+      "numSets", "scoringType", "timedMinutes",
       "pairingMode", "playMode", "prioSpeed", "prioFairness", "prioSkill", "rankingMode",
       "minPlayers", "maxPlayers", "belowMinAction", "mergeWithClassId",
       "upperBracketMergeClassId", "lowerBracketMergeClassId"];
