@@ -236,7 +236,7 @@ export function ClassStepFlow({
         </div>
         <div className="flex items-center justify-between mt-1.5">
           <button onClick={onBack} className="text-xs text-action font-medium shrink-0">← Classes</button>
-          <span className="text-sm font-bold text-foreground truncate px-2">{cls.name} — {currentStep.label}</span>
+          <span className="text-sm font-bold text-foreground">{currentStep.label}</span>
           <div className="flex gap-1 shrink-0">
             {currentStepIdx > 0 && (
               <button onClick={() => setCurrentStepIdx(currentStepIdx - 1)}
@@ -249,6 +249,9 @@ export function ClassStepFlow({
           </div>
         </div>
       </div>
+
+      {/* Class name header */}
+      <h3 className="text-base font-bold">{cls.name}</h3>
 
       {/* Step content */}
       {renderStep()}

@@ -49,11 +49,17 @@ export function StepGroups({ config, canManage, updateConfig }: StepGroupsProps)
 
       <div>
         <label className="block text-xs text-muted mb-1">Group seeding</label>
-        <Toggle value={config.groupSeeding} options={[
-          { value: "rating", label: "Rating" },
-          { value: "skill_level", label: "Skill Level" },
-          { value: "random", label: "Random" },
-        ]} onChange={(v) => updateConfig({ groupSeeding: v as CompetitionConfig["groupSeeding"] })} />
+        <select
+          disabled={!canManage}
+          value={config.groupSeeding}
+          onChange={(e) => updateConfig({ groupSeeding: e.target.value as CompetitionConfig["groupSeeding"] })}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value="rating">App Rating</option>
+          <option value="dupr">DUPR Rating</option>
+          <option value="skill_level">Skill Level</option>
+          <option value="random">Random</option>
+        </select>
       </div>
     </div>
   );

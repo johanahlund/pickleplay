@@ -70,11 +70,16 @@ export function StepAdvancement({ config, canManage, updateConfig }: StepAdvance
 
       <div>
         <label className="block text-xs text-muted mb-1">Bracket seeding</label>
-        <Toggle value={config.bracketSeeding} options={[
-          { value: "cross_group", label: "Cross-group" },
-          { value: "snake", label: "Snake" },
-          { value: "random", label: "Random" },
-        ]} onChange={(v) => updateConfig({ bracketSeeding: v as CompetitionConfig["bracketSeeding"] })} />
+        <select
+          disabled={!canManage}
+          value={config.bracketSeeding}
+          onChange={(e) => updateConfig({ bracketSeeding: e.target.value as CompetitionConfig["bracketSeeding"] })}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value="cross_group">Cross-group</option>
+          <option value="snake">Snake</option>
+          <option value="random">Random</option>
+        </select>
       </div>
     </div>
   );

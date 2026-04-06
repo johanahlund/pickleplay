@@ -5,7 +5,7 @@ export interface CompetitionConfig {
   // Group stage
   numGroups: number; // 2, 3, 4
   matchesPerMatchup: number; // 1 or 2 (how many times each pair plays each other in group)
-  groupSeeding: "rating" | "skill_level" | "random";
+  groupSeeding: "rating" | "dupr" | "skill_level" | "random";
 
   // Advancement
   advanceToUpper: number; // how many from each group go to upper bracket
