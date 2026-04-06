@@ -48,6 +48,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [manualPairSelection, setManualPairSelection] = useState<string | null>(null);
+  const [pairingBusy, setPairingBusy] = useState(false);
   const pairingLock = useRef(false);
 
   const fetchData = useCallback(async () => {
@@ -90,6 +91,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   const forcePair = (player1Id: string, player2Id: string) => {
     // Lock to prevent rapid clicks
     pairingLock.current = true;
+    setPairingBusy(true);
     // Optimistic: add pair immediately
     const p1 = players.find((p) => p.playerId === player1Id)?.player;
     const p2 = players.find((p) => p.playerId === player2Id)?.player;
@@ -106,7 +108,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "force_pair", player1Id, player2Id }),
     }).then(() => {
-      setTimeout(() => { pairingLock.current = false; fetchData(); onRefresh(); }, 500);
+      setTimeout(() => { pairingLock.current = false; setPairingBusy(false); fetchData(); onRefresh(); }, 500);
     });
   };
 
@@ -250,7 +252,12 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
               </button>
             );
           })}
-          {manualPairSelection && (
+          {pairingBusy && (
+            <div className="px-3 py-2 bg-green-50 text-xs text-green-700 font-medium animate-pulse">
+              Pairing...
+            </div>
+          )}
+          {manualPairSelection && !pairingBusy && (
             <div className="px-3 py-2 bg-action/5 text-xs text-action font-medium">
               Tap another player to pair, or tap again to deselect
             </div>
