@@ -16,17 +16,12 @@ interface StepGroupsProps {
   updateConfig: (partial: Partial<CompetitionConfig>) => void;
 }
 
-function groupDistribution(total: number, numGroups: number): { perGroup: number; remainder: number } {
-  if (numGroups <= 0) return { perGroup: 0, remainder: 0 };
-  return { perGroup: Math.floor(total / numGroups), remainder: total % numGroups };
-}
-
-function distributionNote(total: number, numGroups: number): string | null {
-  if (total === 0 || numGroups <= 0) return null;
-  const { perGroup, remainder } = groupDistribution(total, numGroups);
-  if (remainder === 0) return null;
-  const bigger = perGroup + 1;
-  return `${remainder} group${remainder > 1 ? "s" : ""} with ${bigger} teams, ${numGroups - remainder} with ${perGroup}`;
+/** Returns array of group sizes, e.g. groupSizes(10, 3) → [4, 3, 3] */
+function groupSizes(total: number, numGroups: number): number[] {
+  if (numGroups <= 0) return [];
+  const base = Math.floor(total / numGroups);
+  const remainder = total % numGroups;
+  return Array.from({ length: numGroups }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
 const SCORING_OPTIONS = [
@@ -57,10 +52,6 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
   );
 
   const n = config.numGroups;
-  const maxDist = maxTeams ? groupDistribution(maxTeams, n) : null;
-  const regDist = groupDistribution(registeredTeams, n);
-  const maxNote = maxTeams ? distributionNote(maxTeams, n) : null;
-  const regNote = distributionNote(registeredTeams, n);
 
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
@@ -83,7 +74,7 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
                 <tr className="text-muted">
                   <th className="text-left font-normal pb-1"></th>
                   {maxTeams != null && <th className="text-center font-normal pb-1">Max</th>}
-                  <th className="text-center font-normal pb-1">Registered</th>
+                  <th className="text-center font-normal pb-1">Reg</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,17 +84,18 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
                   <td className="text-center font-semibold">{registeredTeams}</td>
                 </tr>
                 <tr>
-                  <td className="text-muted pr-2">Per group</td>
-                  {maxTeams != null && <td className="text-center font-semibold">{maxDist ? Math.floor(maxTeams / n) : "–"}</td>}
-                  <td className="text-center font-semibold">{n > 0 ? Math.floor(registeredTeams / n) : "–"}</td>
+                  <td className="text-muted pr-2">Per grp</td>
+                  {maxTeams != null && (
+                    <td className="text-center text-[10px]">
+                      {n > 0 ? groupSizes(maxTeams, n).join(" · ") : "–"}
+                    </td>
+                  )}
+                  <td className="text-center text-[10px]">
+                    {n > 0 ? groupSizes(registeredTeams, n).join(" · ") : "–"}
+                  </td>
                 </tr>
               </tbody>
             </table>
-            {(maxNote || regNote) && (
-              <p className="text-[10px] text-amber-600 mt-1">
-                {regNote || maxNote}
-              </p>
-            )}
           </div>
         </div>
       </div>
