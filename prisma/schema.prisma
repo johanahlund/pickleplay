@@ -164,6 +164,7 @@ model EventClass {
   // Format settings
   numSets      Int      @default(1)
   scoringType  String   @default("normal_11")
+  winBy        String   @default("2") // "1", "2", "cap15", "cap18"
   timedMinutes Int?
   pairingMode  String   @default("random")
   playMode     String   @default("round_based") // "round_based" | "continuous"

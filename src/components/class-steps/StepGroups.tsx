@@ -7,6 +7,7 @@ interface StepGroupsProps {
   cls: {
     numSets: number;
     scoringType: string;
+    winBy?: string;
   };
   maxTeams: number | null;
   registeredTeams: number;
@@ -128,6 +129,16 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+      </div>
+
+      <div>
+        <label className="block text-xs text-muted mb-1">Win by</label>
+        <Toggle value={cls.winBy || "2"} options={[
+          { value: "1", label: "1" },
+          { value: "2", label: "2" },
+          ...(cls.scoringType === "normal_11" ? [{ value: "cap15", label: "Cap 15" }] : []),
+          { value: "cap18", label: "Cap 18" },
+        ]} onChange={(v) => updateField("winBy", v)} />
       </div>
 
       <div>
