@@ -55,13 +55,14 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
     updateField("name", name);
   };
 
-  const Toggle = ({ field, value, options }: { field: string; value: string; options: { value: string; label: string }[] }) => (
+  const Toggle = ({ field, value, options, onAfterChange }: { field: string; value: string; options: { value: string; label: string }[]; onAfterChange?: (v: string) => void }) => (
     <div className="flex gap-1.5">
       {options.map((o) => (
         <button key={o.value} onClick={() => {
           if (!canManage) return;
           updateField(field, o.value);
           autoName({ [field]: o.value });
+          onAfterChange?.(o.value);
         }}
           className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
             value === o.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
@@ -94,16 +95,28 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
         <Toggle field="format" value={cls.format} options={[
           { value: "doubles", label: "Doubles" },
           { value: "singles", label: "Singles" },
-        ]} />
+        ]} onAfterChange={(v) => {
+          if (v === "singles" && cls.gender === "mix") {
+            updateField("gender", "open");
+          }
+        }} />
       </div>
       <div>
         <label className="block text-xs text-muted mb-1">Gender</label>
-        <Toggle field="gender" value={cls.gender} options={[
-          { value: "open", label: "Open" },
-          { value: "male", label: "Male" },
-          { value: "female", label: "Female" },
-          { value: "mix", label: "Mixed" },
-        ]} />
+        <select
+          disabled={!canManage}
+          value={cls.gender}
+          onChange={(e) => {
+            updateField("gender", e.target.value);
+            autoName({ gender: e.target.value });
+          }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+        >
+          <option value="open">Open</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          {cls.format === "doubles" && <option value="mix">Mixed</option>}
+        </select>
       </div>
       <div>
         <label className="block text-xs text-muted mb-1">Age Group</label>
@@ -161,18 +174,6 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
             onChange={(e) => updateField("maxPlayers", e.target.value ? parseInt(e.target.value) : null)}
             className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium" />
         </div>
-      </div>
-
-      {/* Class name (auto-generated, editable) */}
-      <div>
-        <label className="block text-xs text-muted mb-1">Class Name</label>
-        <input
-          type="text"
-          disabled={!canManage}
-          value={cls.name}
-          onChange={(e) => updateField("name", e.target.value)}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
-        />
       </div>
     </div>
   );
