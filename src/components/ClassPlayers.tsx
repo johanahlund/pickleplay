@@ -34,6 +34,7 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [clubMemberIds, setClubMemberIds] = useState<Set<string>>(new Set());
 
   const fetchClassPlayers = useCallback(async () => {
     // Get event data which includes players with classId
@@ -42,6 +43,12 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
     const data = await r.json();
     const classPlayers = (data.players || []).filter((ep: { classId?: string }) => ep.classId === classId);
     setPlayers(classPlayers);
+    // Fetch club members for guest badge
+    if (data.clubId) {
+      fetch(`/api/clubs/${data.clubId}`).then((r) => r.ok ? r.json() : null).then((club) => {
+        if (club?.members) setClubMemberIds(new Set(club.members.map((m: { playerId: string }) => m.playerId)));
+      });
+    }
     setLoading(false);
   }, [eventId, classId]);
 
@@ -136,6 +143,9 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
                 </span>
               )}
               <span className="text-xs text-muted">{Math.round(ep.player.rating)}</span>
+              {clubMemberIds.size > 0 && !clubMemberIds.has(ep.playerId) && (
+                <span className="text-[9px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium">Guest</span>
+              )}
               {canManage && (
                 <button onClick={() => removePlayer(ep.playerId)}
                   className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Remove</button>
