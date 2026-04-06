@@ -320,7 +320,8 @@ function NewEventPage() {
   const baseSteps = fixedPairs
     ? ["When", "Organizer", "Scoring", "Pairing", "Players", "Pairs"]
     : ["When", "Organizer", "Scoring", "Pairing", "Players"];
-  const stepTitles = [...baseSteps, "Competition", "Review"];
+  const lastStepName = competitionEnabled ? "Competition" : "Ranked";
+  const stepTitles = [...baseSteps, lastStepName, "Review"];
   const TOTAL_STEPS = stepTitles.length;
   const stepNum = (name: string) => stepTitles.indexOf(name) + 1;
 
@@ -478,6 +479,21 @@ function NewEventPage() {
             {selectedClub && (
               <p className="text-xs text-muted">Club: {selectedClub.emoji} {selectedClub.name}</p>
             )}
+
+            {/* Competition toggle */}
+            <div className="border-t border-border pt-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
+                  onClick={() => setCompetitionEnabled(!competitionEnabled)}>
+                  <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
+                    style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
+                </div>
+                <div>
+                  <span className="text-sm font-medium">Competition Mode</span>
+                  <p className="text-xs text-muted">Groups → Elimination tournament</p>
+                </div>
+              </label>
+            </div>
           </>
         )}
 
@@ -889,7 +905,7 @@ function NewEventPage() {
           );
         })()}
         {/* Competition step (always shown — includes Ranking) */}
-        {step === stepNum("Competition") && (
+        {step === stepNum(lastStepName) && (
           <>
             {/* Ranking */}
             <div>
@@ -913,23 +929,6 @@ function NewEventPage() {
                 {rankingMode === "none" && "Scores recorded but don't affect ratings."}
               </p>
             </div>
-
-            {/* Competition toggle */}
-            {format === "doubles" && (
-              <div className="border-t border-border pt-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <div className={`w-11 h-6 rounded-full transition-colors relative ${competitionEnabled ? "bg-action" : "bg-gray-200"}`}
-                    onClick={() => setCompetitionEnabled(!competitionEnabled)}>
-                    <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
-                      style={{ transform: competitionEnabled ? "translateX(22px)" : "translateX(0)" }} />
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium">Competition Mode</span>
-                    <p className="text-xs text-muted">Groups → Elimination tournament</p>
-                  </div>
-                </label>
-              </div>
-            )}
 
             {competitionEnabled && (
               <div className="bg-gray-50 rounded-lg p-3 text-sm text-muted space-y-1">
@@ -999,7 +998,7 @@ function NewEventPage() {
                   </button>
                 )}
                 {competitionEnabled && (
-                  <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
+                  <button type="button" onClick={() => goEdit(stepNum(lastStepName))} className={rowClass}>
                     <span className="text-sm text-muted">Competition</span>
                     <span className="text-sm font-medium">Enabled</span>
                   </button>
@@ -1024,12 +1023,12 @@ function NewEventPage() {
 
               {/* Competition & Ranking */}
               <div className={frameClass}>
-                <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
+                <button type="button" onClick={() => goEdit(stepNum(lastStepName))} className={rowClass}>
                   <span className="text-sm text-muted">Ranking</span>
                   <span className="text-sm font-medium">{rankingMode === "ranked" ? "Ranked" : rankingMode === "approval" ? "Approval" : "Unranked"}</span>
                 </button>
                 {competitionEnabled && (
-                  <button type="button" onClick={() => goEdit(stepNum("Competition"))} className={rowClass}>
+                  <button type="button" onClick={() => goEdit(stepNum(lastStepName))} className={rowClass}>
                     <span className="text-sm text-muted">Competition</span>
                     <span className="text-sm font-medium">Enabled</span>
                   </button>

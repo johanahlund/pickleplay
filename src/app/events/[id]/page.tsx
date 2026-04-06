@@ -1984,43 +1984,40 @@ export default function EventDetailPage() {
             </span>
           </button>
         )}
-        {/* Competition & Ranking */}
-        <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
-          <span className="text-sm text-muted">Ranking</span>
-          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
-        </button>
-        {event.format === "doubles" && (
-          <button onClick={() => setActiveSection("competition")} className={rowClass}>
-            <span className="text-sm text-muted">Competition</span>
-            <span className="text-sm font-medium">
-              {!event.competitionMode
-                ? "Not enabled"
-                : event.competitionPhase === "groups"
-                  ? "Group Stage"
-                  : event.competitionPhase?.startsWith("bracket")
-                    ? "Bracket Stage"
-                    : event.competitionPhase === "completed"
-                      ? "Completed"
-                      : "Setup"}
-            </span>
-          </button>
-        )}
       </div>
 
-      {/* Scoring */}
+      {/* Scoring & Pairing */}
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass}>
           <span className="text-sm text-muted">Scoring</span>
           <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
         </button>
-      </div>
-
-      {/* Pairing */}
-      <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
         </button>
+      </div>
+
+      {/* Ranking & Competition */}
+      <div className={frameClass}>
+        <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
+          <span className="text-sm text-muted">Ranking</span>
+          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+        </button>
+        {event.competitionMode && (
+          <button onClick={() => setActiveSection("competition")} className={rowClass}>
+            <span className="text-sm text-muted">Competition</span>
+            <span className="text-sm font-medium">
+              {event.competitionPhase === "groups"
+                ? "Group Stage"
+                : event.competitionPhase?.startsWith("bracket")
+                  ? "Bracket Stage"
+                  : event.competitionPhase === "completed"
+                    ? "Completed"
+                    : "Setup"}
+            </span>
+          </button>
+        )}
       </div>
 
       {(isOwner || isAdmin) && (
