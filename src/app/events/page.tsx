@@ -135,7 +135,7 @@ export default function EventsPage() {
           {[
             { value: "all", label: "All" },
             { value: "past7", label: "P7" },
-            { value: "today", label: "Today" },
+            { value: "today", label: `${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short" })} (Today)` },
             { value: "tomorrow", label: "Tomorrow" },
             { value: "next7", label: "N7" },
             { value: "next30", label: "N30" },
