@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerSelector } from "./PlayerSelector";
+import { PairRequests } from "./PairRequests";
 
 interface Player {
   id: string;
@@ -35,6 +36,7 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clubMemberIds, setClubMemberIds] = useState<Set<string>>(new Set());
+  const [pairedPlayerIds, setPairedPlayerIds] = useState<Set<string>>(new Set());
 
   const fetchClassPlayers = useCallback(async () => {
     // Get event data which includes players with classId
@@ -43,6 +45,12 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
     const data = await r.json();
     const classPlayers = (data.players || []).filter((ep: { classId?: string }) => ep.classId === classId);
     setPlayers(classPlayers);
+    // Track paired players
+    const paired = new Set<string>();
+    (data.pairs || []).filter((p: { classId?: string }) => p.classId === classId).forEach((p: { player1Id: string; player2Id: string }) => {
+      paired.add(p.player1Id); paired.add(p.player2Id);
+    });
+    setPairedPlayerIds(paired);
     // Fetch club members for guest badge
     if (data.clubId) {
       fetch(`/api/clubs/${data.clubId}`).then((r) => r.ok ? r.json() : null).then((club) => {
@@ -153,6 +161,19 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
             </div>
           ))}
         </div>
+      )}
+
+      {/* Pair requests (doubles only) */}
+      {format === "doubles" && players.length > 0 && (
+        <PairRequests
+          eventId={eventId}
+          classId={classId}
+          format={format}
+          players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji } }))}
+          existingPairPlayerIds={pairedPlayerIds}
+          canManage={canManage}
+          onPairCreated={() => { fetchClassPlayers(); onRefresh(); }}
+        />
       )}
 
       {/* Add player (manager) */}

@@ -193,6 +193,18 @@ model EventClass {
   matches  Match[]
 }
 
+model PairRequest {
+  id          String   @id @default(cuid())
+  eventId     String
+  classId     String
+  requesterId String   // who asked
+  requestedId String   // who they asked
+  status      String   @default("pending") // "pending" | "accepted" | "declined" | "cancelled"
+  createdAt   DateTime @default(now())
+
+  @@unique([eventId, classId, requesterId])
+}
+
 model EventPlayer {
   id         String   @id @default(cuid())
   eventId    String
