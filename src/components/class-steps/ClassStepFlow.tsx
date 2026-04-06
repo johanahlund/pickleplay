@@ -120,7 +120,7 @@ export function ClassStepFlow({
   // Build dynamic step list
   const steps: StepDef[] = [
     { id: "category", label: "Category", shortLabel: "Cat", type: "config" },
-    { id: "groups", label: "Groups", shortLabel: "Grps", type: "config" },
+    { id: "groups", label: "Group Setup", shortLabel: "Grps", type: "config" },
     { id: "advancement", label: "Advancement", shortLabel: "Adv", type: "config" },
     { id: "upper-config", label: "Upper Bracket", shortLabel: "Upper", type: "config" },
     ...(hasLowerBracket ? [{ id: "lower-config", label: "Lower Bracket", shortLabel: "Lower", type: "config" as const }] : []),
