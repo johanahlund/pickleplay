@@ -82,6 +82,14 @@ export const BRACKET_STAGE_LABELS: Record<string, string> = {
   f: "Final",
 };
 
+export const BRACKET_STAGE_SHORT: Record<string, string> = {
+  r32: "1/32",
+  r16: "1/16",
+  qf: "1/4",
+  sf: "Semi",
+  f: "Final",
+};
+
 /**
  * Group standing entry
  */

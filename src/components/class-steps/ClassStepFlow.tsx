@@ -5,7 +5,7 @@ import {
   CompetitionConfig,
   DEFAULT_COMPETITION_CONFIG,
   getBracketStages,
-  BRACKET_STAGE_LABELS,
+  BRACKET_STAGE_SHORT,
 } from "@/lib/competition/types";
 import { StepCategory } from "./StepCategory";
 import { StepGroups } from "./StepGroups";
@@ -264,8 +264,8 @@ export function ClassStepFlow({
         {hasUpperBracket && (() => {
           const upperTeams = config.numGroups * config.advanceToUpper + config.wildcardCount;
           const stages = getBracketStages(upperTeams);
-          const roundLabels = stages.map((s) => BRACKET_STAGE_LABELS[s] || s);
-          if (config.upperThirdPlace) roundLabels.push("3rd place");
+          const roundLabels = stages.map((s) => BRACKET_STAGE_SHORT[s] || s);
+          if (config.upperThirdPlace) roundLabels.push("3rd");
           return (
             <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "upper-config"))} className={rowClass}>
               <span className="text-sm text-muted">Upper Bracket</span>
@@ -276,8 +276,8 @@ export function ClassStepFlow({
         {hasLowerBracket && (() => {
           const lowerTeams = config.numGroups * config.advanceToLower;
           const stages = getBracketStages(lowerTeams);
-          const roundLabels = stages.map((s) => BRACKET_STAGE_LABELS[s] || s);
-          if (config.lowerThirdPlace) roundLabels.push("3rd place");
+          const roundLabels = stages.map((s) => BRACKET_STAGE_SHORT[s] || s);
+          if (config.lowerThirdPlace) roundLabels.push("3rd");
           return (
             <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
               <span className="text-sm text-muted">Lower Bracket</span>
