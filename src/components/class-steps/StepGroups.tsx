@@ -4,11 +4,26 @@ import { CompetitionConfig } from "@/lib/competition/types";
 
 interface StepGroupsProps {
   config: CompetitionConfig;
+  maxTeams: number | null;
+  registeredTeams: number;
   canManage: boolean;
   updateConfig: (partial: Partial<CompetitionConfig>) => void;
 }
 
-export function StepGroups({ config, canManage, updateConfig }: StepGroupsProps) {
+function groupDistribution(total: number, numGroups: number): { perGroup: number; remainder: number } {
+  if (numGroups <= 0) return { perGroup: 0, remainder: 0 };
+  return { perGroup: Math.floor(total / numGroups), remainder: total % numGroups };
+}
+
+function distributionNote(total: number, numGroups: number): string | null {
+  if (total === 0 || numGroups <= 0) return null;
+  const { perGroup, remainder } = groupDistribution(total, numGroups);
+  if (remainder === 0) return null;
+  const bigger = perGroup + 1;
+  return `${remainder} group${remainder > 1 ? "s" : ""} with ${bigger} teams, ${numGroups - remainder} with ${perGroup}`;
+}
+
+export function StepGroups({ config, maxTeams, registeredTeams, canManage, updateConfig }: StepGroupsProps) {
   const Toggle = ({ value, options, onChange }: {
     value: string | number;
     options: { value: string | number; label: string }[];
@@ -26,16 +41,55 @@ export function StepGroups({ config, canManage, updateConfig }: StepGroupsProps)
     </div>
   );
 
+  const n = config.numGroups;
+  const maxDist = maxTeams ? groupDistribution(maxTeams, n) : null;
+  const regDist = groupDistribution(registeredTeams, n);
+  const maxNote = maxTeams ? distributionNote(maxTeams, n) : null;
+  const regNote = distributionNote(registeredTeams, n);
+
   return (
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div>
         <label className="block text-xs text-muted mb-1">Groups</label>
-        <div className="flex items-center gap-0">
-          <button onClick={() => canManage && updateConfig({ numGroups: Math.max(1, config.numGroups - 1) })}
-            className="w-12 h-12 rounded-l-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">−</button>
-          <div className="w-12 h-12 bg-selected text-white font-bold text-2xl flex items-center justify-center">{config.numGroups}</div>
-          <button onClick={() => canManage && updateConfig({ numGroups: Math.min(10, config.numGroups + 1) })}
-            className="w-12 h-12 rounded-r-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">+</button>
+        <div className="flex gap-3">
+          {/* Group selector */}
+          <div className="flex items-center gap-0 shrink-0">
+            <button onClick={() => canManage && updateConfig({ numGroups: Math.max(1, n - 1) })}
+              className="w-12 h-12 rounded-l-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">−</button>
+            <div className="w-12 h-12 bg-selected text-white font-bold text-2xl flex items-center justify-center">{n}</div>
+            <button onClick={() => canManage && updateConfig({ numGroups: Math.min(10, n + 1) })}
+              className="w-12 h-12 rounded-r-xl bg-gray-200 text-foreground font-bold text-2xl flex items-center justify-center active:bg-gray-300">+</button>
+          </div>
+
+          {/* Distribution info */}
+          <div className="flex-1 min-w-0">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted">
+                  <th className="text-left font-normal pb-1"></th>
+                  {maxTeams != null && <th className="text-center font-normal pb-1">Max</th>}
+                  <th className="text-center font-normal pb-1">Registered</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="text-muted pr-2">Teams</td>
+                  {maxTeams != null && <td className="text-center font-semibold">{maxTeams}</td>}
+                  <td className="text-center font-semibold">{registeredTeams}</td>
+                </tr>
+                <tr>
+                  <td className="text-muted pr-2">Per group</td>
+                  {maxTeams != null && <td className="text-center font-semibold">{maxDist ? Math.floor(maxTeams / n) : "–"}</td>}
+                  <td className="text-center font-semibold">{n > 0 ? Math.floor(registeredTeams / n) : "–"}</td>
+                </tr>
+              </tbody>
+            </table>
+            {(maxNote || regNote) && (
+              <p className="text-[10px] text-amber-600 mt-1">
+                {regNote || maxNote}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
