@@ -173,7 +173,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, pairs, user
               const leftId = p1Female ? pair.player1Id : pair.player2Id;
               const rightId = p1Female ? pair.player2Id : pair.player1Id;
               return (
-                <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-red-50 border border-red-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
+                <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-amber-50 border border-amber-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
                   <div className="flex items-center gap-2">
                     <div className="flex-1"><PlayerCard player={left} isMe={leftId === userId} /></div>
                     <span className="text-[9px] text-muted">&</span>
@@ -196,7 +196,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, pairs, user
                       </div>
                     ) : null;
                   })()}
-                  {sameGender && <div className="text-[10px] text-danger mt-1">Same gender — mixed pairs required</div>}
+                  {sameGender && <div className="text-[10px] text-amber-600 mt-1">Same gender pair</div>}
                 </div>
               );
             })}
