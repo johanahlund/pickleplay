@@ -82,11 +82,9 @@ export default function ClubsPage() {
     if (r.ok) {
       const data = await r.json();
       setBrowseClubs(data);
-      // Extract unique countries for the filter
-      if (countries.length === 0) {
-        const uniqueCountries = [...new Set(data.map((cl: BrowseClub) => cl.country).filter(Boolean))] as string[];
-        setCountries(uniqueCountries.sort());
-      }
+      // Extract unique countries for the filter (always update)
+      const uniqueCountries = [...new Set(data.map((cl: BrowseClub) => cl.country).filter(Boolean))] as string[];
+      if (uniqueCountries.length > countries.length) setCountries(uniqueCountries.sort());
     }
     setBrowseLoading(false);
   };
@@ -203,13 +201,11 @@ export default function ClubsPage() {
                 <ClearInput value={browseSearch} onChange={(v) => { setBrowseSearch(v); searchBrowse(v); }}
                   placeholder="Search by name..." className="text-sm" />
               </div>
-              {countries.length > 0 && (
-                <select value={browseCountry} onChange={(e) => { setBrowseCountry(e.target.value); searchBrowse(undefined, e.target.value); }}
-                  className="border border-border rounded-lg px-2 py-1.5 text-sm shrink-0">
-                  <option value="">All countries</option>
-                  {countries.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              )}
+              <select value={browseCountry} onChange={(e) => { setBrowseCountry(e.target.value); searchBrowse(undefined, e.target.value); }}
+                className="border border-border rounded-lg px-2 py-1.5 text-sm shrink-0">
+                <option value="">All countries</option>
+                {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
 
             {browseLoading ? (
