@@ -119,6 +119,14 @@ export function Header() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<{ id: string; title: string; body?: string | null; linkUrl?: string | null; read: boolean; createdAt: string }[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    const handler = (e: MouseEvent) => { if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifications(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showNotifications]);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -218,7 +226,7 @@ export function Header() {
                 >
                   {session.user.name}
                 </button>
-                <div className="relative">
+                <div className="relative" ref={notifRef}>
                   <button
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="relative text-lg opacity-90 hover:opacity-100"

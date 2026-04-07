@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 
 type ViewRole = "admin" | "user";
 
@@ -47,13 +47,21 @@ export function RoleTogglePill() {
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const { viewRole, setViewRole } = useViewRole();
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   if (!isAdmin) return null;
 
   const current = ROLES.find((r) => r.value === viewRole) || ROLES[0];
 
   return (
-    <div className="fixed top-1 right-24 z-[60]">
+    <div className="fixed top-1 left-1/2 -translate-x-1/2 z-[60]" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className={`px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg transition-all ${current.color} text-white`}

@@ -125,10 +125,18 @@ const ROLE_COLORS: Record<string, string> = {
 
 function RolePill({ role, canChange, onChange }: { role: string; canChange: boolean; onChange: (role: string) => void }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const roles = ["member", "admin", "owner"];
 
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   return (
-    <div className="relative w-16">
+    <div className="relative w-16" ref={ref}>
       <button
         onClick={(e) => { e.stopPropagation(); if (canChange) setOpen(!open); }}
         className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize w-full text-center ${ROLE_COLORS[role] || ROLE_COLORS.member} ${canChange ? "cursor-pointer" : ""}`}
