@@ -116,6 +116,39 @@ interface Club {
 
 type Tab = "feed" | "events" | "members" | "rankings";
 
+// ── Role Pill ──
+const ROLE_COLORS: Record<string, string> = {
+  owner: "bg-purple-100 text-purple-700",
+  admin: "bg-blue-100 text-blue-700",
+  member: "bg-gray-100 text-muted",
+};
+
+function RolePill({ role, canChange, onChange }: { role: string; canChange: boolean; onChange: (role: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const roles = ["member", "admin", "owner"];
+
+  return (
+    <div className="relative w-16">
+      <button
+        onClick={(e) => { e.stopPropagation(); if (canChange) setOpen(!open); }}
+        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize w-full text-center ${ROLE_COLORS[role] || ROLE_COLORS.member} ${canChange ? "cursor-pointer" : ""}`}
+      >
+        {role}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-6 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[100px]">
+          {roles.map((r) => (
+            <button key={r} onClick={(e) => { e.stopPropagation(); onChange(r); setOpen(false); }}
+              className={`w-full text-left px-3 py-1.5 text-xs capitalize hover:bg-gray-50 ${role === r ? "font-bold" : ""}`}>
+              {r} {role === r ? "✓" : ""}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Swipeable Member Row ──
 function SwipeableMemberRow({
   member,
@@ -199,22 +232,7 @@ function SwipeableMemberRow({
       )}
       <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
-      {isOwner && member.role !== "owner" && !isSelf ? (
-        <select
-          value={member.role}
-          onChange={(e) => onRoleChange(e.target.value)}
-          className="text-[10px] border border-border rounded px-1 py-0.5 w-16 bg-white"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-          <option value="owner">Owner</option>
-        </select>
-      ) : (
-        <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize w-16 text-center">
-          {member.role}
-        </span>
-      )}
+      <RolePill role={member.role} canChange={!!(isOwner && member.role !== "owner" && !isSelf)} onChange={onRoleChange} />
       {/* Desktop hover action */}
       {canManage && member.role !== "owner" && !isSelf && (
         <button
@@ -777,7 +795,7 @@ export default function ClubDetailPage() {
       )}
 
       {/* ── Feed Tab ── */}
-      {tab === "feed" && (
+      {tab === "feed" && !showInfo && (
         <div className="space-y-3">
           {/* Join requests alert */}
           {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
@@ -900,7 +918,7 @@ export default function ClubDetailPage() {
       )}
 
       {/* ── Events Tab ── */}
-      {tab === "events" && (
+      {tab === "events" && !showInfo && (
         <div className="space-y-3">
           {canManage && (
             <Link
@@ -1009,7 +1027,7 @@ export default function ClubDetailPage() {
       )}
 
       {/* ── Members Tab ── */}
-      {tab === "members" && (
+      {tab === "members" && !showInfo && (
         <div className="space-y-3">
           {/* Join requests */}
           {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
@@ -1149,7 +1167,7 @@ export default function ClubDetailPage() {
       )}
 
       {/* ── Rankings Tab ── */}
-      {tab === "rankings" && (
+      {tab === "rankings" && !showInfo && (
         <div className="space-y-2">
           {rankings.ranked.length === 0 ? (
             <div className="text-center py-8">
