@@ -1612,12 +1612,20 @@ export default function EventDetailPage() {
     // Competition mode: summary across classes, no add/leave at event level
     if (event.competitionMode) {
       // Deduplicate players (can be in multiple classes)
-      const uniquePlayers = new Map<string, typeof event.players[0]>();
-      for (const ep of event.players) {
-        if (!uniquePlayers.has(ep.player.id)) uniquePlayers.set(ep.player.id, ep);
-      }
-      const allPlayers = [...uniquePlayers.values()].sort((a, b) => a.player.name.localeCompare(b.player.name));
+      // Build unique player list with their class memberships
+      const playerClasses = new Map<string, { player: typeof event.players[0]; classNames: string[] }>();
       const classes = event.classes || [];
+      const classNameMap = new Map(classes.map((c: { id: string; name: string }) => [c.id, c.name]));
+      for (const ep of event.players) {
+        const existing = playerClasses.get(ep.player.id);
+        const className = classNameMap.get((ep as unknown as { classId?: string }).classId || "") || "";
+        if (existing) {
+          if (className && !existing.classNames.includes(className)) existing.classNames.push(className);
+        } else {
+          playerClasses.set(ep.player.id, { player: ep, classNames: className ? [className] : [] });
+        }
+      }
+      const allPlayers = [...playerClasses.values()].sort((a, b) => a.player.player.name.localeCompare(b.player.player.name));
 
       return (
         <div className="space-y-3">
@@ -1626,37 +1634,25 @@ export default function EventDetailPage() {
           </h3>
           <p className="text-xs text-muted">Players are managed per class in the Competition section.</p>
 
-          {/* Per-class breakdown */}
-          {classes.length > 1 && classes.map((cls: { id: string; name: string }) => {
-            const classPlayers = event.players.filter((ep) => (ep as unknown as { classId?: string }).classId === cls.id);
-            if (classPlayers.length === 0) return null;
-            return (
-              <div key={cls.id} className="bg-card rounded-xl border border-border p-3">
-                <span className="text-xs font-semibold">{cls.name}</span>
-                <span className="text-xs text-muted ml-1">({classPlayers.length})</span>
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {[...classPlayers].sort((a, b) => a.player.name.localeCompare(b.player.name)).map((ep) => (
-                    <span key={ep.player.id} className="text-xs bg-gray-50 rounded px-2 py-0.5">
-                      {ep.player.name}
-                      {ep.player.gender && <span className={`ml-0.5 text-[9px] ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{ep.player.gender === "M" ? "♂" : "♀"}</span>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Full player list */}
-          {event.players.length > 6 && (
+          {allPlayers.length > 6 && (
             <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
           )}
           <div className="space-y-0">
             {allPlayers
-              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
-              .map((ep) => (
-              <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={false} hasMatches={true}
-                showContact={isAdmin || ep.player.id === userId}
-                onPause={() => {}} onRemove={() => {}} />
+              .filter((entry) => entry.player.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+              .map((entry) => (
+              <div key={entry.player.player.id} className="flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
+                <PlayerAvatar name={entry.player.player.name} size="xs" />
+                <span className="text-sm font-medium flex-1 truncate">{entry.player.player.name}</span>
+                {entry.player.player.gender && (
+                  <span className={`text-[10px] ${entry.player.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                    {entry.player.player.gender === "M" ? "♂" : "♀"}
+                  </span>
+                )}
+                {entry.classNames.map((cn) => (
+                  <span key={cn} className="text-[9px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{cn}</span>
+                ))}
+              </div>
             ))}
           </div>
         </div>
