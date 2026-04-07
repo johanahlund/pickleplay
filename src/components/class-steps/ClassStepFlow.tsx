@@ -140,11 +140,15 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
   const userGender = userId ? players.find((p) => p.playerId === userId)?.player.gender : null;
 
   const sendRequest = async (partnerId: string) => {
-    await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+    const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "request", partnerId }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || "Could not send request");
+    }
     globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
   };
 
@@ -167,11 +171,10 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
     globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
   };
 
-  const PlayerCard = ({ player, playerId, isMe }: { player: PairPlayer; playerId: string; isMe?: boolean }) => {
-    const incomingFromThem = myIncoming.find((r) => r.requesterId === playerId);
-    const iSentToThem = myOutgoing?.requestedId === playerId;
-    const canRequest = !userIsPaired && !isMe && !myOutgoing && userId;
-    // For mix class: only request opposite gender
+  const PlayerCard = ({ player, playerId, isMe, showActions = true }: { player: PairPlayer; playerId: string; isMe?: boolean; showActions?: boolean }) => {
+    const incomingFromThem = showActions ? myIncoming.find((r) => r.requesterId === playerId) : undefined;
+    const iSentToThem = showActions && myOutgoing?.requestedId === playerId;
+    const canRequest = showActions && !userIsPaired && !isMe && !myOutgoing && userId && !pairedIds.has(playerId);
     const genderOk = classGender !== "mix" || !userGender || !player.gender || userGender !== player.gender;
 
     return (
@@ -181,13 +184,13 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
         <div className={`text-xs font-medium truncate ${isMe ? "text-action" : ""}`}>{player.name}</div>
         <div className="text-[9px] text-muted">{Math.round(player.rating)}</div>
       </div>
-      {!isMe && incomingFromThem && (
+      {incomingFromThem && (
         <div className="flex gap-1 shrink-0">
           <button onClick={() => respondRequest(incomingFromThem.id, "accept")} className="text-[9px] bg-green-600 text-white px-1.5 py-0.5 rounded">Accept</button>
           <button onClick={() => respondRequest(incomingFromThem.id, "decline")} className="text-[9px] text-danger px-1 py-0.5 rounded hover:bg-red-50">✕</button>
         </div>
       )}
-      {!isMe && iSentToThem && (
+      {iSentToThem && (
         <button onClick={() => cancelRequest(myOutgoing!.id)} className="text-[9px] text-muted px-1.5 py-0.5 rounded hover:bg-gray-100 shrink-0">Pending ✕</button>
       )}
       {canRequest && genderOk && !incomingFromThem && !iSentToThem && (
@@ -226,9 +229,9 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
               return (
                 <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-amber-50 border border-amber-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} /></div>
+                    <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} showActions={false} /></div>
                     <div className="w-px h-8 border-l border-dashed border-gray-300 mx-1" />
-                    <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} /></div>
+                    <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} showActions={false} /></div>
                   </div>
                   {isMyPair && (() => {
                     const myReq = pairRequests.find((r) => r.status === "accepted" && (r.requesterId === userId || r.requestedId === userId));
