@@ -413,28 +413,27 @@ export function ClassStepFlow({
         </AdminRow>
         {hasUpperBracket && (() => {
           const n = config.advanceToUpper;
-          const teamDesc = n === 1 ? "The winner of each group" : `Top ${n} from each group`;
+          const teamDesc = n === 1 ? "Winner of each group" : `Top ${n} from each group`;
           const wcDesc = config.wildcardCount > 0 ? ` + ${config.wildcardCount} best runner-up${config.wildcardCount > 1 ? "s" : ""}` : "";
           const upperTeams = config.numGroups * n + config.wildcardCount;
           const stages = getBracketStages(upperTeams);
-          const formatDesc = (formats: Record<string, string>) => {
-            const parts = stages.map((s) => {
-              const fmt = formats[s];
-              const label = BRACKET_STAGE_LABELS[s] || s;
-              if (!fmt || fmt === "to_11") return `${label}: to 11`;
-              if (fmt === "to_15") return `${label}: to 15`;
-              if (fmt === "to_21") return `${label}: to 21`;
-              if (fmt === "bo3_11") return `${label}: Bo3 to 11`;
-              if (fmt === "bo3_15") return `${label}: Bo3 to 15`;
-              if (fmt === "bo3_21") return `${label}: Bo3 to 21`;
-              return `${label}: ${fmt}`;
-            });
-            if (config.upperThirdPlace) parts.push("3rd place match");
-            return parts.join(". ");
+          const fmtShort = (fmt: string | undefined) => {
+            if (!fmt || fmt === "to_11") return "1-11";
+            if (fmt === "to_15") return "1-15";
+            if (fmt === "to_21") return "1-21";
+            if (fmt === "bo3_11") return "3-11";
+            if (fmt === "bo3_15") return "3-15";
+            if (fmt === "bo3_21") return "3-21";
+            return fmt;
           };
+          const roundParts = stages.map((s) => `${BRACKET_STAGE_SHORT[s] || s} (${fmtShort(config.upperBracketFormats[s])})`);
+          if (config.upperThirdPlace) roundParts.push("3rd");
           return (
             <AdminRow stepId="advancement" label="Elimination">
-              <span className="text-sm font-medium text-right">{teamDesc}{wcDesc} advance. {formatDesc(config.upperBracketFormats)}</span>
+              <span className="text-right">
+                <span className="text-sm font-medium block">{teamDesc}{wcDesc} advance</span>
+                <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
+              </span>
             </AdminRow>
           );
         })()}
@@ -453,24 +452,23 @@ export function ClassStepFlow({
             : `#${posStart} and #${posEnd} in each group`;
           const lowerTeams = config.numGroups * lower;
           const stages = getBracketStages(lowerTeams);
-          const formatDesc = (formats: Record<string, string>) => {
-            const parts = stages.map((s) => {
-              const fmt = formats[s];
-              const label = BRACKET_STAGE_LABELS[s] || s;
-              if (!fmt || fmt === "to_11") return `${label}: to 11`;
-              if (fmt === "to_15") return `${label}: to 15`;
-              if (fmt === "to_21") return `${label}: to 21`;
-              if (fmt === "bo3_11") return `${label}: Bo3 to 11`;
-              if (fmt === "bo3_15") return `${label}: Bo3 to 15`;
-              if (fmt === "bo3_21") return `${label}: Bo3 to 21`;
-              return `${label}: ${fmt}`;
-            });
-            if (config.lowerThirdPlace) parts.push("3rd place match");
-            return parts.join(". ");
+          const fmtShort = (fmt: string | undefined) => {
+            if (!fmt || fmt === "to_11") return "1-11";
+            if (fmt === "to_15") return "1-15";
+            if (fmt === "to_21") return "1-21";
+            if (fmt === "bo3_11") return "3-11";
+            if (fmt === "bo3_15") return "3-15";
+            if (fmt === "bo3_21") return "3-21";
+            return fmt;
           };
+          const roundParts = stages.map((s) => `${BRACKET_STAGE_SHORT[s] || s} (${fmtShort(config.lowerBracketFormats[s])})`);
+          if (config.lowerThirdPlace) roundParts.push("3rd");
           return (
             <AdminRow stepId="lower-config" label="Consolation">
-              <span className="text-sm font-medium text-right">{teamDesc} advance. {formatDesc(config.lowerBracketFormats)}</span>
+              <span className="text-right">
+                <span className="text-sm font-medium block">{teamDesc} advance</span>
+                <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
+              </span>
             </AdminRow>
           );
         })()}
