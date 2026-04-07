@@ -923,7 +923,15 @@ export default function EventDetailPage() {
   const sectionOrder = ["when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds"];
 
   const sectionBar = (
-    <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
+    <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-1 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
+      <div className="text-center pb-1">
+        <span className="text-xs font-semibold">{event.name}</span>
+        <span className="text-[10px] text-muted ml-1.5">
+          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+          {" "}
+          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
       <div className="flex gap-1">
         {sectionOrder
           .filter((s) => {
@@ -1934,6 +1942,8 @@ export default function EventDetailPage() {
         <div className="space-y-2">
           <ClassStepFlow
             eventId={id as string}
+            eventName={event.name}
+            eventDate={event.date}
             cls={cls as never}
             allClasses={(event.classes || []) as never}
             pairs={event.pairs}

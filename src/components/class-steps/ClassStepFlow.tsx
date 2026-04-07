@@ -82,6 +82,8 @@ interface EventClassData {
 
 interface ClassStepFlowProps {
   eventId: string;
+  eventName: string;
+  eventDate: string;
   cls: EventClassData;
   allClasses: EventClassData[];
   pairs: EventPair[];
@@ -181,7 +183,7 @@ function ClassPlayersInline({ eventId, classId, format, pairs }: {
 }
 
 export function ClassStepFlow({
-  eventId, cls: propsCls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
+  eventId, eventName, eventDate, cls: propsCls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
 }: ClassStepFlowProps) {
   // Optimistic state: local overrides applied instantly before API responds
   const [fieldOverrides, setFieldOverrides] = useState<Record<string, unknown>>({});
@@ -551,7 +553,15 @@ export function ClassStepFlow({
     <div className="space-y-3">
       {/* Step bar — hidden on overview */}
       {!isOverview && (
-        <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-2 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
+        <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-1 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
+          <div className="text-center pb-1">
+            <span className="text-xs font-semibold">{eventName}</span>
+            <span className="text-[10px] text-muted ml-1.5">
+              {new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+              {" "}
+              {new Date(eventDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
           <div className="flex gap-0.5">
             {steps.map((step, i) => (
               <button key={step.id} className="flex-1 text-center min-w-0" onClick={() => setCurrentStepIdx(i)}>
