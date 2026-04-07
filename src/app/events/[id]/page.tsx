@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
+import { useViewRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
@@ -328,7 +329,8 @@ export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "admin";
+  const { viewRole } = useViewRole();
+  const isAdmin = session?.user?.role === "admin" && viewRole === "admin";
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
   const [event, setEvent] = useState<Event | null>(null);

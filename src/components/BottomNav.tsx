@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useViewRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
 
 const tabs = [
@@ -22,7 +23,8 @@ interface ActiveEvent {
 export function BottomNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { viewRole } = useViewRole();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && viewRole === "admin";
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [activeEvent, setActiveEvent] = useState<ActiveEvent | null>(null);
 

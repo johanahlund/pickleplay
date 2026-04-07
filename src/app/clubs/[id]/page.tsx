@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useViewRole } from "@/components/RoleToggle";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -262,7 +263,8 @@ export default function ClubDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  const isGlobalAdmin = session?.user?.role === "admin";
+  const { viewRole } = useViewRole();
+  const isGlobalAdmin = session?.user?.role === "admin" && viewRole === "admin";
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
