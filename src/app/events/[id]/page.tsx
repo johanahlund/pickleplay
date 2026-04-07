@@ -347,6 +347,7 @@ export default function EventDetailPage() {
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [showAddPlayer, setShowAddPlayer] = useState(false);
@@ -631,9 +632,11 @@ export default function EventDetailPage() {
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
     if (event.endDate) {
+      setEditEndDate(toDateInput(event.endDate));
       setEditEndTime(toTimeInput(event.endDate));
     } else {
-      // Default: 2 hours after start
+      // Default: same date, 2 hours after start
+      setEditEndDate(toDateInput(event.date));
       const end = new Date(event.date);
       end.setHours(end.getHours() + 2);
       setEditEndTime(toTimeInput(end.toISOString()));
@@ -644,7 +647,7 @@ export default function EventDetailPage() {
   const saveEditEvent = async () => {
     if (!editName.trim()) return;
     const eventDate = new Date(`${editDate}T${editTime}`);
-    const eventEndDate = new Date(`${editDate}T${editEndTime}`);
+    const eventEndDate = new Date(`${editEndDate || editDate}T${editEndTime}`);
     if (eventEndDate <= eventDate) eventEndDate.setDate(eventEndDate.getDate() + 1);
     await fetch(`/api/events/${id}`, {
       method: "PATCH",
@@ -1005,10 +1008,18 @@ export default function EventDetailPage() {
         <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Date</label>
-        <input type="date" value={editDate} onChange={(e) => { setEditDate(e.target.value); setHasEdits(true); }}
-          className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-muted mb-1">Start Date</label>
+          <input type="date" value={editDate} onChange={(e) => { setEditDate(e.target.value); if (!editEndDate) setEditEndDate(e.target.value); setHasEdits(true); }}
+            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+        </div>
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-muted mb-1">End Date</label>
+          <input type="date" value={editEndDate} onChange={(e) => { setEditEndDate(e.target.value); setHasEdits(true); }}
+            min={editDate}
+            className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
+        </div>
       </div>
       <div className="flex gap-3">
         <div className="flex-1">
