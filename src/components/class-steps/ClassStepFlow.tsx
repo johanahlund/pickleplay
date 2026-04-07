@@ -103,15 +103,15 @@ interface StepDef {
 }
 
 /** Inline player/pair view for non-admin users in class overview */
-function ClassPlayersInline({ eventId, classId, format, classGender, pairs, userId }: {
+function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
   eventId: string;
   classId: string;
   format: string;
   classGender: string;
-  pairs: { id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[];
   userId?: string | null;
 }) {
   const [players, setPlayers] = useState<{ playerId: string; player: PairPlayer }[]>([]);
+  const [pairs, setPairs] = useState<{ id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[]>([]);
   const [pairRequests, setPairRequests] = useState<{ id: string; requesterId: string; requestedId: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -120,7 +120,10 @@ function ClassPlayersInline({ eventId, classId, format, classGender, pairs, user
       fetch(`/api/events/${eventId}`).then((r) => r.ok ? r.json() : null),
       format === "doubles" ? fetch(`/api/events/${eventId}/classes/${classId}/pair-request`).then((r) => r.ok ? r.json() : []) : Promise.resolve([]),
     ]).then(([data, reqs]) => {
-      if (data) setPlayers((data.players || []).filter((ep: { classId?: string }) => ep.classId === classId));
+      if (data) {
+        setPlayers((data.players || []).filter((ep: { classId?: string }) => ep.classId === classId));
+        setPairs((data.pairs || []).filter((p: { classId?: string }) => p.classId === classId));
+      }
       setPairRequests(reqs);
       setLoading(false);
     });
@@ -561,7 +564,7 @@ export function ClassStepFlow({
         {/* Expanded player view for non-admins */}
         {showPlayersExpand && !canManage && (
           <div className="border-t border-border">
-            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} classGender={cls.gender} pairs={classPairs as never} userId={userId} />
+            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} classGender={cls.gender} userId={userId} />
           </div>
         )}
         {canManage ? (
