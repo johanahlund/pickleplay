@@ -27,7 +27,7 @@ interface ClassesManagerProps {
 }
 
 const GENDER_OPTIONS = [
-  { value: "open", label: "Open" },
+  { value: "open", label: "Any Gender" },
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
   { value: "mix", label: "Mixed" },

@@ -240,7 +240,7 @@ export function ClassStepFlow({
         </button>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
-          <span className="text-sm font-medium capitalize">{cls.format} · {cls.gender}{cls.ageGroup !== "open" ? ` · ${cls.ageGroup}` : ""}</span>
+          <span className="text-sm font-medium capitalize">{cls.format} · {cls.gender === "open" ? "Any Gender" : cls.gender}{cls.ageGroup !== "open" ? ` · ${cls.ageGroup}` : ""}</span>
         </button>
         {cls.skillMin && (
           <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
