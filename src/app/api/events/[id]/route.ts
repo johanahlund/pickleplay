@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireEventOwner, requireEventManager } from "@/lib/auth";
+import { requireAuth, requireEventOwner, requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -86,13 +86,20 @@ export async function PATCH(
   if (visibility !== undefined) eventData.visibility = visibility;
   if (body.status !== undefined) eventData.status = body.status;
   if (body.createdById !== undefined) {
+    // Only event owner, club owner, or app admin can transfer ownership
+    const user = await requireAuth();
+    const evt = await prisma.event.findUnique({ where: { id }, select: { createdById: true, clubId: true } });
+    const isEventOwner = evt?.createdById === user.id;
+    const isClubOwner = evt?.clubId ? !!(await prisma.clubMember.findFirst({ where: { clubId: evt.clubId, playerId: user.id, role: "owner" } })) : false;
+    if (!isEventOwner && !isClubOwner && user.role !== "admin") {
+      return NextResponse.json({ error: "Only the event owner, club owner, or app admin can transfer ownership" }, { status: 403 });
+    }
     eventData.createdById = body.createdById;
     // Add old owner as helper
-    const event = await prisma.event.findUnique({ where: { id }, select: { createdById: true } });
-    if (event?.createdById && event.createdById !== body.createdById) {
-      const alreadyHelper = await prisma.eventHelper.findFirst({ where: { eventId: id, playerId: event.createdById } });
+    if (evt?.createdById && evt.createdById !== body.createdById) {
+      const alreadyHelper = await prisma.eventHelper.findFirst({ where: { eventId: id, playerId: evt.createdById } });
       if (!alreadyHelper) {
-        await prisma.eventHelper.create({ data: { eventId: id, playerId: event.createdById } });
+        await prisma.eventHelper.create({ data: { eventId: id, playerId: evt.createdById } });
       }
     }
   }
