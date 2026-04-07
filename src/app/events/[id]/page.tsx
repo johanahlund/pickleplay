@@ -1625,11 +1625,13 @@ export default function EventDetailPage() {
           playerClasses.set(ep.player.id, { player: ep, classNames: className ? [className] : [] });
         }
       }
-      // Sort: females first, then males, then others, alphabetical within each
+      // Filter out players with no class, sort: females first then males
       const genderOrder = (g: string | null | undefined) => g === "F" ? 0 : g === "M" ? 1 : 2;
-      const allPlayers = [...playerClasses.values()].sort((a, b) =>
-        genderOrder(a.player.player.gender) - genderOrder(b.player.player.gender) || a.player.player.name.localeCompare(b.player.player.name)
-      );
+      const allPlayers = [...playerClasses.values()]
+        .filter((e) => e.classNames.length > 0)
+        .sort((a, b) =>
+          genderOrder(a.player.player.gender) - genderOrder(b.player.player.gender) || a.player.player.name.localeCompare(b.player.player.name)
+        );
       const femaleCount = allPlayers.filter((e) => e.player.player.gender === "F").length;
       const maleCount = allPlayers.filter((e) => e.player.player.gender === "M").length;
 
@@ -2027,6 +2029,22 @@ export default function EventDetailPage() {
         </div>
       );
     }
+  }
+
+  // Competition mode: Players section without section bar
+  if (event.competitionMode && activeSection === "players") {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium">← Event</button>
+          <span className="text-[10px] text-muted">
+            {event.name} · {new Date(event.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+          </span>
+          <span className="w-12" />
+        </div>
+        {renderPlayers()}
+      </div>
+    );
   }
 
   if (activeSection !== "overview") {
