@@ -1637,11 +1637,10 @@ export default function EventDetailPage() {
 
       return (
         <div className="space-y-3">
-          <h3 className="text-xl font-bold text-foreground">
-            Players ({allPlayers.length})
-          </h3>
-          <div className="flex gap-2 items-center">
-            <p className="text-xs text-muted flex-1">Players are managed per class.</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-xl font-bold text-foreground">
+              Players ({allPlayers.length})
+            </h3>
             {(["F", "M"] as const).map((g) => (
               <button key={g} onClick={() => setPlayerSearch((prev) => prev === `__gender_${g}` ? "" : `__gender_${g}`)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
@@ -1662,20 +1661,31 @@ export default function EventDetailPage() {
                 if (playerSearch === "__gender_M") return entry.player.player.gender === "M";
                 return entry.player.player.name.toLowerCase().includes(playerSearch.toLowerCase());
               })
-              .map((entry) => (
-              <div key={entry.player.player.id} className="flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
-                <PlayerAvatar name={entry.player.player.name} size="xs" />
-                <span className="text-sm font-medium flex-1 truncate">{entry.player.player.name}</span>
-                {entry.player.player.gender && (
-                  <span className={`text-[10px] ${entry.player.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                    {entry.player.player.gender === "M" ? "♂" : "♀"}
-                  </span>
-                )}
-                {entry.classNames.map((cn) => (
-                  <span key={cn} className="text-[9px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{cn}</span>
-                ))}
-              </div>
-            ))}
+              .map((entry) => {
+                const p = entry.player.player;
+                return (
+                  <div key={p.id} className="flex items-center gap-2 py-2.5 px-3 border-b border-border last:border-b-0">
+                    <PlayerAvatar name={p.name} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium truncate">{p.name}</span>
+                        {p.gender && (
+                          <span className={`text-[10px] ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                            {p.gender === "M" ? "♂" : "♀"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-1 mt-0.5 flex-wrap">
+                        {p.duprRating && <span className="text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full">DUPR {p.duprRating.toFixed(2)}</span>}
+                        <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">App {Math.round(p.rating)}</span>
+                        {entry.classNames.map((cn) => (
+                          <span key={cn} className="text-[9px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{cn}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       );
