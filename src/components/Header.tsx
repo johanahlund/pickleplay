@@ -117,6 +117,8 @@ export function Header() {
   const router = useRouter();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<{ id: string; title: string; body?: string | null; linkUrl?: string | null; read: boolean; createdAt: string }[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -145,7 +147,10 @@ export function Header() {
     if (!session?.user) return;
     const check = () => {
       fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
-        if (Array.isArray(data)) setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
+        if (Array.isArray(data)) {
+          setNotifications(data);
+          setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
+        }
       }).catch(() => {});
     };
     check();
@@ -213,19 +218,54 @@ export function Header() {
                 >
                   {session.user.name}
                 </button>
-                <button
-                  onClick={() => router.push("/profile")}
-                  className="relative text-lg opacity-90 hover:opacity-100"
-                  title="Notifications"
-                  aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
-                >
-                  🔔
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="relative text-lg opacity-90 hover:opacity-100"
+                    title="Notifications"
+                    aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+                  >
+                    🔔
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {showNotifications && (
+                    <div className="absolute right-0 top-8 w-72 bg-white rounded-xl shadow-xl border border-border z-50 max-h-80 overflow-y-auto">
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                        <span className="text-xs font-semibold text-foreground">Notifications</span>
+                        {unreadCount > 0 && (
+                          <button onClick={async () => {
+                            await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "read_all" }) });
+                            setUnreadCount(0);
+                            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+                          }} className="text-[10px] text-action font-medium">Mark all read</button>
+                        )}
+                      </div>
+                      {notifications.length === 0 ? (
+                        <p className="text-xs text-muted text-center py-4">No notifications</p>
+                      ) : (
+                        notifications.slice(0, 20).map((n) => (
+                          <button key={n.id} onClick={() => {
+                            if (n.linkUrl) router.push(n.linkUrl);
+                            setShowNotifications(false);
+                            if (!n.read) {
+                              fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "read", notificationId: n.id }) });
+                              setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x));
+                              setUnreadCount((c) => Math.max(0, c - 1));
+                            }
+                          }} className={`w-full text-left px-3 py-2 border-b border-border last:border-b-0 hover:bg-gray-50 ${!n.read ? "bg-blue-50" : ""}`}>
+                            <div className="text-xs font-medium text-foreground">{n.title}</div>
+                            {n.body && <div className="text-[10px] text-muted mt-0.5">{n.body}</div>}
+                            <div className="text-[9px] text-muted mt-0.5">{new Date(n.createdAt).toLocaleDateString()}</div>
+                          </button>
+                        ))
+                      )}
+                    </div>
                   )}
-                </button>
+                </div>
                 <button
                   onClick={() => signOut({ callbackUrl: "/signin" })}
                   className="text-[10px] bg-white/15 px-2 py-0.5 rounded-md hover:bg-white/25 transition-colors"
