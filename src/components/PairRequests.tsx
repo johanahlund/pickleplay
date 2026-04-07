@@ -70,24 +70,24 @@ export function PairRequests({ eventId, classId, format, players, existingPairPl
 
   return (
     <div className="space-y-2">
-      {/* My confirmed pair */}
+      {/* My confirmed pair — same style as others but name highlighted */}
       {myAccepted && (() => {
         const partner = myAccepted.requesterId === userId ? myAccepted.requested : myAccepted.requester;
         const me = myAccepted.requesterId === userId ? myAccepted.requester : myAccepted.requested;
         return (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-2.5 flex items-center gap-2">
-            <span className="text-sm">✅</span>
-            <span className="text-sm flex-1"><span className="font-bold text-green-700">{me.name}</span> <span className="text-muted">&</span> <span className="font-bold text-green-700">{partner.name}</span></span>
+          <div className="flex items-center gap-2 py-2 px-3 bg-card rounded-lg border border-border">
+            <span className="text-sm"><span className="font-bold text-action">{me.name}</span> <span className="text-muted">&</span> <span className="font-medium">{partner.name}</span></span>
+            <span className="flex-1" />
             <button onClick={async () => {
-              if (confirm(`Are you sure you want to unpair from ${partner.name}?\n\nYou will need to find a new partner.`)) {
-                const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "unpair", requestId: myAccepted.id }),
-                });
-                if (r.ok) { await fetchRequests(); onPairCreated(); }
-                else { const d = await r.json().catch(() => ({})); alert(d.error || "Cannot unpair"); }
-              }
+              if (!confirm(`Unpair from ${partner.name}?`)) return;
+              if (!confirm(`Are you really sure? You will need to find a new partner.`)) return;
+              const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "unpair", requestId: myAccepted.id }),
+              });
+              if (r.ok) { await fetchRequests(); onPairCreated(); }
+              else { const d = await r.json().catch(() => ({})); alert(d.error || "Cannot unpair"); }
             }} className="text-[10px] text-danger px-2 py-0.5 rounded hover:bg-red-50">Unpair</button>
           </div>
         );
