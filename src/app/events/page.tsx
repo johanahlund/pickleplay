@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useViewRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
 
 interface Event {
@@ -39,7 +40,8 @@ function getTimeStatus(event: Event): "past" | "active" | "upcoming" {
 export default function EventsPage() {
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const { viewRole } = useViewRole();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && viewRole === "admin";
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");

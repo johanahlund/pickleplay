@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useViewRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 
@@ -39,7 +40,8 @@ export default function PlayersPage() {
   const [editPhone, setEditPhone] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
 
-  const isAdmin = session?.user?.role === "admin";
+  const { viewRole } = useViewRole();
+  const isAdmin = session?.user?.role === "admin" && viewRole === "admin";
 
   const fetchPlayers = async () => {
     const r = await fetch("/api/players");

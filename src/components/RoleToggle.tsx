@@ -48,7 +48,7 @@ export function RoleTogglePill() {
   return (
     <button
       onClick={() => setViewRole(viewRole === "admin" ? "user" : "admin")}
-      className={`fixed bottom-20 right-4 z-50 px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all ${
+      className={`fixed top-1 right-24 z-[60] px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg transition-all ${
         viewRole === "admin"
           ? "bg-red-600 text-white"
           : "bg-green-600 text-white"
