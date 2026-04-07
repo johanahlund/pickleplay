@@ -358,6 +358,7 @@ export default function EventDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
+  const [editFormat, setEditFormat] = useState("doubles");
   const [editScoringFormat, setEditScoringFormat] = useState("1x11");
   const [editWinBy, setEditWinBy] = useState("2");
   const [editPairingMode, setEditPairingMode] = useState("random");
@@ -623,6 +624,7 @@ export default function EventDetailPage() {
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
+    setEditFormat(event.format || "doubles");
     setEditScoringFormat(event.scoringFormat || "1x11");
     setEditWinBy(event.classes?.[0]?.winBy || "2");
     setEditPairingMode(event.pairingMode);
@@ -661,6 +663,7 @@ export default function EventDetailPage() {
         numCourts: editCourts,
         date: eventDate.toISOString(),
         endDate: eventEndDate.toISOString(),
+        format: editFormat,
         scoringFormat: editScoringFormat,
         winBy: editWinBy,
         pairingMode: editPairingMode,
@@ -1108,14 +1111,11 @@ export default function EventDetailPage() {
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Format</label>
-        <div className="flex gap-2">
-          {(["doubles", "singles"] as const).map((f) => (
-            <button key={f} type="button" onClick={() => { /* format change not supported after creation */ }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${event.format === f ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
-              {f === "doubles" ? "🤝 Doubles" : "👤 Singles"}
-            </button>
-          ))}
-        </div>
+        <select value={editFormat} onChange={(e) => { setEditFormat(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="doubles">Doubles</option>
+          <option value="singles">Singles</option>
+        </select>
       </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Scoring</label>

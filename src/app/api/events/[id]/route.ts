@@ -89,6 +89,7 @@ export async function PATCH(
 
   // Class-level fields (update default class)
   const classData: Record<string, unknown> = {};
+  if (body.format !== undefined) classData.format = body.format;
   if (scoringFormat !== undefined) classData.scoringFormat = scoringFormat;
   if (body.winBy !== undefined) classData.winBy = body.winBy;
   // Legacy compat: convert old numSets+scoringType to scoringFormat
