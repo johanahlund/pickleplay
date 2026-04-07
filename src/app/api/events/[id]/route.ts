@@ -85,7 +85,17 @@ export async function PATCH(
   if (openSignup !== undefined) eventData.openSignup = !!openSignup;
   if (visibility !== undefined) eventData.visibility = visibility;
   if (body.status !== undefined) eventData.status = body.status;
-  if (body.createdById !== undefined) eventData.createdById = body.createdById;
+  if (body.createdById !== undefined) {
+    eventData.createdById = body.createdById;
+    // Add old owner as helper
+    const event = await prisma.event.findUnique({ where: { id }, select: { createdById: true } });
+    if (event?.createdById && event.createdById !== body.createdById) {
+      const alreadyHelper = await prisma.eventHelper.findFirst({ where: { eventId: id, playerId: event.createdById } });
+      if (!alreadyHelper) {
+        await prisma.eventHelper.create({ data: { eventId: id, playerId: event.createdById } });
+      }
+    }
+  }
 
   // Class-level fields (update default class)
   const classData: Record<string, unknown> = {};
