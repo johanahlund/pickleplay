@@ -240,14 +240,15 @@ export function ClassStepFlow({
         </button>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
-          <span className="text-sm font-medium capitalize">{cls.format} · {cls.gender === "open" ? "Any Gender" : cls.gender}{cls.ageGroup !== "open" ? ` · ${cls.ageGroup}` : ""}</span>
+          <span className="text-sm font-medium capitalize">
+            {[
+              cls.ageGroup !== "open" ? cls.ageGroup : null,
+              cls.skillMin ? cls.skillMin.toFixed(1) : null,
+              cls.gender === "open" ? "Any Gender" : cls.gender,
+              cls.format,
+            ].filter(Boolean).join(" · ")}
+          </span>
         </button>
-        {cls.skillMin && (
-          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
-            <span className="text-sm text-muted">Level</span>
-            <span className="text-sm font-medium">DUPR {cls.skillMin?.toFixed(1)}</span>
-          </button>
-        )}
       </div>
 
       {/* Groups & Advancement */}
