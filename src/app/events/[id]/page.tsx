@@ -2033,7 +2033,7 @@ export default function EventDetailPage() {
             matches={event.matches}
             canManage={canManage}
             numCourts={event.numCourts}
-            onBack={() => { setSelectedClassId(null); if (!canManage) setActiveSection("overview"); }}
+            onBack={() => { setSelectedClassId(null); fetchEvent(); if (!canManage) setActiveSection("overview"); }}
             onRefresh={fetchEvent}
           />
         </div>
@@ -2167,7 +2167,7 @@ export default function EventDetailPage() {
           const phaseLabel: Record<string, string> = { draft: "Draft", open: "Open", closed: "Closed", groups: "Group", bracket: "Bracket", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Done" };
           const phaseStr = phaseLabel[phase] || phase;
           return (
-            <button key={cls.id} onClick={() => { setActiveSection("competition"); setSelectedClassId(cls.id); }}
+            <button key={cls.id} onClick={() => { fetchEvent(); setActiveSection("competition"); setSelectedClassId(cls.id); }}
               className="w-full bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors text-left">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">{cls.name}</span>
