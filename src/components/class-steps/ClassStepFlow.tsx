@@ -257,8 +257,21 @@ export function ClassStepFlow({
       <div className={frameClass}>
         <div className={frameTitleClass}>Competition</div>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "groups"))} className={rowClass}>
-          <span className="text-sm text-muted">Groups</span>
+          <span className="text-sm text-muted shrink-0">Groups</span>
           <span className="text-sm font-medium text-right">{(() => {
+            const n = config.numGroups;
+            const total = classPairs.length;
+            // Group sizes
+            const base = total > 0 ? Math.floor(total / n) : 0;
+            const rem = total > 0 ? total % n : 0;
+            const sizes = Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
+            const allSame = sizes.every((s) => s === sizes[0]);
+            const sizeDesc = total === 0
+              ? ""
+              : allSame
+                ? ` (${sizes[0]} teams)`
+                : ` (${sizes.join("-")} teams)`;
+            // Scoring
             const sf = cls.scoringFormat || "1x11";
             const sets = sf.startsWith("3") ? "best of 3" : "1 set";
             const isRally = sf.includes("R");
@@ -266,8 +279,8 @@ export function ClassStepFlow({
             const scoring = `${sets} ${isRally ? "rally " : ""}to ${pts}`;
             const wb = cls.winBy || "2";
             const winBy = wb === "1" ? ", win by 1" : wb === "2" ? "" : `, cap ${wb.replace("cap", "")}`;
-            const freq = config.matchesPerMatchup === 1 ? "once" : "twice";
-            return `${config.numGroups} groups, play each other ${freq}, ${scoring}${winBy}`;
+            const freq = config.matchesPerMatchup === 1 ? "1 match" : "2 matches";
+            return `${n} Groups${sizeDesc}: ${freq} with ${scoring}${winBy}`;
           })()}</span>
         </button>
         {hasUpperBracket && (() => {
