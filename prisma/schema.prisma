@@ -60,6 +60,8 @@ model Club {
   name        String
   emoji       String   @default("🏓")
   description String?
+  city        String?
+  country     String?
   ratingOffset Float?  // club rating - global rating offset (calculated)
   ratingBridgePlayers Int @default(0) // how many players have global ratings
   createdAt   DateTime @default(now())

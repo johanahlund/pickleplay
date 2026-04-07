@@ -11,18 +11,11 @@ export async function GET(req: Request) {
   const clubs = await prisma.club.findMany({
     where: {
       ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
-      ...(city || country ? {
-        locations: {
-          some: {
-            ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
-            ...(country ? { country: { contains: country, mode: "insensitive" as const } } : {}),
-          },
-        },
-      } : {}),
+      ...(city ? { city: { contains: city, mode: "insensitive" as const } } : {}),
+      ...(country ? { country: { contains: country, mode: "insensitive" as const } } : {}),
     },
     include: {
       _count: { select: { members: true, events: true } },
-      locations: { select: { city: true, country: true }, take: 1 },
     },
     orderBy: { name: "asc" },
     take: 50,
@@ -35,7 +28,7 @@ export async function GET(req: Request) {
     description: c.description,
     memberCount: c._count.members,
     eventCount: c._count.events,
-    city: c.locations[0]?.city || null,
-    country: c.locations[0]?.country || null,
+    city: c.city,
+    country: c.country,
   })));
 }
