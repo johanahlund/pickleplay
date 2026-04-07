@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import useSWR, { mutate as globalMutate } from "swr";
 import {
   CompetitionConfig,
   DEFAULT_COMPETITION_CONFIG,
@@ -110,26 +111,17 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
   classGender: string;
   userId?: string | null;
 }) {
-  const [players, setPlayers] = useState<{ playerId: string; player: PairPlayer }[]>([]);
-  const [pairs, setPairs] = useState<{ id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[]>([]);
-  const [pairRequests, setPairRequests] = useState<{ id: string; requesterId: string; requestedId: string; status: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: eventData } = useSWR(`/api/events/${eventId}`, (url: string) => fetch(url).then((r) => r.ok ? r.json() : null), { revalidateOnFocus: true, dedupingInterval: 2000 });
+  const { data: reqData } = useSWR(
+    format === "doubles" ? `/api/events/${eventId}/classes/${classId}/pair-request` : null,
+    (url: string) => fetch(url).then((r) => r.ok ? r.json() : []),
+    { revalidateOnFocus: true }
+  );
 
-  const fetchAll = useCallback(() => {
-    Promise.all([
-      fetch(`/api/events/${eventId}`).then((r) => r.ok ? r.json() : null),
-      format === "doubles" ? fetch(`/api/events/${eventId}/classes/${classId}/pair-request`).then((r) => r.ok ? r.json() : []) : Promise.resolve([]),
-    ]).then(([data, reqs]) => {
-      if (data) {
-        setPlayers((data.players || []).filter((ep: { classId?: string }) => ep.classId === classId));
-        setPairs((data.pairs || []).filter((p: { classId?: string }) => p.classId === classId));
-      }
-      setPairRequests(reqs);
-      setLoading(false);
-    });
-  }, [eventId, classId, format]);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const players: { playerId: string; player: PairPlayer }[] = (eventData?.players || []).filter((ep: { classId?: string }) => ep.classId === classId);
+  const pairs: { id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[] = (eventData?.pairs || []).filter((p: { classId?: string }) => p.classId === classId);
+  const pairRequests: { id: string; requesterId: string; requestedId: string; status: string }[] = reqData || [];
+  const loading = !eventData;
 
   if (loading) return <div className="p-3 text-xs text-muted">Loading...</div>;
 
@@ -196,7 +188,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action: "unpair", requestId: myReq.id }),
                           });
-                          if (r.ok) fetchAll();
+                          if (r.ok) { globalMutate(`/api/events/${eventId}`); }
                           else { const d = await r.json().catch(() => ({})); alert(d.error || "Cannot unpair"); }
                         }} className="text-[10px] text-danger hover:underline">Unpair</button>
                       </div>

@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import useSWR from "swr";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
@@ -332,6 +333,7 @@ export default function EventDetailPage() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
+  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000 });
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
@@ -387,14 +389,11 @@ export default function EventDetailPage() {
   const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId));
   const canManage = isAdmin || isOwner || isHelper;
 
-  const fetchEvent = useCallback(async () => {
-    const r = await fetch(`/api/events/${id}`);
-    if (!r.ok) {
-      router.push("/events");
-      return;
-    }
-    const data = await r.json();
-    // Derive legacy fields from default class for backwards compat
+  // Sync SWR data → local event state with derived fields
+  useEffect(() => {
+    if (swrEvent.error) { router.push("/events"); return; }
+    if (!swrEvent.data) return;
+    const data = { ...swrEvent.data };
     const defaultClass = data.classes?.find((c: EventClassData) => c.isDefault) || data.classes?.[0];
     if (defaultClass) {
       data.format = defaultClass.format;
@@ -407,7 +406,10 @@ export default function EventDetailPage() {
     }
     setEvent(data);
     setLoading(false);
-  }, [id, router]);
+  }, [swrEvent.data, swrEvent.error, router]);
+
+  // fetchEvent = trigger SWR revalidation (used by existing code)
+  const fetchEvent = useCallback(() => { swrEvent.mutate(); }, [swrEvent]);
 
   const fetchWaGroups = useCallback(async () => {
     const [linked, all] = await Promise.all([
@@ -418,10 +420,7 @@ export default function EventDetailPage() {
     if (Array.isArray(all)) setAllWaGroups(all);
   }, [id]);
 
-  useEffect(() => {
-    fetchEvent();
-    fetchWaGroups();
-  }, [fetchEvent, fetchWaGroups]);
+  useEffect(() => { fetchWaGroups(); }, [fetchWaGroups]);
 
   const buildWhatsAppMessage = () => {
     if (!event) return "";
