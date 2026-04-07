@@ -923,7 +923,7 @@ export default function EventDetailPage() {
   const sectionLabels: Record<string, string> = {
     when: "When",
     admins: "Organizer",
-    scoring: "Scoring",
+    scoring: "Format",
     pairing: "Pairing",
     players: "Players",
     pairs: "Pairs",
@@ -931,7 +931,9 @@ export default function EventDetailPage() {
     rounds: "Matches",
   };
 
-  const sectionOrder = ["when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds"];
+  const sectionOrder = event.competitionMode
+    ? ["when", "admins", "scoring", "pairing", "players", "competition", "rounds"]
+    : ["when", "admins", "scoring", "pairing", "players", "pairs", "rounds"];
 
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-1 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
@@ -1106,17 +1108,14 @@ export default function EventDetailPage() {
     </div>
   );
 
-  // ── Section: Scoring (format + sets + scoring) ──
+  // ── Section: Format (doubles/singles + scoring + ranking) ──
   const renderScoring = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Format</label>
-        <select value={editFormat} onChange={(e) => { setEditFormat(e.target.value); setHasEdits(true); }}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="doubles">Doubles</option>
-          <option value="singles">Singles</option>
-        </select>
-      </div>
+      <select value={editFormat} onChange={(e) => { setEditFormat(e.target.value); setHasEdits(true); }}
+        className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+        <option value="doubles">Doubles</option>
+        <option value="singles">Singles</option>
+      </select>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
         <select value={editScoringFormat} onChange={(e) => { setEditScoringFormat(e.target.value); setHasEdits(true); }}
@@ -1153,6 +1152,15 @@ export default function EventDetailPage() {
           <option value="cap18">Cap 18</option>
           <option value="cap23">Cap 23</option>
           <option value="cap25">Cap 25</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Ranking</label>
+        <select value={editRankingMode} onChange={(e) => { setEditRankingMode(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="ranked">Ranked — scores count towards ratings</option>
+          <option value="approval">Approval — scores need confirmation</option>
+          <option value="none">Unranked — scores don&apos;t affect ratings</option>
         </select>
       </div>
     </div>
