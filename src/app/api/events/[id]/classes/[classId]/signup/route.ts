@@ -97,6 +97,17 @@ export async function DELETE(
     }
   }
 
+  // Check if player is in any match for this event
+  const inMatch = await prisma.matchPlayer.findFirst({
+    where: { playerId, match: { eventId: id, classId } },
+  });
+  if (inMatch) {
+    return NextResponse.json(
+      { error: "Cannot remove: player is assigned to a match" },
+      { status: 400 }
+    );
+  }
+
   // Remove from this class
   await prisma.eventPlayer.deleteMany({
     where: { eventId: id, classId, playerId },

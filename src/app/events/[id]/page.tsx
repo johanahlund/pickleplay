@@ -599,8 +599,12 @@ export default function EventDetailPage() {
   };
 
   const removePlayer = async (playerId: string, playerName: string) => {
-    if (!confirm(`Are you sure you want to remove ${playerName} from this event?`)) return;
-    await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
+    if (!confirm(`Remove ${playerName} from this event?`)) return;
+    const r = await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({ error: "Failed to remove" }));
+      alert(data.error || "Cannot remove player");
+    }
     await fetchEvent();
   };
 

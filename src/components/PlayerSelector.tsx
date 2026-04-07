@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ClearInput } from "./ClearInput";
 import { PlayerAvatar } from "./PlayerAvatar";
 
@@ -113,6 +113,35 @@ export function PlayerSelector({
   const [search, setSearch] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(!recentIds || recentIds.size === 0);
+  // Optimistic: track IDs that were just toggled (added/removed) to prevent flicker
+  const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
+  const [recentlyRemoved, setRecentlyRemoved] = useState<Set<string>>(new Set());
+  const [flashCount, setFlashCount] = useState(false);
+
+  // Clear optimistic state when selectedIds changes (parent confirmed)
+  const prevSelectedRef = useRef(selectedIds);
+  if (prevSelectedRef.current !== selectedIds) {
+    prevSelectedRef.current = selectedIds;
+    if (recentlyAdded.size > 0) setRecentlyAdded(new Set());
+    if (recentlyRemoved.size > 0) setRecentlyRemoved(new Set());
+  }
+
+  const handleToggle = (id: string) => {
+    if (selectedIds.has(id) && !recentlyRemoved.has(id)) {
+      // Removing
+      setRecentlyRemoved((prev) => new Set([...prev, id]));
+    } else if (!selectedIds.has(id) && !recentlyAdded.has(id)) {
+      // Adding
+      setRecentlyAdded((prev) => new Set([...prev, id]));
+      setFlashCount(true);
+      setTimeout(() => setFlashCount(false), 600);
+    }
+    onToggle(id);
+  };
+
+  // Effective selected = (selectedIds + recentlyAdded) - recentlyRemoved
+  const effectiveSelected = new Set([...selectedIds, ...recentlyAdded]);
+  for (const id of recentlyRemoved) effectiveSelected.delete(id);
 
   const baseFilter = (p: Player) => {
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -121,7 +150,7 @@ export function PlayerSelector({
   };
 
   const available = players
-    .filter((p) => !selectedIds.has(p.id))
+    .filter((p) => !effectiveSelected.has(p.id))
     .filter((p) => {
       if (!showAll && recentIds && recentIds.size > 0 && !recentIds.has(p.id)) return false;
       return baseFilter(p);
@@ -129,7 +158,7 @@ export function PlayerSelector({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const selected = players
-    .filter((p) => selectedIds.has(p.id))
+    .filter((p) => effectiveSelected.has(p.id))
     .filter(baseFilter)
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -175,7 +204,7 @@ export function PlayerSelector({
           </div>
           <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
             {available.map((p) => (
-              <SwipeRow key={p.id} player={p} direction="right" onAction={() => onToggle(p.id)} />
+              <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} />
             ))}
             {available.length === 0 && <p className="text-[10px] text-muted py-4 text-center">No players</p>}
           </div>
@@ -184,11 +213,11 @@ export function PlayerSelector({
         {/* Right: Added */}
         <div className="flex-1 min-w-0">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
-            Added ({selected.length})
+            Added (<span className={flashCount ? "text-green-600 text-xs font-bold" : ""}>{selected.length}</span>)
           </div>
           <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
             {selected.map((p) => (
-              <SwipeRow key={p.id} player={p} direction="left" onAction={() => onToggle(p.id)} />
+              <SwipeRow key={p.id} player={p} direction="left" onAction={() => handleToggle(p.id)} />
             ))}
             {selected.length === 0 && <p className="text-[10px] text-muted py-4 text-center">None yet</p>}
           </div>

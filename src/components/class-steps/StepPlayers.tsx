@@ -77,12 +77,16 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   };
 
   const removePlayer = async (playerId: string) => {
-    if (!confirm("Remove this player?")) return;
-    await fetch(`/api/events/${eventId}/classes/${cls.id}/signup`, {
+    const r = await fetch(`/api/events/${eventId}/classes/${cls.id}/signup`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({ error: "Failed to remove" }));
+      alert(data.error || "Cannot remove player");
+      return;
+    }
     fetchData();
     onRefresh();
   };
