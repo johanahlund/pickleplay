@@ -494,13 +494,17 @@ export function ClassStepFlow({
       <div className={frameClass}>
         <div className={frameTitleClass}>Players & Matches</div>
         <button onClick={() => canManage ? setCurrentStepIdx(steps.findIndex((s) => s.id === "players")) : setShowPlayersExpand(!showPlayersExpand)} className={rowClass}>
-          <span className="text-sm text-muted shrink-0">Players{cls.maxPlayers ? ` (max ${cls.maxPlayers})` : ""}</span>
+          <span className="text-sm text-muted shrink-0">{cls.format === "doubles" ? "Pairs" : "Players"}</span>
           <span className="text-sm font-medium">
-            {maleCount > 0 && <span className="text-blue-500">♂{maleCount}</span>}
-            {maleCount > 0 && femaleCount > 0 && <span className="text-muted mx-1">·</span>}
-            {femaleCount > 0 && <span className="text-pink-500">♀{femaleCount}</span>}
-            {totalPlayers > 0 && <span className="text-muted ml-1">({classPairs.length} {cls.format === "doubles" ? "pairs" : "players"})</span>}
-            {totalPlayers === 0 && <span className="text-muted">None yet</span>}
+            {totalPlayers > 0 ? (
+              <>
+                {maleCount > 0 && <span className="text-blue-500">♂ {maleCount}{cls.maxPlayers ? `/${cls.maxPlayers}` : ""}</span>}
+                {maleCount > 0 && femaleCount > 0 && <span className="text-muted mx-1">·</span>}
+                {femaleCount > 0 && <span className="text-pink-500">♀ {femaleCount}{cls.maxPlayers ? `/${cls.maxPlayers}` : ""}</span>}
+              </>
+            ) : (
+              <span className="text-muted">None yet</span>
+            )}
           </span>
         </button>
         {/* Expanded player view for non-admins */}
