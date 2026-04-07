@@ -413,8 +413,9 @@ export function ClassStepFlow({
         </AdminRow>
         {hasUpperBracket && (() => {
           const n = config.advanceToUpper;
-          const teamDesc = n === 1 ? "Winner of each group" : `Top ${n} from each group`;
-          const wcDesc = config.wildcardCount > 0 ? ` + ${config.wildcardCount} best runner-up${config.wildcardCount > 1 ? "s" : ""}` : "";
+          const positions = Array.from({ length: n }, (_, i) => `#${i + 1}`);
+          const teamDesc = `${positions.join(", ")} per group`;
+          const wcDesc = config.wildcardCount > 0 ? ` + ${config.wildcardCount} WC` : "";
           const upperTeams = config.numGroups * n + config.wildcardCount;
           const stages = getBracketStages(upperTeams);
           const fmtShort = (fmt: string | undefined) => {
@@ -445,11 +446,8 @@ export function ClassStepFlow({
         {hasLowerBracket && (() => {
           const lower = config.advanceToLower;
           const upperN = config.advanceToUpper;
-          const posStart = upperN + 1;
-          const posEnd = upperN + lower;
-          const teamDesc = lower === 1
-            ? `#${posStart} in each group`
-            : `#${posStart} and #${posEnd} in each group`;
+          const positions = Array.from({ length: lower }, (_, i) => `#${upperN + i + 1}`);
+          const teamDesc = `${positions.join(", ")} per group`;
           const lowerTeams = config.numGroups * lower;
           const stages = getBracketStages(lowerTeams);
           const fmtShort = (fmt: string | undefined) => {
