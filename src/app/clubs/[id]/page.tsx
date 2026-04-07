@@ -725,18 +725,7 @@ export default function ClubDetailPage() {
                 </div>
               </div>
 
-              {/* WhatsApp Groups */}
-              {club.whatsappGroups.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-muted mb-1">WhatsApp Groups</label>
-                  {club.whatsappGroups.map((g) => (
-                    <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg">
-                      <span>💬</span>
-                      <span className="text-sm">{g.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+
 
               <div className="flex gap-2">
                 <button onClick={saveEdit} className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium">Save</button>
@@ -793,17 +782,6 @@ export default function ClubDetailPage() {
                 </div>
               )}
 
-              {club.whatsappGroups.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-medium text-muted mb-1 uppercase tracking-wider">WhatsApp Groups</h4>
-                  {club.whatsappGroups.map((g) => (
-                    <div key={g.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
-                      <span>💬</span>
-                      <span className="text-sm font-medium">{g.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>
