@@ -103,22 +103,30 @@ interface StepDef {
 }
 
 /** Inline player/pair view for non-admin users in class overview */
-function ClassPlayersInline({ eventId, classId, format, pairs, userId }: {
+function ClassPlayersInline({ eventId, classId, format, classGender, pairs, userId }: {
   eventId: string;
   classId: string;
   format: string;
+  classGender: string;
   pairs: { id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[];
   userId?: string | null;
 }) {
   const [players, setPlayers] = useState<{ playerId: string; player: PairPlayer }[]>([]);
+  const [pairRequests, setPairRequests] = useState<{ id: string; requesterId: string; requestedId: string; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch(`/api/events/${eventId}`).then((r) => r.ok ? r.json() : null).then((data) => {
+  const fetchAll = useCallback(() => {
+    Promise.all([
+      fetch(`/api/events/${eventId}`).then((r) => r.ok ? r.json() : null),
+      format === "doubles" ? fetch(`/api/events/${eventId}/classes/${classId}/pair-request`).then((r) => r.ok ? r.json() : []) : Promise.resolve([]),
+    ]).then(([data, reqs]) => {
       if (data) setPlayers((data.players || []).filter((ep: { classId?: string }) => ep.classId === classId));
+      setPairRequests(reqs);
       setLoading(false);
     });
-  }, [eventId, classId]);
+  }, [eventId, classId, format]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   if (loading) return <div className="p-3 text-xs text-muted">Loading...</div>;
 
@@ -157,6 +165,7 @@ function ClassPlayersInline({ eventId, classId, format, pairs, userId }: {
           <div className="space-y-1">
             {sortedPairs.map((pair) => {
               const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
+              const sameGender = classGender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender;
               // For mixed: female left, male right
               const p1Female = pair.player1.gender === "F";
               const left = p1Female ? pair.player1 : pair.player2;
@@ -164,17 +173,30 @@ function ClassPlayersInline({ eventId, classId, format, pairs, userId }: {
               const leftId = p1Female ? pair.player1Id : pair.player2Id;
               const rightId = p1Female ? pair.player2Id : pair.player1Id;
               return (
-                <div key={pair.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg ${isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
-                  <div className="flex-1"><PlayerCard player={left} isMe={leftId === userId} /></div>
-                  <span className="text-[9px] text-muted">&</span>
-                  <div className="flex-1"><PlayerCard player={right} isMe={rightId === userId} /></div>
-                  {isMyPair && (
-                    <PairRequests
-                      eventId={eventId} classId={classId} format={format}
-                      players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji || "" } }))}
-                      existingPairPlayerIds={pairedIds} canManage={false}
-                      onPairCreated={() => {}} />
-                  )}
+                <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-red-50 border border-red-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1"><PlayerCard player={left} isMe={leftId === userId} /></div>
+                    <span className="text-[9px] text-muted">&</span>
+                    <div className="flex-1"><PlayerCard player={right} isMe={rightId === userId} /></div>
+                  </div>
+                  {isMyPair && (() => {
+                    const myReq = pairRequests.find((r) => r.status === "accepted" && (r.requesterId === userId || r.requestedId === userId));
+                    return myReq ? (
+                      <div className="text-right mt-1">
+                        <button onClick={async () => {
+                          if (!confirm("Unpair?")) return;
+                          if (!confirm("Are you really sure? You will need to find a new partner.")) return;
+                          const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "unpair", requestId: myReq.id }),
+                          });
+                          if (r.ok) fetchAll();
+                          else { const d = await r.json().catch(() => ({})); alert(d.error || "Cannot unpair"); }
+                        }} className="text-[10px] text-danger hover:underline">Unpair</button>
+                      </div>
+                    ) : null;
+                  })()}
+                  {sameGender && <div className="text-[10px] text-danger mt-1">Same gender — mixed pairs required</div>}
                 </div>
               );
             })}
@@ -536,7 +558,7 @@ export function ClassStepFlow({
         {/* Expanded player view for non-admins */}
         {showPlayersExpand && !canManage && (
           <div className="border-t border-border">
-            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} pairs={classPairs as never} userId={userId} />
+            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} classGender={cls.gender} pairs={classPairs as never} userId={userId} />
           </div>
         )}
         {canManage ? (

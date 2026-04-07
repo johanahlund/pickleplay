@@ -2033,7 +2033,7 @@ export default function EventDetailPage() {
             matches={event.matches}
             canManage={canManage}
             numCourts={event.numCourts}
-            onBack={() => setSelectedClassId(null)}
+            onBack={() => { setSelectedClassId(null); if (!canManage) setActiveSection("overview"); }}
             onRefresh={fetchEvent}
           />
         </div>
