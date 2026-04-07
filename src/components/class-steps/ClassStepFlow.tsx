@@ -8,6 +8,8 @@ import {
   BRACKET_STAGE_SHORT,
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
+import { PlayerAvatar } from "../PlayerAvatar";
+import { PairRequests } from "../PairRequests";
 import { StepCategory } from "./StepCategory";
 import { StepGroups } from "./StepGroups";
 import { StepAdvancement } from "./StepAdvancement";
@@ -95,6 +97,112 @@ interface StepDef {
   label: string;
   shortLabel: string;
   type: "config" | "action";
+}
+
+/** Inline player/pair view for non-admin users in class overview */
+function ClassPlayersInline({ eventId, classId, format, pairs }: {
+  eventId: string;
+  classId: string;
+  format: string;
+  pairs: { id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[];
+}) {
+  const [players, setPlayers] = useState<{ playerId: string; player: PairPlayer }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/events/${eventId}`).then((r) => r.ok ? r.json() : null).then((data) => {
+      if (data) setPlayers((data.players || []).filter((ep: { classId?: string }) => ep.classId === classId));
+      setLoading(false);
+    });
+  }, [eventId, classId]);
+
+  if (loading) return <div className="p-3 text-xs text-muted">Loading...</div>;
+
+  const pairedIds = new Set(pairs.flatMap((p) => [p.player1Id, p.player2Id]));
+  const unpaired = players.filter((ep) => !pairedIds.has(ep.playerId));
+  const males = unpaired.filter((ep) => ep.player.gender === "M");
+  const females = unpaired.filter((ep) => ep.player.gender === "F");
+  const other = unpaired.filter((ep) => ep.player.gender !== "M" && ep.player.gender !== "F");
+  const isDoubles = format === "doubles";
+
+  return (
+    <div className="p-3 space-y-3">
+      {/* Existing pairs */}
+      {isDoubles && pairs.length > 0 && (
+        <div>
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Pairs ({pairs.length})</div>
+          <div className="space-y-1">
+            {pairs.map((pair) => (
+              <div key={pair.id} className="flex items-center gap-2 py-1">
+                <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
+                <span className="text-xs font-medium">{pair.player1.name} & {pair.player2.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Available players by gender */}
+      {unpaired.length > 0 && (
+        <div>
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">
+            {isDoubles ? "Looking for partner" : "Players"} ({unpaired.length})
+          </div>
+          {males.length > 0 && (
+            <div className="mb-1">
+              <span className="text-[9px] text-blue-500 font-medium">♂ Male ({males.length})</span>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {males.map((ep) => (
+                  <div key={ep.playerId} className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1">
+                    <PlayerAvatar name={ep.player.name} size="xs" />
+                    <span className="text-xs">{ep.player.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {females.length > 0 && (
+            <div className="mb-1">
+              <span className="text-[9px] text-pink-500 font-medium">♀ Female ({females.length})</span>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {females.map((ep) => (
+                  <div key={ep.playerId} className="flex items-center gap-1 bg-pink-50 rounded-lg px-2 py-1">
+                    <PlayerAvatar name={ep.player.name} size="xs" />
+                    <span className="text-xs">{ep.player.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {other.length > 0 && (
+            <div>
+              <div className="flex flex-wrap gap-1">
+                {other.map((ep) => (
+                  <div key={ep.playerId} className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1">
+                    <PlayerAvatar name={ep.player.name} size="xs" />
+                    <span className="text-xs">{ep.player.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pair requests */}
+      {isDoubles && players.length > 0 && (
+        <PairRequests
+          eventId={eventId}
+          classId={classId}
+          format={format}
+          players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji || "" } }))}
+          existingPairPlayerIds={pairedIds}
+          canManage={false}
+          onPairCreated={() => {}}
+        />
+      )}
+    </div>
+  );
 }
 
 export function ClassStepFlow({
@@ -225,23 +333,44 @@ export function ClassStepFlow({
   };
 
   const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
+  const rowStaticClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 w-full";
   const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
   const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
   const groupMatches = classMatches.filter((m) => m.groupLabel);
   const bracketMatches = classMatches.filter((m) => m.bracketStage);
 
+  // Player gender counts from pairs
+  const allPairPlayers = classPairs.flatMap((p) => [p.player1, p.player2]);
+  const maleCount = allPairPlayers.filter((p) => p.gender === "M").length;
+  const femaleCount = allPairPlayers.filter((p) => p.gender === "F").length;
+  const totalPlayers = allPairPlayers.length;
+
+  const [showPlayersExpand, setShowPlayersExpand] = useState(false);
+
+  // Row helper: clickable for admins, static for others
+  const AdminRow = ({ stepId, label, children }: { stepId: string; label: string; children: React.ReactNode }) =>
+    canManage ? (
+      <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === stepId))} className={rowClass}>
+        <span className="text-sm text-muted shrink-0">{label}</span>
+        {children}
+      </button>
+    ) : (
+      <div className={rowStaticClass}>
+        <span className="text-sm text-muted shrink-0">{label}</span>
+        {children}
+      </div>
+    );
+
   const renderOverview = () => (
     <div className="space-y-3">
       {/* Category summary */}
       <div className={frameClass}>
         <div className={frameTitleClass}>Category</div>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
-          <span className="text-sm text-muted">Status</span>
+        <AdminRow stepId="category" label="Status">
           <span className="text-sm font-medium">{PHASE_LABELS[cls.competitionPhase || "open"] || "Setup"}</span>
-        </button>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "category"))} className={rowClass}>
-          <span className="text-sm text-muted">Format</span>
+        </AdminRow>
+        <AdminRow stepId="category" label="Format">
           <span className="text-sm font-medium capitalize">
             {[
               cls.ageGroup !== "open" ? cls.ageGroup : null,
@@ -250,14 +379,13 @@ export function ClassStepFlow({
               cls.format,
             ].filter(Boolean).join(" · ")}
           </span>
-        </button>
+        </AdminRow>
       </div>
 
       {/* Groups & Advancement */}
       <div className={frameClass}>
         <div className={frameTitleClass}>Competition</div>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "groups"))} className={rowClass}>
-          <span className="text-sm text-muted shrink-0">Groups</span>
+        <AdminRow stepId="groups" label="Groups">
           <span className="text-sm font-medium text-right">{(() => {
             const n = config.numGroups;
             const total = classPairs.length;
@@ -282,7 +410,7 @@ export function ClassStepFlow({
             const freq = config.matchesPerMatchup === 1 ? "1 match" : "2 matches";
             return `${n} Groups${sizeDesc}: ${freq} with ${scoring}${winBy}`;
           })()}</span>
-        </button>
+        </AdminRow>
         {hasUpperBracket && (() => {
           const n = config.advanceToUpper;
           const teamDesc = n === 1 ? "The winner of each group" : `Top ${n} from each group`;
@@ -305,17 +433,15 @@ export function ClassStepFlow({
             return parts.join(". ");
           };
           return (
-            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
-              <span className="text-sm text-muted shrink-0">Elimination</span>
+            <AdminRow stepId="advancement" label="Elimination">
               <span className="text-sm font-medium text-right">{teamDesc}{wcDesc} advance. {formatDesc(config.upperBracketFormats)}</span>
-            </button>
+            </AdminRow>
           );
         })()}
         {!hasUpperBracket && (
-          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
-            <span className="text-sm text-muted">Elimination</span>
+          <AdminRow stepId="advancement" label="Elimination">
             <span className="text-sm font-medium text-muted">No bracket rounds</span>
-          </button>
+          </AdminRow>
         )}
         {hasLowerBracket && (() => {
           const lower = config.advanceToLower;
@@ -343,10 +469,9 @@ export function ClassStepFlow({
             return parts.join(". ");
           };
           return (
-            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
-              <span className="text-sm text-muted shrink-0">Consolation</span>
+            <AdminRow stepId="lower-config" label="Consolation">
               <span className="text-sm font-medium text-right">{teamDesc} advance. {formatDesc(config.lowerBracketFormats)}</span>
-            </button>
+            </AdminRow>
           );
         })()}
       </div>
@@ -354,32 +479,60 @@ export function ClassStepFlow({
       {/* Players & Matches */}
       <div className={frameClass}>
         <div className={frameTitleClass}>Players & Matches</div>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "players"))} className={rowClass}>
-          <span className="text-sm text-muted">Players</span>
+        <button onClick={() => canManage ? setCurrentStepIdx(steps.findIndex((s) => s.id === "players")) : setShowPlayersExpand(!showPlayersExpand)} className={rowClass}>
+          <span className="text-sm text-muted shrink-0">Players{cls.maxPlayers ? ` (max ${cls.maxPlayers})` : ""}</span>
           <span className="text-sm font-medium">
-            {classPairs.length} pair{classPairs.length !== 1 ? "s" : ""}
-            {(cls.minPlayers || cls.maxPlayers) ? ` · ${cls.minPlayers || "?"}–${cls.maxPlayers || "∞"}` : ""}
+            {maleCount > 0 && <span className="text-blue-500">♂{maleCount}</span>}
+            {maleCount > 0 && femaleCount > 0 && <span className="text-muted mx-1">·</span>}
+            {femaleCount > 0 && <span className="text-pink-500">♀{femaleCount}</span>}
+            {totalPlayers > 0 && <span className="text-muted ml-1">({classPairs.length} {cls.format === "doubles" ? "pairs" : "players"})</span>}
+            {totalPlayers === 0 && <span className="text-muted">None yet</span>}
           </span>
         </button>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "draw-groups"))} className={rowClass}>
-          <span className="text-sm text-muted">Group Matches</span>
-          <span className="text-sm font-medium">
-            {groupMatches.length === 0 ? "Not started" : `${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
-          </span>
-        </button>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-upper"))} className={rowClass}>
-          <span className="text-sm text-muted">Upper Bracket</span>
-          <span className="text-sm font-medium">
-            {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
-          </span>
-        </button>
-        {hasLowerBracket && (
-          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-lower"))} className={rowClass}>
-            <span className="text-sm text-muted">Lower Bracket</span>
-            <span className="text-sm font-medium">
-              {bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length} played`}
-            </span>
-          </button>
+        {/* Expanded player view for non-admins */}
+        {showPlayersExpand && !canManage && (
+          <div className="border-t border-border">
+            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} pairs={classPairs as never} />
+          </div>
+        )}
+        {canManage ? (
+          <>
+            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "draw-groups"))} className={rowClass}>
+              <span className="text-sm text-muted">Group Matches</span>
+              <span className="text-sm font-medium">
+                {groupMatches.length === 0 ? "Not started" : `${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
+              </span>
+            </button>
+            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-upper"))} className={rowClass}>
+              <span className="text-sm text-muted">Elimination</span>
+              <span className="text-sm font-medium">
+                {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
+              </span>
+            </button>
+            {hasLowerBracket && (
+              <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-lower"))} className={rowClass}>
+                <span className="text-sm text-muted">Consolation</span>
+                <span className="text-sm font-medium">
+                  {bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length} played`}
+                </span>
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className={rowStaticClass}>
+              <span className="text-sm text-muted">Group Matches</span>
+              <span className="text-sm font-medium">
+                {groupMatches.length === 0 ? "Not started" : `${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
+              </span>
+            </div>
+            <div className={rowStaticClass}>
+              <span className="text-sm text-muted">Elimination</span>
+              <span className="text-sm font-medium">
+                {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
+              </span>
+            </div>
+          </>
         )}
       </div>
 
