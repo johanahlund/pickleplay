@@ -121,9 +121,29 @@ export async function DELETE(
   const body = await req.json().catch(() => ({}));
 
   if (body.pairId) {
-    await prisma.eventPair.delete({ where: { id: body.pairId } });
+    // Find the pair to get player IDs for cancelling the request
+    const pair = await prisma.eventPair.findUnique({ where: { id: body.pairId } });
+    if (pair) {
+      await prisma.eventPair.delete({ where: { id: body.pairId } });
+      // Also cancel any accepted pair request for these players
+      await prisma.pairRequest.updateMany({
+        where: {
+          eventId: id, status: "accepted",
+          OR: [
+            { requesterId: pair.player1Id, requestedId: pair.player2Id },
+            { requesterId: pair.player2Id, requestedId: pair.player1Id },
+          ],
+        },
+        data: { status: "cancelled" },
+      });
+    }
   } else {
     await prisma.eventPair.deleteMany({ where: { eventId: id } });
+    // Cancel all accepted pair requests for this event
+    await prisma.pairRequest.updateMany({
+      where: { eventId: id, status: "accepted" },
+      data: { status: "cancelled" },
+    });
   }
 
   return NextResponse.json({ ok: true });
