@@ -227,7 +227,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
                 <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-amber-50 border border-amber-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
                   <div className="flex items-center gap-2">
                     <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} /></div>
-                    <span className="text-[9px] text-muted">&</span>
+                    <div className="w-px h-8 border-l border-dashed border-gray-300 mx-1" />
                     <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} /></div>
                   </div>
                   {isMyPair && (() => {
@@ -437,6 +437,71 @@ export function ClassStepFlow({
   const groupMatches = classMatches.filter((m) => m.groupLabel);
   const bracketMatches = classMatches.filter((m) => m.bracketStage);
 
+  // Estimate match duration in minutes based on scoring format
+  const matchDuration = (fmt: string | undefined): number => {
+    if (!fmt) return 15;
+    if (fmt.startsWith("3")) return fmt.includes("R") ? 40 : 35; // Bo3
+    if (fmt.includes("R21")) return 20;
+    if (fmt.includes("R15")) return 15;
+    if (fmt.includes("15")) return 18;
+    if (fmt.includes("9") || fmt.includes("7")) return 10;
+    return 15; // 1x11 default
+  };
+  const BREAK_MIN = 5;
+
+  // Court time estimation
+  const estimateCourtTime = () => {
+    const sf = cls.scoringFormat || "1x11";
+    const groupMatchDur = matchDuration(sf);
+    const numCourtsAvail = numCourts || 1;
+    const n = config.numGroups;
+    const total = classPairs.length || (cls.maxPlayers || 0);
+    if (total === 0) return null;
+
+    // Group stage: round-robin within each group
+    const base = Math.floor(total / n);
+    const rem = total % n;
+    const groupSizes = Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
+    // Matches per group = size*(size-1)/2 * matchesPerMatchup
+    const groupMatchCounts = groupSizes.map((s) => (s * (s - 1)) / 2 * config.matchesPerMatchup);
+    const totalGroupMatches = groupMatchCounts.reduce((a, b) => a + b, 0);
+    // Parallel: max matches at same time = numCourts
+    const groupRounds = Math.ceil(totalGroupMatches / numCourtsAvail);
+    const groupMinutes = groupRounds * (groupMatchDur + BREAK_MIN);
+
+    // Bracket stages
+    const stages: { name: string; matches: number; fmt: string }[] = [];
+    if (hasUpperBracket) {
+      const upperTeams = n * config.advanceToUpper + config.wildcardCount;
+      const upperStages = getBracketStages(upperTeams);
+      for (const s of upperStages) {
+        const numMatches = s === "f" ? 1 : s === "sf" ? 2 : s === "qf" ? 4 : s === "r16" ? 8 : 16;
+        stages.push({ name: `Main ${BRACKET_STAGE_SHORT[s] || s}`, matches: Math.min(numMatches, upperTeams), fmt: config.upperBracketFormats[s] || "to_11" });
+      }
+      if (config.upperThirdPlace) stages.push({ name: "Main 3rd", matches: 1, fmt: config.upperBracketFormats["sf"] || "to_11" });
+    }
+    if (hasLowerBracket) {
+      const lowerTeams = n * config.advanceToLower;
+      const lowerStages = getBracketStages(lowerTeams);
+      for (const s of lowerStages) {
+        const numMatches = s === "f" ? 1 : s === "sf" ? 2 : s === "qf" ? 4 : s === "r16" ? 8 : 16;
+        stages.push({ name: `Cons ${BRACKET_STAGE_SHORT[s] || s}`, matches: Math.min(numMatches, lowerTeams), fmt: config.lowerBracketFormats[s] || "to_11" });
+      }
+      if (config.lowerThirdPlace) stages.push({ name: "Cons 3rd", matches: 1, fmt: config.lowerBracketFormats["sf"] || "to_11" });
+    }
+
+    const bracketStageEstimates = stages.map((s) => {
+      const dur = matchDuration(s.fmt.replace("to_", "1x").replace("bo3_", "3x"));
+      const rounds = Math.ceil(s.matches / numCourtsAvail);
+      return { name: s.name, matches: s.matches, minutes: rounds * (dur + BREAK_MIN) };
+    });
+    const totalBracketMin = bracketStageEstimates.reduce((a, b) => a + b.minutes, 0);
+
+    return { groupMinutes, totalGroupMatches, bracketStageEstimates, totalBracketMin, totalMinutes: groupMinutes + totalBracketMin };
+  };
+
+  const courtTime = canManage ? estimateCourtTime() : null;
+
   // Player gender counts from pairs
   const allPairPlayers = classPairs.flatMap((p) => [p.player1, p.player2]);
   const maleCount = allPairPlayers.filter((p) => p.gender === "M").length;
@@ -462,24 +527,28 @@ export function ClassStepFlow({
       </div>
     );
 
+  const phaseStr = PHASE_LABELS[cls.competitionPhase || "open"] || "Setup";
+
   const renderOverview = () => (
     <div className="space-y-3">
-      {/* Category summary */}
-      <div className={frameClass}>
-        <AdminRow stepId="category" label="Status">
-          <span className="text-sm font-medium">{PHASE_LABELS[cls.competitionPhase || "open"] || "Setup"}</span>
-        </AdminRow>
-        <AdminRow stepId="category" label="Format">
-          <span className="text-sm font-medium capitalize">
-            {[
-              cls.ageGroup !== "open" ? cls.ageGroup : null,
-              cls.skillMin ? cls.skillMin.toFixed(1) : null,
-              cls.gender === "open" ? "Any Gender" : cls.gender,
-              cls.format,
-            ].filter(Boolean).join(" · ")}
-          </span>
-        </AdminRow>
-      </div>
+      {/* Category summary — admin sees editable rows, normal users see status pill on class name */}
+      {canManage ? (
+        <div className={frameClass}>
+          <AdminRow stepId="category" label="Status">
+            <span className="text-sm font-medium">{phaseStr}</span>
+          </AdminRow>
+          <AdminRow stepId="category" label="Format">
+            <span className="text-sm font-medium capitalize">
+              {[
+                cls.ageGroup !== "open" ? cls.ageGroup : null,
+                cls.skillMin ? cls.skillMin.toFixed(1) : null,
+                cls.gender === "open" ? "Any Gender" : cls.gender,
+                cls.format,
+              ].filter(Boolean).join(" · ")}
+            </span>
+          </AdminRow>
+        </div>
+      ) : null}
 
       {/* Groups & Advancement */}
       <div className={frameClass}>
@@ -682,6 +751,29 @@ export function ClassStepFlow({
         )}
       </div>
 
+      {/* Court time estimation — admin only */}
+      {canManage && courtTime && (
+        <div className="bg-card rounded-xl border border-border p-3">
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1.5">Estimated Court Time ({numCourts} court{numCourts !== 1 ? "s" : ""})</div>
+          <div className="space-y-0.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted">Group stage ({courtTime.totalGroupMatches} matches)</span>
+              <span className="font-medium">{Math.round(courtTime.groupMinutes)} min</span>
+            </div>
+            {courtTime.bracketStageEstimates.map((s) => (
+              <div key={s.name} className="flex justify-between">
+                <span className="text-muted">{s.name} ({s.matches} match{s.matches !== 1 ? "es" : ""})</span>
+                <span className="font-medium">{Math.round(s.minutes)} min</span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-border pt-1 mt-1">
+              <span className="font-semibold">Total</span>
+              <span className="font-bold">{Math.floor(courtTime.totalMinutes / 60)}h {Math.round(courtTime.totalMinutes % 60)}min</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete class */}
       {canManage && !cls.isDefault && (
         <button onClick={() => {
@@ -751,7 +843,10 @@ export function ClassStepFlow({
             </span>
             <span className="w-12" />
           </div>
-          <h3 className="text-base font-bold text-center mt-1">{cls.name}</h3>
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <h3 className="text-base font-bold">{cls.name}</h3>
+            {!canManage && <span className="text-[10px] font-medium bg-gray-100 text-muted px-2 py-0.5 rounded-full">{phaseStr}</span>}
+          </div>
         </div>
       ) : (
         <h3 className="text-base font-bold">{cls.name}</h3>
