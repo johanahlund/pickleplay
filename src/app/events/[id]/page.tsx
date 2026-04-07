@@ -1313,6 +1313,33 @@ export default function EventDetailPage() {
               <span className="text-lg font-medium">{owner.name}</span>
               <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Owner</span>
             </div>
+            {(isOwner || isAdmin) && (
+              <details className="mt-1">
+                <summary className="text-[10px] text-muted cursor-pointer">Transfer ownership</summary>
+                <select className="w-full mt-1 border border-border rounded-lg px-3 py-2 text-sm"
+                  defaultValue=""
+                  onChange={async (e) => {
+                    const newOwnerId = e.target.value;
+                    if (!newOwnerId) return;
+                    const newOwner = [...event.helpers.map((h) => h.player), ...event.players.map((ep) => ep.player)].find((p) => p.id === newOwnerId);
+                    if (!confirm(`Transfer ownership to ${newOwner?.name}? You will become a helper.`)) { e.target.value = ""; return; }
+                    await fetch(`/api/events/${id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ createdById: newOwnerId }),
+                    });
+                    fetchEvent();
+                  }}>
+                  <option value="">Select new owner...</option>
+                  {event.helpers.map((h) => (
+                    <option key={h.playerId} value={h.playerId}>{h.player.name} (helper)</option>
+                  ))}
+                  {event.players.filter((ep) => ep.player.id !== event.createdById && !event.helpers.some((h) => h.playerId === ep.player.id)).map((ep) => (
+                    <option key={ep.player.id} value={ep.player.id}>{ep.player.name}</option>
+                  ))}
+                </select>
+              </details>
+            )}
           </div>
         )}
 

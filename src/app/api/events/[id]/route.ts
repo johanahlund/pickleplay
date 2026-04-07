@@ -85,6 +85,7 @@ export async function PATCH(
   if (openSignup !== undefined) eventData.openSignup = !!openSignup;
   if (visibility !== undefined) eventData.visibility = visibility;
   if (body.status !== undefined) eventData.status = body.status;
+  if (body.createdById !== undefined) eventData.createdById = body.createdById;
 
   // Class-level fields (update default class)
   const classData: Record<string, unknown> = {};
