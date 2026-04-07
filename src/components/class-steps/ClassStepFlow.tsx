@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import {
   CompetitionConfig,
   DEFAULT_COMPETITION_CONFIG,
@@ -102,11 +103,12 @@ interface StepDef {
 }
 
 /** Inline player/pair view for non-admin users in class overview */
-function ClassPlayersInline({ eventId, classId, format, pairs }: {
+function ClassPlayersInline({ eventId, classId, format, pairs, userId }: {
   eventId: string;
   classId: string;
   format: string;
   pairs: { id: string; player1: PairPlayer; player2: PairPlayer; player1Id: string; player2Id: string }[];
+  userId?: string | null;
 }) {
   const [players, setPlayers] = useState<{ playerId: string; player: PairPlayer }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,20 +131,35 @@ function ClassPlayersInline({ eventId, classId, format, pairs }: {
 
   return (
     <div className="p-3 space-y-3">
-      {/* Existing pairs */}
-      {isDoubles && pairs.length > 0 && (
-        <div>
-          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Pairs ({pairs.length})</div>
-          <div className="space-y-1">
-            {pairs.map((pair) => (
-              <div key={pair.id} className="flex items-center gap-2 py-1">
-                <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
-                <span className="text-xs font-medium">{pair.player1.name} & {pair.player2.name}</span>
-              </div>
-            ))}
+      {/* Existing pairs — user's pair first */}
+      {isDoubles && pairs.length > 0 && (() => {
+        const sortedPairs = [...pairs].sort((a, b) => {
+          const aIsMe = userId && (a.player1Id === userId || a.player2Id === userId) ? 0 : 1;
+          const bIsMe = userId && (b.player1Id === userId || b.player2Id === userId) ? 0 : 1;
+          return aIsMe - bIsMe;
+        });
+        return (
+          <div>
+            <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Pairs ({pairs.length})</div>
+            <div className="space-y-1">
+              {sortedPairs.map((pair) => {
+                const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
+                return (
+                  <div key={pair.id} className="flex items-center gap-2 py-1">
+                    <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
+                    <span className="text-xs font-medium">
+                      <span className={pair.player1Id === userId ? "text-action font-bold" : ""}>{pair.player1.name}</span>
+                      {" & "}
+                      <span className={pair.player2Id === userId ? "text-action font-bold" : ""}>{pair.player2.name}</span>
+                    </span>
+                    {isMyPair && <span className="text-[9px] text-action font-medium">Your pair</span>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Available players — females first, then males */}
       {unpaired.length > 0 && (
@@ -185,6 +202,9 @@ function ClassPlayersInline({ eventId, classId, format, pairs }: {
 export function ClassStepFlow({
   eventId, eventName, eventDate, cls: propsCls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
 }: ClassStepFlowProps) {
+  const { data: session } = useSession();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+
   // Optimistic state: local overrides applied instantly before API responds
   const [fieldOverrides, setFieldOverrides] = useState<Record<string, unknown>>({});
   const [configOverrides, setConfigOverrides] = useState<Partial<CompetitionConfig>>({});
@@ -324,6 +344,9 @@ export function ClassStepFlow({
   const totalPlayers = allPairPlayers.length;
 
   const [showPlayersExpand, setShowPlayersExpand] = useState(false);
+  const [showGroupsExpand, setShowGroupsExpand] = useState(false);
+  const [showUpperExpand, setShowUpperExpand] = useState(false);
+  const [showLowerExpand, setShowLowerExpand] = useState(false);
 
   // Row helper: clickable for admins, static for others
   const AdminRow = ({ stepId, label, children }: { stepId: string; label: string; children: React.ReactNode }) =>
@@ -362,7 +385,7 @@ export function ClassStepFlow({
       {/* Groups & Advancement */}
       <div className={frameClass}>
         <div className={frameTitleClass}>Competition</div>
-        <AdminRow stepId="groups" label="Groups">
+        <AdminRow stepId="groups" label="Group Stage">
           <span className="text-right">
             {(() => {
               const n = config.numGroups;
@@ -472,7 +495,7 @@ export function ClassStepFlow({
         <div className={frameTitleClass}>Players & Matches</div>
         <button onClick={() => canManage ? setCurrentStepIdx(steps.findIndex((s) => s.id === "players")) : setShowPlayersExpand(!showPlayersExpand)} className={rowClass}>
           <span className="text-sm text-muted shrink-0">{cls.format === "doubles" ? "Pairs" : "Players"}</span>
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium flex-1 text-right">
             {totalPlayers > 0 ? (
               <>
                 {maleCount > 0 && <span className="text-blue-500">♂ {maleCount}{cls.maxPlayers ? `/${cls.maxPlayers}` : ""}</span>}
@@ -483,11 +506,12 @@ export function ClassStepFlow({
               <span className="text-muted">None yet</span>
             )}
           </span>
+          {!canManage && <span className={`text-muted text-xs ml-1 transition-transform ${showPlayersExpand ? "rotate-90" : ""}`}>›</span>}
         </button>
         {/* Expanded player view for non-admins */}
         {showPlayersExpand && !canManage && (
           <div className="border-t border-border">
-            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} pairs={classPairs as never} />
+            <ClassPlayersInline eventId={eventId} classId={cls.id} format={cls.format} pairs={classPairs as never} userId={userId} />
           </div>
         )}
         {canManage ? (
@@ -515,18 +539,48 @@ export function ClassStepFlow({
           </>
         ) : (
           <>
-            <div className={rowStaticClass}>
-              <span className="text-sm text-muted">Group Matches</span>
-              <span className="text-sm font-medium">
-                {groupMatches.length === 0 ? "Not started" : `${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
-              </span>
-            </div>
-            <div className={rowStaticClass}>
-              <span className="text-sm text-muted">Main Bracket</span>
-              <span className="text-sm font-medium">
-                {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
-              </span>
-            </div>
+            {groupMatches.length > 0 && (
+              <>
+                <button onClick={() => setShowGroupsExpand(!showGroupsExpand)} className={rowClass}>
+                  <span className="text-sm text-muted">Group Matches</span>
+                  <span className="text-sm font-medium flex-1 text-right">
+                    {`${groupMatches.filter((m) => m.status === "completed").length}/${groupMatches.length} played`}
+                  </span>
+                  <span className={`text-muted text-xs ml-1 transition-transform ${showGroupsExpand ? "rotate-90" : ""}`}>›</span>
+                </button>
+                {showGroupsExpand && (
+                  <div className="border-t border-border p-3 text-xs text-muted">Group standings and matches coming soon</div>
+                )}
+              </>
+            )}
+            {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length > 0 && (
+              <>
+                <button onClick={() => setShowUpperExpand(!showUpperExpand)} className={rowClass}>
+                  <span className="text-sm text-muted">Main Bracket</span>
+                  <span className="text-sm font-medium flex-1 text-right">
+                    {`${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
+                  </span>
+                  <span className={`text-muted text-xs ml-1 transition-transform ${showUpperExpand ? "rotate-90" : ""}`}>›</span>
+                </button>
+                {showUpperExpand && (
+                  <div className="border-t border-border p-3 text-xs text-muted">Bracket matches coming soon</div>
+                )}
+              </>
+            )}
+            {hasLowerBracket && bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length > 0 && (
+              <>
+                <button onClick={() => setShowLowerExpand(!showLowerExpand)} className={rowClass}>
+                  <span className="text-sm text-muted">Consolation</span>
+                  <span className="text-sm font-medium flex-1 text-right">
+                    {`${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("lower_")).length} played`}
+                  </span>
+                  <span className={`text-muted text-xs ml-1 transition-transform ${showLowerExpand ? "rotate-90" : ""}`}>›</span>
+                </button>
+                {showLowerExpand && (
+                  <div className="border-t border-border p-3 text-xs text-muted">Consolation matches coming soon</div>
+                )}
+              </>
+            )}
           </>
         )}
       </div>
@@ -551,8 +605,8 @@ export function ClassStepFlow({
 
   return (
     <div className="space-y-3">
-      {/* Step bar — hidden on overview */}
-      {!isOverview && (
+      {/* Step bar — only for admins, hidden on overview */}
+      {!isOverview && canManage && (
         <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-1 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
           <div className="text-center pb-1">
             <span className="text-xs font-semibold">{eventName}</span>
