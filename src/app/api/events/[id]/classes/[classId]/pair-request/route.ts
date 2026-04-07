@@ -65,15 +65,11 @@ export async function POST(
     });
     if (existingAccepted) return NextResponse.json({ error: "You already have a confirmed partner" }, { status: 400 });
 
-    // Cancel any existing pending request from this user
-    await prisma.pairRequest.updateMany({
-      where: { eventId: id, classId, requesterId: user.id, status: "pending" },
-      data: { status: "cancelled" },
-    });
-
-    // Create new request
-    const request = await prisma.pairRequest.create({
-      data: { eventId: id, classId, requesterId: user.id, requestedId: partnerId },
+    // Upsert: reuse existing request row (handles cancelled/declined → re-request)
+    const request = await prisma.pairRequest.upsert({
+      where: { eventId_classId_requesterId: { eventId: id, classId, requesterId: user.id } },
+      create: { eventId: id, classId, requesterId: user.id, requestedId: partnerId },
+      update: { requestedId: partnerId, status: "pending" },
     });
 
     // Notify the requested player
