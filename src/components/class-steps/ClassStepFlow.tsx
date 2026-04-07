@@ -11,7 +11,6 @@ import {
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
 import { PlayerAvatar } from "../PlayerAvatar";
-import { PairRequests } from "../PairRequests";
 import { StepCategory } from "./StepCategory";
 import { StepGroups } from "./StepGroups";
 import { StepAdvancement } from "./StepAdvancement";
@@ -134,15 +133,69 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
 
   const isMix = format === "doubles"; // show 2-col for all doubles
 
-  const PlayerCard = ({ player, isMe }: { player: PairPlayer; isMe?: boolean }) => (
-    <div className="flex items-center gap-1.5 min-w-0">
+  // Check if user can request this player
+  const myOutgoing = pairRequests.find((r) => r.requesterId === userId && r.status === "pending");
+  const myIncoming = pairRequests.filter((r) => r.requestedId === userId && r.status === "pending");
+  const userIsPaired = userId ? pairedIds.has(userId) : true;
+  const userGender = userId ? players.find((p) => p.playerId === userId)?.player.gender : null;
+
+  const sendRequest = async (partnerId: string) => {
+    await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "request", partnerId }),
+    });
+    globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
+  };
+
+  const respondRequest = async (requestId: string, action: "accept" | "decline") => {
+    await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, requestId }),
+    });
+    globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
+    globalMutate(`/api/events/${eventId}`);
+  };
+
+  const cancelRequest = async (requestId: string) => {
+    await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel", requestId }),
+    });
+    globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
+  };
+
+  const PlayerCard = ({ player, playerId, isMe }: { player: PairPlayer; playerId: string; isMe?: boolean }) => {
+    const incomingFromThem = myIncoming.find((r) => r.requesterId === playerId);
+    const iSentToThem = myOutgoing?.requestedId === playerId;
+    const canRequest = !userIsPaired && !isMe && !myOutgoing && userId;
+    // For mix class: only request opposite gender
+    const genderOk = classGender !== "mix" || !userGender || !player.gender || userGender !== player.gender;
+
+    return (
+    <div className="flex items-center gap-1.5 min-w-0 py-0.5">
       <PlayerAvatar name={player.name} size="xs" />
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className={`text-xs font-medium truncate ${isMe ? "text-action" : ""}`}>{player.name}</div>
         <div className="text-[9px] text-muted">{Math.round(player.rating)}</div>
       </div>
+      {!isMe && incomingFromThem && (
+        <div className="flex gap-1 shrink-0">
+          <button onClick={() => respondRequest(incomingFromThem.id, "accept")} className="text-[9px] bg-green-600 text-white px-1.5 py-0.5 rounded">Accept</button>
+          <button onClick={() => respondRequest(incomingFromThem.id, "decline")} className="text-[9px] text-danger px-1 py-0.5 rounded hover:bg-red-50">✕</button>
+        </div>
+      )}
+      {!isMe && iSentToThem && (
+        <button onClick={() => cancelRequest(myOutgoing!.id)} className="text-[9px] text-muted px-1.5 py-0.5 rounded hover:bg-gray-100 shrink-0">Pending ✕</button>
+      )}
+      {canRequest && genderOk && !incomingFromThem && !iSentToThem && (
+        <button onClick={() => sendRequest(playerId)} className="text-[9px] text-action px-1.5 py-0.5 rounded hover:bg-action/10 shrink-0">🤝</button>
+      )}
     </div>
-  );
+    );
+  };
 
   // Sort pairs: user's pair first
   const sortedPairs = [...pairs].sort((a, b) => {
@@ -173,9 +226,9 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
               return (
                 <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-amber-50 border border-amber-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1"><PlayerCard player={left} isMe={leftId === userId} /></div>
+                    <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} /></div>
                     <span className="text-[9px] text-muted">&</span>
-                    <div className="flex-1"><PlayerCard player={right} isMe={rightId === userId} /></div>
+                    <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} /></div>
                   </div>
                   {isMyPair && (() => {
                     const myReq = pairRequests.find((r) => r.status === "accepted" && (r.requesterId === userId || r.requestedId === userId));
@@ -209,18 +262,18 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
           <div className="flex gap-3">
             <div className="flex-1 space-y-1">
               <div className="text-[9px] text-pink-500 font-medium mb-0.5">♀ ({females.length})</div>
-              {females.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+              {females.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />)}
               {females.length === 0 && <div className="text-[10px] text-muted">—</div>}
             </div>
             <div className="flex-1 space-y-1">
               <div className="text-[9px] text-blue-500 font-medium mb-0.5">♂ ({males.length})</div>
-              {males.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+              {males.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />)}
               {males.length === 0 && <div className="text-[10px] text-muted">—</div>}
             </div>
           </div>
           {other.length > 0 && (
             <div className="mt-1 space-y-1">
-              {other.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+              {other.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />)}
             </div>
           )}
         </div>
@@ -230,18 +283,16 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
       {!isDoubles && players.length > 0 && (
         <div className="space-y-1">
           {[...females, ...males, ...other].map((ep) => (
-            <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />
+            <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />
           ))}
         </div>
       )}
 
-      {/* Pair requests (only if user doesn't have a pair yet) */}
-      {isDoubles && players.length > 0 && userId && !pairedIds.has(userId) && (
-        <PairRequests
-          eventId={eventId} classId={classId} format={format}
-          players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji || "" } }))}
-          existingPairPlayerIds={pairedIds} canManage={false}
-          onPairCreated={() => {}} />
+      {/* Incoming requests banner (if user has pending incoming) */}
+      {isDoubles && !userIsPaired && myIncoming.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-800">
+          {myIncoming.length} partner request{myIncoming.length > 1 ? "s" : ""} — see 🤝 above to accept
+        </div>
       )}
     </div>
   );
