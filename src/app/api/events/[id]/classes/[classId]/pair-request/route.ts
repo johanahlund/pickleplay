@@ -168,6 +168,40 @@ export async function POST(
     return NextResponse.json({ ok: true, status: "cancelled" });
   }
 
+  // ── Unpair: player breaks their own accepted pair ──
+  if (body.action === "unpair") {
+    const { requestId } = body;
+    const request = await prisma.pairRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.status !== "accepted") return NextResponse.json({ error: "No active pair found" }, { status: 404 });
+    if (request.requesterId !== user.id && request.requestedId !== user.id) {
+      return NextResponse.json({ error: "Not your pair" }, { status: 403 });
+    }
+
+    // Check not in a match
+    const inMatch = await prisma.matchPlayer.findFirst({
+      where: { playerId: user.id, match: { eventId: id, classId } },
+    });
+    if (inMatch) {
+      return NextResponse.json({ error: "Cannot unpair: you are assigned to a match" }, { status: 400 });
+    }
+
+    // Cancel the pair request
+    await prisma.pairRequest.update({ where: { id: requestId }, data: { status: "cancelled" } });
+
+    // Delete the EventPair
+    await prisma.eventPair.deleteMany({
+      where: {
+        eventId: id, classId,
+        OR: [
+          { player1Id: request.requesterId, player2Id: request.requestedId },
+          { player1Id: request.requestedId, player2Id: request.requesterId },
+        ],
+      },
+    });
+
+    return NextResponse.json({ ok: true, status: "unpaired" });
+  }
+
   // ── Force pair (admin/manager) ──
   if (body.action === "force_pair") {
     try { await requireEventManager(id); } catch {
