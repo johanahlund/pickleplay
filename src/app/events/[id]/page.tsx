@@ -1024,12 +1024,12 @@ export default function EventDetailPage() {
       </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Courts</label>
-        <div className="flex gap-2">
-          {[1, 2, 3, 4].map((n) => (
-            <button key={n} type="button" onClick={() => { setEditCourts(n); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all ${editCourts === n ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>{n}</button>
+        <select value={editCourts} onChange={(e) => { setEditCourts(parseInt(e.target.value)); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
+            <option key={n} value={n}>{n} court{n !== 1 ? "s" : ""}</option>
           ))}
-        </div>
+        </select>
       </div>
       {event.club?.locations && event.club.locations.length > 0 && (
         <div>
@@ -1051,29 +1051,15 @@ export default function EventDetailPage() {
       {/* Event status */}
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Status</label>
-        <div className="flex gap-1 flex-wrap">
-          {[
-            { value: "draft", label: "Draft" },
-            { value: "visible", label: "Visible" },
-            { value: "open", label: "Open" },
-            { value: "closed", label: "Closed" },
-            { value: "active", label: "Active" },
-            { value: "completed", label: "Done" },
-          ].map((s) => (
-            <button key={s.value} type="button" onClick={() => { setEditStatus(s.value); setHasEdits(true); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${editStatus === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted mt-1">
-          {editStatus === "draft" && "Only organizers can see this event."}
-          {editStatus === "visible" && "Everyone can see but can't sign up yet."}
-          {editStatus === "open" && "Players can sign up."}
-          {editStatus === "closed" && "No more signups. Ready to start."}
-          {editStatus === "active" && "Event is running."}
-          {editStatus === "completed" && "Event is finished."}
-        </p>
+        <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="draft">Draft — only organizers can see</option>
+          <option value="visible">Visible — everyone can see, no signup</option>
+          <option value="open">Open — players can sign up</option>
+          <option value="closed">Closed — no more signups</option>
+          <option value="active">Active — event is running</option>
+          <option value="completed">Done — event finished</option>
+        </select>
       </div>
       {/* Competition toggle */}
       <div className="border-t border-border pt-3">
