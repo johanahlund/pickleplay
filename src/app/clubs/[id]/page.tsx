@@ -305,6 +305,9 @@ export default function ClubDetailPage() {
   const [commentContent, setCommentContent] = useState("");
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
 
+  // Join requests
+  const [joinRequests, setJoinRequests] = useState<{ id: string; playerId: string; status: string; message?: string | null; createdAt: string; player: { id: string; name: string; emoji: string; gender?: string | null; rating: number } }[]>([]);
+
   // Event filters
   const [eventSearch, setEventSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
@@ -344,6 +347,12 @@ export default function ClubDetailPage() {
   const myMembership = club?.members.find((m) => m.playerId === userId);
   const canManage = myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin;
   const isOwner = myMembership?.role === "owner" || isGlobalAdmin;
+
+  // Fetch join requests for managers
+  useEffect(() => {
+    if (!canManage || !club) return;
+    fetch(`/api/clubs/${club.id}/join-request`).then((r) => r.ok ? r.json() : []).then(setJoinRequests);
+  }, [canManage, club?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAllPlayers = async () => {
     if (allPlayers.length > 0) return;
@@ -746,6 +755,17 @@ export default function ClubDetailPage() {
       {/* ── Feed Tab ── */}
       {tab === "feed" && (
         <div className="space-y-3">
+          {/* Join requests alert */}
+          {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
+            <button onClick={() => setTab("members")}
+              className="w-full bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 active:bg-amber-100">
+              <span className="text-lg">👋</span>
+              <span className="text-sm font-medium text-amber-800 flex-1 text-left">
+                {joinRequests.filter((r) => r.status === "pending").length} pending join request{joinRequests.filter((r) => r.status === "pending").length !== 1 ? "s" : ""}
+              </span>
+              <span className="text-xs text-amber-600">View ›</span>
+            </button>
+          )}
           {/* New post */}
           <div className="bg-card rounded-xl border border-border p-3 space-y-2">
             <textarea
@@ -967,6 +987,42 @@ export default function ClubDetailPage() {
       {/* ── Members Tab ── */}
       {tab === "members" && (
         <div className="space-y-3">
+          {/* Join requests */}
+          {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
+            <div className="bg-card rounded-xl border border-amber-200 overflow-hidden">
+              <div className="text-[10px] text-amber-700 px-3 pt-2 pb-1 uppercase tracking-wider font-medium">
+                Join Requests ({joinRequests.filter((r) => r.status === "pending").length})
+              </div>
+              {joinRequests.filter((r) => r.status === "pending").map((req) => (
+                <div key={req.id} className="flex items-center gap-2 py-2 px-3 border-b border-amber-100 last:border-b-0 bg-amber-50/50">
+                  <span className="text-lg">{req.player.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium">{req.player.name}</span>
+                    {req.message && <p className="text-[10px] text-muted truncate">{req.message}</p>}
+                  </div>
+                  <button onClick={async () => {
+                    await fetch(`/api/clubs/${club!.id}/join-request`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ requestId: req.id, action: "accept" }),
+                    });
+                    setJoinRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: "accepted" } : r));
+                    fetchClub();
+                  }}
+                    className="text-[10px] bg-green-600 text-white px-2.5 py-1 rounded font-medium">Accept</button>
+                  <button onClick={async () => {
+                    await fetch(`/api/clubs/${club!.id}/join-request`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ requestId: req.id, action: "decline" }),
+                    });
+                    setJoinRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: "declined" } : r));
+                  }}
+                    className="text-[10px] text-danger px-2 py-1 rounded hover:bg-red-50">Decline</button>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Filters */}
           <div className="flex gap-2">
             <ClearInput value={memberSearch} onChange={setMemberSearch} placeholder="Search members..." className="text-sm" />

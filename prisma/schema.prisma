@@ -49,7 +49,8 @@ model Player {
   clubMembers   ClubMember[]
   clubRatings   ClubPlayerRating[]
   createdClubs  Club[]        @relation("createdClubs")
-  clubInvites   ClubInvite[]  @relation("ClubInviteCreator")
+  clubInvites      ClubInvite[]      @relation("ClubInviteCreator")
+  clubJoinRequests ClubJoinRequest[]
   clubPosts     ClubPost[]
   clubComments  ClubComment[]
 }
@@ -73,6 +74,7 @@ model Club {
   posts          ClubPost[]
   locations      ClubLocation[]
   invites        ClubInvite[]
+  joinRequests   ClubJoinRequest[]
 }
 
 model ClubPlayerRating {
@@ -105,6 +107,21 @@ model ClubMember {
   clubId   String
   playerId String
   role     String @default("member") // "owner" | "admin" | "member"
+
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, playerId])
+}
+
+model ClubJoinRequest {
+  id        String   @id @default(cuid())
+  clubId    String
+  playerId  String
+  message   String?
+  status    String   @default("pending") // "pending" | "accepted" | "declined"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
