@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 
-const APP_VERSION = "4.0.0";
+const APP_VERSION = "5.0.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
