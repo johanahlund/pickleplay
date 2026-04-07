@@ -44,7 +44,7 @@ export function StepManageBracket({ bracket, matches, numCourts }: StepManageBra
     return (
       <div className="bg-card rounded-xl border border-border p-4">
         <p className="text-sm text-muted text-center">
-          {bracket === "upper" ? "Upper" : "Lower"} bracket not started yet. Complete group stage and advance first.
+          {bracket === "upper" ? "Main bracket" : "Consolation"} not started yet. Complete group stage and advance first.
         </p>
       </div>
     );

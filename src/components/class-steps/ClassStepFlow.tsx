@@ -234,12 +234,12 @@ export function ClassStepFlow({
     { id: "category", label: "Category", shortLabel: "Cat", type: "config" },
     { id: "groups", label: "Group Setup", shortLabel: "Grps", type: "config" },
     { id: "advancement", label: "Advancement", shortLabel: "Adv", type: "config" },
-    { id: "upper-config", label: "Upper Bracket", shortLabel: "Upper", type: "config" },
-    ...(hasLowerBracket ? [{ id: "lower-config", label: "Lower Bracket", shortLabel: "Lower", type: "config" as const }] : []),
+    { id: "upper-config", label: "Main Bracket", shortLabel: "Main", type: "config" },
+    ...(hasLowerBracket ? [{ id: "lower-config", label: "Consolation", shortLabel: "Cons", type: "config" as const }] : []),
     { id: "players", label: "Players", shortLabel: "Players", type: "config" },
     { id: "draw-groups", label: "Draw Groups", shortLabel: "Draw", type: "action" },
-    { id: "manage-upper", label: "Upper Bracket", shortLabel: "Upper", type: "action" },
-    ...(hasLowerBracket ? [{ id: "manage-lower", label: "Lower Bracket", shortLabel: "Lower", type: "action" as const }] : []),
+    { id: "manage-upper", label: "Main Bracket", shortLabel: "Main", type: "action" },
+    ...(hasLowerBracket ? [{ id: "manage-lower", label: "Consolation", shortLabel: "Cons", type: "action" as const }] : []),
   ];
 
   // -1 = overview, 0+ = steps
@@ -430,7 +430,7 @@ export function ClassStepFlow({
           const roundParts = stages.map((s) => `${BRACKET_STAGE_SHORT[s] || s} (${fmtShort(config.upperBracketFormats[s])})`);
           if (config.upperThirdPlace) roundParts.push("3rd");
           return (
-            <AdminRow stepId="advancement" label="Elimination">
+            <AdminRow stepId="advancement" label="Main Bracket">
               <span className="text-right">
                 <span className="text-sm font-medium block">{teamDesc}{wcDesc} advance</span>
                 <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
@@ -439,7 +439,7 @@ export function ClassStepFlow({
           );
         })()}
         {!hasUpperBracket && (
-          <AdminRow stepId="advancement" label="Elimination">
+          <AdminRow stepId="advancement" label="Main Bracket">
             <span className="text-sm font-medium text-muted">No bracket rounds</span>
           </AdminRow>
         )}
@@ -500,7 +500,7 @@ export function ClassStepFlow({
               </span>
             </button>
             <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "manage-upper"))} className={rowClass}>
-              <span className="text-sm text-muted">Elimination</span>
+              <span className="text-sm text-muted">Main Bracket</span>
               <span className="text-sm font-medium">
                 {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
               </span>
@@ -523,7 +523,7 @@ export function ClassStepFlow({
               </span>
             </div>
             <div className={rowStaticClass}>
-              <span className="text-sm text-muted">Elimination</span>
+              <span className="text-sm text-muted">Main Bracket</span>
               <span className="text-sm font-medium">
                 {bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length === 0 ? "Not started" : `${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_") && m.status === "completed").length}/${bracketMatches.filter((m) => m.bracketStage?.startsWith("upper_")).length} played`}
               </span>

@@ -20,7 +20,7 @@ export function StepLowerBracket({ config, canManage, updateConfig }: StepLowerB
   if (stages.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-border p-4">
-        <p className="text-sm text-muted text-center">No lower bracket stages. Adjust lower bracket advancement.</p>
+        <p className="text-sm text-muted text-center">No consolation stages. Adjust consolation advancement.</p>
       </div>
     );
   }
@@ -29,7 +29,7 @@ export function StepLowerBracket({ config, canManage, updateConfig }: StepLowerB
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div>
         <label className="block text-xs text-muted mb-1">Lower bracket match format</label>
-        <p className="text-[10px] text-muted mb-2">{numLower} teams in lower bracket</p>
+        <p className="text-[10px] text-muted mb-2">{numLower} teams in consolation</p>
         <div className="space-y-1.5">
           {stages.map((stage) => (
             <div key={stage} className="flex items-center gap-2">
@@ -64,7 +64,7 @@ export function StepLowerBracket({ config, canManage, updateConfig }: StepLowerB
           disabled={!canManage}
           onChange={(e) => updateConfig({ lowerThirdPlace: e.target.checked })}
           className="rounded border-border" />
-        3rd place match (lower bracket)
+        3rd place match (consolation)
       </label>
     </div>
   );

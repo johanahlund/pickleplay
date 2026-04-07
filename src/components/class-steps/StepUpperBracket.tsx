@@ -20,7 +20,7 @@ export function StepUpperBracket({ config, canManage, updateConfig }: StepUpperB
   if (stages.length === 0) {
     return (
       <div className="bg-card rounded-xl border border-border p-4">
-        <p className="text-sm text-muted text-center">No upper bracket stages yet. Increase teams advancing or add wildcards.</p>
+        <p className="text-sm text-muted text-center">No main bracket stages yet. Increase teams advancing or add wildcards.</p>
       </div>
     );
   }
@@ -29,7 +29,7 @@ export function StepUpperBracket({ config, canManage, updateConfig }: StepUpperB
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div>
         <label className="block text-xs text-muted mb-1">Upper bracket match format</label>
-        <p className="text-[10px] text-muted mb-2">{numAdvancing} teams advancing to upper bracket</p>
+        <p className="text-[10px] text-muted mb-2">{numAdvancing} teams advancing to main bracket</p>
         <div className="space-y-1.5">
           {stages.map((stage) => (
             <div key={stage} className="flex items-center gap-2">
@@ -65,7 +65,7 @@ export function StepUpperBracket({ config, canManage, updateConfig }: StepUpperB
           disabled={!canManage}
           onChange={(e) => updateConfig({ upperThirdPlace: e.target.checked })}
           className="rounded border-border" />
-        3rd place match (upper bracket)
+        3rd place match (main bracket)
       </label>
     </div>
   );

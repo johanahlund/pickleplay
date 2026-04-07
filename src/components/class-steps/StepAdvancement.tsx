@@ -29,7 +29,7 @@ export function StepAdvancement({ config, canManage, updateConfig }: StepAdvance
     <div className="bg-card rounded-xl border border-border p-4 space-y-4">
       <div className="flex gap-3">
         <div className="flex-1">
-          <label className="block text-xs text-muted mb-1">Advance to upper bracket</label>
+          <label className="block text-xs text-muted mb-1">Advance to main bracket</label>
           <select
             disabled={!canManage}
             value={config.advanceToUpper}
@@ -43,7 +43,7 @@ export function StepAdvancement({ config, canManage, updateConfig }: StepAdvance
           </select>
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-muted mb-1">Advance to lower bracket</label>
+          <label className="block text-xs text-muted mb-1">Advance to consolation</label>
           <select
             disabled={!canManage}
             value={config.advanceToLower}

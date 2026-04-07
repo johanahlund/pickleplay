@@ -390,7 +390,7 @@ export function CompetitionView({
             return (
               <>
                 <div className="border-t border-border pt-3 mt-2">
-                  <p className="text-xs font-semibold text-muted mb-2 uppercase tracking-wider">Lower Bracket</p>
+                  <p className="text-xs font-semibold text-muted mb-2 uppercase tracking-wider">Consolation</p>
                 </div>
                 <div>
                   <label className="block text-xs text-muted mb-1">Lower bracket match format</label>
@@ -742,8 +742,8 @@ export function CompetitionView({
 
     return (
       <div className="space-y-4">
-        {upperMatches.length > 0 && renderBracketSection("Upper Bracket", groupByStage(upperMatches, "upper"), "upper")}
-        {lowerMatches.length > 0 && renderBracketSection("Lower Bracket", groupByStage(lowerMatches, "lower"), "lower")}
+        {upperMatches.length > 0 && renderBracketSection("Main Bracket", groupByStage(upperMatches, "upper"), "upper")}
+        {lowerMatches.length > 0 && renderBracketSection("Consolation", groupByStage(lowerMatches, "lower"), "lower")}
       </div>
     );
   };
