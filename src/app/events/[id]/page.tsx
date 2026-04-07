@@ -935,7 +935,7 @@ export default function EventDetailPage() {
       <div className="flex gap-1">
         {sectionOrder
           .filter((s) => {
-            if (s === "pairs" && (event.format !== "doubles" || event.pairs.length === 0)) return false;
+            if (s === "pairs" && (event.competitionMode || event.format !== "doubles" || event.pairs.length === 0)) return false;
             // competition section always visible (contains ranking)
             return true;
           })
@@ -1609,6 +1609,61 @@ export default function EventDetailPage() {
   };
 
   const renderPlayers = () => {
+    // Competition mode: summary across classes, no add/leave at event level
+    if (event.competitionMode) {
+      // Deduplicate players (can be in multiple classes)
+      const uniquePlayers = new Map<string, typeof event.players[0]>();
+      for (const ep of event.players) {
+        if (!uniquePlayers.has(ep.player.id)) uniquePlayers.set(ep.player.id, ep);
+      }
+      const allPlayers = [...uniquePlayers.values()].sort((a, b) => a.player.name.localeCompare(b.player.name));
+      const classes = event.classes || [];
+
+      return (
+        <div className="space-y-3">
+          <h3 className="text-xl font-bold text-foreground">
+            Players ({allPlayers.length})
+          </h3>
+          <p className="text-xs text-muted">Players are managed per class in the Competition section.</p>
+
+          {/* Per-class breakdown */}
+          {classes.length > 1 && classes.map((cls: { id: string; name: string }) => {
+            const classPlayers = event.players.filter((ep) => (ep as unknown as { classId?: string }).classId === cls.id);
+            if (classPlayers.length === 0) return null;
+            return (
+              <div key={cls.id} className="bg-card rounded-xl border border-border p-3">
+                <span className="text-xs font-semibold">{cls.name}</span>
+                <span className="text-xs text-muted ml-1">({classPlayers.length})</span>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {[...classPlayers].sort((a, b) => a.player.name.localeCompare(b.player.name)).map((ep) => (
+                    <span key={ep.player.id} className="text-xs bg-gray-50 rounded px-2 py-0.5">
+                      {ep.player.name}
+                      {ep.player.gender && <span className={`ml-0.5 text-[9px] ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{ep.player.gender === "M" ? "♂" : "♀"}</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Full player list */}
+          {event.players.length > 6 && (
+            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
+          )}
+          <div className="space-y-0">
+            {allPlayers
+              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+              .map((ep) => (
+              <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={false} hasMatches={true}
+                showContact={isAdmin || ep.player.id === userId}
+                onPause={() => {}} onRemove={() => {}} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Non-competition mode: standard player management
     if (bulkSelectMode && canManage) return renderBulkSelect();
     if (showAddPlayer && canManage) return renderAddPlayers();
 
@@ -2041,6 +2096,70 @@ export default function EventDetailPage() {
 
   const scoringDisplay = scoringFormatLabel(event.scoringFormat || "1x11");
 
+  // Competition mode overview: classes list
+  if (event.competitionMode) {
+    const classes = event.classes || [];
+    const uniquePlayerIds = new Set(event.players.map((ep) => ep.player.id));
+    return (
+      <div className="space-y-3">
+        {eventHeader}
+        <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
+
+        {/* Total players */}
+        <div className={frameClass}>
+          <button onClick={() => setActiveSection("players")} className={rowClass}>
+            <span className="text-sm text-muted">Players</span>
+            <span className="text-sm font-medium">{uniquePlayerIds.size} signed up</span>
+          </button>
+        </div>
+
+        {/* Classes */}
+        <div className={frameClass}>
+          <div className={frameTitleClass}>Classes</div>
+          {classes.map((cls: { id: string; name: string; competitionPhase?: string | null }) => {
+            const classPlayers = event.players.filter((ep) => (ep as unknown as { classId?: string }).classId === cls.id);
+            const classMatches = event.matches.filter((m) => (m as unknown as { classId?: string }).classId === cls.id);
+            const completed = classMatches.filter((m) => m.status === "completed").length;
+            const phase = (cls.competitionPhase || "draft") as string;
+            const phaseLabel: Record<string, string> = { draft: "Draft", open: "Open", closed: "Closed", groups: "Group", bracket: "Bracket", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Done" };
+            const phaseStr = phaseLabel[phase] || phase;
+            return (
+              <button key={cls.id} onClick={() => { setActiveSection("competition"); setSelectedClassId(cls.id); }} className={rowClass}>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{cls.name}</span>
+                  <span className="text-xs text-muted ml-2">{classPlayers.length} players{classMatches.length > 0 ? ` · ${completed}/${classMatches.length} matches` : ""}</span>
+                </div>
+                <span className="text-[10px] text-muted font-medium bg-gray-100 px-2 py-0.5 rounded-full">{phaseStr}</span>
+              </button>
+            );
+          })}
+          {canManage && (
+            <button onClick={() => setActiveSection("competition")} className={`${rowClass} text-action`}>
+              <span className="text-xs font-medium">Manage Classes</span>
+              <span className="text-xs">›</span>
+            </button>
+          )}
+        </div>
+
+        {/* Ranking */}
+        <div className={frameClass}>
+          <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
+            <span className="text-sm text-muted">Ranking</span>
+            <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+          </button>
+        </div>
+
+        {(isOwner || isAdmin) && (
+          <button onClick={deleteEvent}
+            className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
+            Delete Event
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Non-competition overview
   return (
     <div className="space-y-3">
       {eventHeader}
@@ -2101,33 +2220,17 @@ export default function EventDetailPage() {
         </button>
       </div>
 
-      {/* Ranking & Competition */}
+      {/* Ranking */}
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
           <span className="text-sm text-muted">Ranking</span>
           <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
         </button>
-        {event.competitionMode && (
-          <button onClick={() => setActiveSection("competition")} className={rowClass}>
-            <span className="text-sm text-muted">Competition</span>
-            <span className="text-sm font-medium">
-              {event.competitionPhase === "groups"
-                ? "Group Stage"
-                : event.competitionPhase?.startsWith("bracket")
-                  ? "Bracket Stage"
-                  : event.competitionPhase === "completed"
-                    ? "Completed"
-                    : "Setup"}
-            </span>
-          </button>
-        )}
       </div>
 
       {(isOwner || isAdmin) && (
-        <button
-          onClick={deleteEvent}
-          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors"
-        >
+        <button onClick={deleteEvent}
+          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
           Delete Event
         </button>
       )}
