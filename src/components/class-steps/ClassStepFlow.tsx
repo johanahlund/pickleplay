@@ -421,7 +421,7 @@ export function ClassStepFlow({
           return (
             <AdminRow stepId="advancement" label="Main Bracket">
               <span className="text-right">
-                <span className="text-sm font-medium block">{posDesc} in each group{wcDesc} advance</span>
+                <span className="text-sm font-medium block">{posDesc} per group{wcDesc}</span>
                 <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
               </span>
             </AdminRow>
@@ -457,7 +457,7 @@ export function ClassStepFlow({
           return (
             <AdminRow stepId="lower-config" label="Consolation">
               <span className="text-right">
-                <span className="text-sm font-medium block">{posDesc} in each group advance</span>
+                <span className="text-sm font-medium block">{posDesc} per group</span>
                 <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
               </span>
             </AdminRow>
