@@ -142,50 +142,25 @@ function ClassPlayersInline({ eventId, classId, format, pairs }: {
         </div>
       )}
 
-      {/* Available players by gender */}
+      {/* Available players — females first, then males */}
       {unpaired.length > 0 && (
         <div>
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">
             {isDoubles ? "Looking for partner" : "Players"} ({unpaired.length})
           </div>
-          {males.length > 0 && (
-            <div className="mb-1">
-              <span className="text-[9px] text-blue-500 font-medium">♂ Male ({males.length})</span>
-              <div className="flex flex-wrap gap-1 mt-0.5">
-                {males.map((ep) => (
-                  <div key={ep.playerId} className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1">
-                    <PlayerAvatar name={ep.player.name} size="xs" />
-                    <span className="text-xs">{ep.player.name}</span>
-                  </div>
-                ))}
+          <div className="flex flex-wrap gap-1">
+            {[...females, ...males, ...other].map((ep) => (
+              <div key={ep.playerId} className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1">
+                <PlayerAvatar name={ep.player.name} size="xs" />
+                <span className="text-xs">{ep.player.name}</span>
+                {ep.player.gender && (
+                  <span className={`text-[9px] ${ep.player.gender === "F" ? "text-pink-500" : ep.player.gender === "M" ? "text-blue-500" : ""}`}>
+                    {ep.player.gender === "F" ? "♀" : ep.player.gender === "M" ? "♂" : ""}
+                  </span>
+                )}
               </div>
-            </div>
-          )}
-          {females.length > 0 && (
-            <div className="mb-1">
-              <span className="text-[9px] text-pink-500 font-medium">♀ Female ({females.length})</span>
-              <div className="flex flex-wrap gap-1 mt-0.5">
-                {females.map((ep) => (
-                  <div key={ep.playerId} className="flex items-center gap-1 bg-pink-50 rounded-lg px-2 py-1">
-                    <PlayerAvatar name={ep.player.name} size="xs" />
-                    <span className="text-xs">{ep.player.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {other.length > 0 && (
-            <div>
-              <div className="flex flex-wrap gap-1">
-                {other.map((ep) => (
-                  <div key={ep.playerId} className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1">
-                    <PlayerAvatar name={ep.player.name} size="xs" />
-                    <span className="text-xs">{ep.player.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 
