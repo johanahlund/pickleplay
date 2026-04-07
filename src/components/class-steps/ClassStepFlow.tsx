@@ -129,71 +129,99 @@ function ClassPlayersInline({ eventId, classId, format, pairs, userId }: {
   const other = unpaired.filter((ep) => ep.player.gender !== "M" && ep.player.gender !== "F");
   const isDoubles = format === "doubles";
 
+  const isMix = format === "doubles"; // show 2-col for all doubles
+
+  const PlayerCard = ({ player, isMe }: { player: PairPlayer; isMe?: boolean }) => (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <PlayerAvatar name={player.name} size="xs" />
+      <div className="min-w-0">
+        <div className={`text-xs font-medium truncate ${isMe ? "text-action" : ""}`}>{player.name}</div>
+        <div className="text-[9px] text-muted">{Math.round(player.rating)}</div>
+      </div>
+    </div>
+  );
+
+  // Sort pairs: user's pair first
+  const sortedPairs = [...pairs].sort((a, b) => {
+    const aIsMe = userId && (a.player1Id === userId || a.player2Id === userId) ? 0 : 1;
+    const bIsMe = userId && (b.player1Id === userId || b.player2Id === userId) ? 0 : 1;
+    return aIsMe - bIsMe;
+  });
+
   return (
     <div className="p-3 space-y-3">
-      {/* Existing pairs — user's pair first */}
-      {isDoubles && pairs.length > 0 && (() => {
-        const sortedPairs = [...pairs].sort((a, b) => {
-          const aIsMe = userId && (a.player1Id === userId || a.player2Id === userId) ? 0 : 1;
-          const bIsMe = userId && (b.player1Id === userId || b.player2Id === userId) ? 0 : 1;
-          return aIsMe - bIsMe;
-        });
-        return (
-          <div>
-            <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">Pairs ({pairs.length})</div>
-            <div className="space-y-1">
-              {sortedPairs.map((pair) => {
-                const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
-                return (
-                  <div key={pair.id} className="flex items-center gap-2 py-1">
-                    <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
-                    <span className="text-xs font-medium">
-                      <span className={pair.player1Id === userId ? "text-action font-bold" : ""}>{pair.player1.name}</span>
-                      {" & "}
-                      <span className={pair.player2Id === userId ? "text-action font-bold" : ""}>{pair.player2.name}</span>
-                    </span>
-                    {isMyPair && <span className="text-[9px] text-action font-medium">Your pair</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Available players — females first, then males */}
-      {unpaired.length > 0 && (
+      {/* Pairs — 2 columns: left player | right player */}
+      {isDoubles && pairs.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1">
-            {isDoubles ? "Looking for partner" : "Players"} ({unpaired.length})
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {[...females, ...males, ...other].map((ep) => (
-              <div key={ep.playerId} className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1">
-                <PlayerAvatar name={ep.player.name} size="xs" />
-                <span className="text-xs">{ep.player.name}</span>
-                {ep.player.gender && (
-                  <span className={`text-[9px] ${ep.player.gender === "F" ? "text-pink-500" : ep.player.gender === "M" ? "text-blue-500" : ""}`}>
-                    {ep.player.gender === "F" ? "♀" : ep.player.gender === "M" ? "♂" : ""}
-                  </span>
-                )}
-              </div>
-            ))}
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1.5">Pairs ({pairs.length})</div>
+          <div className="space-y-1">
+            {sortedPairs.map((pair) => {
+              const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
+              // For mixed: female left, male right
+              const p1Female = pair.player1.gender === "F";
+              const left = p1Female ? pair.player1 : pair.player2;
+              const right = p1Female ? pair.player2 : pair.player1;
+              const leftId = p1Female ? pair.player1Id : pair.player2Id;
+              const rightId = p1Female ? pair.player2Id : pair.player1Id;
+              return (
+                <div key={pair.id} className={`flex items-center gap-2 py-1.5 px-2 rounded-lg ${isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
+                  <div className="flex-1"><PlayerCard player={left} isMe={leftId === userId} /></div>
+                  <span className="text-[9px] text-muted">&</span>
+                  <div className="flex-1"><PlayerCard player={right} isMe={rightId === userId} /></div>
+                  {isMyPair && (
+                    <PairRequests
+                      eventId={eventId} classId={classId} format={format}
+                      players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji || "" } }))}
+                      existingPairPlayerIds={pairedIds} canManage={false}
+                      onPairCreated={() => {}} />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Pair requests */}
-      {isDoubles && players.length > 0 && (
+      {/* Looking for partner — 2 columns */}
+      {isDoubles && unpaired.length > 0 && (
+        <div>
+          <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1.5">Looking for partner ({unpaired.length})</div>
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1">
+              <div className="text-[9px] text-pink-500 font-medium mb-0.5">♀ ({females.length})</div>
+              {females.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+              {females.length === 0 && <div className="text-[10px] text-muted">—</div>}
+            </div>
+            <div className="flex-1 space-y-1">
+              <div className="text-[9px] text-blue-500 font-medium mb-0.5">♂ ({males.length})</div>
+              {males.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+              {males.length === 0 && <div className="text-[10px] text-muted">—</div>}
+            </div>
+          </div>
+          {other.length > 0 && (
+            <div className="mt-1 space-y-1">
+              {other.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Singles player list */}
+      {!isDoubles && players.length > 0 && (
+        <div className="space-y-1">
+          {[...females, ...males, ...other].map((ep) => (
+            <PlayerCard key={ep.playerId} player={ep.player} isMe={ep.playerId === userId} />
+          ))}
+        </div>
+      )}
+
+      {/* Pair requests (only if user doesn't have a pair yet) */}
+      {isDoubles && players.length > 0 && userId && !pairedIds.has(userId) && (
         <PairRequests
-          eventId={eventId}
-          classId={classId}
-          format={format}
+          eventId={eventId} classId={classId} format={format}
           players={players.map((p) => ({ playerId: p.playerId, player: { id: p.player.id, name: p.player.name, emoji: p.player.emoji || "" } }))}
-          existingPairPlayerIds={pairedIds}
-          canManage={false}
-          onPairCreated={() => {}}
-        />
+          existingPairPlayerIds={pairedIds} canManage={false}
+          onPairCreated={() => {}} />
       )}
     </div>
   );
@@ -366,7 +394,6 @@ export function ClassStepFlow({
     <div className="space-y-3">
       {/* Category summary */}
       <div className={frameClass}>
-        <div className={frameTitleClass}>Category</div>
         <AdminRow stepId="category" label="Status">
           <span className="text-sm font-medium">{PHASE_LABELS[cls.competitionPhase || "open"] || "Setup"}</span>
         </AdminRow>
@@ -384,7 +411,6 @@ export function ClassStepFlow({
 
       {/* Groups & Advancement */}
       <div className={frameClass}>
-        <div className={frameTitleClass}>Competition</div>
         <AdminRow stepId="groups" label="Group Stage">
           <span className="text-right">
             {(() => {
@@ -492,9 +518,8 @@ export function ClassStepFlow({
 
       {/* Players & Matches */}
       <div className={frameClass}>
-        <div className={frameTitleClass}>Players & Matches</div>
         <button onClick={() => canManage ? setCurrentStepIdx(steps.findIndex((s) => s.id === "players")) : setShowPlayersExpand(!showPlayersExpand)} className={rowClass}>
-          <span className="text-sm text-muted shrink-0">{cls.format === "doubles" ? "Pairs" : "Players"}</span>
+          <span className="text-sm text-muted shrink-0">{cls.format === "doubles" ? (cls.gender === "mix" ? "Player Pairs" : "Players") : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
             {totalPlayers > 0 ? (
               <>
@@ -644,10 +669,17 @@ export function ClassStepFlow({
 
       {/* Class name header */}
       {isOverview ? (
-        <div className="flex items-center justify-between">
-          <button onClick={onBack} className="text-xs text-action font-medium shrink-0">← Classes</button>
-          <h3 className="text-base font-bold text-center">{cls.name}</h3>
-          <span className="w-16" />
+        <div>
+          <div className="flex items-center justify-between">
+            <button onClick={onBack} className="text-xs text-action font-medium shrink-0">← Event</button>
+            <span className="text-[10px] text-muted">
+              {eventName} · {new Date(eventDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+              {" "}
+              {new Date(eventDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+            </span>
+            <span className="w-12" />
+          </div>
+          <h3 className="text-base font-bold text-center mt-1">{cls.name}</h3>
         </div>
       ) : (
         <h3 className="text-base font-bold">{cls.name}</h3>
