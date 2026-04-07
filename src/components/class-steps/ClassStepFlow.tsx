@@ -191,7 +191,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
         <button onClick={() => cancelRequest(myOutgoing!.id)} className="text-[9px] text-muted px-1.5 py-0.5 rounded hover:bg-gray-100 shrink-0">Pending ✕</button>
       )}
       {canRequest && genderOk && !incomingFromThem && !iSentToThem && (
-        <button onClick={() => sendRequest(playerId)} className="text-[9px] text-action px-1.5 py-0.5 rounded hover:bg-action/10 shrink-0">🤝</button>
+        <button onClick={() => sendRequest(playerId)} title="Play with me!" className="text-sm px-1 py-0.5 rounded hover:bg-action/10 hover:scale-110 transition-transform shrink-0">🤝</button>
       )}
     </div>
     );
