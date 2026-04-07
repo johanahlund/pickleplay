@@ -386,30 +386,41 @@ export function ClassStepFlow({
       <div className={frameClass}>
         <div className={frameTitleClass}>Competition</div>
         <AdminRow stepId="groups" label="Groups">
-          <span className="text-sm font-medium text-right">{(() => {
-            const n = config.numGroups;
-            const total = classPairs.length;
-            // Group sizes
-            const base = total > 0 ? Math.floor(total / n) : 0;
-            const rem = total > 0 ? total % n : 0;
-            const sizes = Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0));
-            const allSame = sizes.every((s) => s === sizes[0]);
-            const sizeDesc = total === 0
-              ? ""
-              : allSame
-                ? ` (${sizes[0]} teams)`
-                : ` (${sizes.join("-")} teams)`;
-            // Scoring
-            const sf = cls.scoringFormat || "1x11";
-            const sets = sf.startsWith("3") ? "best of 3" : "1 set";
-            const isRally = sf.includes("R");
-            const pts = sf.replace(/^[13]x/, "").replace("R", "");
-            const scoring = `${sets} ${isRally ? "rally " : ""}to ${pts}`;
-            const wb = cls.winBy || "2";
-            const winBy = wb === "1" ? ", win by 1" : wb === "2" ? "" : `, cap ${wb.replace("cap", "")}`;
-            const freq = config.matchesPerMatchup === 1 ? "1 match" : "2 matches";
-            return `${n} Groups${sizeDesc}: ${freq} with ${scoring}${winBy}`;
-          })()}</span>
+          <span className="text-right">
+            {(() => {
+              const n = config.numGroups;
+              const phase = cls.competitionPhase || "draft";
+              const isClosed = ["closed", "groups", "bracket", "bracket_upper", "bracket_lower", "completed"].includes(phase);
+              const registered = classPairs.length;
+              const total = isClosed ? registered : (cls.maxPlayers || registered);
+              const teamLabel = isClosed ? `${total} teams` : total > 0 ? `if ${total} teams` : "";
+              // Group sizes
+              const groupNames = "ABCDEFGHIJ";
+              let groupLine = "";
+              if (total > 0) {
+                const base = Math.floor(total / n);
+                const rem = total % n;
+                const parts = Array.from({ length: n }, (_, i) => `${groupNames[i]} (${base + (i < rem ? 1 : 0)})`);
+                groupLine = parts.join(", ");
+              }
+              // Scoring
+              const sf = cls.scoringFormat || "1x11";
+              const sets = sf.startsWith("3") ? "best of 3" : "1 set";
+              const isRally = sf.includes("R");
+              const pts = sf.replace(/^[13]x/, "").replace("R", "");
+              const scoring = `${sets}${isRally ? " rally" : ""} to ${pts}`;
+              const wb = cls.winBy || "2";
+              const winBy = wb === "1" ? ", win by 1" : wb === "2" ? "" : `, cap ${wb.replace("cap", "")}`;
+              const freq = config.matchesPerMatchup === 1 ? "1 match" : "2 matches";
+              return (
+                <>
+                  <span className="text-sm font-medium block">{n} Groups {teamLabel ? `(${teamLabel})` : ""}</span>
+                  {groupLine && <span className="text-xs text-muted block">{groupLine}</span>}
+                  <span className="text-xs text-muted block">{freq} with {scoring}{winBy}</span>
+                </>
+              );
+            })()}
+          </span>
         </AdminRow>
         {hasUpperBracket && (() => {
           const n = config.advanceToUpper;
