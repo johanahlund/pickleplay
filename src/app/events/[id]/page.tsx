@@ -1171,90 +1171,33 @@ export default function EventDetailPage() {
 
   const renderPairing = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-      {event.format === "doubles" && (
-        <div>
-          <label className="block text-sm font-medium text-muted mb-1">Team Formation</label>
-          <div className="flex gap-2">
-            {([
-              { value: "shuffle", label: "Shuffle" },
-              { value: "fixed", label: "Fixed" },
-            ] as const).map((t) => {
-              const isFixed = event.pairs.length > 0; // derive from current state
-              const current = t.value === "fixed" ? isFixed : !isFixed;
-              return (
-                <button key={t.value} type="button"
-                  className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${current ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"}`}>
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted mt-1">
-            {event.pairs.length > 0 ? "Same partner all event. Manage pairs in the Pairs section." : "New teams formed each round."}
-          </p>
-        </div>
-      )}
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Match Pairing</label>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <select value={editPairingMode} onChange={(e) => { setEditPairingMode(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
           {pairingOptions.map((m) => (
-            <button key={m.value} type="button" onClick={() => { setEditPairingMode(m.value); setHasEdits(true); }}
-              aria-label={m.label}
-              className={`flex-1 min-w-[40px] py-2 rounded-lg text-center transition-all ${
-                editPairingMode === m.value ? "bg-selected text-white ring-1 ring-selected/50" : "bg-gray-100 hover:bg-gray-200"
-              }`} title={m.label}>
-              <span className="text-lg">{m.icon}</span>
-            </button>
+            <option key={m.value} value={m.value}>{m.label} — {m.desc}</option>
           ))}
-        </div>
-        {(() => {
-          const sel = pairingOptions.find((m) => m.value === editPairingMode);
-          return sel ? (
-            <div className="mt-1.5">
-              <span className="text-sm font-medium">{sel.label}</span>
-              <span className="text-xs text-muted ml-1.5">{sel.desc}</span>
-            </div>
-          ) : null;
-        })()}
+        </select>
       </div>
-      {/* Skill source */}
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Skill Source</label>
-        <div className="flex gap-2">
-          {([
-            { value: "rating", label: "App Rating" },
-            { value: "manual", label: "Manual Level (1-3)" },
-          ] as const).map((s) => (
-            <button key={s.value} type="button" onClick={() => { setEditSkillSource(s.value); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                editSkillSource === s.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-              }`}>{s.label}</button>
-          ))}
-        </div>
-        <p className="text-xs text-muted mt-1">
-          {editSkillSource === "rating" ? "Uses app rating for skill level." : "You assign level 1-3 per player."}
-        </p>
+        <select value={editSkillSource} onChange={(e) => { setEditSkillSource(e.target.value as "rating" | "manual"); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="rating">App Rating</option>
+          <option value="manual">Manual Level (1-3)</option>
+        </select>
       </div>
-      {/* Play Mode */}
-      <div className="border-t border-border pt-3 mt-1">
+      <div>
         <label className="block text-sm font-medium text-muted mb-1">Play Mode</label>
-        <div className="flex gap-2">
-          {([
-            { value: "round_based", label: "Round-based" },
-            { value: "continuous", label: "Continuous" },
-          ] as const).map((m) => (
-            <button key={m.value} type="button" onClick={() => { setEditPlayMode(m.value); setHasEdits(true); }}
-              className={`flex-1 py-2.5 rounded-lg font-medium transition-all text-sm ${
-                editPlayMode === m.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-              }`}>{m.label}</button>
-          ))}
-        </div>
-        <p className="text-xs text-muted mt-1">
-          {editPlayMode === "round_based" ? "All matches finish before next round starts." : "New match starts immediately when a court is free."}
-        </p>
+        <select value={editPlayMode} onChange={(e) => { setEditPlayMode(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="round_based">Round-based — all matches finish before next round</option>
+          <option value="continuous">Continuous — new match when a court is free</option>
+        </select>
       </div>
 
-      {/* Priority toggles */}
+      {/* Priority toggles — only for continuous */}
       {editPlayMode === "continuous" && (
         <div className="space-y-2">
           <label className="block text-sm font-medium text-muted">Prioritize</label>
@@ -1263,22 +1206,19 @@ export default function EventDetailPage() {
             { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
             { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "Skill", desc: "Group by level" },
           ].map((p) => (
-            <div key={p.key} className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg transition-all ${
+            <label key={p.key} className={`flex items-center gap-3 py-2 px-3 rounded-lg cursor-pointer transition-all ${
                 p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
               }`}>
-              <button type="button" onClick={() => { p.set(!p.value); setHasEdits(true); }}
-                className={`w-6 h-6 shrink-0 rounded border-2 flex items-center justify-center text-xs font-bold ${
-                  p.value ? "bg-selected border-selected text-white" : "border-gray-300"
-                }`}>{p.value ? "✓" : ""}</button>
-              <div className="text-left">
+              <input type="checkbox" checked={p.value} onChange={() => { p.set(!p.value); setHasEdits(true); }}
+                className="rounded border-border" />
+              <div>
                 <span className="text-sm font-medium">{p.label}</span>
                 <span className="text-xs text-muted ml-1.5">{p.desc}</span>
               </div>
-            </div>
+            </label>
           ))}
         </div>
       )}
-
     </div>
   );
 
