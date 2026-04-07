@@ -2132,20 +2132,26 @@ export default function EventDetailPage() {
         {/* Classes */}
         <div className={frameClass}>
           <div className={frameTitleClass}>Classes</div>
-          {classes.map((cls: { id: string; name: string; competitionPhase?: string | null }) => {
+          {classes.map((cls: { id: string; name: string; competitionPhase?: string | null; maxPlayers?: number | null }) => {
             const classPlayers = event.players.filter((ep) => (ep as unknown as { classId?: string }).classId === cls.id);
-            const classMatches = event.matches.filter((m) => (m as unknown as { classId?: string }).classId === cls.id);
-            const completed = classMatches.filter((m) => m.status === "completed").length;
+            const mCount = classPlayers.filter((ep) => ep.player.gender === "M").length;
+            const fCount = classPlayers.filter((ep) => ep.player.gender === "F").length;
+            const max = cls.maxPlayers;
             const phase = (cls.competitionPhase || "draft") as string;
             const phaseLabel: Record<string, string> = { draft: "Draft", open: "Open", closed: "Closed", groups: "Group", bracket: "Bracket", bracket_upper: "Bracket", bracket_lower: "Bracket", completed: "Done" };
             const phaseStr = phaseLabel[phase] || phase;
             return (
               <button key={cls.id} onClick={() => { setActiveSection("competition"); setSelectedClassId(cls.id); }} className={rowClass}>
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{cls.name}</span>
-                  <span className="text-xs text-muted ml-2">{classPlayers.length} players{classMatches.length > 0 ? ` · ${completed}/${classMatches.length} matches` : ""}</span>
+                  <div className="text-sm font-medium">{cls.name}</div>
+                  <div className="text-xs mt-0.5">
+                    {mCount > 0 && <span className="text-blue-500">♂ {mCount}{max ? `/${max}` : ""}</span>}
+                    {mCount > 0 && fCount > 0 && <span className="text-muted mx-1">·</span>}
+                    {fCount > 0 && <span className="text-pink-500">♀ {fCount}{max ? `/${max}` : ""}</span>}
+                    {mCount === 0 && fCount === 0 && <span className="text-muted">No players yet</span>}
+                  </div>
                 </div>
-                <span className="text-[10px] text-muted font-medium bg-gray-100 px-2 py-0.5 rounded-full">{phaseStr}</span>
+                <span className="text-[10px] text-muted font-medium bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{phaseStr}</span>
               </button>
             );
           })}
