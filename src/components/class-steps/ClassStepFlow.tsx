@@ -82,6 +82,11 @@ interface EventClassData {
   lowerBracketMergeClassId?: string | null;
 }
 
+interface EventPlayerEntry {
+  player: { id: string; gender?: string | null };
+  classId?: string | null;
+}
+
 interface ClassStepFlowProps {
   eventId: string;
   eventName: string;
@@ -90,6 +95,7 @@ interface ClassStepFlowProps {
   allClasses: EventClassData[];
   pairs: EventPair[];
   matches: Match[];
+  eventPlayers: EventPlayerEntry[];
   canManage: boolean;
   numCourts: number;
   onBack: () => void;
@@ -178,7 +184,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
     globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
   };
 
-  const PlayerCard = ({ player, playerId, isMe, showActions = true }: { player: PairPlayer; playerId: string; isMe?: boolean; showActions?: boolean }) => {
+  const PlayerCard = ({ player, playerId, isMe, showActions = true, genderViolation }: { player: PairPlayer; playerId: string; isMe?: boolean; showActions?: boolean; genderViolation?: boolean }) => {
     const incomingFromThem = showActions ? myIncoming.find((r) => r.requesterId === playerId) : undefined;
     const iSentToThem = showActions && myOutgoing?.requestedId === playerId;
     const canRequest = showActions && !userIsPaired && !isMe && !myOutgoing && userId && !pairedIds.has(playerId);
@@ -186,7 +192,16 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
 
     return (
     <div className="flex items-center gap-1.5 min-w-0 py-0.5">
-      <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
+      <div className="relative shrink-0">
+        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
+        {genderViolation && (
+          <button
+            onClick={(e) => { e.stopPropagation(); alert(classGender === "mix" ? "Mixed class requires one male and one female player" : `This player's gender doesn't match the ${classGender} class`); }}
+            className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 text-white rounded-full flex items-center justify-center text-[8px] font-bold leading-none"
+            title="Gender mismatch"
+          >⚠</button>
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         <div className={`text-xs font-medium truncate ${isMe ? "text-action" : ""}`}>{player.name}</div>
         <div className="text-[9px] text-muted">{Math.round(player.rating)}</div>
@@ -223,22 +238,27 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
           <div className="space-y-1">
             {sortedPairs.map((pair) => {
               const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
-              const sameGender =
-                (classGender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender) ||
-                (classGender === "male" && (pair.player1.gender === "F" || pair.player2.gender === "F")) ||
-                (classGender === "female" && (pair.player1.gender === "M" || pair.player2.gender === "M"));
+              // Determine per-player gender violations
+              const leftViolation = classGender === "mix"
+                ? !!(pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender)
+                : (classGender === "male" && pair.player1.gender === "F") || (classGender === "female" && pair.player1.gender === "M");
+              const rightViolation = classGender === "mix"
+                ? leftViolation // both violate in mixed same-gender
+                : (classGender === "male" && pair.player2.gender === "F") || (classGender === "female" && pair.player2.gender === "M");
               // For mixed: female left, male right
               const p1Female = pair.player1.gender === "F";
               const left = p1Female ? pair.player1 : pair.player2;
               const right = p1Female ? pair.player2 : pair.player1;
               const leftId = p1Female ? pair.player1Id : pair.player2Id;
               const rightId = p1Female ? pair.player2Id : pair.player1Id;
+              const leftGenderViolation = p1Female ? leftViolation : rightViolation;
+              const rightGenderViolation = p1Female ? rightViolation : leftViolation;
               return (
-                <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${sameGender ? "bg-amber-50 border border-amber-200" : isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
+                <div key={pair.id} className={`py-1.5 px-2 rounded-lg ${isMyPair ? "bg-action/5 border border-action/20" : "bg-gray-50"}`}>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} showActions={false} /></div>
+                    <div className="flex-1"><PlayerCard player={left} playerId={leftId} isMe={leftId === userId} showActions={false} genderViolation={!!leftGenderViolation} /></div>
                     <div className="w-px h-8 border-l border-dashed border-gray-300 mx-1" />
-                    <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} showActions={false} /></div>
+                    <div className="flex-1"><PlayerCard player={right} playerId={rightId} isMe={rightId === userId} showActions={false} genderViolation={!!rightGenderViolation} /></div>
                   </div>
                   {isMyPair && (() => {
                     const myReq = pairRequests.find((r) => r.status === "accepted" && (r.requesterId === userId || r.requestedId === userId));
@@ -257,7 +277,6 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
                       </div>
                     ) : null;
                   })()}
-                  {sameGender && <div className="text-[10px] text-amber-600 mt-1">Gender mismatch</div>}
                 </div>
               );
             })}
@@ -310,7 +329,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
 }
 
 export function ClassStepFlow({
-  eventId, eventName, eventDate, cls: propsCls, allClasses, pairs, matches, canManage, numCourts, onBack, onRefresh,
+  eventId, eventName, eventDate, cls: propsCls, allClasses, pairs, matches, eventPlayers, canManage, numCourts, onBack, onRefresh,
 }: ClassStepFlowProps) {
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
@@ -512,11 +531,21 @@ export function ClassStepFlow({
 
   const courtTime = canManage ? estimateCourtTime() : null;
 
-  // Player gender counts from pairs
-  const allPairPlayers = classPairs.flatMap((p) => [p.player1, p.player2]);
-  const maleCount = allPairPlayers.filter((p) => p.gender === "M").length;
-  const femaleCount = allPairPlayers.filter((p) => p.gender === "F").length;
-  const totalPlayers = allPairPlayers.length;
+  // Player counts from signups (all registered players for this class)
+  const classSignups = eventPlayers.filter((ep) => ep.classId === cls.id);
+  const signupMaleCount = classSignups.filter((ep) => ep.player.gender === "M").length;
+  const signupFemaleCount = classSignups.filter((ep) => ep.player.gender === "F").length;
+  const totalSignups = classSignups.length;
+
+  // Team counts
+  const setTeams = classPairs.length;
+  const isDoubles = cls.format === "doubles";
+  const isMixed = cls.gender === "mix";
+  // Potential teams: for mixed = min(males, females), for non-mixed doubles = floor(total/2), for singles = total
+  const potentialTeams = isDoubles
+    ? (isMixed ? Math.min(signupMaleCount, signupFemaleCount) : Math.floor(totalSignups / 2))
+    : totalSignups;
+  const maxTeams = cls.maxPlayers ?? null;
 
   const [showPlayersExpand, setShowPlayersExpand] = useState(false);
   const [showGroupsExpand, setShowGroupsExpand] = useState(false);
@@ -670,13 +699,14 @@ export function ClassStepFlow({
       {/* Players & Matches */}
       <div className={frameClass}>
         <button onClick={() => canManage ? setCurrentStepIdx(steps.findIndex((s) => s.id === "players")) : setShowPlayersExpand(!showPlayersExpand)} className={rowClass}>
-          <span className="text-sm text-muted shrink-0">{cls.format === "doubles" ? (cls.gender === "mix" ? "Player Pairs" : "Players") : "Players"}</span>
+          <span className="text-sm text-muted shrink-0">{isDoubles ? "Player Pairs" : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
-            {totalPlayers > 0 ? (
+            {totalSignups > 0 ? (
               <>
-                {maleCount > 0 && <span className="text-blue-500">♂ {maleCount}{cls.maxPlayers ? `/${cls.maxPlayers}` : ""}</span>}
-                {maleCount > 0 && femaleCount > 0 && <span className="text-muted mx-1">·</span>}
-                {femaleCount > 0 && <span className="text-pink-500">♀ {femaleCount}{cls.maxPlayers ? `/${cls.maxPlayers}` : ""}</span>}
+                <span className="text-pink-500">♀ {signupFemaleCount}</span>
+                <span className="text-muted mx-1">·</span>
+                <span className="text-blue-500">♂ {signupMaleCount}</span>
+                {maxTeams != null && <span className="text-muted text-xs ml-1">(max {maxTeams})</span>}
               </>
             ) : (
               <span className="text-muted">None yet</span>
@@ -684,6 +714,14 @@ export function ClassStepFlow({
           </span>
           {!canManage && <span className={`text-muted text-xs ml-1 transition-transform ${showPlayersExpand ? "rotate-90" : ""}`}>›</span>}
         </button>
+        {isDoubles && totalSignups > 0 && (
+          <div className="flex items-center gap-1 px-3 pb-2 text-xs text-muted">
+            <span>Paired: <span className="font-medium text-foreground">{setTeams}</span></span>
+            <span>·</span>
+            <span>Possible: <span className="font-medium text-foreground">{potentialTeams}</span></span>
+            {maxTeams != null && <><span>·</span><span>Max: <span className="font-medium text-foreground">{maxTeams}</span></span></>}
+          </div>
+        )}
         {/* Expanded player view for non-admins */}
         {showPlayersExpand && !canManage && (
           <div className="border-t border-border">

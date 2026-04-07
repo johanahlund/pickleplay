@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useViewRole } from "@/components/RoleToggle";
+import { useViewRole, hasRole } from "@/components/RoleToggle";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -301,7 +301,7 @@ export default function ClubDetailPage() {
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
-  const isGlobalAdmin = session?.user?.role === "admin" && viewRole === "admin";
+  const isGlobalAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
@@ -386,8 +386,8 @@ export default function ClubDetailPage() {
   useEffect(() => { fetchClub(); fetchEvents(); fetchPosts(); }, [fetchClub, fetchEvents, fetchPosts]);
 
   const myMembership = club?.members.find((m) => m.playerId === userId);
-  const canManage = viewRole === "admin" && (myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin);
-  const isOwner = viewRole === "admin" && (myMembership?.role === "owner" || isGlobalAdmin);
+  const canManage = hasRole(viewRole, "club") && (myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin);
+  const isOwner = hasRole(viewRole, "club") && (myMembership?.role === "owner" || isGlobalAdmin);
 
   // Fetch join requests for managers
   useEffect(() => {

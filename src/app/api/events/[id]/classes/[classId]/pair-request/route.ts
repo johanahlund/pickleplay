@@ -19,7 +19,7 @@ export async function GET(
   requests.forEach((r) => { playerIds.add(r.requesterId); playerIds.add(r.requestedId); });
   const players = await prisma.player.findMany({
     where: { id: { in: [...playerIds] } },
-    select: { id: true, name: true, emoji: true },
+    select: { id: true, name: true, emoji: true, photoUrl: true },
   });
   const playerMap = Object.fromEntries(players.map((p) => [p.id, p]));
 
@@ -94,14 +94,17 @@ export async function POST(
     if (request.requestedId !== user.id) return NextResponse.json({ error: "Not your request to accept" }, { status: 403 });
     if (request.status !== "pending") return NextResponse.json({ error: "Request is not pending" }, { status: 400 });
 
-    // Check accepter doesn't already have an accepted pair
-    const existingAccepted = await prisma.pairRequest.findFirst({
+    // Check neither player is already in a pair for this class
+    const existingPair = await prisma.eventPair.findFirst({
       where: {
-        eventId: id, classId, status: "accepted",
-        OR: [{ requesterId: user.id }, { requestedId: user.id }],
+        eventId: id, classId,
+        OR: [
+          { player1Id: { in: [request.requesterId, request.requestedId] } },
+          { player2Id: { in: [request.requesterId, request.requestedId] } },
+        ],
       },
     });
-    if (existingAccepted) return NextResponse.json({ error: "You already have a confirmed partner" }, { status: 400 });
+    if (existingPair) return NextResponse.json({ error: "One of the players is already in a pair" }, { status: 400 });
 
     // Accept this request
     await prisma.pairRequest.update({ where: { id: requestId }, data: { status: "accepted" } });
@@ -205,6 +208,18 @@ export async function POST(
     }
     const { player1Id, player2Id } = body;
     if (!player1Id || !player2Id) return NextResponse.json({ error: "player1Id and player2Id required" }, { status: 400 });
+
+    // Check neither player is already in a pair for this class
+    const existingPair = await prisma.eventPair.findFirst({
+      where: {
+        eventId: id, classId,
+        OR: [
+          { player1Id: { in: [player1Id, player2Id] } },
+          { player2Id: { in: [player1Id, player2Id] } },
+        ],
+      },
+    });
+    if (existingPair) return NextResponse.json({ error: "One of the players is already in a pair" }, { status: 400 });
 
     // Cancel any pending requests involving these players
     await prisma.pairRequest.updateMany({

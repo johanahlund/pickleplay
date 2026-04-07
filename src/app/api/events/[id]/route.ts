@@ -20,8 +20,8 @@ export async function GET(
       helpers: { include: { player: true } },
       pairs: {
         include: {
-          player1: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
-          player2: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
+          player1: { select: { id: true, name: true, emoji: true, photoUrl: true, rating: true, gender: true } },
+          player2: { select: { id: true, name: true, emoji: true, photoUrl: true, rating: true, gender: true } },
         },
       },
       createdBy: { select: { id: true, name: true, emoji: true } },

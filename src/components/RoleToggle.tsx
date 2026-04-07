@@ -3,7 +3,19 @@
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 
-type ViewRole = "admin" | "user";
+type ViewRole = "admin" | "club" | "event" | "user";
+
+const ROLE_LEVELS: Record<ViewRole, number> = {
+  user: 0,
+  event: 1,
+  club: 2,
+  admin: 3,
+};
+
+/** Check if the current viewRole meets the minimum required level */
+export function hasRole(viewRole: ViewRole, minRole: ViewRole): boolean {
+  return ROLE_LEVELS[viewRole] >= ROLE_LEVELS[minRole];
+}
 
 interface RoleContextType {
   viewRole: ViewRole;
@@ -26,7 +38,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const [viewRole, setViewRole] = useState<ViewRole>("admin");
 
-  const effectiveRole = isAdmin ? viewRole : "user";
+  const effectiveRole: ViewRole = isAdmin ? viewRole : "user";
   const isAdminViewing = isAdmin && viewRole === "user";
 
   return (
@@ -37,7 +49,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 }
 
 const ROLES: { value: ViewRole; label: string; icon: string; color: string }[] = [
-  { value: "admin", label: "Admin", icon: "👁", color: "bg-red-600" },
+  { value: "admin", label: "App Admin", icon: "🛡", color: "bg-red-600" },
+  { value: "club", label: "Club Admin", icon: "🏠", color: "bg-purple-600" },
+  { value: "event", label: "Event Admin", icon: "📋", color: "bg-blue-600" },
   { value: "user", label: "User", icon: "👤", color: "bg-green-600" },
 ];
 

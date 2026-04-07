@@ -178,25 +178,27 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pairs</div>
           {pairs.map((pair) => {
-            const warnings: string[] = [];
-            if (cls.gender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender) {
-              warnings.push("Same gender pair in mixed class");
-            }
-            if (cls.gender === "male") {
-              if (pair.player1.gender === "F") warnings.push(`${pair.player1.name} is female`);
-              if (pair.player2.gender === "F") warnings.push(`${pair.player2.name} is female`);
-            }
-            if (cls.gender === "female") {
-              if (pair.player1.gender === "M") warnings.push(`${pair.player1.name} is male`);
-              if (pair.player2.gender === "M") warnings.push(`${pair.player2.name} is male`);
-            }
-            const hasWarning = warnings.length > 0;
+            const p1Violation = cls.gender === "mix"
+              ? !!(pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender)
+              : (cls.gender === "male" && pair.player1.gender === "F") || (cls.gender === "female" && pair.player1.gender === "M");
+            const p2Violation = cls.gender === "mix"
+              ? p1Violation
+              : (cls.gender === "male" && pair.player2.gender === "F") || (cls.gender === "female" && pair.player2.gender === "M");
+            const GenderBadge = ({ show }: { show: boolean }) => show ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); alert(cls.gender === "mix" ? "Mixed class requires one male and one female player" : `This player's gender doesn't match the ${cls.gender} class`); }}
+                className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 text-white rounded-full flex items-center justify-center text-[8px] font-bold leading-none"
+                title="Gender mismatch"
+              >⚠</button>
+            ) : null;
             return (
-              <div key={pair.id} className={`group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 ${hasWarning ? "bg-amber-50" : ""}`}>
-                <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} photoUrl={pair.player1.photoUrl} size="xs" /><PlayerAvatar name={pair.player2.name} photoUrl={pair.player2.photoUrl} size="xs" /></div>
+              <div key={pair.id} className="group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
+                <div className="flex -space-x-1">
+                  <div className="relative"><PlayerAvatar name={pair.player1.name} photoUrl={pair.player1.photoUrl} size="xs" /><GenderBadge show={!!p1Violation} /></div>
+                  <div className="relative"><PlayerAvatar name={pair.player2.name} photoUrl={pair.player2.photoUrl} size="xs" /><GenderBadge show={!!p2Violation} /></div>
+                </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-medium">{pair.player1.name} & {pair.player2.name}</span>
-                  {hasWarning && <span className="text-[10px] text-amber-600 block">{warnings.join(", ")}</span>}
                 </div>
                 {canManage && (
                   <button onClick={() => unpair(pair.id)}

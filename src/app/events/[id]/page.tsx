@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
-import { useViewRole } from "@/components/RoleToggle";
+import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
@@ -105,7 +105,7 @@ interface Event {
   visibility: string;
   createdById: string | null;
   createdBy?: { id: string; name: string; emoji: string } | null;
-  players: { player: Player; status: string; skillLevel?: number | null }[];
+  players: { player: Player; classId?: string | null; status: string; skillLevel?: number | null }[];
   matches: Match[];
   helpers: EventHelper[];
   pairs: EventPair[];
@@ -331,7 +331,7 @@ export default function EventDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
-  const isAdmin = session?.user?.role === "admin" && viewRole === "admin";
+  const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -391,8 +391,8 @@ export default function EventDetailPage() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
-  const isOwner = !!(event && userId && event.createdById === userId) && viewRole === "admin";
-  const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId)) && viewRole === "admin";
+  const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
+  const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId)) && hasRole(viewRole, "event");
   const canManage = isAdmin || isOwner || isHelper;
 
   // Sync SWR data → local event state with derived fields
@@ -2022,6 +2022,7 @@ export default function EventDetailPage() {
             allClasses={(event.classes || []) as never}
             pairs={event.pairs}
             matches={event.matches}
+            eventPlayers={event.players || []}
             canManage={canManage}
             numCourts={event.numCourts}
             onBack={() => { setSelectedClassId(null); fetchEvent(); if (!canManage) setActiveSection("overview"); }}

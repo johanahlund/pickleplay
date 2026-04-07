@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useViewRole } from "@/components/RoleToggle";
+import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
 
 interface Event {
@@ -48,7 +48,7 @@ function EventsPage() {
   const clubFilter = searchParams.get("club");
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && viewRole === "admin";
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && hasRole(viewRole, "admin");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
