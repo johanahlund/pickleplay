@@ -1625,21 +1625,41 @@ export default function EventDetailPage() {
           playerClasses.set(ep.player.id, { player: ep, classNames: className ? [className] : [] });
         }
       }
-      const allPlayers = [...playerClasses.values()].sort((a, b) => a.player.player.name.localeCompare(b.player.player.name));
+      // Sort: females first, then males, then others, alphabetical within each
+      const genderOrder = (g: string | null | undefined) => g === "F" ? 0 : g === "M" ? 1 : 2;
+      const allPlayers = [...playerClasses.values()].sort((a, b) =>
+        genderOrder(a.player.player.gender) - genderOrder(b.player.player.gender) || a.player.player.name.localeCompare(b.player.player.name)
+      );
+      const femaleCount = allPlayers.filter((e) => e.player.player.gender === "F").length;
+      const maleCount = allPlayers.filter((e) => e.player.player.gender === "M").length;
 
       return (
         <div className="space-y-3">
           <h3 className="text-xl font-bold text-foreground">
             Players ({allPlayers.length})
           </h3>
-          <p className="text-xs text-muted">Players are managed per class in the Competition section.</p>
+          <div className="flex gap-2 items-center">
+            <p className="text-xs text-muted flex-1">Players are managed per class.</p>
+            {(["F", "M"] as const).map((g) => (
+              <button key={g} onClick={() => setPlayerSearch((prev) => prev === `__gender_${g}` ? "" : `__gender_${g}`)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  playerSearch === `__gender_${g}` ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                }`}>
+                {g === "F" ? `♀ ${femaleCount}` : `♂ ${maleCount}`}
+              </button>
+            ))}
+          </div>
 
           {allPlayers.length > 6 && (
-            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
+            <ClearInput value={playerSearch.startsWith("__gender_") ? "" : playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
           )}
           <div className="space-y-0">
             {allPlayers
-              .filter((entry) => entry.player.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+              .filter((entry) => {
+                if (playerSearch === "__gender_F") return entry.player.player.gender === "F";
+                if (playerSearch === "__gender_M") return entry.player.player.gender === "M";
+                return entry.player.player.name.toLowerCase().includes(playerSearch.toLowerCase());
+              })
               .map((entry) => (
               <div key={entry.player.player.id} className="flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
                 <PlayerAvatar name={entry.player.player.name} size="xs" />
