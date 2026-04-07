@@ -6,6 +6,7 @@ import {
   DEFAULT_COMPETITION_CONFIG,
   getBracketStages,
   BRACKET_STAGE_SHORT,
+  BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
 import { StepCategory } from "./StepCategory";
 import { StepGroups } from "./StepGroups";
@@ -269,31 +270,69 @@ export function ClassStepFlow({
             return `${config.numGroups} groups, play each other ${freq}, ${scoring}${winBy}`;
           })()}</span>
         </button>
-        <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
-          <span className="text-sm text-muted">Advancement</span>
-          <span className="text-sm font-medium">{config.advanceToUpper} upper{config.advanceToLower > 0 ? ` · ${config.advanceToLower} lower` : ""}{config.wildcardCount > 0 ? ` · ${config.wildcardCount} WC` : ""}</span>
-        </button>
         {hasUpperBracket && (() => {
-          const upperTeams = config.numGroups * config.advanceToUpper + config.wildcardCount;
+          const n = config.advanceToUpper;
+          const teamDesc = n === 1 ? "The winner of each group" : `Top ${n} from each group`;
+          const wcDesc = config.wildcardCount > 0 ? ` + ${config.wildcardCount} best runner-up${config.wildcardCount > 1 ? "s" : ""}` : "";
+          const upperTeams = config.numGroups * n + config.wildcardCount;
           const stages = getBracketStages(upperTeams);
-          const roundLabels = stages.map((s) => BRACKET_STAGE_SHORT[s] || s);
-          if (config.upperThirdPlace) roundLabels.push("3rd");
+          const formatDesc = (formats: Record<string, string>) => {
+            const parts = stages.map((s) => {
+              const fmt = formats[s];
+              const label = BRACKET_STAGE_LABELS[s] || s;
+              if (!fmt || fmt === "to_11") return `${label}: to 11`;
+              if (fmt === "to_15") return `${label}: to 15`;
+              if (fmt === "to_21") return `${label}: to 21`;
+              if (fmt === "bo3_11") return `${label}: Bo3 to 11`;
+              if (fmt === "bo3_15") return `${label}: Bo3 to 15`;
+              if (fmt === "bo3_21") return `${label}: Bo3 to 21`;
+              return `${label}: ${fmt}`;
+            });
+            if (config.upperThirdPlace) parts.push("3rd place match");
+            return parts.join(". ");
+          };
           return (
-            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "upper-config"))} className={rowClass}>
-              <span className="text-sm text-muted">Upper Bracket</span>
-              <span className="text-sm font-medium">{roundLabels.join(" · ")}</span>
+            <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
+              <span className="text-sm text-muted shrink-0">Elimination</span>
+              <span className="text-sm font-medium text-right">{teamDesc}{wcDesc} advance. {formatDesc(config.upperBracketFormats)}</span>
             </button>
           );
         })()}
+        {!hasUpperBracket && (
+          <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
+            <span className="text-sm text-muted">Elimination</span>
+            <span className="text-sm font-medium text-muted">No bracket rounds</span>
+          </button>
+        )}
         {hasLowerBracket && (() => {
-          const lowerTeams = config.numGroups * config.advanceToLower;
+          const lower = config.advanceToLower;
+          const upperN = config.advanceToUpper;
+          const posStart = upperN + 1;
+          const posEnd = upperN + lower;
+          const teamDesc = lower === 1
+            ? `#${posStart} in each group`
+            : `#${posStart} and #${posEnd} in each group`;
+          const lowerTeams = config.numGroups * lower;
           const stages = getBracketStages(lowerTeams);
-          const roundLabels = stages.map((s) => BRACKET_STAGE_SHORT[s] || s);
-          if (config.lowerThirdPlace) roundLabels.push("3rd");
+          const formatDesc = (formats: Record<string, string>) => {
+            const parts = stages.map((s) => {
+              const fmt = formats[s];
+              const label = BRACKET_STAGE_LABELS[s] || s;
+              if (!fmt || fmt === "to_11") return `${label}: to 11`;
+              if (fmt === "to_15") return `${label}: to 15`;
+              if (fmt === "to_21") return `${label}: to 21`;
+              if (fmt === "bo3_11") return `${label}: Bo3 to 11`;
+              if (fmt === "bo3_15") return `${label}: Bo3 to 15`;
+              if (fmt === "bo3_21") return `${label}: Bo3 to 21`;
+              return `${label}: ${fmt}`;
+            });
+            if (config.lowerThirdPlace) parts.push("3rd place match");
+            return parts.join(". ");
+          };
           return (
             <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "lower-config"))} className={rowClass}>
-              <span className="text-sm text-muted">Lower Bracket</span>
-              <span className="text-sm font-medium">{roundLabels.join(" · ")}</span>
+              <span className="text-sm text-muted shrink-0">Consolation</span>
+              <span className="text-sm font-medium text-right">{teamDesc} advance. {formatDesc(config.lowerBracketFormats)}</span>
             </button>
           );
         })()}
