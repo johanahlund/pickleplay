@@ -43,11 +43,13 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const { name, emoji, description, locations } = await req.json();
-  const data: { name?: string; emoji?: string; description?: string | null } = {};
+  const { name, emoji, description, city, country, locations } = await req.json();
+  const data: { name?: string; emoji?: string; description?: string | null; city?: string | null; country?: string | null } = {};
   if (name?.trim()) data.name = name.trim();
   if (emoji) data.emoji = emoji;
   if (description !== undefined) data.description = description?.trim() || null;
+  if (city !== undefined) data.city = city?.trim() || null;
+  if (country !== undefined) data.country = country?.trim() || null;
 
   const club = await prisma.club.update({ where: { id }, data });
 

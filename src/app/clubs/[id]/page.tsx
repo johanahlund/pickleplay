@@ -105,6 +105,8 @@ interface Club {
   name: string;
   emoji: string;
   description?: string | null;
+  city?: string | null;
+  country?: string | null;
   createdById: string | null;
   members: ClubMember[];
   whatsappGroups: WaGroup[];
@@ -300,6 +302,8 @@ export default function ClubDetailPage() {
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editCountry, setEditCountry] = useState("");
   const [editLocations, setEditLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostContent, setNewPostContent] = useState("");
@@ -385,6 +389,8 @@ export default function ClubDetailPage() {
         name: editName,
         emoji: editEmoji,
         description: editDescription,
+        city: editCity,
+        country: editCountry,
         locations: editLocations.filter((l) => l.name.trim()),
       }),
     });
@@ -397,6 +403,8 @@ export default function ClubDetailPage() {
     setEditName(club.name);
     setEditEmoji(club.emoji);
     setEditDescription(club.description || "");
+    setEditCity(club.city || "");
+    setEditCountry(club.country || "");
     setEditLocations(
       club.locations.length > 0
         ? club.locations.map((l) => ({ name: l.name, googleMapsUrl: l.googleMapsUrl || "" }))
@@ -622,6 +630,20 @@ export default function ClubDetailPage() {
                       className={`text-2xl p-1 rounded-lg transition-all ${editEmoji === e ? "bg-primary/10 ring-2 ring-primary scale-110" : "hover:bg-gray-100"}`}
                     >{e}</button>
                   ))}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-muted mb-1">City</label>
+                  <input type="text" value={editCity} onChange={(e) => setEditCity(e.target.value)}
+                    placeholder="e.g. Setúbal"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-muted mb-1">Country</label>
+                  <input type="text" value={editCountry} onChange={(e) => setEditCountry(e.target.value)}
+                    placeholder="e.g. Portugal"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
               </div>
               <div>
