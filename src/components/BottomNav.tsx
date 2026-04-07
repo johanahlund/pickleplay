@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { useViewRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
 
-const tabs = [
+const defaultTabs = [
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
   { href: "/events", label: "My Events", icon: "📅" },
   { href: "/matches", label: "My Matches", icon: "🏓" },
@@ -86,7 +86,19 @@ export function BottomNav() {
 
   if (HIDDEN_PATHS.some((p) => pathname.startsWith(p))) return null;
 
-  const allTabs = isAdmin
+  // Detect club context from URL
+  const clubMatch = pathname.match(/^\/clubs\/([^/]+)/);
+  const clubId = clubMatch ? clubMatch[1] : null;
+
+  const tabs = clubId
+    ? [
+        { href: `/clubs/${clubId}`, label: "Club", icon: "🏟️" },
+        { href: `/events?club=${clubId}`, label: "My Club Events", icon: "📅" },
+        { href: `/matches?club=${clubId}`, label: "My Club Matches", icon: "🏓" },
+      ]
+    : defaultTabs;
+
+  const allTabs = isAdmin && !clubId
     ? [...tabs, { href: "/players", label: "Players", icon: "👤" }]
     : tabs;
 
@@ -96,10 +108,11 @@ export function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-[600px] mx-auto flex justify-around items-center h-16">
         {allTabs.map((tab) => {
+          const tabPath = tab.href.split("?")[0];
           const isActive =
-            tab.href === "/"
+            tabPath === "/"
               ? pathname === "/"
-              : pathname.startsWith(tab.href);
+              : pathname === tabPath || pathname.startsWith(tabPath + "/");
           return (
             <Link
               key={tab.href}

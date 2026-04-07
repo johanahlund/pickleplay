@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
@@ -37,8 +38,14 @@ function getTimeStatus(event: Event): "past" | "active" | "upcoming" {
   return "upcoming";
 }
 
-export default function EventsPage() {
+export default function EventsPageWrapper() {
+  return <Suspense><EventsPage /></Suspense>;
+}
+
+function EventsPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const clubFilter = searchParams.get("club");
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && viewRole === "admin";
@@ -62,10 +69,14 @@ export default function EventsPage() {
           }
           return e;
         });
-        setEvents(enriched);
+        // Filter by club if query param present
+        const filtered = clubFilter
+          ? enriched.filter((e: Event) => e.clubId === clubFilter)
+          : enriched;
+        setEvents(filtered);
         setLoading(false);
       });
-  }, []);
+  }, [clubFilter]);
 
   const deleteEvent = async (id: string) => {
     if (!confirm("Are you sure you want to delete this event and all its matches?")) return;
@@ -140,7 +151,7 @@ export default function EventsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Events</h2>
+        <h2 className="text-xl font-bold">{clubFilter ? "My Club Events" : "My Events"}</h2>
         <Link
           href="/events/new"
           className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"

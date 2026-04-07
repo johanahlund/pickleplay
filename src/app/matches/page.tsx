@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
@@ -26,11 +27,17 @@ interface Match {
   eloChange: number;
   createdAt: string;
   players: MatchPlayer[];
-  event: { id: string; name: string; date: string; format: string };
+  event: { id: string; name: string; date: string; format: string; clubId?: string | null };
 }
 
-export default function MatchesPage() {
+export default function MatchesPageWrapper() {
+  return <Suspense><MatchesPage /></Suspense>;
+}
+
+function MatchesPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const clubFilter = searchParams.get("club");
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +51,9 @@ export default function MatchesPage() {
     fetch("/api/matches/my")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setMatches(data);
+        if (Array.isArray(data)) {
+          setMatches(clubFilter ? data.filter((m: Match) => m.event?.clubId === clubFilter) : data);
+        }
         setLoading(false);
       });
   }, []);
@@ -132,7 +141,7 @@ export default function MatchesPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold">My Matches</h2>
+      <h2 className="text-xl font-bold">{clubFilter ? "My Club Matches" : "My Matches"}</h2>
 
       {/* Completed / All toggle */}
       <div className="flex gap-2">
