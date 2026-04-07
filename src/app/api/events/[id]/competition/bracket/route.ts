@@ -110,6 +110,7 @@ export async function POST(
       await prisma.match.create({
         data: {
           eventId: id,
+          classId: cls.id,
           courtNum: 1, // default court, can be reassigned
           round: 0, // bracket matches don't use round numbers
           bracketStage: match.bracketStage,
@@ -147,6 +148,7 @@ export async function POST(
         await prisma.match.create({
           data: {
             eventId: id,
+            classId: cls.id,
             courtNum: 1,
             round: 0,
             bracketStage: match.bracketStage,

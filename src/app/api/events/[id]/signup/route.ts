@@ -59,7 +59,7 @@ export async function POST(
   const status = isFull ? "waitlisted" : "registered";
 
   await prisma.eventPlayer.create({
-    data: { eventId: id, playerId: user.id, status },
+    data: { eventId: id, classId: cls?.id, playerId: user.id, status },
   });
 
   return NextResponse.json({ ok: true, status });

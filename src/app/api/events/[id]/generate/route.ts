@@ -147,6 +147,7 @@ export async function POST(
           await prisma.match.create({
             data: {
               eventId: id,
+              classId: cls.id,
               courtNum: match.court,
               round: roundIdx + 1,
               rankingMode: cls.rankingMode,
@@ -238,6 +239,7 @@ export async function POST(
       await prisma.match.create({
         data: {
           eventId: id,
+          classId: cls.id,
           courtNum: match.court,
           round: isIncremental ? nextRound + roundIdx : roundIdx + 1,
           rankingMode: cls.rankingMode,

@@ -26,23 +26,23 @@ export async function POST(
     return NextResponse.json({ error: "Player already in event" }, { status: 400 });
   }
 
+  // Always link to default class
+  const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
+
   // Managers can force a status, otherwise auto-determine
   let status = requestedStatus || "registered";
-  if (!requestedStatus) {
-    const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
-    if (cls?.maxPlayers) {
-      const players = await prisma.eventPlayer.findMany({ where: { eventId: id }, select: { status: true } });
-      const activeCount = players.filter(
-        (p) => p.status === "registered" || p.status === "checked_in"
-      ).length;
-      if (activeCount >= cls.maxPlayers) {
-        status = "waitlisted";
-      }
+  if (!requestedStatus && cls?.maxPlayers) {
+    const players = await prisma.eventPlayer.findMany({ where: { eventId: id }, select: { status: true } });
+    const activeCount = players.filter(
+      (p) => p.status === "registered" || p.status === "checked_in"
+    ).length;
+    if (activeCount >= cls.maxPlayers) {
+      status = "waitlisted";
     }
   }
 
   await prisma.eventPlayer.create({
-    data: { eventId: id, playerId, status },
+    data: { eventId: id, classId: cls?.id, playerId, status },
   });
 
   return NextResponse.json({ ok: true, status });

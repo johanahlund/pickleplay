@@ -42,6 +42,7 @@ export async function POST(
   const match = await prisma.match.create({
     data: {
       eventId: id,
+      classId: cls.id,
       courtNum: courtNum || 1,
       round,
       status: "pending",

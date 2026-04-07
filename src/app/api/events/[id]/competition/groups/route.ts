@@ -208,6 +208,7 @@ export async function POST(
         await prisma.match.create({
           data: {
             eventId: id,
+            classId: cls.id,
             courtNum,
             round: matchup.round,
             groupLabel: label,

@@ -33,6 +33,8 @@ export async function POST(
 
   const body = await req.json();
 
+  const cls = await prisma.eventClass.findFirst({ where: { eventId: id, isDefault: true } });
+
   // Manual pair creation: { player1Id, player2Id }
   if (body.player1Id && body.player2Id) {
     // Check neither player is already in a pair
@@ -50,7 +52,7 @@ export async function POST(
     }
 
     const pair = await prisma.eventPair.create({
-      data: { eventId: id, player1Id: body.player1Id, player2Id: body.player2Id },
+      data: { eventId: id, classId: cls?.id, player1Id: body.player1Id, player2Id: body.player2Id },
       include: {
         player1: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
         player2: { select: { id: true, name: true, emoji: true, rating: true, gender: true } },
@@ -88,7 +90,7 @@ export async function POST(
   // Save pairs
   for (const pair of generated) {
     await prisma.eventPair.create({
-      data: { eventId: id, player1Id: pair.player1Id, player2Id: pair.player2Id },
+      data: { eventId: id, classId: cls?.id, player1Id: pair.player1Id, player2Id: pair.player2Id },
     });
   }
 
