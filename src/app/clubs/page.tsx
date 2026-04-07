@@ -37,6 +37,8 @@ export default function ClubsPage() {
   // Browse state
   const [browseClubs, setBrowseClubs] = useState<BrowseClub[]>([]);
   const [browseSearch, setBrowseSearch] = useState("");
+  const [browseCountry, setBrowseCountry] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [requestedClubIds, setRequestedClubIds] = useState<Set<string>>(new Set());
@@ -70,12 +72,22 @@ export default function ClubsPage() {
     fetchClubs();
   };
 
-  const searchBrowse = async (q?: string) => {
+  const searchBrowse = async (q?: string, country?: string) => {
     setBrowseLoading(true);
     const params = new URLSearchParams();
     if (q || browseSearch) params.set("q", q || browseSearch);
+    const c = country !== undefined ? country : browseCountry;
+    if (c) params.set("country", c);
     const r = await fetch(`/api/clubs/browse?${params}`);
-    if (r.ok) setBrowseClubs(await r.json());
+    if (r.ok) {
+      const data = await r.json();
+      setBrowseClubs(data);
+      // Extract unique countries for the filter
+      if (countries.length === 0) {
+        const uniqueCountries = [...new Set(data.map((cl: BrowseClub) => cl.country).filter(Boolean))] as string[];
+        setCountries(uniqueCountries.sort());
+      }
+    }
     setBrowseLoading(false);
   };
 
@@ -186,8 +198,19 @@ export default function ClubsPage() {
 
         {showBrowse && (
           <div className="space-y-3">
-            <ClearInput value={browseSearch} onChange={(v) => { setBrowseSearch(v); searchBrowse(v); }}
-              placeholder="Search by name..." className="text-sm" />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <ClearInput value={browseSearch} onChange={(v) => { setBrowseSearch(v); searchBrowse(v); }}
+                  placeholder="Search by name..." className="text-sm" />
+              </div>
+              {countries.length > 0 && (
+                <select value={browseCountry} onChange={(e) => { setBrowseCountry(e.target.value); searchBrowse(undefined, e.target.value); }}
+                  className="border border-border rounded-lg px-2 py-1.5 text-sm shrink-0">
+                  <option value="">All countries</option>
+                  {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+            </div>
 
             {browseLoading ? (
               <p className="text-sm text-muted text-center py-4">Searching...</p>
