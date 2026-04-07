@@ -35,6 +35,7 @@ interface StepPlayersProps {
   cls: {
     id: string;
     format: string;
+    gender: string;
   };
   canManage: boolean;
   onRefresh: () => void;
@@ -175,16 +176,23 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       {isDoubles && pairs.length > 0 && (
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pairs</div>
-          {pairs.map((pair) => (
-            <div key={pair.id} className="group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
-              <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
-              <span className="text-sm font-medium flex-1">{pair.player1.name} & {pair.player2.name}</span>
-              {canManage && (
-                <button onClick={() => unpair(pair.id)}
-                  className="text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Unpair</button>
-              )}
-            </div>
-          ))}
+          {pairs.map((pair) => {
+            const isMix = cls.gender === "mix";
+            const sameGender = isMix && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender;
+            return (
+              <div key={pair.id} className={`group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 ${sameGender ? "bg-red-50" : ""}`}>
+                <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{pair.player1.name} & {pair.player2.name}</span>
+                  {sameGender && <span className="text-[10px] text-danger block">Same gender — mixed pairs required</span>}
+                </div>
+                {canManage && (
+                  <button onClick={() => unpair(pair.id)}
+                    className="text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Unpair</button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -251,22 +259,35 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
             );
           })}
           {/* Pair button — shown when 2 selected */}
-          {pairSelection.size === 2 && !pairingBusy && (
-            <div className="px-3 py-2.5 flex gap-2">
+          {pairSelection.size === 2 && !pairingBusy && (() => {
+            const [aId, bId] = [...pairSelection];
+            const pA = unpairedPlayers.find((ep) => ep.playerId === aId);
+            const pB = unpairedPlayers.find((ep) => ep.playerId === bId);
+            const isMixClass = cls.gender === "mix";
+            const sameGender = isMixClass && pA?.player.gender && pB?.player.gender && pA.player.gender === pB.player.gender;
+            return (
+            <div className="px-3 py-2.5 space-y-1.5">
+              {sameGender && (
+                <p className="text-xs text-danger font-medium">Mixed pairs required — cannot pair same gender</p>
+              )}
+              <div className="flex gap-2">
               <button
                 onClick={() => {
-                  const [a, b] = [...pairSelection];
-                  forcePair(a, b);
+                  if (sameGender) { alert("Mixed class requires one male and one female per pair."); return; }
+                  forcePair(aId, bId);
                 }}
-                className="flex-1 bg-action text-white py-2 rounded-lg text-sm font-semibold active:bg-action-dark">
+                disabled={!!sameGender}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold ${sameGender ? "bg-gray-200 text-muted" : "bg-action text-white active:bg-action-dark"}`}>
                 Pair Selected
               </button>
               <button onClick={() => setPairSelection(new Set())}
                 className="px-4 py-2 rounded-lg text-sm text-muted bg-gray-100 hover:bg-gray-200">
                 Clear
               </button>
+              </div>
             </div>
-          )}
+            );
+          })()}
           {pairingBusy && (
             <div className="px-3 py-2 bg-green-50 text-xs text-green-700 font-medium animate-pulse">
               Pairing...
