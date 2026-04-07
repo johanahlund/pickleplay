@@ -424,8 +424,7 @@ export function ClassStepFlow({
         </AdminRow>
         {hasUpperBracket && (() => {
           const n = config.advanceToUpper;
-          const positions = Array.from({ length: n }, (_, i) => `#${i + 1}`);
-          const teamDesc = `${positions.join(", ")} per group`;
+          const posDesc = n === 1 ? "N° 1" : `N° 1-${n}`;
           const wcDesc = config.wildcardCount > 0 ? ` + ${config.wildcardCount} WC` : "";
           const upperTeams = config.numGroups * n + config.wildcardCount;
           const stages = getBracketStages(upperTeams);
@@ -439,11 +438,15 @@ export function ClassStepFlow({
             return fmt;
           };
           const roundParts = stages.map((s) => `${BRACKET_STAGE_SHORT[s] || s} (${fmtShort(config.upperBracketFormats[s])})`);
-          if (config.upperThirdPlace) roundParts.push("3rd");
+          if (config.upperThirdPlace) {
+            // 3rd place uses same format as semifinal, or last stage format
+            const sfFmt = config.upperBracketFormats["sf"] || config.upperBracketFormats[stages[stages.length - 1]];
+            roundParts.push(`3rd (${fmtShort(sfFmt)})`);
+          }
           return (
             <AdminRow stepId="advancement" label="Main Bracket">
               <span className="text-right">
-                <span className="text-sm font-medium block">{teamDesc}{wcDesc} advance</span>
+                <span className="text-sm font-medium block">{posDesc} in each group{wcDesc} advance</span>
                 <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
               </span>
             </AdminRow>
@@ -457,8 +460,9 @@ export function ClassStepFlow({
         {hasLowerBracket && (() => {
           const lower = config.advanceToLower;
           const upperN = config.advanceToUpper;
-          const positions = Array.from({ length: lower }, (_, i) => `#${upperN + i + 1}`);
-          const teamDesc = `${positions.join(", ")} per group`;
+          const posStart = upperN + 1;
+          const posEnd = upperN + lower;
+          const posDesc = lower === 1 ? `N° ${posStart}` : `N° ${posStart}-${posEnd}`;
           const lowerTeams = config.numGroups * lower;
           const stages = getBracketStages(lowerTeams);
           const fmtShort = (fmt: string | undefined) => {
@@ -471,11 +475,14 @@ export function ClassStepFlow({
             return fmt;
           };
           const roundParts = stages.map((s) => `${BRACKET_STAGE_SHORT[s] || s} (${fmtShort(config.lowerBracketFormats[s])})`);
-          if (config.lowerThirdPlace) roundParts.push("3rd");
+          if (config.lowerThirdPlace) {
+            const sfFmt = config.lowerBracketFormats["sf"] || config.lowerBracketFormats[stages[stages.length - 1]];
+            roundParts.push(`3rd (${fmtShort(sfFmt)})`);
+          }
           return (
             <AdminRow stepId="lower-config" label="Consolation">
               <span className="text-right">
-                <span className="text-sm font-medium block">{teamDesc} advance</span>
+                <span className="text-sm font-medium block">{posDesc} in each group advance</span>
                 <span className="text-xs text-muted block">{roundParts.join(", ")}</span>
               </span>
             </AdminRow>
