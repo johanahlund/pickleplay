@@ -80,6 +80,7 @@ interface EventClassData {
   gender: string;
   ageGroup: string;
   scoringFormat: string;
+  winBy?: string;
   pairingMode: string;
   playMode?: string;
   prioSpeed?: boolean;
@@ -358,6 +359,7 @@ export default function EventDetailPage() {
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
   const [editScoringFormat, setEditScoringFormat] = useState("1x11");
+  const [editWinBy, setEditWinBy] = useState("2");
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [editPlayMode, setEditPlayMode] = useState("round_based");
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
@@ -622,6 +624,7 @@ export default function EventDetailPage() {
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
     setEditScoringFormat(event.scoringFormat || "1x11");
+    setEditWinBy(event.classes?.[0]?.winBy || "2");
     setEditPairingMode(event.pairingMode);
     const cls = event.classes?.[0];
     setEditPlayMode(cls?.playMode || "round_based");
@@ -659,6 +662,7 @@ export default function EventDetailPage() {
         date: eventDate.toISOString(),
         endDate: eventEndDate.toISOString(),
         scoringFormat: editScoringFormat,
+        winBy: editWinBy,
         pairingMode: editPairingMode,
         playMode: editPlayMode,
         prioSpeed: editPrioSpeed,
@@ -1135,6 +1139,20 @@ export default function EventDetailPage() {
             <option value="3xR15">Best of 3 rally to 15</option>
             <option value="3xR21">Best of 3 rally to 21</option>
           </optgroup>
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Win by</label>
+        <select value={editWinBy} onChange={(e) => { setEditWinBy(e.target.value); setHasEdits(true); }}
+          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="cap13">Cap 13</option>
+          <option value="cap15">Cap 15</option>
+          <option value="cap17">Cap 17</option>
+          <option value="cap18">Cap 18</option>
+          <option value="cap23">Cap 23</option>
+          <option value="cap25">Cap 25</option>
         </select>
       </div>
     </div>
