@@ -259,13 +259,14 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
       {isDoubles && unpaired.length > 0 && (
         <div>
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1.5">Looking for partner ({unpaired.length})</div>
-          <div className="flex gap-3">
-            <div className="flex-1 space-y-1">
+          <div className="flex">
+            <div className="flex-1 space-y-1 pr-2">
               <div className="text-[9px] text-pink-500 font-medium mb-0.5">♀ ({females.length})</div>
               {females.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />)}
               {females.length === 0 && <div className="text-[10px] text-muted">—</div>}
             </div>
-            <div className="flex-1 space-y-1">
+            <div className="w-px border-l border-dashed border-gray-300" />
+            <div className="flex-1 space-y-1 pl-2">
               <div className="text-[9px] text-blue-500 font-medium mb-0.5">♂ ({males.length})</div>
               {males.map((ep) => <PlayerCard key={ep.playerId} player={ep.player} playerId={ep.playerId} isMe={ep.playerId === userId} />)}
               {males.length === 0 && <div className="text-[10px] text-muted">—</div>}
