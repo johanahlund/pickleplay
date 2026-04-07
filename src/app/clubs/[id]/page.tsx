@@ -104,6 +104,8 @@ interface Club {
   id: string;
   name: string;
   emoji: string;
+  logoUrl?: string | null;
+  coverUrl?: string | null;
   description?: string | null;
   city?: string | null;
   country?: string | null;
@@ -656,13 +658,47 @@ export default function ClubDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-muted mb-1">Icon</label>
-                <div className="flex flex-wrap gap-2">
-                  {EMOJIS.map((e) => (
-                    <button key={e} type="button" onClick={() => setEditEmoji(e)}
-                      className={`text-2xl p-1 rounded-lg transition-all ${editEmoji === e ? "bg-primary/10 ring-2 ring-primary scale-110" : "hover:bg-gray-100"}`}
-                    >{e}</button>
-                  ))}
+                <label className="block text-sm font-medium text-muted mb-1">Logo</label>
+                <div className="flex items-center gap-3">
+                  {club.logoUrl ? (
+                    <img src={club.logoUrl} alt="Logo" className="w-16 h-16 rounded-xl object-cover" />
+                  ) : (
+                    <span className="text-4xl">{club.emoji}</span>
+                  )}
+                  <label className="text-xs text-action font-medium cursor-pointer hover:underline">
+                    Upload logo
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      fd.append("type", "logo");
+                      const r = await fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd });
+                      if (r.ok) fetchClub();
+                      else alert("Upload failed");
+                    }} />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Cover Photo</label>
+                <div>
+                  {club.coverUrl && (
+                    <img src={club.coverUrl} alt="Cover" className="w-full h-24 rounded-lg object-cover mb-2" />
+                  )}
+                  <label className="text-xs text-action font-medium cursor-pointer hover:underline">
+                    {club.coverUrl ? "Change cover" : "Upload cover photo"}
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      fd.append("type", "cover");
+                      const r = await fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd });
+                      if (r.ok) fetchClub();
+                      else alert("Upload failed");
+                    }} />
+                  </label>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -739,13 +775,27 @@ export default function ClubDetailPage() {
               )}
             </div>
           ) : (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              {club.coverUrl && (
+                <div className="h-32 w-full bg-gray-100">
+                  <img src={club.coverUrl} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl">{club.emoji}</span>
+                  {club.logoUrl ? (
+                    <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                  ) : (
+                    <span className="text-2xl">{club.emoji}</span>
+                  )}
                   <div>
                     <h3 className="font-bold">{club.name}</h3>
-                    <p className="text-xs text-muted">{club.members.length} members &middot; {club._count.events} events</p>
+                    <p className="text-xs text-muted">
+                      {club.members.length} members &middot; {club._count.events} events
+                      {club.city && ` &middot; ${club.city}`}
+                      {club.country && !club.city && ` &middot; ${club.country}`}
+                    </p>
                   </div>
                 </div>
                 {canManage && (
@@ -781,7 +831,7 @@ export default function ClubDetailPage() {
                   </div>
                 </div>
               )}
-
+              </div>
             </div>
           )}
         </div>

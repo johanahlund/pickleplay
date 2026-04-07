@@ -59,6 +59,8 @@ model Club {
   id          String   @id @default(cuid())
   name        String
   emoji       String   @default("🏓")
+  logoUrl     String?
+  coverUrl    String?
   description String?
   city        String?
   country     String?
