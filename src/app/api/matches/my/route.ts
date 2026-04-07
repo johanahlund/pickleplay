@@ -17,7 +17,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: {
       players: {
-        include: { player: { select: { id: true, name: true, emoji: true } } },
+        include: { player: { select: { id: true, name: true, emoji: true, photoUrl: true } } },
       },
       event: { select: { id: true, name: true, date: true, clubId: true } },
       class: { select: { format: true } },

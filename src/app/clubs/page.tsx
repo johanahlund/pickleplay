@@ -9,6 +9,7 @@ interface Club {
   id: string;
   name: string;
   emoji: string;
+  logoUrl?: string | null;
   myRole: string;
   _count: { members: number; events: number };
 }
@@ -17,6 +18,7 @@ interface BrowseClub {
   id: string;
   name: string;
   emoji: string;
+  logoUrl?: string | null;
   description: string | null;
   memberCount: number;
   eventCount: number;
@@ -167,7 +169,7 @@ export default function ClubsPage() {
             <Link key={club.id} href={`/clubs/${club.id}`}
               className="block bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">{club.emoji}</span>
+                {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-lg">{club.name}</span>
@@ -220,7 +222,7 @@ export default function ClubsPage() {
                   return (
                     <div key={club.id} className="bg-card rounded-xl border border-border p-4">
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">{club.emoji}</span>
+                        {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" /> : <span className="text-2xl">{club.emoji}</span>}
                         <div className="flex-1 min-w-0">
                           <span className="font-semibold">{club.name}</span>
                           <p className="text-xs text-muted">

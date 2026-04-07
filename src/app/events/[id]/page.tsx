@@ -260,7 +260,7 @@ function SwipeablePlayerRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <PlayerAvatar name={ep.player.name} size="sm" />
+      <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
       <span className={`text-lg font-medium flex-1 ${localPaused ? "line-through text-muted" : ""}`}>
         {ep.player.name}
       </span>
@@ -1275,7 +1275,7 @@ export default function EventDetailPage() {
           <div>
             <h4 className="text-sm font-medium text-muted mb-1">Owner</h4>
             <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-purple-50">
-              <PlayerAvatar name={owner.name} size="sm" />
+              <PlayerAvatar name={owner.name} photoUrl={owner.photoUrl} size="sm" />
               <span className="text-lg font-medium">{owner.name}</span>
               <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Owner</span>
             </div>
@@ -1316,7 +1316,7 @@ export default function EventDetailPage() {
             <div className="space-y-1">
               {event.helpers.map((h) => (
                 <div key={h.playerId} className="flex items-center gap-2 rounded-lg px-3 py-2">
-                  <PlayerAvatar name={h.player.name} size="sm" />
+                  <PlayerAvatar name={h.player.name} photoUrl={h.player.photoUrl} size="sm" />
                   <span className="text-lg font-medium flex-1">{h.player.name}</span>
                   {(isOwner || isAdmin) && (
                     <button onClick={() => removeHelper(h.playerId)}
@@ -1808,7 +1808,7 @@ export default function EventDetailPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 {team1.map((mp) => (
                   <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                    <PlayerAvatar name={mp.player.name} size="xs" />
+                    <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
                     <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                   </span>
                 ))}
@@ -1830,7 +1830,7 @@ export default function EventDetailPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 {team2.map((mp) => (
                   <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                    <PlayerAvatar name={mp.player.name} size="xs" />
+                    <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
                     <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
                   </span>
                 ))}
@@ -1982,7 +1982,7 @@ export default function EventDetailPage() {
                   manualTeam1.includes(ep.player.id) ? "bg-blue-100 text-blue-800 font-medium"
                   : manualTeam2.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
                 }`} disabled={manualTeam2.includes(ep.player.id)}>
-                <PlayerAvatar name={ep.player.name} size="xs" /> {ep.player.name}
+                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" /> {ep.player.name}
               </button>
             ))}
           </div>
@@ -1996,7 +1996,7 @@ export default function EventDetailPage() {
                   manualTeam2.includes(ep.player.id) ? "bg-red-100 text-red-800 font-medium"
                   : manualTeam1.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
                 }`} disabled={manualTeam1.includes(ep.player.id)}>
-                <PlayerAvatar name={ep.player.name} size="xs" /> {ep.player.name}
+                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" /> {ep.player.name}
               </button>
             ))}
           </div>

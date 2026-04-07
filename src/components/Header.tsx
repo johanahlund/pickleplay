@@ -129,6 +129,7 @@ export function Header() {
   }, [showNotifications]);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
+  const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
 
   // Dynamically set main content padding based on header height
@@ -182,8 +183,11 @@ export function Header() {
           if (data) {
             setClubName(data.name);
             setClubEmoji(data.emoji);
+            setClubLogoUrl(data.logoUrl || null);
             sessionStorage.setItem("activeClubName", data.name);
             sessionStorage.setItem("activeClubEmoji", data.emoji);
+            if (data.logoUrl) sessionStorage.setItem("activeClubLogoUrl", data.logoUrl);
+            else sessionStorage.removeItem("activeClubLogoUrl");
           }
         });
     } else if (isClubsListPage) {
@@ -193,6 +197,7 @@ export function Header() {
       sessionStorage.removeItem("activeClubEmoji");
       setClubName(null);
       setClubEmoji(null);
+      setClubLogoUrl(null);
     } else {
       // On another page (events, matches, etc.) — restore from session
       const savedName = sessionStorage.getItem("activeClubName");
@@ -200,6 +205,7 @@ export function Header() {
       if (savedName) {
         setClubName(savedName);
         setClubEmoji(savedEmoji);
+        setClubLogoUrl(sessionStorage.getItem("activeClubLogoUrl"));
       }
     }
   }, [urlClubId, isClubsListPage]);
@@ -298,7 +304,7 @@ export function Header() {
                   onClick={() => router.push(`/clubs/${activeClubId}`)}
                   className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
                 >
-                  <span className="text-sm">{clubEmoji}</span>
+                  {clubLogoUrl ? <img src={clubLogoUrl} alt="" className="w-5 h-5 rounded object-cover" /> : <span className="text-sm">{clubEmoji}</span>}
                   <span className="text-sm font-semibold opacity-90">{clubName}</span>
                 </button>
               </div>

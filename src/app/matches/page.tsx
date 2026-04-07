@@ -9,6 +9,7 @@ interface PlayerInfo {
   id: string;
   name: string;
   emoji: string;
+  photoUrl?: string | null;
 }
 
 interface MatchPlayer {
@@ -313,7 +314,7 @@ function MatchesPage() {
                   <div className={`flex-1 text-sm ${myTeam === 1 ? "font-semibold" : ""}`}>
                     {team1.map((mp) => (
                       <span key={mp.id} className="mr-1">
-                        <PlayerAvatar name={mp.player.name} size="xs" />
+                        <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
                         <span className="text-xs">{mp.player.name.split(" ")[0]}</span>
                       </span>
                     ))}
@@ -324,7 +325,7 @@ function MatchesPage() {
                   <div className={`flex-1 text-sm text-right ${myTeam === 2 ? "font-semibold" : ""}`}>
                     {team2.map((mp) => (
                       <span key={mp.id} className="ml-1">
-                        <PlayerAvatar name={mp.player.name} size="xs" />
+                        <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
                         <span className="text-xs">{mp.player.name.split(" ")[0]}</span>
                       </span>
                     ))}

@@ -25,6 +25,7 @@ export async function GET(req: Request) {
     id: c.id,
     name: c.name,
     emoji: c.emoji,
+    logoUrl: c.logoUrl,
     description: c.description,
     memberCount: c._count.members,
     eventCount: c._count.events,

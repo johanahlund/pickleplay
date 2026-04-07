@@ -24,6 +24,7 @@ interface PairPlayer {
   id: string;
   name: string;
   emoji: string;
+  photoUrl?: string | null;
   rating: number;
   gender?: string | null;
 }
@@ -185,7 +186,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
 
     return (
     <div className="flex items-center gap-1.5 min-w-0 py-0.5">
-      <PlayerAvatar name={player.name} size="xs" />
+      <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
       <div className="min-w-0 flex-1">
         <div className={`text-xs font-medium truncate ${isMe ? "text-action" : ""}`}>{player.name}</div>
         <div className="text-[9px] text-muted">{Math.round(player.rating)}</div>

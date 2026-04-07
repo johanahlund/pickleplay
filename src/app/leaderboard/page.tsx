@@ -7,6 +7,7 @@ interface Player {
   id: string;
   name: string;
   emoji: string;
+  photoUrl?: string | null;
   rating: number;
   wins: number;
   losses: number;
@@ -71,7 +72,7 @@ export default function LeaderboardPage() {
               <span className="text-2xl w-10 text-center font-bold">
                 {getMedal(i)}
               </span>
-              <PlayerAvatar name={p.name} size="sm" />
+              <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <span className="font-semibold truncate">{p.name}</span>
@@ -112,7 +113,7 @@ export default function LeaderboardPage() {
                 className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-60"
               >
                 <span className="text-2xl w-10 text-center">-</span>
-                <PlayerAvatar name={p.name} size="sm" />
+                <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <span className="font-semibold truncate">{p.name}</span>

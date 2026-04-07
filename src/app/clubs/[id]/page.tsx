@@ -1191,7 +1191,7 @@ export default function ClubDetailPage() {
                       onClick={() => addMember(p.id)}
                       className="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors"
                     >
-                      <PlayerAvatar name={p.name} size="xs" />
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
                       <span className="text-sm font-medium flex-1">{p.name}</span>
                       {p.gender && (
                         <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
@@ -1229,7 +1229,7 @@ export default function ClubDetailPage() {
                 }`}
               >
                 <span className="text-xl w-8 text-center font-bold">{getMedal(i)}</span>
-                <PlayerAvatar name={p.name} size="sm" />
+                <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
                 <div className="flex-1 min-w-0">
                   <span className="font-semibold text-sm truncate block">{p.name}</span>
                   <span className="text-xs text-muted">{p.wins}W / {p.losses}L &middot; {p.wins + p.losses > 0 ? Math.round((p.wins / (p.wins + p.losses)) * 100) : 0}%</span>
@@ -1247,7 +1247,7 @@ export default function ClubDetailPage() {
               {rankings.unranked.map((p) => (
                 <div key={p.id} className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-50">
                   <span className="text-xl w-8 text-center">-</span>
-                  <PlayerAvatar name={p.name} size="sm" />
+                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
                   <span className="font-medium text-sm flex-1">{p.name}</span>
                   <span className="text-sm text-muted">1000</span>
                 </div>

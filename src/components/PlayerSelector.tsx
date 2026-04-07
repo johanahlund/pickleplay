@@ -9,6 +9,7 @@ interface Player {
   name: string;
   gender?: string | null;
   rating?: number;
+  photoUrl?: string | null;
   [key: string]: unknown;
 }
 
@@ -84,7 +85,7 @@ function SwipeRow({ player, direction, onAction }: {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <PlayerAvatar name={player.name} size="xs" />
+        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
         <span className="text-xs font-medium flex-1 truncate">{player.name}</span>
         {player.gender && (
           <span className={`text-[9px] ${player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
