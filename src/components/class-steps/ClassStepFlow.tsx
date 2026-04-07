@@ -165,7 +165,10 @@ function ClassPlayersInline({ eventId, classId, format, classGender, pairs, user
           <div className="space-y-1">
             {sortedPairs.map((pair) => {
               const isMyPair = userId && (pair.player1Id === userId || pair.player2Id === userId);
-              const sameGender = classGender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender;
+              const sameGender =
+                (classGender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender) ||
+                (classGender === "male" && (pair.player1.gender === "F" || pair.player2.gender === "F")) ||
+                (classGender === "female" && (pair.player1.gender === "M" || pair.player2.gender === "M"));
               // For mixed: female left, male right
               const p1Female = pair.player1.gender === "F";
               const left = p1Female ? pair.player1 : pair.player2;
@@ -196,7 +199,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, pairs, user
                       </div>
                     ) : null;
                   })()}
-                  {sameGender && <div className="text-[10px] text-amber-600 mt-1">Same gender pair</div>}
+                  {sameGender && <div className="text-[10px] text-amber-600 mt-1">Gender mismatch</div>}
                 </div>
               );
             })}

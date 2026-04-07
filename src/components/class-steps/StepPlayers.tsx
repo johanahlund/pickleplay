@@ -177,14 +177,25 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pairs</div>
           {pairs.map((pair) => {
-            const isMix = cls.gender === "mix";
-            const sameGender = isMix && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender;
+            const warnings: string[] = [];
+            if (cls.gender === "mix" && pair.player1.gender && pair.player2.gender && pair.player1.gender === pair.player2.gender) {
+              warnings.push("Same gender pair in mixed class");
+            }
+            if (cls.gender === "male") {
+              if (pair.player1.gender === "F") warnings.push(`${pair.player1.name} is female`);
+              if (pair.player2.gender === "F") warnings.push(`${pair.player2.name} is female`);
+            }
+            if (cls.gender === "female") {
+              if (pair.player1.gender === "M") warnings.push(`${pair.player1.name} is male`);
+              if (pair.player2.gender === "M") warnings.push(`${pair.player2.name} is male`);
+            }
+            const hasWarning = warnings.length > 0;
             return (
-              <div key={pair.id} className={`group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 ${sameGender ? "bg-amber-50" : ""}`}>
+              <div key={pair.id} className={`group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 ${hasWarning ? "bg-amber-50" : ""}`}>
                 <div className="flex -space-x-1"><PlayerAvatar name={pair.player1.name} size="xs" /><PlayerAvatar name={pair.player2.name} size="xs" /></div>
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-medium">{pair.player1.name} & {pair.player2.name}</span>
-                  {sameGender && <span className="text-[10px] text-amber-600 block">Same gender pair</span>}
+                  {hasWarning && <span className="text-[10px] text-amber-600 block">{warnings.join(", ")}</span>}
                 </div>
                 {canManage && (
                   <button onClick={() => unpair(pair.id)}
@@ -231,6 +242,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
           </div>
           {unpairedPlayers.map((ep) => {
             const isSelected = pairSelection.has(ep.playerId);
+            const genderWarn = (cls.gender === "male" && ep.player.gender === "F") || (cls.gender === "female" && ep.player.gender === "M");
             return (
               <button key={ep.playerId}
                 disabled={pairingBusy || (!isSelected && pairSelection.size >= 2)}
@@ -244,10 +256,13 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
                   });
                 }}
                 className={`w-full flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 transition-colors ${
-                  isSelected ? "bg-action/10" : pairSelection.size >= 2 ? "opacity-40" : canManage ? "hover:bg-gray-50" : ""
+                  genderWarn ? "bg-amber-50" : isSelected ? "bg-action/10" : pairSelection.size >= 2 ? "opacity-40" : canManage ? "hover:bg-gray-50" : ""
                 }`}>
                 <PlayerAvatar name={ep.player.name} size="xs" />
-                <span className="text-sm font-medium flex-1 text-left">{ep.player.name}</span>
+                <div className="flex-1 text-left min-w-0">
+                  <span className="text-sm font-medium">{ep.player.name}</span>
+                  {genderWarn && <span className="text-[10px] text-amber-600 block">Gender doesn&apos;t match class</span>}
+                </div>
                 {ep.player.gender && (
                   <span className={`text-[10px] ${ep.player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
                     {ep.player.gender === "M" ? "♂" : "♀"}
@@ -298,17 +313,23 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
       {!isDoubles && players.length > 0 && (
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Players</div>
-          {players.map((ep) => (
-            <div key={ep.playerId} className="group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0">
-              <span className="text-lg">{ep.player.emoji}</span>
-              <span className="text-sm font-medium flex-1">{ep.player.name}</span>
+          {players.map((ep) => {
+            const genderWarn = (cls.gender === "male" && ep.player.gender === "F") || (cls.gender === "female" && ep.player.gender === "M");
+            return (
+            <div key={ep.playerId} className={`group flex items-center gap-2 py-2 px-3 border-b border-border last:border-b-0 ${genderWarn ? "bg-amber-50" : ""}`}>
+              <PlayerAvatar name={ep.player.name} size="xs" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium">{ep.player.name}</span>
+                {genderWarn && <span className="text-[10px] text-amber-600 block">Gender doesn&apos;t match class</span>}
+              </div>
               <span className="text-xs text-muted">{Math.round(ep.player.rating)}</span>
               {canManage && (
                 <button onClick={() => removePlayer(ep.playerId)}
                   className="hidden group-hover:block text-[10px] text-danger px-1.5 py-0.5 rounded hover:bg-red-50">Remove</button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
