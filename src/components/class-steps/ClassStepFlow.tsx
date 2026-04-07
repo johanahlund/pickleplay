@@ -140,14 +140,20 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
   const userGender = userId ? players.find((p) => p.playerId === userId)?.player.gender : null;
 
   const sendRequest = async (partnerId: string) => {
-    const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "request", partnerId }),
-    });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      alert(d.error || "Could not send request");
+    try {
+      const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request", partnerId }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.error || `Request failed (${r.status})`);
+      } else {
+        alert("Request sent!");
+      }
+    } catch (e) {
+      alert(`Network error: ${e}`);
     }
     globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
   };
