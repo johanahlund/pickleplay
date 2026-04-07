@@ -138,7 +138,14 @@ function RolePill({ role, canChange, onChange }: { role: string; canChange: bool
       {open && (
         <div className="absolute right-0 top-6 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[100px]">
           {roles.map((r) => (
-            <button key={r} onClick={(e) => { e.stopPropagation(); onChange(r); setOpen(false); }}
+            <button key={r} onClick={(e) => {
+              e.stopPropagation();
+              if (r === role) { setOpen(false); return; }
+              if (r === "owner" ? confirm("Transfer ownership? You will become admin.") : confirm(`Change role to ${r}?`)) {
+                onChange(r);
+              }
+              setOpen(false);
+            }}
               className={`w-full text-left px-3 py-1.5 text-xs capitalize hover:bg-gray-50 ${role === r ? "font-bold" : ""}`}>
               {r} {role === r ? "✓" : ""}
             </button>
