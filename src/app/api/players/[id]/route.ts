@@ -1,6 +1,19 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAuth, requireAdmin } from "@/lib/auth";
 import { NextResponse } from "next/server";
+
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const player = await prisma.player.findUnique({
+    where: { id },
+    select: { id: true, name: true, email: true, phone: true, gender: true, photoUrl: true, rating: true, emoji: true },
+  });
+  if (!player) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json(player);
+}
 
 export async function DELETE(
   _req: Request,
@@ -20,10 +33,19 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user;
+  try { user = await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const { id } = await params;
-  const { name, emoji, gender, phone } = await req.json();
+  // Users can edit themselves, admins can edit anyone
+  if (user.id !== id && user.role !== "admin") {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
 
-  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null } = {};
+  const { name, emoji, gender, phone, email } = await req.json();
+
+  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null; email?: string | null } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -41,6 +63,9 @@ export async function PATCH(
   }
   if (phone !== undefined) {
     data.phone = phone ? phone.trim() : null;
+  }
+  if (email !== undefined) {
+    data.email = email ? email.trim().toLowerCase() : null;
   }
 
   if (Object.keys(data).length === 0) {

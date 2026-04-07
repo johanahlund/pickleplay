@@ -43,11 +43,17 @@ const BRACKET_LABELS: Record<string, string> = {
 };
 
 export default function ProfilePage() {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [ratings, setRatings] = useState<RatingData | null>(null);
   const [results, setResults] = useState<CompResult[]>([]);
   const [matches, setMatches] = useState<RecentMatch[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"all" | "social" | "competition">("all");
   const [loading, setLoading] = useState(true);
 
@@ -56,9 +62,16 @@ export default function ProfilePage() {
     Promise.all([
       fetch(`/api/players/${userId}/ratings`).then((r) => r.ok ? r.json() : null),
       fetch("/api/matches/my").then((r) => r.ok ? r.json() : []),
-    ]).then(([ratingsData, matchesData]) => {
+      fetch(`/api/players/${userId}`).then((r) => r.ok ? r.json() : null),
+    ]).then(([ratingsData, matchesData, playerData]) => {
       setRatings(ratingsData);
       setMatches(Array.isArray(matchesData) ? matchesData.slice(0, 30) : []);
+      if (playerData) {
+        setPhotoUrl(playerData.photoUrl || null);
+        setEditName(playerData.name || "");
+        setEditPhone(playerData.phone || "");
+        setEditEmail(playerData.email || "");
+      }
       setLoading(false);
     });
   }, [userId]);
@@ -90,9 +103,67 @@ export default function ProfilePage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="text-center py-4">
-        <PlayerAvatar name={session.user.name || ""} size="lg" />
-        <h2 className="text-xl font-bold mt-2">{session.user.name}</h2>
-        <p className="text-sm text-muted">{session.user.email}</p>
+        <div className="relative inline-block">
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="w-16 h-16 rounded-full object-cover mx-auto" />
+          ) : (
+            <PlayerAvatar name={session.user.name || ""} size="lg" />
+          )}
+          <label className="absolute bottom-0 right-0 w-6 h-6 bg-action text-white rounded-full flex items-center justify-center text-xs cursor-pointer shadow">
+            +
+            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file || !userId) return;
+              const fd = new FormData();
+              fd.append("photo", file);
+              const r = await fetch(`/api/players/${userId}/photo`, { method: "POST", body: fd });
+              if (r.ok) { const d = await r.json(); setPhotoUrl(d.photoUrl); }
+              else alert("Upload failed");
+            }} />
+          </label>
+        </div>
+        {editing ? (
+          <div className="mt-3 space-y-2 max-w-xs mx-auto text-left">
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Name</label>
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Email</label>
+              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Phone (WhatsApp)</label>
+              <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
+                placeholder="+351 912 345 678"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button disabled={saving} onClick={async () => {
+                setSaving(true);
+                await fetch(`/api/players/${userId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim() }),
+                });
+                setSaving(false);
+                setEditing(false);
+                updateSession();
+              }} className="flex-1 bg-action text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                {saving ? "Saving..." : "Save"}
+              </button>
+              <button onClick={() => setEditing(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-xl font-bold mt-2">{session.user.name}</h2>
+            <p className="text-sm text-muted">{session.user.email}</p>
+            <button onClick={() => setEditing(true)} className="text-xs text-action font-medium mt-1">Edit Profile</button>
+          </>
+        )}
       </div>
 
       {/* Rating cards */}
