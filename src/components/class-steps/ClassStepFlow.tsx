@@ -62,6 +62,7 @@ interface EventClassData {
   skillMin?: number | null;
   skillMax?: number | null;
   scoringFormat: string;
+  winBy?: string;
   pairingMode: string;
   playMode?: string;
   rankingMode: string;
@@ -256,7 +257,17 @@ export function ClassStepFlow({
         <div className={frameTitleClass}>Competition</div>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "groups"))} className={rowClass}>
           <span className="text-sm text-muted">Groups</span>
-          <span className="text-sm font-medium">{config.numGroups} groups · {config.matchesPerMatchup === 1 ? "once" : "twice"} · {config.groupSeeding}</span>
+          <span className="text-sm font-medium text-right">{(() => {
+            const sf = cls.scoringFormat || "1x11";
+            const sets = sf.startsWith("3") ? "best of 3" : "1 set";
+            const isRally = sf.includes("R");
+            const pts = sf.replace(/^[13]x/, "").replace("R", "");
+            const scoring = `${sets} ${isRally ? "rally " : ""}to ${pts}`;
+            const wb = cls.winBy || "2";
+            const winBy = wb === "1" ? ", win by 1" : wb === "2" ? "" : `, cap ${wb.replace("cap", "")}`;
+            const freq = config.matchesPerMatchup === 1 ? "once" : "twice";
+            return `${config.numGroups} groups, play each other ${freq}, ${scoring}${winBy}`;
+          })()}</span>
         </button>
         <button onClick={() => setCurrentStepIdx(steps.findIndex((s) => s.id === "advancement"))} className={rowClass}>
           <span className="text-sm text-muted">Advancement</span>
