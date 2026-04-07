@@ -347,8 +347,8 @@ export default function ClubDetailPage() {
   useEffect(() => { fetchClub(); fetchEvents(); fetchPosts(); }, [fetchClub, fetchEvents, fetchPosts]);
 
   const myMembership = club?.members.find((m) => m.playerId === userId);
-  const canManage = myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin;
-  const isOwner = myMembership?.role === "owner" || isGlobalAdmin;
+  const canManage = viewRole === "admin" && (myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin);
+  const isOwner = viewRole === "admin" && (myMembership?.role === "owner" || isGlobalAdmin);
 
   // Fetch join requests for managers
   useEffect(() => {

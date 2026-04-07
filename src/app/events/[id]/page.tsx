@@ -387,8 +387,8 @@ export default function EventDetailPage() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
-  const isOwner = !!(event && userId && event.createdById === userId);
-  const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId));
+  const isOwner = !!(event && userId && event.createdById === userId) && viewRole === "admin";
+  const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId)) && viewRole === "admin";
   const canManage = isAdmin || isOwner || isHelper;
 
   // Sync SWR data → local event state with derived fields
