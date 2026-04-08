@@ -1894,12 +1894,14 @@ export default function EventDetailPage() {
             return (
               <>
                 {renderTeamRow(team1, 1, team1Won, team1Score)}
-                <div className="flex items-center justify-center gap-2 my-1">
-                  <span className="text-sm text-muted font-medium">vs</span>
+                <div className="flex items-center my-1 px-2">
+                  <div className="flex-1 text-center">
+                    <span className="text-sm text-muted font-medium">vs</span>
+                  </div>
                   {match.scorer && (
-                    <span className="text-[10px] text-muted flex items-center gap-1">
+                    <span className="text-[10px] text-muted flex items-center gap-1 shrink-0">
                       <PlayerAvatar name={match.scorer.name} photoUrl={match.scorer.photoUrl} size="xs" />
-                      <span>Scorer: {match.scorer.name}</span>
+                      <span>{match.scorer.name}</span>
                     </span>
                   )}
                 </div>
