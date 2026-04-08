@@ -24,7 +24,7 @@ interface Event {
   createdById: string | null;
   clubId: string | null;
   club?: { id: string; name: string; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
-  classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null }[];
+  classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null; skillMin?: number | null; skillMax?: number | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string; status?: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
@@ -255,6 +255,15 @@ function EventsPage() {
                           <span className="text-[10px] text-muted">📍 {event.club.locations[0].name}</span>
                         )
                       )}
+                      {(() => {
+                        const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
+                        if (!cls?.skillMin && !cls?.skillMax) return null;
+                        const label = cls.skillMin && cls.skillMax
+                          ? `${cls.skillMin.toFixed(1)}–${cls.skillMax.toFixed(1)}`
+                          : cls.skillMin ? `${cls.skillMin.toFixed(1)}+`
+                          : `≤${cls.skillMax!.toFixed(1)}`;
+                        return <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">DUPR {label}</span>;
+                      })()}
                     </div>
                     <div className="flex items-center gap-1 mt-1">
                       <div className="flex -space-x-1.5">

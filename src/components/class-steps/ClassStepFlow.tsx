@@ -580,7 +580,7 @@ export function ClassStepFlow({
             <span className="text-sm font-medium capitalize">
               {[
                 cls.ageGroup !== "open" ? cls.ageGroup : null,
-                cls.skillMin ? cls.skillMin.toFixed(1) : null,
+                cls.skillMin ? (cls.skillMax ? `${cls.skillMin.toFixed(1)}–${cls.skillMax.toFixed(1)}` : cls.skillMin.toFixed(1)) : null,
                 cls.gender === "open" ? "Any Gender" : cls.gender,
                 cls.format,
               ].filter(Boolean).join(" · ")}

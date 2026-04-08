@@ -131,21 +131,39 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
       </div>
       <div>
         <label className="block text-xs text-muted mb-1">Level (DUPR)</label>
-        <select
-          disabled={!canManage}
-          value={cls.skillMin ?? ""}
-          onChange={(e) => {
-            const val = e.target.value ? parseFloat(e.target.value) : null;
-            updateField("skillMin", val);
-            updateField("skillMax", null);
-            autoName({ skillMin: val });
-          }}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
-        >
-          {DUPR_LEVELS.map((lvl) => (
-            <option key={lvl ?? "open"} value={lvl ?? ""}>{lvl ? lvl.toFixed(1) : "Open"}</option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select
+            disabled={!canManage}
+            value={cls.skillMin ?? ""}
+            onChange={(e) => {
+              const val = e.target.value ? parseFloat(e.target.value) : null;
+              updateField("skillMin", val);
+              // Clear max if it's lower than new min
+              if (val && cls.skillMax && cls.skillMax < val) updateField("skillMax", null);
+              autoName({ skillMin: val });
+            }}
+            className="flex-1 border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+          >
+            {DUPR_LEVELS.map((lvl) => (
+              <option key={lvl ?? "from"} value={lvl ?? ""}>{lvl ? lvl.toFixed(1) : "From"}</option>
+            ))}
+          </select>
+          <span className="self-center text-muted text-sm">–</span>
+          <select
+            disabled={!canManage}
+            value={cls.skillMax ?? ""}
+            onChange={(e) => {
+              const val = e.target.value ? parseFloat(e.target.value) : null;
+              updateField("skillMax", val);
+            }}
+            className="flex-1 border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
+          >
+            <option value="">To</option>
+            {DUPR_LEVELS.filter((lvl) => lvl !== null && (!cls.skillMin || lvl >= cls.skillMin)).map((lvl) => (
+              <option key={lvl!} value={lvl!}>{lvl!.toFixed(1)}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Min / Max */}
