@@ -11,10 +11,12 @@ interface RallyPlayer {
 
 interface RallyTrackerProps {
   matchId: string;
+  matchStatus: string;
   team1Players: RallyPlayer[];
   team2Players: RallyPlayer[];
   scoringFormat: string; // "1x11", "3x11", "1xR15", etc.
   winBy: string; // "1", "2", "cap15", etc.
+  onStartMatch: () => Promise<void>;
   onSubmitScore: (team1Score: number, team2Score: number) => void;
   onClose: () => void;
 }
@@ -134,10 +136,12 @@ function findPlayer(court: CourtState, playerId: string): RallyPlayer {
 
 export function RallyTracker({
   matchId,
+  matchStatus,
   team1Players,
   team2Players,
   scoringFormat,
   winBy,
+  onStartMatch,
   onSubmitScore,
   onClose,
 }: RallyTrackerProps) {
@@ -223,6 +227,11 @@ export function RallyTracker({
     setGameState(state);
     setHistory([]);
     setPhase("playing");
+
+    // Auto-start the match if still pending
+    if (matchStatus === "pending") {
+      onStartMatch();
+    }
   };
 
   // Handle rally result

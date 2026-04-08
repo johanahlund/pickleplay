@@ -1745,6 +1745,8 @@ export default function EventDetailPage() {
     const team1 = match.players.filter((p) => p.team === 1);
     const team2 = match.players.filter((p) => p.team === 2);
     const isCompleted = match.status === "completed";
+    const isActive = match.status === "active";
+    const isPending = match.status === "pending";
     const isEditing = editingMatchId === match.id;
     const team1Score = isCompleted ? team1[0]?.score ?? 0 : null;
     const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
@@ -1752,33 +1754,45 @@ export default function EventDetailPage() {
     const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
     const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
     const canScore = canManage || isMatchPlayer;
-    const showInputs = canScore && (!isCompleted || isEditing);
+    const showInputs = canScore && (isActive || isEditing);
     const isNextMatch = nextMatchIdSet.has(match.id);
     const isCourtFree = courtFreeMatchIds.has(match.id);
 
     return (
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
-        isCourtFree && !isCompleted
-          ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
-          : isNextMatch && !isCompleted
-            ? "border-blue-300 ring-1 ring-blue-200/50"
-            : "border-border"
+        isActive
+          ? "border-orange-400 ring-2 ring-orange-300/50 shadow-md shadow-orange-100"
+          : isCourtFree && isPending
+            ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
+            : isNextMatch && isPending
+              ? "border-blue-300 ring-1 ring-blue-200/50"
+              : "border-border"
       }`}>
         <div className={`px-3 py-2 border-b flex items-center justify-between ${
-          isCourtFree && !isCompleted
-            ? "bg-green-50 border-green-200"
-            : isNextMatch && !isCompleted
-              ? "bg-blue-50 border-blue-200"
-              : "bg-gray-50 border-border"
+          isActive
+            ? "bg-orange-50 border-orange-200"
+            : isCourtFree && isPending
+              ? "bg-green-50 border-green-200"
+              : isNextMatch && isPending
+                ? "bg-blue-50 border-blue-200"
+                : "bg-gray-50 border-border"
         }`}>
           <span className={`text-sm font-medium ${
-            isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
+            isActive ? "text-orange-600" : isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
           }`}>
             Court {match.courtNum}
-            {isCourtFree && !isCompleted && " — Ready!"}
-            {isNextMatch && !isCourtFree && !isCompleted && " — Up next"}
+            {isActive && " — In Play"}
+            {isPending && isCourtFree && " — Ready!"}
+            {isPending && isNextMatch && !isCourtFree && " — Up next"}
           </span>
           <div className="flex items-center gap-2">
+            {isPending && canScore && match.players.length >= 2 && (
+              <button onClick={async () => {
+                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
+                fetchEvent();
+              }}
+                className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
+            )}
             {!isCompleted && match.players.length >= 2 && (
               <button onClick={() => setRallyMatchId(match.id)}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
@@ -2069,10 +2083,15 @@ export default function EventDetailPage() {
     return (
       <RallyTracker
         matchId={match.id}
+        matchStatus={match.status}
         team1Players={team1}
         team2Players={team2}
         scoringFormat={fmt}
         winBy={wb}
+        onStartMatch={async () => {
+          await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
+          fetchEvent();
+        }}
         onSubmitScore={async (t1, t2) => {
           await fetch(`/api/matches/${match.id}/score`, {
             method: "POST",
