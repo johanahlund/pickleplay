@@ -25,7 +25,7 @@ interface Event {
   clubId: string | null;
   club?: { id: string; name: string; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null }[];
-  players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string }[];
+  players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string; status?: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
 }
@@ -268,8 +268,18 @@ function EventsPage() {
                         )}
                       </div>
                       <span className="text-xs text-muted ml-1">
-                        {event.players.length} players
-                        {(() => { const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0]; return cls?.maxPlayers ? ` (max ${cls.maxPlayers})` : ""; })()}
+                        {(() => {
+                          const active = event.players.filter((p) => p.status !== "waitlisted").length;
+                          const waitlisted = event.players.filter((p) => p.status === "waitlisted").length;
+                          const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
+                          const max = cls?.maxPlayers;
+                          const isFull = max && active >= max;
+                          return <>
+                            {active} players
+                            {isFull ? <span className="text-amber-600 font-medium"> · Full</span> : max ? ` (max ${max})` : ""}
+                            {waitlisted > 0 && <span className="text-amber-600"> · {waitlisted} wl</span>}
+                          </>;
+                        })()}
                       </span>
                     </div>
                   </div>
