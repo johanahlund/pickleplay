@@ -1821,17 +1821,19 @@ export default function EventDetailPage() {
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
             )}
-            <button onClick={() => {
-              if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
-                window.speechSynthesis.cancel();
-                return;
-              }
-              const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
-              const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
-              const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
-              sendAnnouncement(id as string, text);
-            }}
-              className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
+            {!isCompleted && (
+              <button onClick={() => {
+                if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+                  window.speechSynthesis.cancel();
+                  return;
+                }
+                const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
+                const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
+                const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
+                sendAnnouncement(id as string, text);
+              }}
+                className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
+            )}
             {isCompleted && !isEditing && (
               <span className={`text-sm font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
                 {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳ Pending" : "✓ Final"}
