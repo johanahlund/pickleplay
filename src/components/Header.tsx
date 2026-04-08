@@ -218,10 +218,10 @@ export function Header() {
         <div className="max-w-[600px] mx-auto">
           {/* Top row: app name + user */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <button onClick={() => router.push("/clubs")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <h1 className="text-lg font-bold tracking-tight">PickleJ</h1>
               <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
-            </div>
+            </button>
             {!isAuthPage && session?.user && (
               <div className="flex items-center gap-2">
                 <button
@@ -294,12 +294,6 @@ export function Header() {
           {activeClubId && clubName && (
             <>
               <div className="flex items-center gap-2 mt-1 pt-1 border-t border-white/10">
-                <button
-                  onClick={() => router.push("/clubs")}
-                  className="text-white/70 hover:text-white text-sm font-medium"
-                >
-                  ←
-                </button>
                 <button
                   onClick={() => router.push(`/clubs/${activeClubId}`)}
                   className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"

@@ -8,6 +8,13 @@ export async function GET(req: Request) {
   const city = url.searchParams.get("city") || "";
   const country = url.searchParams.get("country") || "";
 
+  // If requesting just countries list
+  if (url.searchParams.get("countries") === "1") {
+    const all = await prisma.club.findMany({ where: { country: { not: null } }, select: { country: true }, distinct: ["country"] });
+    const list = all.map((c) => c.country).filter(Boolean).sort();
+    return NextResponse.json(list);
+  }
+
   const clubs = await prisma.club.findMany({
     where: {
       ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),

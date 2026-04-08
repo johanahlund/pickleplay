@@ -92,7 +92,7 @@ export function BottomNav() {
 
   const tabs = clubId
     ? [
-        { href: `/clubs/${clubId}`, label: "Club", icon: "🏟️" },
+        { href: "/clubs", label: "My Clubs", icon: "🏟️" },
         { href: `/events?club=${clubId}`, label: "My Club Events", icon: "📅" },
         { href: `/matches?club=${clubId}`, label: "My Club Matches", icon: "🏓" },
       ]

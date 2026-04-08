@@ -10,6 +10,9 @@ interface Club {
   name: string;
   emoji: string;
   logoUrl?: string | null;
+  description?: string | null;
+  city?: string | null;
+  country?: string | null;
   myRole: string;
   _count: { members: number; events: number };
 }
@@ -35,6 +38,8 @@ export default function ClubsPage() {
   const [newName, setNewName] = useState("");
   const [newEmoji, setNewEmoji] = useState("🏓");
   const [creating, setCreating] = useState(false);
+
+  const [infoClubId, setInfoClubId] = useState<string | null>(null);
 
   // Browse state
   const [browseClubs, setBrowseClubs] = useState<BrowseClub[]>([]);
@@ -74,19 +79,22 @@ export default function ClubsPage() {
     fetchClubs();
   };
 
+  const fetchCountries = async () => {
+    if (countries.length > 0) return;
+    const r = await fetch("/api/clubs/browse?countries=1");
+    if (r.ok) setCountries(await r.json());
+  };
+
   const searchBrowse = async (q?: string, country?: string) => {
     setBrowseLoading(true);
+    fetchCountries();
     const params = new URLSearchParams();
     if (q || browseSearch) params.set("q", q || browseSearch);
     const c = country !== undefined ? country : browseCountry;
     if (c) params.set("country", c);
     const r = await fetch(`/api/clubs/browse?${params}`);
     if (r.ok) {
-      const data = await r.json();
-      setBrowseClubs(data);
-      // Extract unique countries for the filter (always update)
-      const uniqueCountries = [...new Set(data.map((cl: BrowseClub) => cl.country).filter(Boolean))] as string[];
-      if (uniqueCountries.length > countries.length) setCountries(uniqueCountries.sort());
+      setBrowseClubs(await r.json());
     }
     setBrowseLoading(false);
   };
@@ -166,35 +174,46 @@ export default function ClubsPage() {
       ) : (
         <div className="space-y-2">
           {clubs.map((club) => (
-            <Link key={club.id} href={`/clubs/${club.id}`}
-              className="block bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-3">
-                {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-lg">{club.name}</span>
-                    <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{club.myRole}</span>
+            <div key={club.id} className="bg-card rounded-xl border border-border overflow-hidden">
+              <Link href={`/clubs/${club.id}`}
+                className="block p-4 active:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-lg">{club.name}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{club.myRole}</span>
+                    </div>
+                    <p className="text-sm text-muted">
+                      {club._count.members} member{club._count.members !== 1 ? "s" : ""} &middot; {club._count.events} event{club._count.events !== 1 ? "s" : ""}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted">
-                    {club._count.members} member{club._count.members !== 1 ? "s" : ""} &middot; {club._count.events} event{club._count.events !== 1 ? "s" : ""}
-                  </p>
+                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
+                    className="text-muted hover:text-foreground text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100">ⓘ</button>
+                  <span className="text-2xl text-muted">›</span>
                 </div>
-                <span className="text-2xl text-muted">›</span>
-              </div>
-            </Link>
+              </Link>
+              {infoClubId === club.id && (
+                <div className="px-4 pb-3 pt-1 border-t border-border text-sm text-muted space-y-1">
+                  {club.description && <p>{club.description}</p>}
+                  {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
+                  {!club.description && !club.city && !club.country && <p className="italic">No additional info</p>}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
 
       {/* Browse clubs */}
       <div className="border-t border-border pt-4">
-        <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => { if (!showBrowse) searchBrowse(""); setShowBrowse(!showBrowse); }}
+          className="flex items-center justify-between w-full mb-3"
+        >
           <h3 className="text-lg font-bold">Find Clubs</h3>
-          {!showBrowse && (
-            <button onClick={() => { setShowBrowse(true); searchBrowse(""); }}
-              className="text-sm text-action font-medium">Browse</button>
-          )}
-        </div>
+          <span className={`text-muted text-sm transition-transform ${showBrowse ? "rotate-90" : ""}`}>›</span>
+        </button>
 
         {showBrowse && (
           <div className="space-y-3">
@@ -220,8 +239,8 @@ export default function ClubsPage() {
                   const isPending = requestedClubIds.has(club.id);
                   const isRequesting = requesting === club.id;
                   return (
-                    <div key={club.id} className="bg-card rounded-xl border border-border p-4">
-                      <div className="flex items-center gap-3">
+                    <div key={club.id} className="bg-card rounded-xl border border-border overflow-hidden">
+                      <div className="flex items-center gap-3 p-4">
                         {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" /> : <span className="text-2xl">{club.emoji}</span>}
                         <div className="flex-1 min-w-0">
                           <span className="font-semibold">{club.name}</span>
@@ -231,6 +250,8 @@ export default function ClubsPage() {
                             {club.country && !club.city && ` · ${club.country}`}
                           </p>
                         </div>
+                        <button onClick={() => setInfoClubId(infoClubId === club.id ? null : club.id)}
+                          className="text-muted hover:text-foreground text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100">ⓘ</button>
                         {isLoggedIn && (
                           isPending ? (
                             <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-lg">Requested</span>
@@ -245,6 +266,13 @@ export default function ClubsPage() {
                           <Link href="/signin" className="text-xs text-action font-medium">Sign in to join</Link>
                         )}
                       </div>
+                      {infoClubId === club.id && (
+                        <div className="px-4 pb-3 pt-1 border-t border-border text-sm text-muted space-y-1">
+                          {club.description && <p>{club.description}</p>}
+                          {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
+                          {!club.description && !club.city && !club.country && <p className="italic">No additional info</p>}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
