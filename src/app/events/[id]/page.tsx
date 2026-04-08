@@ -9,7 +9,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { CompetitionView } from "@/components/CompetitionView";
-import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement } from "@/components/SpeakerMode";
+import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement, stopAnnouncement } from "@/components/SpeakerMode";
 import { ClassesManager } from "@/components/ClassesManager";
 import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
@@ -1824,7 +1824,7 @@ export default function EventDetailPage() {
             {!isCompleted && (
               <button onClick={() => {
                 if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
-                  window.speechSynthesis.cancel();
+                  stopAnnouncement();
                   return;
                 }
                 const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);

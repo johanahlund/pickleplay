@@ -14,9 +14,17 @@ interface SpeakerModeProps {
  * Segments text by ". " or " | " delimiters and adds pauses between.
  * Uses slower rate for clarity.
  */
+let pendingTimeouts: ReturnType<typeof setTimeout>[] = [];
+
+export function stopAnnouncement() {
+  pendingTimeouts.forEach(clearTimeout);
+  pendingTimeouts = [];
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
 function speakAnnouncement(text: string) {
   if (!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
+  stopAnnouncement();
 
   // Play attention ding via AudioContext
   try {
@@ -37,13 +45,14 @@ function speakAnnouncement(text: string) {
 
   let delay = 600; // initial delay after ding
   for (const segment of segments) {
-    setTimeout(() => {
+    const t = setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(segment);
       utterance.rate = 0.85;
       utterance.pitch = 1.0;
       utterance.lang = "en-US";
       speechSynthesis.speak(utterance);
     }, delay);
+    pendingTimeouts.push(t);
     // Estimate segment duration + 400ms pause
     delay += segment.length * 60 + 400;
   }
