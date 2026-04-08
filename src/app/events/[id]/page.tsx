@@ -341,7 +341,8 @@ export default function EventDetailPage() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
-  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000 });
+  const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
+  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 0 });
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
@@ -1837,6 +1838,10 @@ export default function EventDetailPage() {
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
             )}
             {!isCompleted && (
+              <button onClick={() => setFocusedMatchId(match.id)}
+                className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Focus on this match">📺</button>
+            )}
+            {!isCompleted && (
               <button onClick={() => {
                 if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
                   stopAnnouncement();
@@ -1968,6 +1973,13 @@ export default function EventDetailPage() {
             {t.label} {t.count > 0 && <span className="text-[10px] opacity-70">({t.count})</span>}
           </button>
         ))}
+      </div>
+
+      {/* Refresh button */}
+      <div className="flex justify-end">
+        <button onClick={() => fetchEvent()} className="text-xs text-muted hover:text-foreground flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors">
+          🔄 Refresh scores
+        </button>
       </div>
 
       {/* Court availability alert */}
@@ -2149,6 +2161,62 @@ export default function EventDetailPage() {
     );
   }
 
+  const renderFocusedMatch = () => {
+    if (!focusedMatchId || !event) return null;
+    const match = event.matches?.find((m: Match) => m.id === focusedMatchId);
+    if (!match || match.status === "completed") { setFocusedMatchId(null); return null; }
+    const t1 = match.players.filter((p: MatchPlayer) => p.team === 1);
+    const t2 = match.players.filter((p: MatchPlayer) => p.team === 2);
+    const liveT1 = rallyMatchId === match.id && rallyLiveScore ? rallyLiveScore.team1 : null;
+    const liveT2 = rallyMatchId === match.id && rallyLiveScore ? rallyLiveScore.team2 : null;
+    const liveServerId = rallyMatchId === match.id ? rallyLiveScore?.serverId : undefined;
+    const liveReceiverId = rallyMatchId === match.id ? rallyLiveScore?.receiverId : undefined;
+    return (
+      <div className="fixed inset-0 z-[90] bg-black/95 flex flex-col text-white">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <button onClick={() => setFocusedMatchId(null)} className="text-sm text-white/60 hover:text-white">← Back</button>
+          <span className="text-sm text-white/50">Court {match.courtNum} · {match.status === "active" ? "In Play" : match.status === "paused" ? "Paused" : "Pending"}</span>
+          <span className="text-xs text-white/30">Auto-refresh</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
+          {/* Team 1 */}
+          <div className="text-center">
+            {t1.map((mp: MatchPlayer, i: number) => (
+              <span key={mp.id} className="text-2xl font-bold">
+                {i > 0 && <span className="text-white/30 mx-2">&</span>}
+                <span className="text-white">{mp.player.name}</span>
+                {liveServerId === mp.player.id && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold ml-2 align-middle">SRV</span>}
+                {liveReceiverId === mp.player.id && <span className="text-[10px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium ml-2 align-middle">RCV</span>}
+              </span>
+            ))}
+          </div>
+          {/* Score */}
+          <div className="flex items-center gap-6">
+            <span className={`text-8xl font-black tabular-nums ${liveT1 !== null ? "text-orange-400" : "text-white/30"}`}>{liveT1 ?? "-"}</span>
+            <span className="text-4xl text-white/20">—</span>
+            <span className={`text-8xl font-black tabular-nums ${liveT2 !== null ? "text-orange-400" : "text-white/30"}`}>{liveT2 ?? "-"}</span>
+          </div>
+          {/* Team 2 */}
+          <div className="text-center">
+            {t2.map((mp: MatchPlayer, i: number) => (
+              <span key={mp.id} className="text-2xl font-bold">
+                {i > 0 && <span className="text-white/30 mx-2">&</span>}
+                <span className="text-white">{mp.player.name}</span>
+                {liveServerId === mp.player.id && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold ml-2 align-middle">SRV</span>}
+                {liveReceiverId === mp.player.id && <span className="text-[10px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium ml-2 align-middle">RCV</span>}
+              </span>
+            ))}
+          </div>
+          {match.scorer && (
+            <div className="text-xs text-white/40 flex items-center gap-1">
+              Scorer: {match.scorer.name}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderRallyTracker = () => {
     if (!rallyMatchId || !event) return null;
     const match = event.matches?.find((m: Match) => m.id === rallyMatchId);
@@ -2251,6 +2319,7 @@ export default function EventDetailPage() {
         )}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
+        {renderFocusedMatch()}
         {renderRallyTracker()}
       </div>
     );
