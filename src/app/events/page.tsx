@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 
 interface Event {
   id: string;
@@ -24,7 +25,7 @@ interface Event {
   clubId: string | null;
   club?: { id: string; name: string; emoji: string } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null }[];
-  players: { player: { name: string; emoji: string }; playerId: string }[];
+  players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
 }
@@ -235,26 +236,24 @@ function EventsPage() {
                         </span>
                       )}
                     </h3>
-                    <p className="text-sm text-muted mt-0.5">
-                      {new Date(event.date).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      at{" "}
-                      {new Date(event.date).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
-                      &middot; {event.numCourts} court
-                      {event.numCourts !== 1 ? "s" : ""} &middot; {event.format}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
-                        {event.scoringFormat || "1x11"}
+                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                      <span className="text-sm text-muted">
+                        {new Date(event.date).toLocaleDateString(undefined, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}{" "}
+                        at{" "}
+                        {new Date(event.date).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full capitalize">{event.format}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.scoringFormat || "1x11"}</span>
                       {event.pairingMode !== "random" && (
-                        <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">
                           {event.pairingMode === "skill_balanced" ? "Skill" : event.pairingMode === "mixed_gender" ? "Mixed" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mix" : event.pairingMode === "king_of_court" ? "King" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
                         </span>
                       )}
@@ -269,15 +268,18 @@ function EventsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1 mt-2">
-                  <div className="flex -space-x-1">
-                    {event.players.slice(0, 6).map((ep, i) => (
-                      <span key={i} className="text-lg">
-                        {ep.player.emoji}
-                      </span>
+                  <div className="flex -space-x-1.5">
+                    {event.players.slice(0, 8).map((ep, i) => (
+                      <div key={i} className="ring-2 ring-white rounded-full">
+                        <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                      </div>
                     ))}
+                    {event.players.length > 8 && (
+                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-muted ring-2 ring-white">+{event.players.length - 8}</div>
+                    )}
                   </div>
                   <span className="text-sm text-muted ml-1">
-                    {event.players.length} players &middot; {event._count.matches} matches
+                    {event.players.length} players · {event._count.matches} matches
                   </span>
                 </div>
               </Link>
