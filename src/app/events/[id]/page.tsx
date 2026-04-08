@@ -1809,7 +1809,8 @@ export default function EventDetailPage() {
             )}
             {isActive && canScore && (
               <button onClick={async () => {
-                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: hasLiveScore ? "paused" : "pending" }) });
+                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) });
+                setMatchTab("paused");
                 fetchEvent();
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors" title="Pause match">⏸️</button>
