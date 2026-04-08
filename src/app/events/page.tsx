@@ -230,7 +230,7 @@ function EventsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h3 className="font-semibold text-sm truncate">{event.name}</h3>
+                      <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
                       {event.classes?.some((c) => c.competitionMode) ? (
                         <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 Comp</span>
