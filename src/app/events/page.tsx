@@ -221,7 +221,7 @@ function EventsPage() {
             const cardOpacity = timeStatus === "past" ? "opacity-60" : "";
             return (
             <div key={event.id} className={`bg-card rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
-              <Link href={`/events/${event.id}`} className="block p-3 active:bg-gray-50 transition-colors">
+              <div className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center min-w-[44px]">
                     <div className="text-xs text-muted uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: "short" })}</div>
@@ -229,6 +229,9 @@ function EventsPage() {
                     <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
+                    {!clubFilter && event.club && (
+                      <div className="text-[10px] text-muted font-medium mb-0.5">{event.club.emoji} {event.club.name}</div>
+                    )}
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
@@ -251,9 +254,6 @@ function EventsPage() {
                         ) : (
                           <span className="text-[10px] text-muted">📍 {event.club.locations[0].name}</span>
                         )
-                      )}
-                      {!clubFilter && event.club && (
-                        <span className="text-[10px] text-muted font-medium ml-auto">{event.club.emoji} {event.club.name}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 mt-1">
@@ -283,9 +283,11 @@ function EventsPage() {
                       </span>
                     </div>
                   </div>
-                  <span className="text-xl text-muted">›</span>
+                  <Link href={`/events/${event.id}`} className="flex items-center pl-2 self-stretch hover:bg-gray-50 active:bg-gray-100 transition-colors -my-3 -mr-3 pr-3 rounded-r-xl">
+                    <span className="text-xl text-muted">›</span>
+                  </Link>
                 </div>
-              </Link>
+              </div>
               {(isAdmin || event.createdById === userId) && (
                 <div className="border-t border-border px-3 py-1.5 flex justify-end">
                   <button onClick={() => deleteEvent(event.id)}
