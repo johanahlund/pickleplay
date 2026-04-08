@@ -24,7 +24,7 @@ interface Event {
   createdById: string | null;
   clubId: string | null;
   club?: { id: string; name: string; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
-  classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null }[];
+  classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
@@ -253,23 +253,7 @@ function EventsPage() {
                         )
                       )}
                     </div>
-                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusBadge(event.status)}`}>{event.status}</span>
-                      {event.club && (
-                        <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
-                          {event.club.emoji} {event.club.name}
-                        </span>
-                      )}
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.numCourts} ct</span>
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full capitalize">{event.format}</span>
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.scoringFormat || "1x11"}</span>
-                      {event.pairingMode !== "random" && (
-                        <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">
-                          {event.pairingMode === "skill_balanced" ? "Skill" : event.pairingMode === "mixed_gender" ? "Mixed" : event.pairingMode === "skill_mixed_gender" ? "Skill+Mix" : event.pairingMode === "king_of_court" ? "King" : event.pairingMode === "manual" ? "Manual" : "Swiss"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1.5">
+                    <div className="flex items-center gap-1 mt-1">
                       <div className="flex -space-x-1.5">
                         {event.players.slice(0, 8).map((ep, i) => (
                           <div key={i} className="ring-2 ring-white rounded-full">
@@ -280,7 +264,10 @@ function EventsPage() {
                           <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-muted ring-2 ring-white">+{event.players.length - 8}</div>
                         )}
                       </div>
-                      <span className="text-xs text-muted ml-1">{event.players.length} players · {event._count.matches} matches</span>
+                      <span className="text-xs text-muted ml-1">
+                        {event.players.length} players
+                        {(() => { const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0]; return cls?.maxPlayers ? ` (max ${cls.maxPlayers})` : ""; })()}
+                      </span>
                     </div>
                   </div>
                   <span className="text-xl text-muted">›</span>
