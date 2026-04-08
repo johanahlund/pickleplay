@@ -14,6 +14,7 @@ import { ClassesManager } from "@/components/ClassesManager";
 import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
+import { RallyTracker } from "@/components/RallyTracker";
 
 interface Player {
   id: string;
@@ -45,6 +46,8 @@ interface Match {
   players: MatchPlayer[];
   scoreConfirmed?: boolean;
   rankingMode?: string;
+  matchFormat?: string | null;
+  classId?: string | null;
 }
 
 interface EventHelper {
@@ -389,6 +392,7 @@ export default function EventDetailPage() {
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
@@ -1775,6 +1779,10 @@ export default function EventDetailPage() {
             {isNextMatch && !isCourtFree && !isCompleted && " — Up next"}
           </span>
           <div className="flex items-center gap-2">
+            {!isCompleted && match.players.length >= 2 && (
+              <button onClick={() => setRallyMatchId(match.id)}
+                className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
+            )}
             <button onClick={() => {
               const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
               const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
@@ -2274,6 +2282,37 @@ export default function EventDetailPage() {
           Delete Event
         </button>
       )}
+
+      {/* Rally Tracker overlay */}
+      {rallyMatchId && (() => {
+        const match = event?.matches?.find((m: Match) => m.id === rallyMatchId);
+        if (!match) return null;
+        const team1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
+        const team2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
+        // Get scoring format: match-level override → class → event default
+        const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
+        const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
+        const wb = cls?.winBy || "2";
+        return (
+          <RallyTracker
+            matchId={match.id}
+            team1Players={team1}
+            team2Players={team2}
+            scoringFormat={fmt}
+            winBy={wb}
+            onSubmitScore={async (t1, t2) => {
+              await fetch(`/api/matches/${match.id}/score`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
+              });
+              setRallyMatchId(null);
+              fetchEvent();
+            }}
+            onClose={() => setRallyMatchId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
