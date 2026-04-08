@@ -23,7 +23,7 @@ interface Event {
   visibility: string;
   createdById: string | null;
   clubId: string | null;
-  club?: { id: string; name: string; emoji: string } | null;
+  club?: { id: string; name: string; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string }[];
   helpers: { playerId: string }[];
@@ -241,7 +241,19 @@ function EventsPage() {
                     <div className="flex items-center flex-wrap gap-1 mt-0.5">
                       <span className="text-xs text-muted">
                         {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                        {event.endDate && ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
                       </span>
+                      {event.club?.locations?.[0] && (
+                        event.club.locations[0].googleMapsUrl ? (
+                          <a href={event.club.locations[0].googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[10px] text-action font-medium hover:underline">📍 {event.club.locations[0].name}</a>
+                        ) : (
+                          <span className="text-[10px] text-muted">📍 {event.club.locations[0].name}</span>
+                        )
+                      )}
+                    </div>
+                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusBadge(event.status)}`}>{event.status}</span>
                       {event.club && (
                         <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">

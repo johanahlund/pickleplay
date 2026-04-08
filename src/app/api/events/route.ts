@@ -12,7 +12,7 @@ export async function GET() {
       classes: true,
       players: { include: { player: true } },
       helpers: { include: { player: true } },
-      club: { select: { id: true, name: true, emoji: true } },
+      club: { select: { id: true, name: true, emoji: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
     },
   });
