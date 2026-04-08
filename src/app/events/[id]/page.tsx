@@ -48,6 +48,8 @@ interface Match {
   rankingMode?: string;
   matchFormat?: string | null;
   classId?: string | null;
+  scorerId?: string | null;
+  scorer?: { id: string; name: string; photoUrl?: string | null } | null;
 }
 
 interface EventHelper {
@@ -1797,7 +1799,26 @@ export default function EventDetailPage() {
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
             )}
             {!isCompleted && match.players.length >= 2 && (
-              <button onClick={() => { setRallyMatchId(match.id); setRallyVisible(true); }}
+              <button onClick={async () => {
+                // If already scorer or resuming, go straight in
+                if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) {
+                  setRallyMatchId(match.id); setRallyVisible(true);
+                  return;
+                }
+                // If another scorer assigned, show who
+                if (match.scorerId && match.scorerId !== userId) {
+                  if (!confirm(`${match.scorer?.name || "Someone"} is the scorer. Take over?`)) return;
+                }
+                // Ask to be scorer
+                if (!confirm("Will you be the scorer for this match?")) return;
+                await fetch(`/api/matches/${match.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ scorerId: userId }),
+                });
+                await fetchEvent();
+                setRallyMatchId(match.id); setRallyVisible(true);
+              }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
             )}
             <button onClick={() => {
@@ -1851,7 +1872,15 @@ export default function EventDetailPage() {
               <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
             )}
           </div>
-          <div className="text-center text-sm text-muted font-medium my-1">vs</div>
+          <div className="flex items-center justify-center gap-2 my-1">
+            <span className="text-sm text-muted font-medium">vs</span>
+            {match.scorer && (
+              <span className="text-[10px] text-muted flex items-center gap-1">
+                <PlayerAvatar name={match.scorer.name} photoUrl={match.scorer.photoUrl} size="xs" />
+                <span>Scorer: {match.scorer.name}</span>
+              </span>
+            )}
+          </div>
           <div className={`flex items-center gap-2 p-2 rounded-lg ${team2Won && !isEditing ? "bg-green-50" : ""}`}>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">

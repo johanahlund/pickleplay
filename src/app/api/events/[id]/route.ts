@@ -14,7 +14,10 @@ export async function GET(
       sessions: { orderBy: { date: "asc" } },
       players: { include: { player: true } },
       matches: {
-        include: { players: { include: { player: true } } },
+        include: {
+          players: { include: { player: true } },
+          scorer: { select: { id: true, name: true, photoUrl: true } },
+        },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
       helpers: { include: { player: true } },
@@ -151,7 +154,10 @@ export async function PATCH(
       classes: true,
       players: { include: { player: true } },
       matches: {
-        include: { players: { include: { player: true } } },
+        include: {
+          players: { include: { player: true } },
+          scorer: { select: { id: true, name: true, photoUrl: true } },
+        },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
     },

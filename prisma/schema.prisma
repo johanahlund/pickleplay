@@ -53,6 +53,7 @@ model Player {
   clubJoinRequests ClubJoinRequest[]
   clubPosts     ClubPost[]
   clubComments  ClubComment[]
+  scoredMatches Match[]       @relation("matchScorer")
 }
 
 model Club {
@@ -316,11 +317,13 @@ model Match {
   matchFormat    String?
   sessionId      String?  // which session this match is scheduled in
   isCrossClub    Boolean  @default(false) // players from different clubs
+  scorerId       String?  // player assigned as scorer/judge
 
   createdAt DateTime @default(now())
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class   EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  scorer  Player?       @relation("matchScorer", fields: [scorerId], references: [id])
   players MatchPlayer[]
 }
 
