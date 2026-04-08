@@ -41,6 +41,18 @@ export async function PATCH(
 
   if (scorerId !== undefined) {
     data.scorerId = scorerId; // null to unassign
+
+    // Auto-add scorer as event helper if not already
+    if (scorerId) {
+      const existingHelper = await prisma.eventHelper.findFirst({
+        where: { eventId: match.eventId, playerId: scorerId },
+      });
+      if (!existingHelper) {
+        await prisma.eventHelper.create({
+          data: { eventId: match.eventId, playerId: scorerId },
+        });
+      }
+    }
   }
 
   if (Object.keys(data).length === 0) {

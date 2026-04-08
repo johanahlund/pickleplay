@@ -1798,7 +1798,7 @@ export default function EventDetailPage() {
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
             )}
-            {!isCompleted && match.players.length >= 2 && (
+            {!isCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
               <button onClick={async () => {
                 // If already scorer or resuming, go straight in
                 if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) {
