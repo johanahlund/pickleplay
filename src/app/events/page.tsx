@@ -278,13 +278,14 @@ function EventsPage() {
                       </div>
                       <span className="text-xs text-muted ml-1">
                         {(() => {
-                          const active = event.players.filter((p) => p.status !== "waitlisted").length;
+                          const total = event.players.length;
                           const waitlisted = event.players.filter((p) => p.status === "waitlisted").length;
+                          const registered = total - waitlisted;
                           const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
                           const max = cls?.maxPlayers;
-                          const isFull = max && active >= max;
+                          const isFull = max && registered >= max;
                           return <>
-                            {active} players
+                            {total} players
                             {isFull ? <span className="text-amber-600 font-medium"> · Full</span> : max ? ` (max ${max})` : ""}
                             {waitlisted > 0 && <span className="text-amber-600"> · {waitlisted} wl</span>}
                           </>;
