@@ -1801,6 +1801,7 @@ export default function EventDetailPage() {
             {(isPending || match.status === "paused") && canScore && match.players.length >= 2 && (
               <button onClick={async () => {
                 await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
+                setMatchTab("current");
                 fetchEvent();
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
