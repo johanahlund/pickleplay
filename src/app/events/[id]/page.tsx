@@ -1956,8 +1956,8 @@ export default function EventDetailPage() {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {([
           { key: "previous", label: "Previous", count: completedMatches.length },
-          ...(pausedMatches.length > 0 ? [{ key: "paused" as const, label: "Paused", count: pausedMatches.length }] : []),
           { key: "current", label: "Current", count: activeMatches.length },
+          ...(pausedMatches.length > 0 ? [{ key: "paused" as const, label: "Paused", count: pausedMatches.length }] : []),
           { key: "future", label: "Future", count: pendingMatches.length },
         ] as const).map((t) => (
           <button key={t.key} onClick={() => setMatchTab(t.key)}
