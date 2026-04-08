@@ -1853,38 +1853,41 @@ export default function EventDetailPage() {
             const renderTeamRow = (teamPlayers: MatchPlayer[], teamNum: 1 | 2, won: boolean, scoreVal: number | null) => {
               const liveServerId = hasLiveScore ? rallyLiveScore?.serverId : undefined;
               const liveReceiverId = hasLiveScore ? rallyLiveScore?.receiverId : undefined;
-              return (
-                <div className={`flex items-center gap-2 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}>
-                  <div className="flex-1 flex items-center justify-end gap-0">
-                    {teamPlayers.map((mp, i) => {
-                      const isServerPlayer = liveServerId === mp.player.id;
-                      const isReceiverPlayer = liveReceiverId === mp.player.id;
-                      return (
-                        <span key={mp.id} className="inline-flex items-center gap-1">
-                          {i > 0 && <span className="text-muted mx-1.5">&</span>}
-                          <span className="flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1">
-                              <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                              <span className={won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                            </span>
-                            {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold mt-0.5">SRV</span>}
-                            {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium mt-0.5">RCV</span>}
-                          </span>
-                        </span>
-                      );
-                    })}
+              const p1 = teamPlayers[0];
+              const p2 = teamPlayers[1];
+              const renderPlayer = (mp: MatchPlayer, align: "left" | "right") => {
+                const isServerPlayer = liveServerId === mp.player.id;
+                const isReceiverPlayer = liveReceiverId === mp.player.id;
+                return (
+                  <div className={`flex-1 flex flex-col ${align === "right" ? "items-end" : "items-start"}`}>
+                    <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+                      <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+                      <span className={won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
+                    </span>
+                    {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold mt-0.5">SRV</span>}
+                    {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium mt-0.5">RCV</span>}
                   </div>
-                  {isCompleted && !isEditing ? (
-                    <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
-                  ) : hasLiveScore ? (
-                    <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
-                  ) : showInputs ? (
-                    <input type="number" inputMode="numeric" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
-                      onChange={(e) => setMatchScore(match.id, teamNum === 1 ? "team1" : "team2", e.target.value)}
-                      className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
-                  ) : (
-                    <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
-                  )}
+                );
+              };
+              return (
+                <div className={`flex items-center gap-1 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}>
+                  {p1 && renderPlayer(p1, "right")}
+                  {p2 && <span className="text-muted text-sm shrink-0">&</span>}
+                  {p2 && renderPlayer(p2, "left")}
+                  {!p2 && <div className="flex-1" />}
+                  <div className="shrink-0 ml-1">
+                    {isCompleted && !isEditing ? (
+                      <span className={`text-2xl font-bold min-w-[2.5rem] text-center block ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
+                    ) : hasLiveScore ? (
+                      <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
+                    ) : showInputs ? (
+                      <input type="number" inputMode="numeric" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
+                        onChange={(e) => setMatchScore(match.id, teamNum === 1 ? "team1" : "team2", e.target.value)}
+                        className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
+                    ) : (
+                      <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
+                    )}
+                  </div>
                 </div>
               );
             };
