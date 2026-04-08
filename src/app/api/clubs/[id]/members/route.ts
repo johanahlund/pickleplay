@@ -82,6 +82,14 @@ export async function PATCH(
     return NextResponse.json({ error: "playerId and valid role required" }, { status: 400 });
   }
 
+  // Check if target is currently the owner — only app admin can change owner's role
+  const targetMember = await prisma.clubMember.findUnique({
+    where: { clubId_playerId: { clubId: id, playerId } },
+  });
+  if (targetMember?.role === "owner" && user.role !== "admin") {
+    return NextResponse.json({ error: "Only app admin can change the owner's role" }, { status: 403 });
+  }
+
   // Ownership transfer requires current owner or app admin
   if (role === "owner") {
     const callerMember = await prisma.clubMember.findUnique({

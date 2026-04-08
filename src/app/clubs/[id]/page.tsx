@@ -171,6 +171,7 @@ function SwipeableMemberRow({
   member,
   canManage,
   isOwner,
+  isGlobalAdmin,
   isSelf,
   showContact,
   onRemove,
@@ -179,6 +180,7 @@ function SwipeableMemberRow({
   member: ClubMember;
   canManage: boolean;
   isOwner: boolean;
+  isGlobalAdmin: boolean;
   isSelf: boolean;
   showContact: boolean;
   onRemove: () => void;
@@ -249,7 +251,7 @@ function SwipeableMemberRow({
       )}
       <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
-      <RolePill role={member.role} canChange={!!(isOwner && member.role !== "owner" && !isSelf)} onChange={onRoleChange} />
+      <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
       {/* Desktop hover action */}
       {canManage && member.role !== "owner" && !isSelf && (
         <button
@@ -1161,6 +1163,7 @@ export default function ClubDetailPage() {
                 member={m}
                 canManage={canManage}
                 isOwner={isOwner}
+                isGlobalAdmin={isGlobalAdmin}
                 isSelf={m.playerId === userId}
                 showContact={isGlobalAdmin || m.playerId === userId}
                 onRemove={() => removeMember(m.playerId)}
