@@ -393,6 +393,8 @@ export default function EventDetailPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
+  const [rallyVisible, setRallyVisible] = useState(false);
+  const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
@@ -1757,6 +1759,7 @@ export default function EventDetailPage() {
     const showInputs = canScore && (isActive || isEditing);
     const isNextMatch = nextMatchIdSet.has(match.id);
     const isCourtFree = courtFreeMatchIds.has(match.id);
+    const hasLiveScore = rallyMatchId === match.id && rallyLiveScore;
 
     return (
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
@@ -1794,7 +1797,7 @@ export default function EventDetailPage() {
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
             )}
             {!isCompleted && match.players.length >= 2 && (
-              <button onClick={() => setRallyMatchId(match.id)}
+              <button onClick={() => { setRallyMatchId(match.id); setRallyVisible(true); }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
             )}
             <button onClick={() => {
@@ -1838,6 +1841,8 @@ export default function EventDetailPage() {
             </div>
             {isCompleted && !isEditing ? (
               <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team1Won ? "text-green-600" : "text-gray-400"}`}>{team1Score}</span>
+            ) : hasLiveScore ? (
+              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{rallyLiveScore!.team1}</span>
             ) : showInputs ? (
               <input type="number" inputMode="numeric" value={scores[match.id]?.team1 ?? ""}
                 onChange={(e) => setMatchScore(match.id, "team1", e.target.value)}
@@ -1860,6 +1865,8 @@ export default function EventDetailPage() {
             </div>
             {isCompleted && !isEditing ? (
               <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team2Won ? "text-green-600" : "text-gray-400"}`}>{team2Score}</span>
+            ) : hasLiveScore ? (
+              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{rallyLiveScore!.team2}</span>
             ) : showInputs ? (
               <input type="number" inputMode="numeric" value={scores[match.id]?.team2 ?? ""}
                 onChange={(e) => setMatchScore(match.id, "team2", e.target.value)}
@@ -2084,6 +2091,7 @@ export default function EventDetailPage() {
       <RallyTracker
         matchId={match.id}
         matchStatus={match.status}
+        visible={rallyVisible}
         team1Players={team1}
         team2Players={team2}
         scoringFormat={fmt}
@@ -2099,9 +2107,11 @@ export default function EventDetailPage() {
             body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
           });
           setRallyMatchId(null);
+          setRallyVisible(false);
           fetchEvent();
         }}
-        onClose={() => setRallyMatchId(null)}
+        onScoreChange={(t1, t2) => setRallyLiveScore({ team1: t1, team2: t2 })}
+        onClose={() => setRallyVisible(false)}
       />
     );
   };
