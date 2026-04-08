@@ -19,7 +19,7 @@ interface RallyTrackerProps {
   winBy: string; // "1", "2", "cap15", etc.
   onStartMatch: () => Promise<void>;
   onSubmitScore: (team1Score: number, team2Score: number) => void;
-  onScoreChange?: (team1Score: number, team2Score: number) => void;
+  onScoreChange?: (team1Score: number, team2Score: number, serverId?: string, receiverId?: string) => void;
   onClose: () => void;
 }
 
@@ -40,7 +40,7 @@ interface GameState {
   isFirstServe: boolean; // game-start exception: only Server 2
 }
 
-type Phase = "pick-sides" | "pick-server" | "pick-receiver" | "playing" | "game-over";
+type Phase = "pick-sides" | "setup-court" | "playing" | "game-over";
 
 function parseFormat(fmt: string): { isRally: boolean; targetScore: number; sets: number } {
   const sets = fmt.startsWith("3") ? 3 : 1;
@@ -154,7 +154,11 @@ export function RallyTracker({
   const isDoubles = team1Players.length === 2 && team2Players.length === 2;
 
   const [phase, setPhase] = useState<Phase>("pick-sides");
-  const [selectedServer, setSelectedServer] = useState<RallyPlayer | null>(null);
+  const [setupServer, setSetupServer] = useState<RallyPlayer | null>(null);
+  const [setupReceiver, setSetupReceiver] = useState<RallyPlayer | null>(null);
+  // Court order: [top, bottom] for each team — bottom = right court (serving side)
+  const [team1Order, setTeam1Order] = useState<RallyPlayer[]>(team1Players);
+  const [team2Order, setTeam2Order] = useState<RallyPlayer[]>(team2Players);
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [swapped, setSwapped] = useState(false); // swap screen sides for teams
 
@@ -182,22 +186,70 @@ export function RallyTracker({
   const winByLabel = cap ? `cap ${cap}` : `win by ${winByN}`;
 
   // Step 1: Pick server
-  const handlePickServer = (player: RallyPlayer, team: 1 | 2) => {
-    setSelectedServer(player);
-    if (!isDoubles) {
-      // Singles: server picked, receiver is the opponent
-      const opponent = team === 1 ? team2Players[0] : team1Players[0];
-      initGame(player, opponent, team);
+  // Ensure the given player is at bottom (right court = serving position)
+  const moveToBottom = (player: RallyPlayer) => {
+    const inTeam1 = team1Players.some((p) => p.id === player.id);
+    if (inTeam1) {
+      const partner = team1Players.find((p) => p.id !== player.id);
+      if (partner) setTeam1Order([partner, player]);
     } else {
-      setPhase("pick-receiver");
+      const partner = team2Players.find((p) => p.id !== player.id);
+      if (partner) setTeam2Order([partner, player]);
     }
   };
 
-  // Step 2: Pick receiver (doubles only)
-  const handlePickReceiver = (receiver: RallyPlayer) => {
-    if (!selectedServer) return;
-    const serverTeam = team1Players.some((p) => p.id === selectedServer.id) ? 1 : 2;
-    initGame(selectedServer, receiver, serverTeam as 1 | 2);
+  // Ensure the given player is at top (left court = receiving diagonal from bottom-right)
+  const moveToTop = (player: RallyPlayer) => {
+    const inTeam1 = team1Players.some((p) => p.id === player.id);
+    if (inTeam1) {
+      const partner = team1Players.find((p) => p.id !== player.id);
+      if (partner) setTeam1Order([player, partner]);
+    } else {
+      const partner = team2Players.find((p) => p.id !== player.id);
+      if (partner) setTeam2Order([player, partner]);
+    }
+  };
+
+  // Setup court: tap a player to assign as server, then receiver
+  const handleSetupTap = (player: RallyPlayer) => {
+    const isTeam1 = team1Players.some((p) => p.id === player.id);
+
+    if (!setupServer) {
+      // First tap = server — move to bottom (right court)
+      setSetupServer(player);
+      setSetupReceiver(null);
+      moveToBottom(player);
+    } else if (setupServer.id === player.id) {
+      // Tap same player = deselect
+      setSetupServer(null);
+      setSetupReceiver(null);
+    } else {
+      // Second tap
+      const serverIsTeam1 = team1Players.some((p) => p.id === setupServer.id);
+      const sameTeam = (serverIsTeam1 && isTeam1) || (!serverIsTeam1 && !isTeam1);
+      if (!sameTeam) {
+        // Other team = receiver — move to top (diagonal from server at bottom)
+        setSetupReceiver(player);
+        moveToTop(player);
+      } else {
+        // Same team = switch server
+        setSetupServer(player);
+        setSetupReceiver(null);
+        moveToBottom(player);
+      }
+    }
+  };
+
+  const handleSetupConfirm = () => {
+    if (!setupServer) return;
+    const serverTeam = team1Players.some((p) => p.id === setupServer.id) ? 1 : 2;
+    if (!isDoubles) {
+      const opponent = serverTeam === 1 ? team2Players[0] : team1Players[0];
+      initGame(setupServer, opponent, serverTeam as 1 | 2);
+    } else {
+      if (!setupReceiver) return;
+      initGame(setupServer, setupReceiver, serverTeam as 1 | 2);
+    }
   };
 
   // Initialize game state from server + receiver picks
@@ -357,7 +409,8 @@ export function RallyTracker({
     }
 
     setGameState(newState);
-    onScoreChange?.(newState.score[0], newState.score[1]);
+    const newReceiverId = getReceiverId(newState.court, newState.serverId);
+    onScoreChange?.(newState.score[0], newState.score[1], newState.serverId, newReceiverId);
 
     // Auto-speak
     if (autoSpeak && !w) {
@@ -408,109 +461,147 @@ export function RallyTracker({
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <button onClick={onClose} className="text-sm text-white/60 hover:text-white transition-colors">← Match Overview</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-lg">✕</button>
+          <div className="w-16" />
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-          {/* Team cards */}
-          <div className="w-full max-w-sm space-y-3">
-            <div className="bg-blue-900/40 border border-blue-500/40 rounded-xl px-4 py-3">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5">
+          {/* Team A with side arrows */}
+          <div className="text-sm text-white font-medium mb--1">Which side is Team A on?</div>
+          <div className="flex items-center gap-3 w-full max-w-sm">
+            <button onClick={() => { setSwapped(false); setPhase("setup-court"); }}
+              className="flex flex-col items-center gap-1 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-xl px-4 py-3 transition-colors animate-pulse">
+              <span className="text-3xl">←</span>
+              <span className="text-xs font-bold text-blue-300">Left</span>
+            </button>
+            <div className="flex-1 bg-blue-900/40 border border-blue-500/40 rounded-xl px-4 py-3 text-center">
               <div className="text-xs text-blue-400 uppercase tracking-wider mb-1">Team A</div>
-              <div className="text-xl font-bold text-white">{team1Players.map((p) => p.name).join(" & ")}</div>
+              {team1Players.map((p, i) => (
+                <div key={p.id}>
+                  <div className="text-xl font-bold text-white">{p.name}</div>
+                  {i < team1Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
+                </div>
+              ))}
             </div>
-            <div className="bg-red-900/40 border border-red-500/40 rounded-xl px-4 py-3">
+            <button onClick={() => { setSwapped(true); setPhase("setup-court"); }}
+              className="flex flex-col items-center gap-1 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-xl px-4 py-3 transition-colors animate-pulse">
+              <span className="text-3xl">→</span>
+              <span className="text-xs font-bold text-blue-300">Right</span>
+            </button>
+          </div>
+
+          {/* Team B */}
+          <div className="w-full max-w-sm">
+            <div className="bg-red-900/40 border border-red-500/40 rounded-xl px-4 py-3 text-center">
               <div className="text-xs text-red-400 uppercase tracking-wider mb-1">Team B</div>
-              <div className="text-xl font-bold text-white">{team2Players.map((p) => p.name).join(" & ")}</div>
+              {team2Players.map((p, i) => (
+                <div key={p.id}>
+                  <div className="text-xl font-bold text-white">{p.name}</div>
+                  {i < team2Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
+                </div>
+              ))}
             </div>
-          </div>
-
-          <div className="text-center">
-            <h2 className="text-lg font-bold">Which side is Team A on?</h2>
-            <div className="text-sm text-blue-300 font-medium mt-0.5">{team1Players.map((p) => p.name).join(" & ")}</div>
-            <div className="text-xs text-white mt-1">As seen from where you sit</div>
-          </div>
-          <div className="flex gap-6">
-            <button onClick={() => { setSwapped(false); setPhase("pick-server"); }}
-              className="flex flex-col items-center gap-3 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-2xl px-10 py-6 transition-colors">
-              <span className="text-4xl">◄</span>
-              <span className="text-lg font-bold text-blue-300">Left</span>
-            </button>
-            <button onClick={() => { setSwapped(true); setPhase("pick-server"); }}
-              className="flex flex-col items-center gap-3 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-2xl px-10 py-6 transition-colors">
-              <span className="text-4xl">►</span>
-              <span className="text-lg font-bold text-blue-300">Right</span>
-            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── RENDER: Pick Server ──
-  if (phase === "pick-server") {
-    return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
-          <button onClick={onClose} className="text-white/60 hover:text-white text-lg">✕</button>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
-          <h2 className="text-xl font-bold">Who serves first?</h2>
-          <div className="space-y-3 w-full max-w-xs">
-            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1">Team A</div>
-            {team1Players.map((p) => (
-              <button key={p.id} onClick={() => handlePickServer(p, 1)}
-                className="w-full flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors">
-                <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                <span className="text-lg font-semibold">{p.name}</span>
-              </button>
-            ))}
-            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1 mt-6">Team B</div>
-            {team2Players.map((p) => (
-              <button key={p.id} onClick={() => handlePickServer(p, 2)}
-                className="w-full flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors">
-                <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                <span className="text-lg font-semibold">{p.name}</span>
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setPhase("pick-sides")}
-            className="text-sm text-white/40 hover:text-white/60">← Back</button>
-        </div>
-      </div>
-    );
-  }
+  // ── RENDER: Setup Court ──
+  if (phase === "setup-court") {
+    // Determine which team is on left vs right based on swapped
+    const leftTeam = swapped ? team2Order : team1Order;
+    const rightTeam = swapped ? team1Order : team2Order;
+    const leftLabel = swapped ? "Team B" : "Team A";
+    const rightLabel = swapped ? "Team A" : "Team B";
+    const leftColor = swapped ? "red" : "blue";
+    const rightColor = swapped ? "blue" : "red";
 
-  // ── RENDER: Pick Receiver ──
-  if (phase === "pick-receiver" && selectedServer) {
-    const serverTeam = team1Players.some((p) => p.id === selectedServer.id) ? 1 : 2;
-    const opponents = serverTeam === 1 ? team2Players : team1Players;
+    // Instruction text
+    const instruction = !setupServer
+      ? "Tap the player who serves first"
+      : !setupReceiver
+        ? "Tap the receiver (other team)"
+        : "Ready! Press Start";
+
+    const renderSetupPlayer = (player: RallyPlayer, color: string) => {
+      const isServer = setupServer?.id === player.id;
+      const isReceiver = setupReceiver?.id === player.id;
+      return (
+        <button key={player.id} onClick={() => handleSetupTap(player)}
+          className={`flex-1 flex flex-col items-center justify-center rounded-xl p-3 border-2 transition-all ${
+            isServer
+              ? "border-green-400 bg-green-500/25"
+              : isReceiver
+                ? "border-yellow-400 bg-yellow-500/20"
+                : `border-${color}-500/30 bg-${color}-900/30 hover:bg-${color}-800/40`
+          }`}>
+          <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="md" />
+          <span className={`text-base font-bold mt-1 ${isServer ? "text-green-300" : isReceiver ? "text-yellow-300" : "text-white/80"}`}>
+            {player.name}
+          </span>
+          {isServer && <span className="text-[10px] text-green-300 font-medium mt-0.5">SERVER</span>}
+          {isReceiver && <span className="text-[10px] text-yellow-300 font-medium mt-0.5">RECEIVER</span>}
+        </button>
+      );
+    };
+
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <button onClick={() => { setSetupServer(null); setSetupReceiver(null); setPhase("pick-sides"); }} className="text-sm text-white/60 hover:text-white transition-colors">← Back</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
           <button onClick={onClose} className="text-white/60 hover:text-white text-lg">✕</button>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
-          <div className="text-center">
-            <div className="text-sm text-white/50 mb-1">Server</div>
-            <div className="flex items-center gap-2 justify-center">
-              <PlayerAvatar name={selectedServer.name} photoUrl={selectedServer.photoUrl} size="sm" />
-              <span className="text-lg font-bold text-green-400">{selectedServer.name}</span>
-            </div>
+
+        {/* Instruction */}
+        <div className="text-center py-3">
+          <span className={`text-base font-semibold ${setupServer && setupReceiver ? "text-green-400" : "text-white"}`}>{instruction}</span>
+        </div>
+
+        {/* Court layout — horizontal */}
+        <div className="flex-1 flex p-3 gap-1 min-h-0">
+          {/* Left team */}
+          <div className="flex-1 flex flex-col gap-2">
+            <div className={`text-[10px] text-center uppercase tracking-wider font-medium mb-0.5 text-${leftColor}-300`}>{leftLabel}</div>
+            {leftTeam.map((p) => renderSetupPlayer(p, leftColor))}
           </div>
-          <h2 className="text-xl font-bold">Who receives?</h2>
-          <div className="space-y-3 w-full max-w-xs">
-            {opponents.map((p) => (
-              <button key={p.id} onClick={() => handlePickReceiver(p)}
-                className="w-full flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors">
-                <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                <span className="text-lg font-semibold">{p.name}</span>
-              </button>
-            ))}
+
+          {/* Net */}
+          <div className="flex flex-col items-center justify-center w-6 relative">
+            <div className="absolute inset-y-6 w-0.5 bg-white/30 left-1/2 -translate-x-1/2" />
+            {setupServer && setupReceiver && (
+              <div className="text-green-400/80 font-bold z-10" style={{
+                fontSize: "3rem",
+                transform: (() => {
+                  const serverOnLeft = leftTeam.some((p) => p.id === setupServer.id);
+                  const serverIdx = (serverOnLeft ? leftTeam : rightTeam).findIndex((p) => p.id === setupServer.id);
+                  const serverIsTop = serverIdx === 0;
+                  return serverOnLeft
+                    ? (serverIsTop ? "rotate(30deg)" : "rotate(-30deg)")
+                    : (serverIsTop ? "rotate(-30deg)" : "rotate(30deg)");
+                })(),
+              }}>
+                {leftTeam.some((p) => p.id === setupServer.id) ? "→" : "←"}
+              </div>
+            )}
+            <span className="text-[8px] text-white/40 uppercase tracking-widest font-bold z-10" style={{ writingMode: "vertical-lr" }}>NET</span>
           </div>
-          <button onClick={() => { setSelectedServer(null); setPhase("pick-server"); }}
-            className="text-sm text-white/40 hover:text-white/60">← Back</button>
+
+          {/* Right team */}
+          <div className="flex-1 flex flex-col gap-2">
+            <div className={`text-[10px] text-center uppercase tracking-wider font-medium mb-0.5 text-${rightColor}-300`}>{rightLabel}</div>
+            {rightTeam.map((p) => renderSetupPlayer(p, rightColor))}
+          </div>
+        </div>
+
+        {/* Start button */}
+        <div className="p-3 border-t border-white/10">
+          <button onClick={handleSetupConfirm}
+            disabled={!setupServer || (isDoubles && !setupReceiver)}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:bg-white/10 disabled:text-white/30 text-white py-4 rounded-xl text-xl font-bold transition-colors">
+            Start Match
+          </button>
         </div>
       </div>
     );
@@ -531,19 +622,19 @@ export function RallyTracker({
     const teamColor = team === 1 ? "blue" : "red";
 
     return (
-      <div className={`flex-1 flex flex-col items-center justify-center rounded-xl p-3 border-2 transition-all ${
+      <div className={`flex-1 flex flex-col items-center justify-center rounded-xl p-3 transition-all ${
         isServer
-          ? "border-green-400 bg-green-500/25"
+          ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
           : isReceiver
-            ? "border-yellow-400 bg-yellow-500/20"
-            : "border-white/10 bg-white/5"
+            ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+            : "border border-white/10 bg-white/5"
       }`}>
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="md" />
-        <span className={`text-base font-bold mt-1 ${isServer ? "text-green-300" : isReceiver ? "text-yellow-300" : "text-white/70"}`}>
+        <span className={`font-bold mt-1 ${isServer ? "text-lg text-green-300" : isReceiver ? "text-base text-yellow-200" : "text-base text-white/60"}`}>
           {player.name}
         </span>
-        {isServer && <span className="text-[10px] text-green-300 font-medium mt-0.5">SERVING</span>}
-        {isReceiver && <span className="text-[10px] text-yellow-300 font-medium mt-0.5">RECEIVING</span>}
+        {isServer && <span className="text-xs text-green-300 font-bold mt-0.5 animate-pulse">● SERVER {gameState?.serverNumber}</span>}
+        {isReceiver && <span className="text-[10px] text-yellow-300/70 font-medium mt-0.5">RECEIVING</span>}
       </div>
     );
   };
@@ -563,7 +654,7 @@ export function RallyTracker({
             </button>
             <button onClick={() => {
               if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
-                setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSelectedServer(null); setStartTime(null);
+                setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
               }
             }} className="text-sm text-red-400 hover:text-red-300 font-bold px-1" title="Reset match">Reset</button>
           </div>
@@ -589,18 +680,27 @@ export function RallyTracker({
         </div>
 
         {/* Back / Forward through rallies */}
-        <div className="flex items-center justify-center gap-6 py-1">
+        <div className="flex items-center justify-center gap-4 py-1">
           <button onClick={handleUndo} disabled={history.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-3 transition-colors">◄</button>
+            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-3 transition-colors">←</button>
           {gamePointActive && !winner ? (
-            <span className="text-sm font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
+            <span className="text-sm font-bold text-yellow-400 animate-pulse min-w-[5rem] text-center">🏆 Game Point!</span>
           ) : (
-            <span className="text-xs text-white/30">{history.length > 0 ? `Rally ${history.length}` : ""}</span>
+            <span className="text-sm text-white/40 min-w-[5rem] text-center font-medium">
+              {redoStack.length === 0 ? "Current" : `Rally ${history.length}`}
+            </span>
           )}
           <button onClick={handleRedo} disabled={redoStack.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-3 transition-colors">►</button>
+            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-3 transition-colors">→</button>
         </div>
       </div>
+
+      {/* Serve info — above court */}
+      {phase === "playing" && (
+        <div className="text-center text-sm text-white/50 py-1">
+          {findPlayer(court, serverId).name} serves from the {serverSide} to {findPlayer(court, receiverId).name}
+        </div>
+      )}
 
       {/* Court view — horizontal: left team | NET | right team */}
       {(() => {
@@ -665,25 +765,37 @@ export function RallyTracker({
       {/* Action buttons */}
       {phase === "playing" && (
         <div className="p-3 space-y-2 border-t border-white/10">
-          {/* Serve info */}
-          <div className="text-center text-sm text-white/50">
-            {findPlayer(court, serverId).name} serves from the {serverSide} to {findPlayer(court, receiverId).name}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleRally(swapped ? 2 : 1)}
-              className={`flex-1 ${swapped ? "bg-red-600 hover:bg-red-500 active:bg-red-700" : "bg-blue-600 hover:bg-blue-500 active:bg-blue-700"} text-white py-6 rounded-xl text-xl font-black transition-colors`}
-            >
-              ◄ {swapped ? "TEAM B" : "TEAM A"}
-            </button>
-            <button
-              onClick={() => handleRally(swapped ? 1 : 2)}
-              className={`flex-1 ${swapped ? "bg-blue-600 hover:bg-blue-500 active:bg-blue-700" : "bg-red-600 hover:bg-red-500 active:bg-red-700"} text-white py-6 rounded-xl text-xl font-black transition-colors`}
-            >
-              {swapped ? "TEAM A" : "TEAM B"} ►
-            </button>
-          </div>
+          {(() => {
+            const leftTeamNum = swapped ? 2 : 1;
+            const rightTeamNum = swapped ? 1 : 2;
+            const leftIsServing = servingTeam === leftTeamNum;
+            const rightIsServing = servingTeam === rightTeamNum;
+            const serverNum = gameState.serverNumber;
+            const isSideOut = isRally || serverNum === 2 || gameState.isFirstServe;
+            const lossLabel = isSideOut ? "Side Out" : "2nd Server";
+            return (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleRally(leftTeamNum)}
+                  className={`flex-1 ${leftIsServing
+                    ? (swapped ? "bg-red-600 hover:bg-red-500 active:bg-red-700" : "bg-blue-600 hover:bg-blue-500 active:bg-blue-700")
+                    : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
+                  } text-white py-3 rounded-xl text-base font-bold transition-colors`}
+                >
+                  ◄ {leftIsServing ? "Point" : lossLabel}
+                </button>
+                <button
+                  onClick={() => handleRally(rightTeamNum)}
+                  className={`flex-1 ${rightIsServing
+                    ? (swapped ? "bg-blue-600 hover:bg-blue-500 active:bg-blue-700" : "bg-red-600 hover:bg-red-500 active:bg-red-700")
+                    : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
+                  } text-white py-3 rounded-xl text-base font-bold transition-colors`}
+                >
+                  {rightIsServing ? "Point" : lossLabel} ►
+                </button>
+              </div>
+            );
+          })()}
 
           <div className="flex items-center justify-center">
             <button onClick={handleSpeak}

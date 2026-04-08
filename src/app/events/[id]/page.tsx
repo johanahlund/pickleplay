@@ -396,7 +396,7 @@ export default function EventDetailPage() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
   const [rallyVisible, setRallyVisible] = useState(false);
-  const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number } | null>(null);
+  const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
@@ -1849,61 +1849,61 @@ export default function EventDetailPage() {
           </div>
         </div>
         <div className="p-3">
-          <div className={`flex items-center gap-2 p-2 rounded-lg ${team1Won && !isEditing ? "bg-green-50" : ""}`}>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                {team1.map((mp) => (
-                  <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                    <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                    <span className={team1Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-            {isCompleted && !isEditing ? (
-              <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team1Won ? "text-green-600" : "text-gray-400"}`}>{team1Score}</span>
-            ) : hasLiveScore ? (
-              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{rallyLiveScore!.team1}</span>
-            ) : showInputs ? (
-              <input type="number" inputMode="numeric" value={scores[match.id]?.team1 ?? ""}
-                onChange={(e) => setMatchScore(match.id, "team1", e.target.value)}
-                className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
-            ) : (
-              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
-            )}
-          </div>
-          <div className="flex items-center justify-center gap-2 my-1">
-            <span className="text-sm text-muted font-medium">vs</span>
-            {match.scorer && (
-              <span className="text-[10px] text-muted flex items-center gap-1">
-                <PlayerAvatar name={match.scorer.name} photoUrl={match.scorer.photoUrl} size="xs" />
-                <span>Scorer: {match.scorer.name}</span>
-              </span>
-            )}
-          </div>
-          <div className={`flex items-center gap-2 p-2 rounded-lg ${team2Won && !isEditing ? "bg-green-50" : ""}`}>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                {team2.map((mp) => (
-                  <span key={mp.id} className="inline-flex items-center gap-1 text-lg">
-                    <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                    <span className={team2Won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-            {isCompleted && !isEditing ? (
-              <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${team2Won ? "text-green-600" : "text-gray-400"}`}>{team2Score}</span>
-            ) : hasLiveScore ? (
-              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{rallyLiveScore!.team2}</span>
-            ) : showInputs ? (
-              <input type="number" inputMode="numeric" value={scores[match.id]?.team2 ?? ""}
-                onChange={(e) => setMatchScore(match.id, "team2", e.target.value)}
-                className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
-            ) : (
-              <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
-            )}
-          </div>
+          {(() => {
+            const renderTeamRow = (teamPlayers: MatchPlayer[], teamNum: 1 | 2, won: boolean, scoreVal: number | null) => {
+              const liveServerId = hasLiveScore ? rallyLiveScore?.serverId : undefined;
+              const liveReceiverId = hasLiveScore ? rallyLiveScore?.receiverId : undefined;
+              return (
+                <div className={`flex items-center gap-2 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}>
+                  <div className="flex-1 flex items-center justify-end gap-0">
+                    {teamPlayers.map((mp, i) => {
+                      const isServerPlayer = liveServerId === mp.player.id;
+                      const isReceiverPlayer = liveReceiverId === mp.player.id;
+                      return (
+                        <span key={mp.id} className="inline-flex items-center gap-1">
+                          {i > 0 && <span className="text-muted mx-1.5">&</span>}
+                          <span className="flex flex-col items-center">
+                            <span className="inline-flex items-center gap-1">
+                              <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+                              <span className={won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
+                            </span>
+                            {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold mt-0.5">SRV</span>}
+                            {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium mt-0.5">RCV</span>}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {isCompleted && !isEditing ? (
+                    <span className={`text-2xl font-bold min-w-[2.5rem] text-center ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
+                  ) : hasLiveScore ? (
+                    <span className="text-2xl font-bold min-w-[2.5rem] text-center text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
+                  ) : showInputs ? (
+                    <input type="number" inputMode="numeric" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
+                      onChange={(e) => setMatchScore(match.id, teamNum === 1 ? "team1" : "team2", e.target.value)}
+                      className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
+                  ) : (
+                    <span className="text-2xl font-bold min-w-[2.5rem] text-center text-gray-400">-</span>
+                  )}
+                </div>
+              );
+            };
+            return (
+              <>
+                {renderTeamRow(team1, 1, team1Won, team1Score)}
+                <div className="flex items-center justify-center gap-2 my-1">
+                  <span className="text-sm text-muted font-medium">vs</span>
+                  {match.scorer && (
+                    <span className="text-[10px] text-muted flex items-center gap-1">
+                      <PlayerAvatar name={match.scorer.name} photoUrl={match.scorer.photoUrl} size="xs" />
+                      <span>Scorer: {match.scorer.name}</span>
+                    </span>
+                  )}
+                </div>
+                {renderTeamRow(team2, 2, team2Won, team2Score)}
+              </>
+            );
+          })()}
           {showInputs && !isEditing && scores[match.id]?.team1 && scores[match.id]?.team2 && (
             <button onClick={() => submitScore(match.id)}
               className="w-full mt-2 bg-action-dark text-white py-2.5 rounded-lg font-medium text-base transition-colors">Submit Score</button>
@@ -2139,7 +2139,7 @@ export default function EventDetailPage() {
           setRallyVisible(false);
           fetchEvent();
         }}
-        onScoreChange={(t1, t2) => setRallyLiveScore({ team1: t1, team2: t2 })}
+        onScoreChange={(t1, t2, sid, rid) => setRallyLiveScore({ team1: t1, team2: t2, serverId: sid, receiverId: rid })}
         onClose={() => setRallyVisible(false)}
       />
     );
