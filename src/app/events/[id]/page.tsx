@@ -497,6 +497,10 @@ export default function EventDetailPage() {
     const team1Score = parseInt(s.team1);
     const team2Score = parseInt(s.team2);
     if (isNaN(team1Score) || isNaN(team2Score)) return;
+    if (team1Score < 0 || team2Score < 0) {
+      alert("Scores cannot be negative!");
+      return;
+    }
     if (team1Score === team2Score) {
       alert("Scores cannot be tied!");
       return;
@@ -520,6 +524,10 @@ export default function EventDetailPage() {
     const team1Score = parseInt(s.team1);
     const team2Score = parseInt(s.team2);
     if (isNaN(team1Score) || isNaN(team2Score)) return;
+    if (team1Score < 0 || team2Score < 0) {
+      alert("Scores cannot be negative!");
+      return;
+    }
     if (team1Score === team2Score) {
       alert("Scores cannot be tied!");
       return;
@@ -1912,7 +1920,7 @@ export default function EventDetailPage() {
                     ) : hasLiveScore ? (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
                     ) : showInputs ? (
-                      <input type="number" inputMode="numeric" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
+                      <input type="number" inputMode="numeric" min="0" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
                         onChange={(e) => setMatchScore(match.id, teamNum === 1 ? "team1" : "team2", e.target.value)}
                         className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
                     ) : (
@@ -2172,48 +2180,76 @@ export default function EventDetailPage() {
     const liveT2 = rallyMatchId === match.id && rallyLiveScore ? rallyLiveScore.team2 : null;
     const liveServerId = rallyMatchId === match.id ? rallyLiveScore?.serverId : undefined;
     const liveReceiverId = rallyMatchId === match.id ? rallyLiveScore?.receiverId : undefined;
+    const statusLabel = match.status === "active" ? "In Play" : match.status === "paused" ? "Paused" : "Pending";
+
+    const renderFocusPlayer = (mp: MatchPlayer) => {
+      const isServer = liveServerId === mp.player.id;
+      const isReceiver = liveReceiverId === mp.player.id;
+      return (
+        <div key={mp.id} className={`flex-1 flex flex-col items-center justify-center rounded-lg p-2 transition-all ${
+          isServer ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
+          : isReceiver ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+          : "border border-white/10 bg-white/5"
+        }`}>
+          <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="sm" />
+          <span className={`text-lg font-bold mt-0.5 ${isServer ? "text-green-300" : isReceiver ? "text-yellow-200" : "text-white/60"}`}>
+            {mp.player.name}
+          </span>
+          {isServer && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
+          {isReceiver && <span className="text-[9px] text-yellow-300/70 font-medium">RCV</span>}
+        </div>
+      );
+    };
+
     return (
-      <div className="fixed inset-0 z-[90] bg-black/95 flex flex-col text-white">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+      <div className="fixed inset-0 z-[90] bg-black flex flex-col text-white">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
           <button onClick={() => setFocusedMatchId(null)} className="text-sm text-white/60 hover:text-white">← Back</button>
-          <span className="text-sm text-white/50">Court {match.courtNum} · {match.status === "active" ? "In Play" : match.status === "paused" ? "Paused" : "Pending"}</span>
-          <span className="text-xs text-white/30">Auto-refresh</span>
+          <span className="text-sm text-white/50">Court {match.courtNum} · {statusLabel}</span>
+          <span className="text-xs text-white/30 animate-pulse">● Live</span>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-6">
-          {/* Team 1 */}
-          <div className="text-center">
-            {t1.map((mp: MatchPlayer, i: number) => (
-              <span key={mp.id} className="text-2xl font-bold">
-                {i > 0 && <span className="text-white/30 mx-2">&</span>}
-                <span className="text-white">{mp.player.name}</span>
-                {liveServerId === mp.player.id && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold ml-2 align-middle">SRV</span>}
-                {liveReceiverId === mp.player.id && <span className="text-[10px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium ml-2 align-middle">RCV</span>}
-              </span>
-            ))}
-          </div>
-          {/* Score */}
-          <div className="flex items-center gap-6">
-            <span className={`text-8xl font-black tabular-nums ${liveT1 !== null ? "text-orange-400" : "text-white/30"}`}>{liveT1 ?? "-"}</span>
-            <span className="text-4xl text-white/20">—</span>
-            <span className={`text-8xl font-black tabular-nums ${liveT2 !== null ? "text-orange-400" : "text-white/30"}`}>{liveT2 ?? "-"}</span>
-          </div>
-          {/* Team 2 */}
-          <div className="text-center">
-            {t2.map((mp: MatchPlayer, i: number) => (
-              <span key={mp.id} className="text-2xl font-bold">
-                {i > 0 && <span className="text-white/30 mx-2">&</span>}
-                <span className="text-white">{mp.player.name}</span>
-                {liveServerId === mp.player.id && <span className="text-[10px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold ml-2 align-middle">SRV</span>}
-                {liveReceiverId === mp.player.id && <span className="text-[10px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium ml-2 align-middle">RCV</span>}
-              </span>
-            ))}
-          </div>
-          {match.scorer && (
-            <div className="text-xs text-white/40 flex items-center gap-1">
-              Scorer: {match.scorer.name}
+
+        {/* Score */}
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-center gap-3 py-2">
+            <div className="text-center">
+              <div className="text-sm uppercase tracking-wider font-bold mb-0.5 text-blue-500">Team A</div>
+              <span className={`text-7xl font-black tabular-nums ${liveT1 !== null ? "text-blue-500" : "text-white/20"}`}>{liveT1 ?? "-"}</span>
             </div>
-          )}
+            <span className="text-4xl text-white/20 self-end mb-2">—</span>
+            <div className="text-center">
+              <div className="text-sm uppercase tracking-wider font-bold mb-0.5 text-red-500">Team B</div>
+              <span className={`text-7xl font-black tabular-nums ${liveT2 !== null ? "text-red-500" : "text-white/20"}`}>{liveT2 ?? "-"}</span>
+            </div>
+          </div>
         </div>
+
+        {/* Court — horizontal like rally tracker */}
+        <div className="flex-1 flex p-2 gap-1 min-h-0 border border-white/20 rounded-xl mx-2">
+          {/* Left team (Team A) */}
+          <div className="flex-1 flex flex-col gap-2">
+            <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5 text-blue-300">Team A</div>
+            {t1.map((mp) => renderFocusPlayer(mp))}
+          </div>
+          {/* Net */}
+          <div className="flex flex-col items-center justify-center w-6 relative">
+            <div className="absolute inset-y-6 w-0.5 bg-white/30 left-1/2 -translate-x-1/2" />
+            <span className="text-[8px] text-white/40 uppercase tracking-widest font-bold z-10" style={{ writingMode: "vertical-lr" }}>NET</span>
+          </div>
+          {/* Right team (Team B) */}
+          <div className="flex-1 flex flex-col gap-2">
+            <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5 text-red-300">Team B</div>
+            {t2.map((mp) => renderFocusPlayer(mp))}
+          </div>
+        </div>
+
+        {/* Scorer */}
+        {match.scorer && (
+          <div className="text-center text-xs text-white/40 py-2">
+            Scorer: {match.scorer.name}
+          </div>
+        )}
       </div>
     );
   };
