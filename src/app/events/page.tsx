@@ -238,7 +238,7 @@ function EventsPage() {
                         <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
                       )}
                     </div>
-                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                    <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-xs text-muted">
                         {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                         {event.endDate && ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
@@ -251,6 +251,9 @@ function EventsPage() {
                         ) : (
                           <span className="text-[10px] text-muted">📍 {event.club.locations[0].name}</span>
                         )
+                      )}
+                      {!clubFilter && event.club && (
+                        <span className="text-[10px] text-muted font-medium ml-auto">{event.club.emoji} {event.club.name}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 mt-1">
