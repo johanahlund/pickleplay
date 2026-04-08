@@ -1890,8 +1890,8 @@ export default function EventDetailPage() {
       {/* Tab bar */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {([
-          { key: "current", label: "Current", count: activeMatches.length },
           { key: "previous", label: "Previous", count: completedMatches.length },
+          { key: "current", label: "Current", count: activeMatches.length },
           { key: "future", label: "Future", count: pendingMatches.length },
         ] as const).map((t) => (
           <button key={t.key} onClick={() => setMatchTab(t.key)}

@@ -38,7 +38,7 @@ interface GameState {
   isFirstServe: boolean; // game-start exception: only Server 2
 }
 
-type Phase = "pick-server" | "pick-receiver" | "playing" | "game-over";
+type Phase = "pick-sides" | "pick-server" | "pick-receiver" | "playing" | "game-over";
 
 function parseFormat(fmt: string): { isRally: boolean; targetScore: number; sets: number } {
   const sets = fmt.startsWith("3") ? 3 : 1;
@@ -115,9 +115,9 @@ function buildAnnouncement(
   if (isGamePoint(state.score, targetScore, winByN, cap)) {
     // Which team has game point?
     if (isGameWon([s1 + 1, s2], targetScore, winByN, cap) === 1) {
-      text = `Game point Team 1! ` + text;
+      text = `Game point Team A! ` + text;
     } else if (isGameWon([s1, s2 + 1], targetScore, winByN, cap) === 2) {
-      text = `Game point Team 2! ` + text;
+      text = `Game point Team B! ` + text;
     } else {
       text = `Game point! ` + text;
     }
@@ -149,12 +149,14 @@ export function RallyTracker({
   const { winByN, cap } = parseWinBy(winBy);
   const isDoubles = team1Players.length === 2 && team2Players.length === 2;
 
-  const [phase, setPhase] = useState<Phase>("pick-server");
+  const [phase, setPhase] = useState<Phase>("pick-sides");
   const [selectedServer, setSelectedServer] = useState<RallyPlayer | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [swapped, setSwapped] = useState(false); // swap screen sides for teams
 
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [history, setHistory] = useState<GameState[]>([]);
+  const [history, setHistory] = useState<GameState[]>([]); // all states, index 0 = initial
+  const [redoStack, setRedoStack] = useState<{ state: GameState; winner: 1 | 2 | null }[]>([]);
   const [winner, setWinner] = useState<1 | 2 | null>(null);
 
   // Format label
@@ -239,6 +241,7 @@ export function RallyTracker({
     if (!gameState) return;
 
     setHistory((prev) => [...prev, { ...gameState, court: { ...gameState.court } }]);
+    setRedoStack([]); // new rally clears redo
 
     const newState = { ...gameState, court: { ...gameState.court } };
     const servingTeam = newState.servingTeam;
@@ -344,13 +347,26 @@ export function RallyTracker({
   }, [gameState, isRally, isDoubles, targetScore, winByN, cap, autoSpeak, team1Players, team2Players]);
 
   const handleUndo = () => {
-    if (history.length === 0) return;
+    if (history.length === 0 || !gameState) return;
+    setRedoStack((prev) => [...prev, { state: { ...gameState, court: { ...gameState.court } }, winner }]);
     const prev = history[history.length - 1];
     setGameState(prev);
     setHistory((h) => h.slice(0, -1));
     if (winner) {
       setWinner(null);
       setPhase("playing");
+    }
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0 || !gameState) return;
+    setHistory((prev) => [...prev, { ...gameState, court: { ...gameState.court } }]);
+    const next = redoStack[redoStack.length - 1];
+    setGameState(next.state);
+    setRedoStack((s) => s.slice(0, -1));
+    if (next.winner) {
+      setWinner(next.winner);
+      setPhase("game-over");
     }
   };
 
@@ -364,6 +380,40 @@ export function RallyTracker({
     onSubmitScore(gameState.score[0], gameState.score[1]);
   };
 
+  // ── RENDER: Pick Sides ──
+  if (phase === "pick-sides") {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-lg">✕</button>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
+          <h2 className="text-xl font-bold">Which side is Team A on?</h2>
+          <div className="text-sm text-white/40 text-center">As seen from where you sit (at the net)</div>
+          <div className="flex gap-6">
+            <button onClick={() => { setSwapped(false); setPhase("pick-server"); }}
+              className="flex flex-col items-center gap-3 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-2xl px-8 py-6 transition-colors">
+              <span className="text-4xl">◄</span>
+              <span className="text-lg font-bold text-blue-300">Team A</span>
+              <span className="text-xs text-white/40">Left side</span>
+            </button>
+            <button onClick={() => { setSwapped(true); setPhase("pick-server"); }}
+              className="flex flex-col items-center gap-3 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-2xl px-8 py-6 transition-colors">
+              <span className="text-4xl">►</span>
+              <span className="text-lg font-bold text-blue-300">Team A</span>
+              <span className="text-xs text-white/40">Right side</span>
+            </button>
+          </div>
+          <div className="text-xs text-white/30 text-center">
+            Team A: {team1Players.map((p) => p.name).join(" & ")}<br/>
+            Team B: {team2Players.map((p) => p.name).join(" & ")}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── RENDER: Pick Server ──
   if (phase === "pick-server") {
     return (
@@ -375,7 +425,7 @@ export function RallyTracker({
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-8">
           <h2 className="text-xl font-bold">Who serves first?</h2>
           <div className="space-y-3 w-full max-w-xs">
-            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1">Team 1</div>
+            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1">Team A</div>
             {team1Players.map((p) => (
               <button key={p.id} onClick={() => handlePickServer(p, 1)}
                 className="w-full flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors">
@@ -383,7 +433,7 @@ export function RallyTracker({
                 <span className="text-lg font-semibold">{p.name}</span>
               </button>
             ))}
-            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1 mt-6">Team 2</div>
+            <div className="text-xs text-white/50 uppercase tracking-wider text-center mb-1 mt-6">Team B</div>
             {team2Players.map((p) => (
               <button key={p.id} onClick={() => handlePickServer(p, 2)}
                 className="w-full flex items-center gap-3 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 transition-colors">
@@ -392,6 +442,8 @@ export function RallyTracker({
               </button>
             ))}
           </div>
+          <button onClick={() => setPhase("pick-sides")}
+            className="text-sm text-white/40 hover:text-white/60">← Back</button>
         </div>
       </div>
     );
@@ -482,8 +534,8 @@ export function RallyTracker({
         {/* Score display */}
         <div className="flex items-center justify-center gap-4 py-2">
           <div className="text-center">
-            <div className="text-xs text-blue-300 uppercase tracking-wider mb-0.5">Team 1</div>
-            <span className={`text-5xl font-black tabular-nums ${winner === 1 ? "text-green-400" : "text-blue-400"}`}>{score[0]}</span>
+            <div className={`text-xs uppercase tracking-wider mb-0.5 ${swapped ? "text-red-300" : "text-blue-300"}`}>{swapped ? "Team B" : "Team A"}</div>
+            <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-400" : "text-blue-400"}`}>{swapped ? score[1] : score[0]}</span>
           </div>
           <div className="text-center">
             <span className="text-2xl text-white/20">—</span>
@@ -492,8 +544,8 @@ export function RallyTracker({
             )}
           </div>
           <div className="text-center">
-            <div className="text-xs text-red-300 uppercase tracking-wider mb-0.5">Team 2</div>
-            <span className={`text-5xl font-black tabular-nums ${winner === 2 ? "text-green-400" : "text-red-400"}`}>{score[1]}</span>
+            <div className={`text-xs uppercase tracking-wider mb-0.5 ${swapped ? "text-blue-300" : "text-red-300"}`}>{swapped ? "Team A" : "Team B"}</div>
+            <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-400" : "text-red-400"}`}>{swapped ? score[0] : score[1]}</span>
           </div>
         </div>
 
@@ -505,38 +557,34 @@ export function RallyTracker({
       </div>
 
       {/* Court view */}
-      <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
-        {/* Team 1 side */}
-        <div className="flex-1 flex gap-2">
-          {isDoubles ? (
-            <>
-              {renderCourtPlayer(court.team1Left, "t1l")}
-              {renderCourtPlayer(court.team1Right, "t1r")}
-            </>
-          ) : (
-            renderCourtPlayer(court.team1Left, "t1l")
-          )}
-        </div>
-
-        {/* Net */}
-        <div className="flex items-center gap-2 py-1">
-          <div className="flex-1 h-px bg-white/20" />
-          <span className="text-[10px] text-white/30 uppercase tracking-widest">net</span>
-          <div className="flex-1 h-px bg-white/20" />
-        </div>
-
-        {/* Team 2 side */}
-        <div className="flex-1 flex gap-2">
-          {isDoubles ? (
-            <>
-              {renderCourtPlayer(court.team2Left, "t2l")}
-              {renderCourtPlayer(court.team2Right, "t2r")}
-            </>
-          ) : (
-            renderCourtPlayer(court.team2Left, "t2l")
-          )}
-        </div>
-      </div>
+      {(() => {
+        const topLeft = swapped ? court.team2Left : court.team1Left;
+        const topRight = swapped ? court.team2Right : court.team1Right;
+        const topLPos = swapped ? "t2l" as const : "t1l" as const;
+        const topRPos = swapped ? "t2r" as const : "t1r" as const;
+        const botLeft = swapped ? court.team1Left : court.team2Left;
+        const botRight = swapped ? court.team1Right : court.team2Right;
+        const botLPos = swapped ? "t1l" as const : "t2l" as const;
+        const botRPos = swapped ? "t1r" as const : "t2r" as const;
+        return (
+          <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
+            <div className="flex-1 flex gap-2">
+              {isDoubles ? <>{renderCourtPlayer(topLeft, topLPos)}{renderCourtPlayer(topRight, topRPos)}</> : renderCourtPlayer(topLeft, topLPos)}
+            </div>
+            {/* Net + swap button */}
+            <div className="flex items-center gap-2 py-1.5">
+              <div className="flex-1 h-1 bg-white/30 rounded-full" />
+              <button onClick={() => setSwapped(!swapped)} className="text-xs text-white/50 uppercase tracking-widest font-bold px-2 hover:text-white/80 transition-colors" title="Swap sides">
+                ⇅ NET
+              </button>
+              <div className="flex-1 h-1 bg-white/30 rounded-full" />
+            </div>
+            <div className="flex-1 flex gap-2">
+              {isDoubles ? <>{renderCourtPlayer(botLeft, botLPos)}{renderCourtPlayer(botRight, botRPos)}</> : renderCourtPlayer(botLeft, botLPos)}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Action buttons */}
       {phase === "playing" && (
@@ -548,26 +596,30 @@ export function RallyTracker({
 
           <div className="flex gap-2">
             <button
-              onClick={() => handleRally(1)}
-              className="flex-1 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white py-6 rounded-xl text-xl font-black transition-colors"
+              onClick={() => handleRally(swapped ? 2 : 1)}
+              className={`flex-1 ${swapped ? "bg-red-600 hover:bg-red-500 active:bg-red-700" : "bg-blue-600 hover:bg-blue-500 active:bg-blue-700"} text-white py-6 rounded-xl text-xl font-black transition-colors`}
             >
-              ◄ TEAM 1
+              ◄ {swapped ? "TEAM B" : "TEAM A"}
             </button>
             <button
-              onClick={() => handleRally(2)}
-              className="flex-1 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white py-6 rounded-xl text-xl font-black transition-colors"
+              onClick={() => handleRally(swapped ? 1 : 2)}
+              className={`flex-1 ${swapped ? "bg-blue-600 hover:bg-blue-500 active:bg-blue-700" : "bg-red-600 hover:bg-red-500 active:bg-red-700"} text-white py-6 rounded-xl text-xl font-black transition-colors`}
             >
-              TEAM 2 ►
+              {swapped ? "TEAM A" : "TEAM B"} ►
             </button>
           </div>
 
           <div className="flex items-center justify-between">
             <button onClick={handleUndo} disabled={history.length === 0}
               className="text-sm text-white/40 hover:text-white/70 disabled:opacity-20 px-3 py-1">
-              ↩ Undo
+              ◄ Back
             </button>
             <button onClick={handleSpeak}
               className="text-2xl px-3 py-1 hover:bg-white/10 rounded-lg transition-colors">🔊</button>
+            <button onClick={handleRedo} disabled={redoStack.length === 0}
+              className="text-sm text-white/40 hover:text-white/70 disabled:opacity-20 px-3 py-1">
+              Forward ►
+            </button>
           </div>
         </div>
       )}
