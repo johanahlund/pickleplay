@@ -221,12 +221,23 @@ function EventsPage() {
             const cardOpacity = timeStatus === "past" ? "opacity-60" : "";
             return (
             <div key={event.id} className={`bg-card rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
-              <Link href={`/events/${event.id}`} className="block p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-lg flex items-center gap-2">
-                      {event.name}
-                      {timeStatus === "active" && <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />}
+              <Link href={`/events/${event.id}`} className="block p-3 active:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="text-center min-w-[44px]">
+                    <div className="text-xs text-muted uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: "short" })}</div>
+                    <div className="text-xl font-bold leading-tight">{new Date(event.date).getDate()}</div>
+                    <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-sm truncate">{event.name}</h3>
+                      {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${statusBadge(event.status)}`}>{event.status}</span>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                      <span className="text-xs text-muted">
+                        {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                      </span>
                       {event.classes?.some((c) => c.competitionMode) && (
                         <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Competition</span>
                       )}
@@ -235,21 +246,7 @@ function EventsPage() {
                           {event.club.emoji} {event.club.name}
                         </span>
                       )}
-                    </h3>
-                    <div className="flex items-center flex-wrap gap-1 mt-0.5">
-                      <span className="text-sm text-muted">
-                        {new Date(event.date).toLocaleDateString(undefined, {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        })}{" "}
-                        at{" "}
-                        {new Date(event.date).toLocaleTimeString(undefined, {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.numCourts} ct</span>
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full capitalize">{event.format}</span>
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full">{event.scoringFormat || "1x11"}</span>
                       {event.pairingMode !== "random" && (
@@ -258,39 +255,27 @@ function EventsPage() {
                         </span>
                       )}
                     </div>
-                  </div>
-                  <span
-                    className={`text-xs font-medium px-2 py-1 rounded-full ${statusBadge(
-                      event.status
-                    )}`}
-                  >
-                    {event.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 mt-2">
-                  <div className="flex -space-x-1.5">
-                    {event.players.slice(0, 8).map((ep, i) => (
-                      <div key={i} className="ring-2 ring-white rounded-full">
-                        <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    <div className="flex items-center gap-1 mt-1.5">
+                      <div className="flex -space-x-1.5">
+                        {event.players.slice(0, 8).map((ep, i) => (
+                          <div key={i} className="ring-2 ring-white rounded-full">
+                            <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          </div>
+                        ))}
+                        {event.players.length > 8 && (
+                          <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-muted ring-2 ring-white">+{event.players.length - 8}</div>
+                        )}
                       </div>
-                    ))}
-                    {event.players.length > 8 && (
-                      <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-muted ring-2 ring-white">+{event.players.length - 8}</div>
-                    )}
+                      <span className="text-xs text-muted ml-1">{event.players.length} players · {event._count.matches} matches</span>
+                    </div>
                   </div>
-                  <span className="text-sm text-muted ml-1">
-                    {event.players.length} players · {event._count.matches} matches
-                  </span>
+                  <span className="text-xl text-muted">›</span>
                 </div>
               </Link>
               {(isAdmin || event.createdById === userId) && (
-                <div className="border-t border-border px-4 py-2 flex justify-end">
-                  <button
-                    onClick={() => deleteEvent(event.id)}
-                    className="text-danger text-sm px-2 py-1 rounded hover:bg-red-50"
-                  >
-                    Delete
-                  </button>
+                <div className="border-t border-border px-3 py-1.5 flex justify-end">
+                  <button onClick={() => deleteEvent(event.id)}
+                    className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50">Delete</button>
                 </div>
               )}
             </div>
