@@ -5,14 +5,22 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ClearInput } from "@/components/ClearInput";
 
+interface ClubLocation {
+  id: string;
+  name: string;
+  googleMapsUrl?: string | null;
+}
+
 interface Club {
   id: string;
   name: string;
   emoji: string;
   logoUrl?: string | null;
+  coverUrl?: string | null;
   description?: string | null;
   city?: string | null;
   country?: string | null;
+  locations?: ClubLocation[];
   myRole: string;
   _count: { members: number; events: number };
 }
@@ -22,11 +30,13 @@ interface BrowseClub {
   name: string;
   emoji: string;
   logoUrl?: string | null;
+  coverUrl?: string | null;
   description: string | null;
   memberCount: number;
   eventCount: number;
   city: string | null;
   country: string | null;
+  locations?: ClubLocation[];
 }
 
 export default function ClubsPage() {
@@ -36,7 +46,14 @@ export default function ClubsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newEmoji, setNewEmoji] = useState("🏓");
+  const [newDescription, setNewDescription] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newCountry, setNewCountry] = useState("");
+  const [newLocations, setNewLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
+  const [newLogoFile, setNewLogoFile] = useState<File | null>(null);
+  const [newLogoPreview, setNewLogoPreview] = useState<string | null>(null);
+  const [newCoverFile, setNewCoverFile] = useState<File | null>(null);
+  const [newCoverPreview, setNewCoverPreview] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [infoClubId, setInfoClubId] = useState<string | null>(null);
@@ -53,7 +70,6 @@ export default function ClubsPage() {
 
   const myClubIds = new Set(clubs.map((c) => c.id));
 
-  const EMOJIS = ["🏓", "🎾", "⚡", "🔥", "🌟", "💪", "🏆", "🎯", "🦅", "🐉"];
 
   const fetchClubs = async () => {
     const r = await fetch("/api/clubs");
@@ -67,13 +83,38 @@ export default function ClubsPage() {
     e.preventDefault();
     if (!newName.trim()) return;
     setCreating(true);
-    await fetch("/api/clubs", {
+    const r = await fetch("/api/clubs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName.trim(), emoji: newEmoji }),
+      body: JSON.stringify({
+        name: newName.trim(),
+        description: newDescription.trim() || undefined,
+        city: newCity.trim() || undefined,
+        country: newCountry.trim() || undefined,
+        locations: newLocations.filter((l) => l.name.trim()),
+      }),
     });
-    setNewName("");
-    setNewEmoji("🏓");
+    if (r.ok) {
+      const club = await r.json();
+      // Upload logo and cover if selected
+      const uploads: Promise<void>[] = [];
+      if (newLogoFile) {
+        const fd = new FormData();
+        fd.append("file", newLogoFile);
+        fd.append("type", "logo");
+        uploads.push(fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd }).then(() => {}));
+      }
+      if (newCoverFile) {
+        const fd = new FormData();
+        fd.append("file", newCoverFile);
+        fd.append("type", "cover");
+        uploads.push(fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd }).then(() => {}));
+      }
+      await Promise.all(uploads);
+    }
+    setNewName(""); setNewDescription(""); setNewCity(""); setNewCountry("");
+    setNewLocations([]); setNewLogoFile(null); setNewLogoPreview(null);
+    setNewCoverFile(null); setNewCoverPreview(null);
     setShowCreate(false);
     setCreating(false);
     fetchClubs();
@@ -145,14 +186,98 @@ export default function ClubsPage() {
               autoFocus />
           </div>
           <div>
-            <label className="block text-sm font-medium text-muted mb-1">Icon</label>
-            <div className="flex flex-wrap gap-2">
-              {EMOJIS.map((e) => (
-                <button key={e} type="button" onClick={() => setNewEmoji(e)}
-                  className={`text-2xl p-1 rounded-lg transition-all ${newEmoji === e ? "bg-primary/10 ring-2 ring-primary scale-110" : "hover:bg-gray-100"}`}>
-                  {e}
-                </button>
+            <label className="block text-sm font-medium text-muted mb-1">Logo</label>
+            <div className="flex items-center gap-3">
+              {newLogoPreview ? (
+                <img src={newLogoPreview} alt="Logo" className="w-16 h-16 rounded-xl object-cover" />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center text-2xl text-muted">🏓</div>
+              )}
+              <label className="text-xs text-action font-medium cursor-pointer hover:underline">
+                {newLogoPreview ? "Change logo" : "Upload logo"}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setNewLogoFile(file);
+                  setNewLogoPreview(URL.createObjectURL(file));
+                }} />
+              </label>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Cover Photo</label>
+            <div>
+              {newCoverPreview && (
+                <img src={newCoverPreview} alt="Cover" className="w-full h-24 rounded-lg object-cover mb-2" />
+              )}
+              <label className="text-xs text-action font-medium cursor-pointer hover:underline">
+                {newCoverPreview ? "Change cover" : "Upload cover photo"}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setNewCoverFile(file);
+                  setNewCoverPreview(URL.createObjectURL(file));
+                }} />
+              </label>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">City</label>
+              <input type="text" value={newCity} onChange={(e) => setNewCity(e.target.value)}
+                placeholder="e.g. Setúbal"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-muted mb-1">Country</label>
+              <input type="text" value={newCountry} onChange={(e) => setNewCountry(e.target.value)}
+                placeholder="e.g. Portugal"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Description</label>
+            <textarea
+              value={newDescription} onChange={(e) => setNewDescription(e.target.value)}
+              rows={3} placeholder="Tell members about this club..."
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Locations</label>
+            <div className="space-y-2">
+              {newLocations.map((loc, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <div className="flex-1 space-y-1">
+                    <input
+                      type="text" value={loc.name} placeholder="Location name"
+                      onChange={(e) => {
+                        const next = [...newLocations];
+                        next[i] = { ...next[i], name: e.target.value };
+                        setNewLocations(next);
+                      }}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <input
+                      type="url" value={loc.googleMapsUrl} placeholder="Google Maps URL"
+                      onChange={(e) => {
+                        const next = [...newLocations];
+                        next[i] = { ...next[i], googleMapsUrl: e.target.value };
+                        setNewLocations(next);
+                      }}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                  </div>
+                  <button type="button"
+                    onClick={() => setNewLocations(newLocations.filter((_, j) => j !== i))}
+                    className="text-xs text-danger px-2 py-2 rounded hover:bg-red-50 mt-1"
+                  >✕</button>
+                </div>
               ))}
+              <button type="button"
+                onClick={() => setNewLocations([...newLocations, { name: "", googleMapsUrl: "" }])}
+                className="text-xs text-primary font-medium"
+              >+ Add Location</button>
             </div>
           </div>
           <button type="submit" disabled={!newName.trim() || creating}
@@ -184,20 +309,40 @@ export default function ClubsPage() {
                       <span className="font-semibold text-lg">{club.name}</span>
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{club.myRole}</span>
                     </div>
-                    <p className="text-sm text-muted">
-                      {club._count.members} member{club._count.members !== 1 ? "s" : ""} &middot; {club._count.events} event{club._count.events !== 1 ? "s" : ""}
-                    </p>
+                    <div className="flex items-center gap-1.5 text-sm text-muted">
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
+                        className="text-muted hover:text-foreground w-4 h-4 flex items-center justify-center rounded-full text-xs">ⓘ</button>
+                      <span>{club._count.members} member{club._count.members !== 1 ? "s" : ""} · {club._count.events} event{club._count.events !== 1 ? "s" : ""}</span>
+                    </div>
                   </div>
-                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
-                    className="text-muted hover:text-foreground text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100">ⓘ</button>
                   <span className="text-2xl text-muted">›</span>
                 </div>
               </Link>
               {infoClubId === club.id && (
-                <div className="px-4 pb-3 pt-1 border-t border-border text-sm text-muted space-y-1">
-                  {club.description && <p>{club.description}</p>}
-                  {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
-                  {!club.description && !club.city && !club.country && <p className="italic">No additional info</p>}
+                <div className="border-t border-border">
+                  {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-32 object-cover" />}
+                  <div className="px-4 pb-3 pt-2 text-sm text-muted space-y-2">
+                    {club.description && <p>{club.description}</p>}
+                    {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
+                    {club.locations && club.locations.length > 0 && (
+                      <div className="space-y-1">
+                        {club.locations.map((loc) => (
+                          <div key={loc.id}>
+                            {loc.googleMapsUrl ? (
+                              <a href={loc.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-action text-xs hover:underline">📍 {loc.name}</a>
+                            ) : (
+                              <span className="text-xs">📍 {loc.name}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!club.description && !club.city && !club.country && (!club.locations || club.locations.length === 0) && (
+                      <p className="italic">No additional info</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -244,14 +389,16 @@ export default function ClubsPage() {
                         {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" /> : <span className="text-2xl">{club.emoji}</span>}
                         <div className="flex-1 min-w-0">
                           <span className="font-semibold">{club.name}</span>
-                          <p className="text-xs text-muted">
-                            {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
-                            {club.city && ` · ${club.city}`}
-                            {club.country && !club.city && ` · ${club.country}`}
-                          </p>
+                          <div className="flex items-center gap-1.5 text-xs text-muted">
+                            <button onClick={(e) => { e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
+                              className="text-muted hover:text-foreground w-4 h-4 flex items-center justify-center rounded-full text-[10px]">ⓘ</button>
+                            <span>
+                              {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
+                              {club.city && ` · ${club.city}`}
+                              {club.country && !club.city && ` · ${club.country}`}
+                            </span>
+                          </div>
                         </div>
-                        <button onClick={() => setInfoClubId(infoClubId === club.id ? null : club.id)}
-                          className="text-muted hover:text-foreground text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-100">ⓘ</button>
                         {isLoggedIn && (
                           isPending ? (
                             <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-lg">Requested</span>
@@ -267,10 +414,29 @@ export default function ClubsPage() {
                         )}
                       </div>
                       {infoClubId === club.id && (
-                        <div className="px-4 pb-3 pt-1 border-t border-border text-sm text-muted space-y-1">
-                          {club.description && <p>{club.description}</p>}
-                          {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
-                          {!club.description && !club.city && !club.country && <p className="italic">No additional info</p>}
+                        <div className="border-t border-border">
+                          {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-32 object-cover" />}
+                          <div className="px-4 pb-3 pt-2 text-sm text-muted space-y-2">
+                            {club.description && <p>{club.description}</p>}
+                            {(club.city || club.country) && <p>{[club.city, club.country].filter(Boolean).join(", ")}</p>}
+                            {club.locations && club.locations.length > 0 && (
+                              <div className="space-y-1">
+                                {club.locations.map((loc) => (
+                                  <div key={loc.id}>
+                                    {loc.googleMapsUrl ? (
+                                      <a href={loc.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                        className="text-action text-xs hover:underline">📍 {loc.name}</a>
+                                    ) : (
+                                      <span className="text-xs">📍 {loc.name}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {!club.description && !club.city && !club.country && (!club.locations || club.locations.length === 0) && (
+                              <p className="italic">No additional info</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

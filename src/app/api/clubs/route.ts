@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, emoji } = await req.json();
+  const { name, description, city, country, locations } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
@@ -48,11 +48,22 @@ export async function POST(req: Request) {
   const club = await prisma.club.create({
     data: {
       name: name.trim(),
-      emoji: emoji || "🏓",
+      emoji: "🏓",
+      description: description?.trim() || null,
+      city: city?.trim() || null,
+      country: country?.trim() || null,
       createdById: user.id,
       members: {
         create: { playerId: user.id, role: "owner" },
       },
+      ...(locations?.length ? {
+        locations: {
+          create: locations.filter((l: { name: string }) => l.name?.trim()).map((l: { name: string; googleMapsUrl?: string }) => ({
+            name: l.name.trim(),
+            googleMapsUrl: l.googleMapsUrl?.trim() || null,
+          })),
+        },
+      } : {}),
     },
   });
 

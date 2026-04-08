@@ -71,15 +71,33 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  let user;
   try {
-    await requireClubAdmin(id);
+    user = await requireClubAdmin(id);
   } catch {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
-
   const { playerId, role } = await req.json();
   if (!playerId || !role || !["owner", "admin", "member"].includes(role)) {
     return NextResponse.json({ error: "playerId and valid role required" }, { status: 400 });
+  }
+
+  // Ownership transfer requires current owner or app admin
+  if (role === "owner") {
+    const callerMember = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: id, playerId: user.id } },
+    });
+    const isClubOwner = callerMember?.role === "owner";
+    const isAppAdmin = user.role === "admin";
+    if (!isClubOwner && !isAppAdmin) {
+      return NextResponse.json({ error: "Only the club owner or app admin can transfer ownership" }, { status: 403 });
+    }
+
+    // Demote current owner to admin
+    await prisma.clubMember.updateMany({
+      where: { clubId: id, role: "owner" },
+      data: { role: "admin" },
+    });
   }
 
   await prisma.clubMember.update({

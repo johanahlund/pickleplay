@@ -23,6 +23,7 @@ export async function GET(req: Request) {
     },
     include: {
       _count: { select: { members: true, events: true } },
+      locations: true,
     },
     orderBy: { name: "asc" },
     take: 50,
@@ -33,10 +34,12 @@ export async function GET(req: Request) {
     name: c.name,
     emoji: c.emoji,
     logoUrl: c.logoUrl,
+    coverUrl: c.coverUrl,
     description: c.description,
     memberCount: c._count.members,
     eventCount: c._count.events,
     city: c.city,
     country: c.country,
+    locations: c.locations,
   })));
 }

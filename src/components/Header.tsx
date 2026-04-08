@@ -218,7 +218,7 @@ export function Header() {
         <div className="max-w-[600px] mx-auto">
           {/* Top row: app name + user */}
           <div className="flex items-center justify-between">
-            <button onClick={() => router.push("/clubs")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <button onClick={() => router.push("/clubs")} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
               <h1 className="text-lg font-bold tracking-tight">PickleJ</h1>
               <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
             </button>
