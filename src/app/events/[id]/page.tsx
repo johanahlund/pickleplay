@@ -1841,12 +1841,16 @@ export default function EventDetailPage() {
               <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); }}
                 className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium hover:bg-amber-200">Confirm</button>
             )}
-            {isCompleted && canManage && !isEditing && (
-              <button onClick={() => startEditMatch(match.id, team1Score!, team2Score!)}
+            {isCompleted && (isOwner || isAdmin) && !isEditing && (
+              <button onClick={() => {
+                if (!confirm("Modify the score of a completed match?")) return;
+                if (!confirm("Are you sure? This will affect player ratings.")) return;
+                startEditMatch(match.id, team1Score!, team2Score!);
+              }}
                 className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
             )}
             {isEditing && <span className="text-sm text-amber-600 font-medium">Editing...</span>}
-            {canManage && (
+            {(isOwner || isAdmin) && (
               <button onClick={() => deleteMatch(match.id)}
                 className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors" title="Delete match">🗑️</button>
             )}

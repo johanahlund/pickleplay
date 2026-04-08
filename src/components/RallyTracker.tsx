@@ -626,19 +626,19 @@ export function RallyTracker({
     const teamColor = team === 1 ? "blue" : "red";
 
     return (
-      <div className={`flex-1 flex flex-col items-center justify-center rounded-xl p-3 transition-all ${
+      <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
         isServer
           ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
           : isReceiver
             ? "border-2 border-yellow-400/60 bg-yellow-500/10"
             : "border border-white/10 bg-white/5"
       }`}>
-        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="md" />
-        <span className={`font-bold mt-1 ${isServer ? "text-lg text-green-300" : isReceiver ? "text-base text-yellow-200" : "text-base text-white/60"}`}>
+        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
+        <span className={`font-bold mt-0.5 ${isServer ? "text-lg text-green-300" : isReceiver ? "text-lg text-yellow-200" : "text-lg text-white/60"}`}>
           {player.name}
         </span>
-        {isServer && <span className="text-xs text-green-300 font-bold mt-0.5 animate-pulse">● SERVER {gameState?.serverNumber}</span>}
-        {isReceiver && <span className="text-[10px] text-yellow-300/70 font-medium mt-0.5">RECEIVING</span>}
+        {isServer && <span className="text-[10px] text-green-300 font-bold mt-0.5 animate-pulse">● SERVER {gameState?.serverNumber}</span>}
+        {isReceiver && <span className="text-[9px] text-yellow-300/70 font-medium mt-0.5">RECEIVING</span>}
       </div>
     );
   };
@@ -652,10 +652,6 @@ export function RallyTracker({
           <span className="text-xs opacity-40">{formatLabel} · to {targetScore} · {winByLabel}</span>
           <div className="flex items-center gap-2">
             <span className="text-sm text-white font-medium tabular-nums">{history.length} rallies · {elapsedDisplay}</span>
-            <button onClick={() => setAutoSpeak(!autoSpeak)}
-              className={`text-xs px-2 py-0.5 rounded ${autoSpeak ? "bg-green-700 text-green-200" : "bg-white/10 text-white/40"}`}>
-              {autoSpeak ? "🔊" : "🔇"}
-            </button>
             <button onClick={() => {
               if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
                 setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
@@ -667,19 +663,22 @@ export function RallyTracker({
         {/* Score display */}
         <div className="flex items-center justify-center gap-3 py-2">
           <div className="text-center">
-            <div className={`text-xs uppercase tracking-wider mb-0.5 ${swapped ? "text-red-300" : "text-blue-300"}`}>{swapped ? "Team B" : "Team A"}</div>
-            <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-400" : "text-blue-400"}`}>{swapped ? score[1] : score[0]}</span>
+            <div className={`text-sm uppercase tracking-wider font-bold mb-0.5 ${swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? "Team B" : "Team A"}</div>
+            <span className={`text-7xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? score[1] : score[0]}</span>
           </div>
-          <span className="text-2xl text-white/20 self-end mb-1">—</span>
+          <span className="text-4xl text-white/20 self-end mb-2">—</span>
           <div className="text-center">
-            <div className={`text-xs uppercase tracking-wider mb-0.5 ${swapped ? "text-blue-300" : "text-red-300"}`}>{swapped ? "Team A" : "Team B"}</div>
-            <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-400" : "text-red-400"}`}>{swapped ? score[0] : score[1]}</span>
+            <div className={`text-sm uppercase tracking-wider font-bold mb-0.5 ${swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? "Team A" : "Team B"}</div>
+            <span className={`text-7xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? score[0] : score[1]}</span>
           </div>
           {!isRally && (
-            <div className="text-center self-end mb-1 ml-1">
-              <div className="text-[10px] text-white/60 uppercase font-medium">Server</div>
-              <span className="text-3xl font-black tabular-nums text-white">{gameState.serverNumber}</span>
-            </div>
+            <>
+              <span className="text-4xl text-white/20 self-end mb-2">—</span>
+              <div className="text-center self-end mb-2">
+                <div className="text-[10px] text-green-400 uppercase font-medium">Server</div>
+                <span className="text-5xl font-black tabular-nums text-green-400">{gameState.serverNumber}</span>
+              </div>
+            </>
           )}
         </div>
 
@@ -726,7 +725,7 @@ export function RallyTracker({
         const serverIsTop = serverId === leftTop.id || serverId === rightTop.id;
 
         return (
-          <div className="flex-1 flex p-3 gap-1 min-h-0 relative">
+          <div className="flex p-2 gap-1 min-h-0 relative border border-white/20 rounded-xl mx-2" style={{ flex: "2 1 0%" }}>
             {/* Serve arrow overlay — centered on court */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
               <div className="text-green-400/80 font-bold" style={{
@@ -782,18 +781,18 @@ export function RallyTracker({
                 <button
                   onClick={() => handleRally(leftTeamNum)}
                   className={`flex-1 ${leftIsServing
-                    ? (swapped ? "bg-red-600 hover:bg-red-500 active:bg-red-700" : "bg-blue-600 hover:bg-blue-500 active:bg-blue-700")
+                    ? (swapped ? "bg-red-500 hover:bg-red-400 active:bg-red-600" : "bg-blue-500 hover:bg-blue-400 active:bg-blue-600")
                     : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
-                  } text-white py-3 rounded-xl text-base font-bold transition-colors`}
+                  } text-white py-8 rounded-xl text-lg font-bold transition-colors`}
                 >
                   ◄ {leftIsServing ? "Point" : lossLabel}
                 </button>
                 <button
                   onClick={() => handleRally(rightTeamNum)}
                   className={`flex-1 ${rightIsServing
-                    ? (swapped ? "bg-blue-600 hover:bg-blue-500 active:bg-blue-700" : "bg-red-600 hover:bg-red-500 active:bg-red-700")
+                    ? (swapped ? "bg-blue-500 hover:bg-blue-400 active:bg-blue-600" : "bg-red-500 hover:bg-red-400 active:bg-red-600")
                     : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
-                  } text-white py-3 rounded-xl text-base font-bold transition-colors`}
+                  } text-white py-8 rounded-xl text-lg font-bold transition-colors`}
                 >
                   {rightIsServing ? "Point" : lossLabel} ►
                 </button>
@@ -801,9 +800,13 @@ export function RallyTracker({
             );
           })()}
 
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center gap-3">
             <button onClick={handleSpeak}
               className="text-2xl px-3 py-1 hover:bg-white/10 rounded-lg transition-colors">🔊</button>
+            <button onClick={() => setAutoSpeak(!autoSpeak)}
+              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${autoSpeak ? "bg-green-700 text-green-200" : "bg-white/10 text-white/40"}`}>
+              {autoSpeak ? "Auto" : "Manual"}
+            </button>
           </div>
         </div>
       )}
@@ -816,9 +819,9 @@ export function RallyTracker({
               🏆 Team {winner} wins!
             </div>
             <div className="text-3xl font-black tabular-nums">
-              <span className="text-blue-400">{score[0]}</span>
+              <span className="text-blue-500">{score[0]}</span>
               <span className="text-white/30 mx-2">—</span>
-              <span className="text-red-400">{score[1]}</span>
+              <span className="text-red-500">{score[1]}</span>
             </div>
           </div>
           <div className="flex gap-2">
