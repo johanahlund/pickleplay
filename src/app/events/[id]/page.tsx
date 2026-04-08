@@ -2057,6 +2057,36 @@ export default function EventDetailPage() {
     );
   }
 
+  const renderRallyTracker = () => {
+    if (!rallyMatchId || !event) return null;
+    const match = event.matches?.find((m: Match) => m.id === rallyMatchId);
+    if (!match) return null;
+    const team1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
+    const team2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
+    const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
+    const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
+    const wb = cls?.winBy || "2";
+    return (
+      <RallyTracker
+        matchId={match.id}
+        team1Players={team1}
+        team2Players={team2}
+        scoringFormat={fmt}
+        winBy={wb}
+        onSubmitScore={async (t1, t2) => {
+          await fetch(`/api/matches/${match.id}/score`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
+          });
+          setRallyMatchId(null);
+          fetchEvent();
+        }}
+        onClose={() => setRallyMatchId(null)}
+      />
+    );
+  };
+
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
@@ -2121,6 +2151,7 @@ export default function EventDetailPage() {
         )}
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
+        {renderRallyTracker()}
       </div>
     );
   }
@@ -2283,36 +2314,7 @@ export default function EventDetailPage() {
         </button>
       )}
 
-      {/* Rally Tracker overlay */}
-      {rallyMatchId && (() => {
-        const match = event?.matches?.find((m: Match) => m.id === rallyMatchId);
-        if (!match) return null;
-        const team1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
-        const team2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
-        // Get scoring format: match-level override → class → event default
-        const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
-        const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
-        const wb = cls?.winBy || "2";
-        return (
-          <RallyTracker
-            matchId={match.id}
-            team1Players={team1}
-            team2Players={team2}
-            scoringFormat={fmt}
-            winBy={wb}
-            onSubmitScore={async (t1, t2) => {
-              await fetch(`/api/matches/${match.id}/score`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
-              });
-              setRallyMatchId(null);
-              fetchEvent();
-            }}
-            onClose={() => setRallyMatchId(null)}
-          />
-        );
-      })()}
+      {renderRallyTracker()}
     </div>
   );
 }
