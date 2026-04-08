@@ -374,7 +374,7 @@ export default function EventDetailPage() {
   const [editRankingMode, setEditRankingMode] = useState("ranked");
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
-  const [matchTab, setMatchTab] = useState<"current" | "previous" | "future">("current");
+  const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
@@ -1740,6 +1740,7 @@ export default function EventDetailPage() {
 
   // ── Section: Rounds ──
   const completedMatches = event.matches.filter((m) => m.status === "completed");
+  const pausedMatches = event.matches.filter((m) => m.status === "paused");
   const activeMatches = event.matches.filter((m) => m.status === "active");
   const pendingMatches = event.matches.filter((m) => m.status === "pending");
   const freeCourts = Array.from({ length: event.numCourts }, (_, i) => i + 1)
@@ -1751,6 +1752,7 @@ export default function EventDetailPage() {
     const isCompleted = match.status === "completed";
     const isActive = match.status === "active";
     const isPending = match.status === "pending";
+    const isPaused = match.status === "paused";
     const isEditing = editingMatchId === match.id;
     const team1Score = isCompleted ? team1[0]?.score ?? 0 : null;
     const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
@@ -1758,7 +1760,7 @@ export default function EventDetailPage() {
     const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
     const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
     const canScore = canManage || isMatchPlayer;
-    const showInputs = canScore && (isActive || isEditing);
+    const showInputs = canScore && (isActive || isPaused || isEditing);
     const isNextMatch = nextMatchIdSet.has(match.id);
     const isCourtFree = courtFreeMatchIds.has(match.id);
     const hasLiveScore = rallyMatchId === match.id && rallyLiveScore;
@@ -1767,36 +1769,48 @@ export default function EventDetailPage() {
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
         isActive
           ? "border-orange-400 ring-2 ring-orange-300/50 shadow-md shadow-orange-100"
-          : isCourtFree && isPending
-            ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
-            : isNextMatch && isPending
-              ? "border-blue-300 ring-1 ring-blue-200/50"
-              : "border-border"
+          : isPaused
+            ? "border-amber-400 ring-1 ring-amber-300/50"
+            : isCourtFree && isPending
+              ? "border-green-400 ring-2 ring-green-300/50 shadow-md shadow-green-100"
+              : isNextMatch && isPending
+                ? "border-blue-300 ring-1 ring-blue-200/50"
+                : "border-border"
       }`}>
         <div className={`px-3 py-2 border-b flex items-center justify-between ${
           isActive
             ? "bg-orange-50 border-orange-200"
-            : isCourtFree && isPending
-              ? "bg-green-50 border-green-200"
-              : isNextMatch && isPending
-                ? "bg-blue-50 border-blue-200"
-                : "bg-gray-50 border-border"
+            : isPaused
+              ? "bg-amber-50 border-amber-200"
+              : isCourtFree && isPending
+                ? "bg-green-50 border-green-200"
+                : isNextMatch && isPending
+                  ? "bg-blue-50 border-blue-200"
+                  : "bg-gray-50 border-border"
         }`}>
           <span className={`text-sm font-medium ${
-            isActive ? "text-orange-600" : isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
+            isActive ? "text-orange-600" : isPaused ? "text-amber-600" : isCourtFree && !isCompleted ? "text-green-700" : isNextMatch && !isCompleted ? "text-blue-600" : "text-muted"
           }`}>
             Court {match.courtNum}
             {isActive && " — In Play"}
+            {isPaused && " — Paused"}
             {isPending && isCourtFree && " — Ready!"}
             {isPending && isNextMatch && !isCourtFree && " — Up next"}
           </span>
           <div className="flex items-center gap-2">
-            {isPending && canScore && match.players.length >= 2 && (
+            {(isPending || match.status === "paused") && canScore && match.players.length >= 2 && (
               <button onClick={async () => {
                 await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
                 fetchEvent();
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
+            )}
+            {isActive && canScore && (
+              <button onClick={async () => {
+                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: hasLiveScore ? "paused" : "pending" }) });
+                fetchEvent();
+              }}
+                className="text-lg px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors" title="Pause match">⏸️</button>
             )}
             {!isCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
               <button onClick={async () => {
@@ -1942,6 +1956,7 @@ export default function EventDetailPage() {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {([
           { key: "previous", label: "Previous", count: completedMatches.length },
+          ...(pausedMatches.length > 0 ? [{ key: "paused" as const, label: "Paused", count: pausedMatches.length }] : []),
           { key: "current", label: "Current", count: activeMatches.length },
           { key: "future", label: "Future", count: pendingMatches.length },
         ] as const).map((t) => (
@@ -1973,6 +1988,17 @@ export default function EventDetailPage() {
             <p className="text-center py-6 text-muted text-sm">No matches in progress</p>
           ) : (
             activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)
+          )}
+        </div>
+      )}
+
+      {/* Paused tab */}
+      {matchTab === "paused" && (
+        <div className="space-y-2">
+          {pausedMatches.length === 0 ? (
+            <p className="text-center py-6 text-muted text-sm">No paused matches</p>
+          ) : (
+            pausedMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)
           )}
         </div>
       )}

@@ -33,7 +33,7 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
 
   if (status) {
-    if (!["active", "pending"].includes(status)) {
+    if (!["active", "pending", "paused"].includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
     data.status = status;
