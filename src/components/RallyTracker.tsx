@@ -445,6 +445,10 @@ export function RallyTracker({
   };
 
   const handleSpeak = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
+      window.speechSynthesis.cancel();
+      return;
+    }
     if (!gameState) return;
     speak(buildAnnouncement(gameState, isRally, targetScore, winByN, cap));
   };
