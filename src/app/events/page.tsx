@@ -229,18 +229,20 @@ function EventsPage() {
                     <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-sm truncate">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${statusBadge(event.status)}`}>{event.status}</span>
+                      {event.classes?.some((c) => c.competitionMode) ? (
+                        <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 Comp</span>
+                      ) : (
+                        <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
+                      )}
                     </div>
                     <div className="flex items-center flex-wrap gap-1 mt-0.5">
                       <span className="text-xs text-muted">
                         {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      {event.classes?.some((c) => c.competitionMode) && (
-                        <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Competition</span>
-                      )}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusBadge(event.status)}`}>{event.status}</span>
                       {event.club && (
                         <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
                           {event.club.emoji} {event.club.name}
