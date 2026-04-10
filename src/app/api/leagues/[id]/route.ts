@@ -1,0 +1,85 @@
+import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
+import { NextResponse } from "next/server";
+
+// GET: league details with all relations
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const league = await prisma.league.findUnique({
+    where: { id },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      categories: { orderBy: { sortOrder: "asc" } },
+      teams: {
+        include: {
+          club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
+          captain: { select: { id: true, name: true, photoUrl: true } },
+          viceCaptain: { select: { id: true, name: true, photoUrl: true } },
+          players: { include: { player: { select: { id: true, name: true, photoUrl: true, rating: true, gender: true } } } },
+          _count: { select: { players: true } },
+        },
+      },
+      rounds: {
+        orderBy: { roundNumber: "asc" },
+        include: {
+          matchDays: {
+            include: {
+              teams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
+              games: {
+                include: {
+                  category: { select: { id: true, name: true } },
+                  team1: { select: { id: true, name: true } },
+                  team2: { select: { id: true, name: true } },
+                  winner: { select: { id: true, name: true } },
+                },
+              },
+              event: { select: { id: true, name: true, date: true, status: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!league) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json(league);
+}
+
+// PATCH: update league
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try { await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const data: Record<string, unknown> = {};
+  if (body.name !== undefined) data.name = body.name.trim();
+  if (body.description !== undefined) data.description = body.description?.trim() || null;
+  if (body.season !== undefined) data.season = body.season?.trim() || null;
+  if (body.status !== undefined) data.status = body.status;
+  if (body.config !== undefined) data.config = body.config;
+
+  if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+
+  const league = await prisma.league.update({ where: { id }, data });
+  return NextResponse.json(league);
+}
+
+// DELETE: delete league
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try { await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+  await prisma.league.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

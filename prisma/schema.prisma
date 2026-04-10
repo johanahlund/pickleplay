@@ -54,6 +54,10 @@ model Player {
   clubPosts     ClubPost[]
   clubComments  ClubComment[]
   scoredMatches Match[]       @relation("matchScorer")
+  leagueTeamPlayers LeagueTeamPlayer[]
+  leagueCaptain     LeagueTeam[]       @relation("teamCaptain")
+  leagueViceCaptain LeagueTeam[]       @relation("teamViceCaptain")
+  createdLeagues    League[]           @relation("leagueCreator")
 }
 
 model Club {
@@ -80,6 +84,7 @@ model Club {
   locations      ClubLocation[]
   invites        ClubInvite[]
   joinRequests   ClubJoinRequest[]
+  leagueTeams    LeagueTeam[]
 }
 
 model ClubPlayerRating {
@@ -183,6 +188,7 @@ model Event {
   matches        Match[]
   helpers        EventHelper[]
   whatsappGroups EventWhatsAppGroup[]
+  leagueMatchDay LeagueMatchDay?
 }
 
 model EventClass {
@@ -325,6 +331,7 @@ model Match {
   class   EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
   scorer  Player?       @relation("matchScorer", fields: [scorerId], references: [id])
   players MatchPlayer[]
+  leagueGame LeagueGame?
 }
 
 model CompetitionResult {
@@ -407,4 +414,121 @@ model ClubComment {
 
   post   ClubPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   author Player   @relation(fields: [authorId], references: [id])
+}
+
+// ── League / Season ──
+
+model League {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  season      String?  // "2025", "Spring 2026"
+  status      String   @default("draft") // draft, active, completed
+  config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy  Player?          @relation("leagueCreator", fields: [createdById], references: [id])
+  teams      LeagueTeam[]
+  rounds     LeagueRound[]
+  categories LeagueCategory[]
+}
+
+model LeagueTeam {
+  id            String  @id @default(cuid())
+  leagueId      String
+  clubId        String? // optional link to Club
+  name          String
+  logoUrl       String?
+  captainId     String?
+  viceCaptainId String?
+
+  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  club        Club?    @relation(fields: [clubId], references: [id])
+  captain     Player?  @relation("teamCaptain", fields: [captainId], references: [id])
+  viceCaptain Player?  @relation("teamViceCaptain", fields: [viceCaptainId], references: [id])
+  players     LeagueTeamPlayer[]
+  matchDayTeams LeagueMatchDayTeam[]
+  gamesAsTeam1  LeagueGame[] @relation("gameTeam1")
+  gamesAsTeam2  LeagueGame[] @relation("gameTeam2")
+  gamesWon      LeagueGame[] @relation("gameWinner")
+}
+
+model LeagueTeamPlayer {
+  id       String   @id @default(cuid())
+  teamId   String
+  playerId String
+  joinedAt DateTime @default(now())
+
+  team   LeagueTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  player Player     @relation(fields: [playerId], references: [id])
+  @@unique([teamId, playerId])
+}
+
+model LeagueCategory {
+  id            String @id @default(cuid())
+  leagueId      String
+  name          String  // "Men's Doubles", "Women's Doubles", "Mixed Doubles", "Singles"
+  format        String  @default("doubles") // "doubles" or "singles"
+  gender        String  @default("open")    // "male", "female", "mix", "open"
+  scoringFormat String  @default("3x15")    // best of 3 to 15
+  winBy         String  @default("2")
+  sortOrder     Int     @default(0)
+
+  league League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  games  LeagueGame[]
+}
+
+model LeagueRound {
+  id          String    @id @default(cuid())
+  leagueId    String
+  roundNumber Int
+  name        String?   // "Jornada 1", "Grande Final"
+  suggestedDate DateTime?
+  status      String    @default("scheduled") // scheduled, in_progress, completed
+
+  league    League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  matchDays LeagueMatchDay[]
+}
+
+model LeagueMatchDay {
+  id         String    @id @default(cuid())
+  roundId    String
+  eventId    String?   @unique // link to Event for actual scoring
+  date       DateTime?
+  status     String    @default("scheduled") // scheduled, in_progress, completed
+  hostTeamId String?
+
+  round  LeagueRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  event  Event?               @relation(fields: [eventId], references: [id])
+  teams  LeagueMatchDayTeam[]
+  games  LeagueGame[]
+}
+
+model LeagueMatchDayTeam {
+  id         String @id @default(cuid())
+  matchDayId String
+  teamId     String
+  points     Int    @default(0) // cached team points for this match day
+
+  matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
+  team     LeagueTeam     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  @@unique([matchDayId, teamId])
+}
+
+model LeagueGame {
+  id         String  @id @default(cuid())
+  matchDayId String
+  categoryId String
+  matchId    String? @unique // link to existing Match for scoring
+  team1Id    String
+  team2Id    String
+  winnerId   String? // set when match completes
+
+  matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
+  category LeagueCategory @relation(fields: [categoryId], references: [id])
+  match    Match?         @relation(fields: [matchId], references: [id])
+  team1    LeagueTeam     @relation("gameTeam1", fields: [team1Id], references: [id])
+  team2    LeagueTeam     @relation("gameTeam2", fields: [team2Id], references: [id])
+  winner   LeagueTeam?    @relation("gameWinner", fields: [winnerId], references: [id])
 }

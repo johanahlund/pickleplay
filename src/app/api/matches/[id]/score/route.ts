@@ -160,6 +160,23 @@ export async function POST(
   // ── Post-score hooks ──
   await handlePostScore(match.id);
 
+  // ── League game winner ──
+  const leagueGame = await prisma.leagueGame.findUnique({ where: { matchId: id } });
+  if (leagueGame) {
+    const winnerId = winnerTeam === 1 ? leagueGame.team1Id : leagueGame.team2Id;
+    await prisma.leagueGame.update({ where: { id: leagueGame.id }, data: { winnerId } });
+    // Recalculate match day team points
+    const games = await prisma.leagueGame.findMany({ where: { matchDayId: leagueGame.matchDayId } });
+    const teamPoints: Record<string, number> = {};
+    for (const g of games) { if (g.winnerId) teamPoints[g.winnerId] = (teamPoints[g.winnerId] || 0) + 1; }
+    const mdTeams = await prisma.leagueMatchDayTeam.findMany({ where: { matchDayId: leagueGame.matchDayId } });
+    const md = await prisma.leagueMatchDay.findUnique({ where: { id: leagueGame.matchDayId }, include: { round: { include: { league: { select: { config: true } } } } } });
+    const maxPts = ((md?.round.league.config as Record<string, number> | null)?.maxPointsPerMatchDay) || 99;
+    for (const mdt of mdTeams) {
+      await prisma.leagueMatchDayTeam.update({ where: { id: mdt.id }, data: { points: Math.min(teamPoints[mdt.teamId] || 0, maxPts) } });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     winnerTeam,

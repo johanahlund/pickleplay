@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 const defaultTabs = [
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
   { href: "/events", label: "My Events", icon: "📅" },
+  { href: "/leagues", label: "Leagues", icon: "🏆" },
   { href: "/matches", label: "My Matches", icon: "🏓" },
 ];
 
