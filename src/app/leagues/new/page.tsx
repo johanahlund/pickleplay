@@ -17,14 +17,17 @@ export default function NewLeaguePage() {
   const [season, setSeason] = useState("");
   const [maxRoster, setMaxRoster] = useState(14);
   const [maxPointsPerMatchDay, setMaxPointsPerMatchDay] = useState(3);
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES.map((c) => ({ ...c, enabled: true })));
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES.map((c) => ({ ...c, enabled: true, customFormat: "" })));
   const [scoringFormat, setScoringFormat] = useState("3x15");
   const [creating, setCreating] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     setCreating(true);
-    const enabledCats = categories.filter((c) => c.enabled).map(({ enabled, ...c }) => ({ ...c, scoringFormat }));
+    const enabledCats = categories.filter((c) => c.enabled).map(({ enabled, customFormat, ...c }) => ({
+      ...c,
+      scoringFormat: customFormat || scoringFormat, // category override or league default
+    }));
     const r = await fetch("/api/leagues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,15 +107,29 @@ export default function NewLeaguePage() {
           <label className="block text-sm font-medium text-muted mb-2">Categories</label>
           <div className="space-y-2">
             {categories.map((cat, i) => (
-              <label key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+              <div key={i} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50">
                 <input type="checkbox" checked={cat.enabled} onChange={(e) => {
                   const next = [...categories];
                   next[i] = { ...next[i], enabled: e.target.checked };
                   setCategories(next);
                 }} className="rounded" />
                 <span className="text-sm font-medium flex-1">{cat.name}</span>
-                <span className="text-xs text-muted">{cat.format} · {cat.gender}</span>
-              </label>
+                <select value={cat.customFormat} onChange={(e) => {
+                  const next = [...categories];
+                  next[i] = { ...next[i], customFormat: e.target.value };
+                  setCategories(next);
+                }} className="text-[10px] border border-border rounded px-1.5 py-1 w-28">
+                  <option value="">Default ({scoringFormat})</option>
+                  <option value="3x11">Bo3 to 11</option>
+                  <option value="3x15">Bo3 to 15</option>
+                  <option value="3x21">Bo3 to 21</option>
+                  <option value="1x11">1 set to 11</option>
+                  <option value="1x15">1 set to 15</option>
+                  <option value="1x21">1 set to 21</option>
+                  <option value="1xR15">Rally 15</option>
+                  <option value="1xR21">Rally 21</option>
+                </select>
+              </div>
             ))}
           </div>
         </div>
