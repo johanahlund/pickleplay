@@ -1908,8 +1908,18 @@ export default function EventDetailPage() {
                   </div>
                 );
               };
+              // Target score from format (e.g. "1x11" → 11, "3x15" → 15)
+              const targetScore = (() => {
+                const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
+                const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
+                return parseInt(fmt.replace(/^[13]x/, "").replace("R", "")) || 11;
+              })();
+              const teamKey = teamNum === 1 ? "team1" : "team2";
+              const canQuickScore = showInputs && !hasLiveScore;
               return (
-                <div className={`flex items-center gap-1 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}>
+                <div className={`flex items-center gap-1 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}
+                  onClick={() => { if (canQuickScore) setMatchScore(match.id, teamKey, String(targetScore)); }}
+                  style={canQuickScore ? { cursor: "pointer" } : undefined}>
                   {p1 && renderPlayer(p1, "right")}
                   {p2 && <span className="text-muted text-sm shrink-0">&</span>}
                   {p2 && renderPlayer(p2, "left")}
@@ -1920,8 +1930,9 @@ export default function EventDetailPage() {
                     ) : hasLiveScore ? (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
                     ) : showInputs ? (
-                      <input type="number" inputMode="numeric" min="0" value={scores[match.id]?.[teamNum === 1 ? "team1" : "team2"] ?? ""}
-                        onChange={(e) => setMatchScore(match.id, teamNum === 1 ? "team1" : "team2", e.target.value)}
+                      <input type="number" inputMode="numeric" min="0" value={scores[match.id]?.[teamKey] ?? ""}
+                        onChange={(e) => setMatchScore(match.id, teamKey, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
                         className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
                     ) : (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
