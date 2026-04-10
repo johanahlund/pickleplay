@@ -620,7 +620,7 @@ export default function ClubDetailPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => { setTab(t.key); setShowInfo(false); }}
+            onClick={() => { setTab(t.key); setShowInfo(false); window.history.replaceState(null, "", `?tab=${t.key}`); }}
             className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
               !showInfo && tab === t.key
                 ? portalTarget ? "bg-white text-black shadow-sm" : "bg-white text-foreground shadow-sm"
