@@ -529,9 +529,11 @@ export function RallyTracker({
     // Instruction text
     const instruction = !setupServer
       ? "Tap the player who serves first"
-      : !setupReceiver
-        ? "Tap the receiver (other team)"
-        : "Ready! Press Start";
+      : !isDoubles
+        ? "Ready! Press Start"
+        : !setupReceiver
+          ? "Tap the receiver (other team)"
+          : "Ready! Press Start";
 
     const renderSetupPlayer = (player: RallyPlayer, color: string) => {
       const isServer = setupServer?.id === player.id;
@@ -759,29 +761,29 @@ export function RallyTracker({
                   const serveFromLeft = isServing && playerScore % 2 !== 0;
                   const recvRight = !isServing && (() => { const svrScore = swapped ? score[0] : score[1]; return svrScore % 2 !== 0; })();
                   const recvLeft = !isServing && !recvRight;
+                  const leftActive = serveFromLeft || recvLeft;
+                  const rightActive = serveFromRight || recvRight;
                   return (
                     <>
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
                         serveFromLeft ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
                         : recvLeft ? "border-2 border-yellow-400/60 bg-yellow-500/10"
-                        : "border border-white/10 bg-white/5"
+                        : "border border-dashed border-white/10 bg-transparent"
                       }`}>
-                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
-                        <span className={`text-lg font-bold mt-0.5 ${serveFromLeft ? "text-green-300" : recvLeft ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {leftActive && <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />}
+                        <span className={`font-bold mt-0.5 ${serveFromLeft ? "text-lg text-green-300" : recvLeft ? "text-lg text-yellow-200" : "text-sm text-white/20"}`}>{leftActive ? player.name : "Left"}</span>
                         {serveFromLeft && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
                         {recvLeft && <span className="text-[9px] text-yellow-300/70">RCV</span>}
-                        <span className="text-[8px] text-white/30 mt-0.5">Left</span>
                       </div>
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
                         serveFromRight ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
                         : recvRight ? "border-2 border-yellow-400/60 bg-yellow-500/10"
-                        : "border border-white/10 bg-white/5"
+                        : "border border-dashed border-white/10 bg-transparent"
                       }`}>
-                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
-                        <span className={`text-lg font-bold mt-0.5 ${serveFromRight ? "text-green-300" : recvRight ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {rightActive && <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />}
+                        <span className={`font-bold mt-0.5 ${serveFromRight ? "text-lg text-green-300" : recvRight ? "text-lg text-yellow-200" : "text-sm text-white/20"}`}>{rightActive ? player.name : "Right"}</span>
                         {serveFromRight && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
                         {recvRight && <span className="text-[9px] text-yellow-300/70">RCV</span>}
-                        <span className="text-[8px] text-white/30 mt-0.5">Right</span>
                       </div>
                     </>
                   );
@@ -814,29 +816,29 @@ export function RallyTracker({
                   const serveFromLeft = isServing && playerScore % 2 !== 0;
                   const recvRight = !isServing && (() => { const svrScore = swapped ? score[1] : score[0]; return svrScore % 2 !== 0; })();
                   const recvLeft = !isServing && !recvRight;
+                  const leftActive = serveFromLeft || recvLeft;
+                  const rightActive = serveFromRight || recvRight;
                   return (
                     <>
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
                         serveFromLeft ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
                         : recvLeft ? "border-2 border-yellow-400/60 bg-yellow-500/10"
-                        : "border border-white/10 bg-white/5"
+                        : "border border-dashed border-white/10 bg-transparent"
                       }`}>
-                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
-                        <span className={`text-lg font-bold mt-0.5 ${serveFromLeft ? "text-green-300" : recvLeft ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {leftActive && <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />}
+                        <span className={`font-bold mt-0.5 ${serveFromLeft ? "text-lg text-green-300" : recvLeft ? "text-lg text-yellow-200" : "text-sm text-white/20"}`}>{leftActive ? player.name : "Left"}</span>
                         {serveFromLeft && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
                         {recvLeft && <span className="text-[9px] text-yellow-300/70">RCV</span>}
-                        <span className="text-[8px] text-white/30 mt-0.5">Left</span>
                       </div>
                       <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
                         serveFromRight ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
                         : recvRight ? "border-2 border-yellow-400/60 bg-yellow-500/10"
-                        : "border border-white/10 bg-white/5"
+                        : "border border-dashed border-white/10 bg-transparent"
                       }`}>
-                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
-                        <span className={`text-lg font-bold mt-0.5 ${serveFromRight ? "text-green-300" : recvRight ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {rightActive && <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />}
+                        <span className={`font-bold mt-0.5 ${serveFromRight ? "text-lg text-green-300" : recvRight ? "text-lg text-yellow-200" : "text-sm text-white/20"}`}>{rightActive ? player.name : "Right"}</span>
                         {serveFromRight && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
                         {recvRight && <span className="text-[9px] text-yellow-300/70">RCV</span>}
-                        <span className="text-[8px] text-white/30 mt-0.5">Right</span>
                       </div>
                     </>
                   );
