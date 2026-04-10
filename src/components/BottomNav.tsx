@@ -39,9 +39,11 @@ export function BottomNav() {
         const now = Date.now();
         const HOUR = 3600000;
 
-        // Find events the user participates in
-        const myEvents = events.filter((e: { players?: { playerId?: string; player?: { id: string } }[] }) =>
-          e.players?.some((p: { playerId?: string; player?: { id: string } }) => (p.playerId || p.player?.id) === userId)
+        // Find events the user participates in, owns, or helps with
+        const myEvents = events.filter((e: { createdById?: string; players?: { playerId?: string; player?: { id: string } }[]; helpers?: { playerId?: string }[] }) =>
+          e.createdById === userId ||
+          e.players?.some((p: { playerId?: string; player?: { id: string } }) => (p.playerId || p.player?.id) === userId) ||
+          e.helpers?.some((h: { playerId?: string }) => h.playerId === userId)
         );
 
         // Priority: 1) Currently running, 2) Ended within 4h (unless next starts in 2h), 3) Next upcoming
@@ -57,6 +59,12 @@ export function BottomNav() {
         for (const e of myEvents) {
           const start = new Date(e.date).getTime();
           const end = e.endDate ? new Date(e.endDate).getTime() : start + 2 * HOUR;
+
+          // 0) Draft event being set up by user
+          if (e.status === "draft" && e.createdById === userId) {
+            if (!best || 110 > best.priority) best = { event: e, priority: 110 };
+            continue;
+          }
 
           // 1) Currently active (between start and end)
           if (now >= start && now <= end) {
@@ -133,11 +141,13 @@ export function BottomNav() {
         {activeEvent && !isOnActiveEvent && (
           <Link
             href={`/events/${activeEvent.id}`}
-            className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-white bg-green-600 shadow-md animate-pulse-slow"
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-white shadow-md ${
+              activeEvent.status === "draft" ? "bg-blue-600" : "bg-green-600 animate-pulse-slow"
+            }`}
             aria-label={`Active event: ${activeEvent.name}`}
           >
-            <span className="text-lg" aria-hidden="true">⚡</span>
-            <span className="text-[9px] font-bold truncate max-w-[50px]">Live</span>
+            <span className="text-lg" aria-hidden="true">{activeEvent.status === "draft" ? "📝" : "⚡"}</span>
+            <span className="text-[9px] font-bold truncate max-w-[50px]">{activeEvent.status === "draft" ? "Draft" : "Live"}</span>
           </Link>
         )}
       </div>

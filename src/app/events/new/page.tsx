@@ -404,14 +404,42 @@ function NewEventPage() {
               Review
             </button>
           ) : step < TOTAL_STEPS ? (
-            <button type="button" onClick={() => canAdvance() && setStep(step + 1)} disabled={!canAdvance()}
+            <button type="button" onClick={async () => {
+              if (!canAdvance()) return;
+              // Auto-create event after step 1
+              if (step === 1 && !createdEventId) {
+                setCreating(true);
+                const eventDate = new Date(`${date}T${time}`);
+                const eventEndDate = new Date(`${date}T${endTime}`);
+                if (eventEndDate <= eventDate) eventEndDate.setDate(eventEndDate.getDate() + 1);
+                const r = await fetch("/api/events", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: name.trim(),
+                    numCourts,
+                    format,
+                    date: eventDate.toISOString(),
+                    endDate: eventEndDate.toISOString(),
+                    scoringFormat,
+                    ...(selectedClubId ? { clubId: selectedClubId } : {}),
+                  }),
+                });
+                if (r.ok) {
+                  const event = await r.json();
+                  setCreatedEventId(event.id);
+                }
+                setCreating(false);
+              }
+              setStep(step + 1);
+            }} disabled={!canAdvance() || creating}
               className="bg-action text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm active:bg-action-dark transition-colors disabled:opacity-50 shrink-0">
-              Next
+              {creating ? "..." : "Next"}
             </button>
           ) : (
             <button type="button" onClick={createEvent} disabled={!name.trim() || creating}
               className="bg-action-dark text-white px-3 py-1 rounded-lg text-xs font-medium shadow-sm transition-colors disabled:opacity-50 shrink-0">
-              {creating ? "..." : "Create"}
+              {creating ? "..." : createdEventId ? "Save" : "Create"}
             </button>
           )}
         </div>

@@ -259,6 +259,7 @@ export function RallyTracker({
     let court: CourtState;
 
     if (!isDoubles) {
+      // Singles: server starts on right (score 0 = even), receiver diagonal
       court = {
         team1Left: team1Players[0],
         team1Right: team1Players[0],
@@ -290,10 +291,10 @@ export function RallyTracker({
     const state: GameState = {
       score: [0, 0],
       servingTeam: serverTeam,
-      serverNumber: 2, // Game starts at Server 2 (first-serve exception)
+      serverNumber: isDoubles ? 2 : 1, // Singles: no Server 1/2 concept
       serverId: server.id,
       court,
-      isFirstServe: true,
+      isFirstServe: isDoubles, // Singles: no first-serve exception
     };
 
     setGameState(state);
@@ -364,7 +365,11 @@ export function RallyTracker({
         // Server stays same person (now on other side)
       } else {
         // Receiving team wins the rally
-        if (newState.isFirstServe) {
+        if (!isDoubles) {
+          // Singles: immediate side-out
+          newState.servingTeam = winningTeam;
+          newState.serverId = (newState.servingTeam === 1 ? team1Players[0] : team2Players[0]).id;
+        } else if (newState.isFirstServe) {
           // Game-start exception: only Server 2, straight to side-out
           newState.servingTeam = winningTeam;
           newState.serverNumber = 1;
@@ -671,7 +676,7 @@ export function RallyTracker({
             <div className={`text-sm uppercase tracking-wider font-bold mb-0.5 ${swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? "Team A" : "Team B"}</div>
             <span className={`text-7xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? score[0] : score[1]}</span>
           </div>
-          {!isRally && (
+          {!isRally && isDoubles && (
             <>
               <span className="text-4xl text-white/20 self-end mb-2">—</span>
               <div className="text-center self-end mb-2">
@@ -742,7 +747,46 @@ export function RallyTracker({
               <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5" style={{ color: swapped ? "#fca5a5" : "#93c5fd" }}>
                 {swapped ? "Team B" : "Team A"}
               </div>
-              {isDoubles ? <>{renderCourtPlayer(leftTop, leftTPos)}{renderCourtPlayer(leftBot, leftBPos)}</> : renderCourtPlayer(leftTop, leftTPos)}
+              {isDoubles ? (
+                <>{renderCourtPlayer(leftTop, leftTPos)}{renderCourtPlayer(leftBot, leftBPos)}</>
+              ) : (
+                // Singles: show left and right squares for this player
+                (() => {
+                  const player = swapped ? team2Players[0] : team1Players[0];
+                  const playerScore = swapped ? score[1] : score[0];
+                  const isServing = servingTeam === (swapped ? 2 : 1);
+                  const serveFromRight = isServing && playerScore % 2 === 0;
+                  const serveFromLeft = isServing && playerScore % 2 !== 0;
+                  const recvRight = !isServing && (() => { const svrScore = swapped ? score[0] : score[1]; return svrScore % 2 !== 0; })();
+                  const recvLeft = !isServing && !recvRight;
+                  return (
+                    <>
+                      <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
+                        serveFromLeft ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
+                        : recvLeft ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+                        : "border border-white/10 bg-white/5"
+                      }`}>
+                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
+                        <span className={`text-lg font-bold mt-0.5 ${serveFromLeft ? "text-green-300" : recvLeft ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {serveFromLeft && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
+                        {recvLeft && <span className="text-[9px] text-yellow-300/70">RCV</span>}
+                        <span className="text-[8px] text-white/30 mt-0.5">Left</span>
+                      </div>
+                      <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
+                        serveFromRight ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
+                        : recvRight ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+                        : "border border-white/10 bg-white/5"
+                      }`}>
+                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
+                        <span className={`text-lg font-bold mt-0.5 ${serveFromRight ? "text-green-300" : recvRight ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {serveFromRight && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
+                        {recvRight && <span className="text-[9px] text-yellow-300/70">RCV</span>}
+                        <span className="text-[8px] text-white/30 mt-0.5">Right</span>
+                      </div>
+                    </>
+                  );
+                })()
+              )}
             </div>
 
             {/* Net (vertical) */}
@@ -759,7 +803,45 @@ export function RallyTracker({
               <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5" style={{ color: swapped ? "#93c5fd" : "#fca5a5" }}>
                 {swapped ? "Team A" : "Team B"}
               </div>
-              {isDoubles ? <>{renderCourtPlayer(rightTop, rightTPos)}{renderCourtPlayer(rightBot, rightBPos)}</> : renderCourtPlayer(rightTop, rightTPos)}
+              {isDoubles ? (
+                <>{renderCourtPlayer(rightTop, rightTPos)}{renderCourtPlayer(rightBot, rightBPos)}</>
+              ) : (
+                (() => {
+                  const player = swapped ? team1Players[0] : team2Players[0];
+                  const playerScore = swapped ? score[0] : score[1];
+                  const isServing = servingTeam === (swapped ? 1 : 2);
+                  const serveFromRight = isServing && playerScore % 2 === 0;
+                  const serveFromLeft = isServing && playerScore % 2 !== 0;
+                  const recvRight = !isServing && (() => { const svrScore = swapped ? score[1] : score[0]; return svrScore % 2 !== 0; })();
+                  const recvLeft = !isServing && !recvRight;
+                  return (
+                    <>
+                      <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
+                        serveFromLeft ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
+                        : recvLeft ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+                        : "border border-white/10 bg-white/5"
+                      }`}>
+                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
+                        <span className={`text-lg font-bold mt-0.5 ${serveFromLeft ? "text-green-300" : recvLeft ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {serveFromLeft && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
+                        {recvLeft && <span className="text-[9px] text-yellow-300/70">RCV</span>}
+                        <span className="text-[8px] text-white/30 mt-0.5">Left</span>
+                      </div>
+                      <div className={`flex-1 flex flex-col items-center justify-center rounded-lg p-1 transition-all ${
+                        serveFromRight ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
+                        : recvRight ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+                        : "border border-white/10 bg-white/5"
+                      }`}>
+                        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
+                        <span className={`text-lg font-bold mt-0.5 ${serveFromRight ? "text-green-300" : recvRight ? "text-yellow-200" : "text-white/40"}`}>{player.name}</span>
+                        {serveFromRight && <span className="text-[10px] text-green-300 font-bold animate-pulse">● SRV</span>}
+                        {recvRight && <span className="text-[9px] text-yellow-300/70">RCV</span>}
+                        <span className="text-[8px] text-white/30 mt-0.5">Right</span>
+                      </div>
+                    </>
+                  );
+                })()
+              )}
             </div>
           </div>
         );
@@ -774,7 +856,7 @@ export function RallyTracker({
             const leftIsServing = servingTeam === leftTeamNum;
             const rightIsServing = servingTeam === rightTeamNum;
             const serverNum = gameState.serverNumber;
-            const isSideOut = isRally || serverNum === 2 || gameState.isFirstServe;
+            const isSideOut = isRally || !isDoubles || serverNum === 2 || gameState.isFirstServe;
             const lossLabel = isSideOut ? "Side Out" : "2nd Server";
             return (
               <div className="flex gap-3">
