@@ -2348,7 +2348,9 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {activeSection !== "rounds" && sectionBar}
+        {activeSection === "rounds" ? (
+          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← {event.name}</button>
+        ) : sectionBar}
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
