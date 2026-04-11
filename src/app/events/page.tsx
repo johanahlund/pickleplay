@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -30,6 +30,13 @@ interface Event {
   _count: { matches: number };
 }
 
+interface UserClub {
+  id: string;
+  name: string;
+  emoji: string;
+  logoUrl?: string | null;
+}
+
 function getTimeStatus(event: Event): "past" | "active" | "upcoming" {
   const now = new Date();
   const start = new Date(event.date);
@@ -46,17 +53,22 @@ export default function EventsPageWrapper() {
 function EventsPage() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
-  const clubFilter = searchParams.get("club");
+  const legacyClubFilter = searchParams.get("club"); // backwards compat
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && hasRole(viewRole, "admin");
+
   const [events, setEvents] = useState<Event[]>([]);
+  const [userClubs, setUserClubs] = useState<UserClub[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
+  const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
+  const [showFilters, setShowFilters] = useState(false);
+  const [clubsLoaded, setClubsLoaded] = useState(false);
 
-  const fetchEvents = () => {
+  const fetchEvents = useCallback(() => {
     fetch("/api/events")
       .then((r) => r.json())
       .then((data) => {
@@ -69,40 +81,52 @@ function EventsPage() {
           }
           return e;
         });
-        const filtered = clubFilter
-          ? enriched.filter((e: Event) => e.clubId === clubFilter)
-          : enriched;
-        setEvents(filtered);
+        setEvents(enriched);
         setLoading(false);
       });
-  };
+  }, []);
+
+  // Fetch user's clubs for filter
+  useEffect(() => {
+    if (!userId) return;
+    fetch("/api/clubs").then((r) => r.ok ? r.json() : []).then((clubs) => {
+      setUserClubs(clubs || []);
+      // Default: select all user's clubs (or legacy single club filter)
+      if (legacyClubFilter) {
+        setSelectedClubIds(new Set([legacyClubFilter]));
+      } else if (!clubsLoaded) {
+        setSelectedClubIds(new Set((clubs || []).map((c: UserClub) => c.id)));
+      }
+      setClubsLoaded(true);
+    });
+  }, [userId, legacyClubFilter, clubsLoaded]);
 
   useEffect(() => {
     fetchEvents();
     const interval = setInterval(fetchEvents, 30000);
-    // Refetch when user returns to the page/tab
     const onFocus = () => fetchEvents();
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) fetchEvents(); });
     return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); };
-  }, [clubFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save last page
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("pickleplay_lastPage", "/events");
+  }, []);
 
   const deleteEvent = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this event and all its matches?")) return;
-    await fetch(`/api/events/${id}`, { method: "DELETE" });
+    if (!confirm("Delete this event and all its matches?")) return;
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    fetch(`/api/events/${id}`, { method: "DELETE" });
   };
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case "setup":
-        return "bg-blue-100 text-blue-700";
-      case "active":
-        return "bg-green-100 text-green-700";
-      case "completed":
-        return "bg-gray-100 text-gray-600";
-      default:
-        return "bg-gray-100 text-gray-600";
+      case "setup": case "draft": return "bg-blue-100 text-blue-700";
+      case "active": return "bg-green-100 text-green-700";
+      case "completed": return "bg-gray-100 text-gray-600";
+      default: return "bg-gray-100 text-gray-600";
     }
   };
 
@@ -112,120 +136,150 @@ function EventsPage() {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const DAY = 86400000;
-    if (filter === "past7") {
-      return eventDate >= new Date(today.getTime() - 7 * DAY) && eventDate < today;
-    }
-    if (filter === "today") {
-      return eventDate >= today && eventDate < new Date(today.getTime() + DAY);
-    }
-    if (filter === "tomorrow") {
-      const tmr = new Date(today.getTime() + DAY);
-      return eventDate >= tmr && eventDate < new Date(tmr.getTime() + DAY);
-    }
-    if (filter === "next7") {
-      return eventDate >= today && eventDate < new Date(today.getTime() + 7 * DAY);
-    }
-    if (filter === "next30") {
-      return eventDate >= today && eventDate < new Date(today.getTime() + 30 * DAY);
-    }
+    if (filter === "past7") return eventDate >= new Date(today.getTime() - 7 * DAY) && eventDate < today;
+    if (filter === "today") return eventDate >= today && eventDate < new Date(today.getTime() + DAY);
+    if (filter === "tomorrow") { const tmr = new Date(today.getTime() + DAY); return eventDate >= tmr && eventDate < new Date(tmr.getTime() + DAY); }
+    if (filter === "next7") return eventDate >= today && eventDate < new Date(today.getTime() + 7 * DAY);
+    if (filter === "next30") return eventDate >= today && eventDate < new Date(today.getTime() + 30 * DAY);
     return true;
   };
 
-  // Club context from sessionStorage
-  const activeClubId = typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null;
+  const toggleClub = (clubId: string) => {
+    setSelectedClubIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clubId)) next.delete(clubId);
+      else next.add(clubId);
+      return next;
+    });
+  };
 
   const filteredEvents = events
     .filter((e) => {
       if (!e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (!matchesDateFilter(e.date, dateFilter)) return false;
-      // Club filter
-      if (activeClubId && e.clubId !== activeClubId) return false;
+      // Club filter: show events from selected clubs, or events without a club
+      if (selectedClubIds.size > 0 && e.clubId && !selectedClubIds.has(e.clubId)) return false;
       // Type filter
       if (typeFilter === "competitions") {
-        const hasCompetition = e.classes?.some((c) => c.competitionMode);
-        if (!hasCompetition) return false;
+        if (!e.classes?.some((c) => c.competitionMode)) return false;
       }
       if (typeFilter === "events") {
-        const hasCompetition = e.classes?.some((c) => c.competitionMode);
-        if (hasCompetition) return false;
+        if (e.classes?.some((c) => c.competitionMode)) return false;
       }
       return true;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  if (loading) {
-    return <div className="text-center py-12 text-muted">Loading...</div>;
+  if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
+
+  // Active filter summary
+  const activeFilters: string[] = [];
+  if (selectedClubIds.size > 0 && selectedClubIds.size < userClubs.length) {
+    const names = userClubs.filter((c) => selectedClubIds.has(c.id)).map((c) => c.name);
+    activeFilters.push(names.length <= 2 ? names.join(", ") : `${names.length} clubs`);
   }
+  if (dateFilter !== "all") activeFilters.push(dateFilter === "past7" ? "Past 7d" : dateFilter === "today" ? "Today" : dateFilter === "tomorrow" ? "Tomorrow" : dateFilter === "next7" ? "Next 7d" : "Next 30d");
+  if (typeFilter !== "all") activeFilters.push(typeFilter === "competitions" ? "Competitions" : "Social");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">{clubFilter ? "My Club Events" : "My Events"}</h2>
-        <Link
-          href="/events/new"
-          className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
-        >
-          + New
-        </Link>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          {([
-            { value: "all", label: "All" },
-            { value: "events", label: "Events" },
-            { value: "competitions", label: "Competitions" },
-          ] as const).map((t) => (
-            <button key={t.value} onClick={() => setTypeFilter(t.value)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                typeFilter === t.value ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
-              }`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search events..." className="text-sm" />
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            { value: "all", label: "All" },
-            { value: "past7", label: "P7" },
-            { value: "today", label: `${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short" })} (Today)` },
-            { value: "tomorrow", label: "Tomorrow" },
-            { value: "next7", label: "N7" },
-            { value: "next30", label: "N30" },
-          ].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setDateFilter(f.value)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                dateFilter === f.value
-                  ? "bg-selected text-white"
-                  : "bg-gray-100 text-muted hover:bg-gray-200"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <h2 className="text-xl font-bold">Events</h2>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowFilters(!showFilters)}
+            className={`text-sm px-2.5 py-1 rounded-lg transition-colors ${showFilters || activeFilters.length > 0 ? "bg-action/10 text-action" : "bg-gray-100 text-muted"}`}>
+            🔍 {activeFilters.length > 0 ? activeFilters.length : ""}
+          </button>
+          <Link href="/events/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ New</Link>
         </div>
       </div>
 
+      {/* Active filter summary */}
+      {activeFilters.length > 0 && !showFilters && (
+        <div className="flex flex-wrap gap-1">
+          {activeFilters.map((f, i) => (
+            <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
+          ))}
+          <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); }}
+            className="text-[10px] text-muted hover:text-foreground px-1">Clear</button>
+        </div>
+      )}
+
+      {/* Filter panel */}
+      {showFilters && (
+        <div className="bg-card rounded-xl border border-border p-3 space-y-3">
+          {/* Club filter */}
+          {userClubs.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-muted">Clubs</span>
+                <button onClick={() => setSelectedClubIds(selectedClubIds.size === userClubs.length ? new Set() : new Set(userClubs.map((c) => c.id)))}
+                  className="text-[10px] text-action">{selectedClubIds.size === userClubs.length ? "None" : "All"}</button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {userClubs.map((club) => (
+                  <button key={club.id} onClick={() => toggleClub(club.id)}
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                      selectedClubIds.has(club.id) ? "bg-action text-white" : "bg-gray-100 text-muted"
+                    }`}>
+                    {club.emoji} {club.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Search */}
+          <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search events..." className="text-sm" />
+
+          {/* Date filter */}
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { value: "all", label: "All dates" },
+              { value: "past7", label: "Past 7d" },
+              { value: "today", label: "Today" },
+              { value: "tomorrow", label: "Tomorrow" },
+              { value: "next7", label: "Next 7d" },
+              { value: "next30", label: "Next 30d" },
+            ].map((f) => (
+              <button key={f.value} onClick={() => setDateFilter(f.value)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  dateFilter === f.value ? "bg-selected text-white" : "bg-gray-100 text-muted"
+                }`}>{f.label}</button>
+            ))}
+          </div>
+
+          {/* Type filter */}
+          <div className="flex gap-1">
+            {([
+              { value: "all", label: "All" },
+              { value: "events", label: "🎾 Social" },
+              { value: "competitions", label: "🏆 Competition" },
+            ] as const).map((t) => (
+              <button key={t.value} onClick={() => setTypeFilter(t.value)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  typeFilter === t.value ? "bg-white text-foreground shadow-sm border border-border" : "text-muted hover:text-foreground"
+                }`}>{t.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Events list */}
       {filteredEvents.length === 0 && events.length > 0 ? (
-        <div className="text-center py-8">
-          <p className="text-muted">No events match your search.</p>
-        </div>
+        <div className="text-center py-8"><p className="text-muted text-sm">No events match your filters.</p></div>
       ) : filteredEvents.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">🏸</div>
           <p className="text-muted">No events yet.</p>
-          <Link href="/events/new" className="text-primary font-medium mt-2 inline-block">
-            Create your first event
-          </Link>
+          <Link href="/events/new" className="text-primary font-medium mt-2 inline-block">Create your first event</Link>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filteredEvents.map((event) => {
             const timeStatus = getTimeStatus(event);
-            const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "upcoming" ? "border-l-blue-400" : "border-l-gray-300";
+            const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "past" ? "border-l-gray-300" : "border-l-blue-400";
             const cardOpacity = timeStatus === "past" ? "opacity-60" : "";
             return (
             <div key={event.id} className={`bg-card rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
@@ -237,7 +291,7 @@ function EventsPage() {
                     <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    {!clubFilter && event.club && (
+                    {!legacyClubFilter && event.club && (
                       <div className="text-[10px] text-muted font-medium mb-0.5">{event.club.emoji} {event.club.name}</div>
                     )}
                     <div className="flex items-center gap-1.5">
@@ -308,8 +362,7 @@ function EventsPage() {
               </div>
               {(isAdmin || event.createdById === userId) && (
                 <div className="border-t border-border px-3 py-1.5 flex justify-end">
-                  <button onClick={() => deleteEvent(event.id)}
-                    className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50">Delete</button>
+                  <button onClick={() => deleteEvent(event.id)} className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50">Delete</button>
                 </div>
               )}
             </div>

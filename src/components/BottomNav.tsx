@@ -7,10 +7,10 @@ import { useViewRole, hasRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
 
 const defaultTabs = [
+  { href: "/events", label: "Events", icon: "📅" },
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
-  { href: "/events", label: "My Events", icon: "📅" },
   { href: "/leagues", label: "Leagues", icon: "🏆" },
-  { href: "/matches", label: "My Matches", icon: "🏓" },
+  { href: "/matches", label: "Matches", icon: "🏓" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -101,9 +101,10 @@ export function BottomNav() {
 
   const tabs = clubId
     ? [
-        { href: "/clubs", label: "My Clubs", icon: "🏟️" },
-        { href: `/events?club=${clubId}`, label: "My Club Events", icon: "📅" },
-        { href: `/matches?club=${clubId}`, label: "My Club Matches", icon: "🏓" },
+        { href: "/events", label: "Events", icon: "📅" },
+        { href: "/clubs", label: "Clubs", icon: "🏟️" },
+        { href: "/leagues", label: "Leagues", icon: "🏆" },
+        { href: "/matches", label: "Matches", icon: "🏓" },
       ]
     : defaultTabs;
 

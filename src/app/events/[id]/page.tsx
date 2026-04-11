@@ -337,6 +337,11 @@ export default function EventDetailPage() {
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
+
+  // Remember last visited page
+  useEffect(() => {
+    if (typeof window !== "undefined" && id) localStorage.setItem("pickleplay_lastPage", `/events/${id}`);
+  }, [id]);
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -1807,87 +1812,77 @@ export default function EventDetailPage() {
             {isPending && isCourtFree && " — Ready!"}
             {isPending && isNextMatch && !isCourtFree && " — Up next"}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            {/* Primary actions — always visible */}
             {(isPending || match.status === "paused") && canScore && match.players.length >= 2 && (
               <button onClick={() => {
-                // Optimistic update
                 setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "active" } : m) } : prev);
                 setMatchTab("current");
                 fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) }).then(() => fetchEvent());
               }}
-                className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
+                className="text-sm px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
             )}
             {isActive && canScore && (
               <button onClick={() => {
-                // Optimistic update
                 setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev);
                 setMatchTab("paused");
                 fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent());
               }}
-                className="text-lg px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors" title="Pause match">⏸️</button>
+                className="text-sm px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors" title="Pause">⏸️</button>
             )}
             {!isCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
               <button onClick={async () => {
-                // If already scorer or resuming, go straight in
                 if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) {
-                  setRallyMatchId(match.id); setRallyVisible(true);
-                  return;
+                  setRallyMatchId(match.id); setRallyVisible(true); return;
                 }
-                // If another scorer assigned, show who
                 if (match.scorerId && match.scorerId !== userId) {
                   if (!confirm(`${match.scorer?.name || "Someone"} is the scorer. Take over?`)) return;
                 }
-                // Ask to be scorer
                 if (!confirm("Will you be the scorer for this match?")) return;
-                await fetch(`/api/matches/${match.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ scorerId: userId }),
-                });
+                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) });
                 await fetchEvent();
                 setRallyMatchId(match.id); setRallyVisible(true);
               }}
-                className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker (judge mode)">⚖️</button>
+                className="text-sm px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Rally tracker">⚖️</button>
             )}
-            {!isCompleted && (
-              <button onClick={() => setFocusedMatchId(match.id)}
-                className="text-lg px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Focus on this match">📺</button>
-            )}
-            {!isCompleted && (
-              <button onClick={() => {
-                if (typeof window !== "undefined" && window.speechSynthesis?.speaking) {
-                  stopAnnouncement();
-                  return;
-                }
-                const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
-                const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
-                const text = formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court");
-                sendAnnouncement(id as string, text);
-              }}
-                className="text-2xl px-1 py-0.5 rounded hover:bg-primary/10 transition-colors" title="Announce match">🔊</button>
-            )}
+            {match.scorer && <span className="text-[9px] text-muted">{match.scorer.name}</span>}
             {isCompleted && !isEditing && (
-              <span className={`text-sm font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
-                {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳ Pending" : "✓ Final"}
+              <span className={`text-[10px] font-medium ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
+                {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳" : "✓"}
               </span>
             )}
-            {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (
-              <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); }}
-                className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-medium hover:bg-amber-200">Confirm</button>
-            )}
-            {isCompleted && (isOwner || isAdmin) && !isEditing && (
-              <button onClick={() => {
-                if (!confirm("Modify the score of a completed match?")) return;
-                if (!confirm("Are you sure? This will affect player ratings.")) return;
-                startEditMatch(match.id, team1Score!, team2Score!);
-              }}
-                className="text-sm text-muted px-1.5 py-0.5 rounded hover:bg-gray-200 transition-colors">Edit</button>
-            )}
-            {isEditing && <span className="text-sm text-amber-600 font-medium">Editing...</span>}
-            {(isOwner || isAdmin) && (
-              <button onClick={() => deleteMatch(match.id)}
-                className="text-2xl px-1 py-0.5 rounded hover:bg-red-100 transition-colors" title="Delete match">🗑️</button>
-            )}
+
+            {/* Menu — secondary actions */}
+            <div className="relative group">
+              <button className="text-sm text-muted px-1 py-0.5 rounded hover:bg-gray-100">⋮</button>
+              <div className="absolute right-0 top-6 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[140px] hidden group-hover:block">
+                {!isCompleted && (
+                  <button onClick={() => setFocusedMatchId(match.id)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">📺 Focus view</button>
+                )}
+                {!isCompleted && (
+                  <button onClick={() => {
+                    if (typeof window !== "undefined" && window.speechSynthesis?.speaking) { stopAnnouncement(); return; }
+                    const t1 = match.players.filter((p) => p.team === 1).map((p) => p.player.name);
+                    const t2 = match.players.filter((p) => p.team === 2).map((p) => p.player.name);
+                    sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, t1, t2, event.pairingMode === "king_of_court"));
+                  }} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">🔊 Announce</button>
+                )}
+                {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (
+                  <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 text-amber-600">✓ Confirm score</button>
+                )}
+                {isCompleted && (isOwner || isAdmin) && !isEditing && (
+                  <button onClick={() => {
+                    if (!confirm("Modify the score?") || !confirm("Are you sure? This will affect ratings.")) return;
+                    startEditMatch(match.id, team1Score!, team2Score!);
+                  }} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">✏️ Edit score</button>
+                )}
+                {(isOwner || isAdmin) && (
+                  <button onClick={() => deleteMatch(match.id)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 text-danger">🗑️ Delete</button>
+                )}
+              </div>
+            </div>
+            {isEditing && <span className="text-[10px] text-amber-600 font-medium">Editing</span>}
           </div>
         </div>
         <div className="p-3">
@@ -1947,17 +1942,7 @@ export default function EventDetailPage() {
             return (
               <>
                 {renderTeamRow(team1, 1, team1Won, team1Score)}
-                <div className="flex items-center my-1 px-2">
-                  <div className="flex-1 text-center">
-                    <span className="text-sm text-muted font-medium">vs</span>
-                  </div>
-                  {match.scorer && (
-                    <span className="text-[10px] text-muted flex items-center gap-1 shrink-0">
-                      <PlayerAvatar name={match.scorer.name} photoUrl={match.scorer.photoUrl} size="xs" />
-                      <span>{match.scorer.name}</span>
-                    </span>
-                  )}
-                </div>
+                <div className="h-px bg-border mx-2" />
                 {renderTeamRow(team2, 2, team2Won, team2Score)}
               </>
             );
