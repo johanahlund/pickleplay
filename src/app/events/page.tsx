@@ -189,7 +189,9 @@ function EventsPage() {
 
   // Active filter summary
   const activeFilters: string[] = [];
-  if (selectedClubIds.size > 0 && selectedClubIds.size < userClubs.length) {
+  if (selectedClubIds.size > 0 && selectedClubIds.size >= userClubs.length) {
+    activeFilters.push("All Clubs");
+  } else if (selectedClubIds.size > 0) {
     const names = userClubs.filter((c) => selectedClubIds.has(c.id)).map((c) => c.name);
     activeFilters.push(names.length <= 2 ? names.join(", ") : `${names.length} clubs`);
   }
