@@ -108,9 +108,9 @@ function MatchesPage() {
     const isCompleted = m.status === "completed";
     const won = isCompleted ? (myTeam === 1 ? score1 > score2 : score2 > score1) : false;
     const renderTeamRow = (players: MatchPlayer[], teamWon: boolean, teamLost: boolean, score: number, isMyTeam: boolean) => {
-      const nameColor = isMyTeam && isCompleted ? (teamWon ? "text-green-700" : "text-red-600") : teamWon ? "text-green-700" : "";
-      const scoreColor = isMyTeam && isCompleted ? (teamWon ? "text-green-600" : "text-red-500") : teamWon ? "text-green-600" : "text-gray-400";
-      const bgColor = isMyTeam && isCompleted ? (teamWon ? "bg-green-50" : "bg-red-50") : teamWon ? "bg-green-50" : "";
+      const nameColor = isMyTeam && isCompleted ? (teamWon ? "text-green-700" : "text-red-600") : "";
+      const scoreColor = isMyTeam && isCompleted ? (teamWon ? "text-green-600" : "text-red-500") : "text-gray-400";
+      const bgColor = isMyTeam && isCompleted ? (teamWon ? "bg-green-50" : "bg-red-50") : "";
       return (
         <div className={`flex items-center gap-1 p-1.5 rounded-lg ${bgColor}`}>
           <div className="flex-1 min-w-0 space-y-0.5">
