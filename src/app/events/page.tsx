@@ -288,13 +288,17 @@ function EventsPage() {
                   typeFilter === t.value ? "bg-selected text-white" : "bg-gray-100 text-muted"
                 }`}>{t.label}</button>
             ))}
+          </div>
+
+          {/* Quick toggles */}
+          <div className="flex gap-2 pt-1">
             <button onClick={() => setMyEventsOnly(!myEventsOnly)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                myEventsOnly ? "bg-selected text-white" : "bg-gray-100 text-muted"
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                myEventsOnly ? "bg-action/10 border-action text-action" : "border-border text-muted hover:text-foreground"
               }`}>👤 My events</button>
             <button onClick={() => setActiveOnly(!activeOnly)}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                activeOnly ? "bg-selected text-white" : "bg-gray-100 text-muted"
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                activeOnly ? "bg-green-50 border-green-500 text-green-700" : "border-border text-muted hover:text-foreground"
               }`}>🟢 Live now</button>
           </div>
         </div>
