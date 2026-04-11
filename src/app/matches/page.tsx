@@ -107,17 +107,22 @@ function MatchesPage() {
     const score2 = team2[0]?.score ?? 0;
     const isCompleted = m.status === "completed";
     const won = isCompleted ? (myTeam === 1 ? score1 > score2 : score2 > score1) : false;
-    const renderPlayer = (mp: MatchPlayer, align: "left" | "right") => (
-      <div className={`flex-1 flex flex-col ${align === "right" ? "items-end" : "items-start"}`}>
-        <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
-          <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-          <span className={mp.playerId === userId ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-        </span>
-      </div>
-    );
-
-    const p1t1 = team1[0], p2t1 = team1[1];
-    const p1t2 = team2[0], p2t2 = team2[1];
+    const renderTeamRow = (players: MatchPlayer[], teamWon: boolean, score: number) => {
+      const nameColor = teamWon ? "text-green-700" : "";
+      return (
+        <div className={`flex items-center gap-1 p-1.5 rounded-lg ${teamWon ? "bg-green-50" : ""}`}>
+          <div className="flex-1 min-w-0 space-y-0.5">
+            {players.map((mp) => (
+              <div key={mp.id} className="flex items-center gap-1.5">
+                <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+                <span className={`text-sm truncate ${mp.playerId === userId ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
+              </div>
+            ))}
+          </div>
+          <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${teamWon ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score : "-"}</span>
+        </div>
+      );
+    };
 
     return (
       <Link key={m.id} href={`/events/${m.event.id}`} className="block bg-white rounded-xl border border-border overflow-hidden active:bg-gray-50">
@@ -128,21 +133,9 @@ function MatchesPage() {
           {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}
         </div>
         <div className="px-2 py-1.5 space-y-0.5">
-          <div className={`flex items-center gap-1 p-1 rounded-lg ${isCompleted && score1 > score2 ? "bg-green-50" : ""}`}>
-            {p1t1 && renderPlayer(p1t1, "right")}
-            {p2t1 && <span className="text-muted text-sm shrink-0">·</span>}
-            {p2t1 && renderPlayer(p2t1, "left")}
-            {!p2t1 && <div className="flex-1" />}
-            <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${isCompleted && score1 > score2 ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score1 : "-"}</span>
-          </div>
+          {renderTeamRow(team1, isCompleted && score1 > score2, score1)}
           <div className="h-px bg-border mx-2" />
-          <div className={`flex items-center gap-1 p-1 rounded-lg ${isCompleted && score2 > score1 ? "bg-green-50" : ""}`}>
-            {p1t2 && renderPlayer(p1t2, "right")}
-            {p2t2 && <span className="text-muted text-sm shrink-0">·</span>}
-            {p2t2 && renderPlayer(p2t2, "left")}
-            {!p2t2 && <div className="flex-1" />}
-            <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${isCompleted && score2 > score1 ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score2 : "-"}</span>
-          </div>
+          {renderTeamRow(team2, isCompleted && score2 > score1, score2)}
         </div>
       </Link>
     );

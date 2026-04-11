@@ -1800,7 +1800,7 @@ export default function EventDetailPage() {
 
     return (
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
-        isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : "border-border"
+        isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action/40" : "border-border"
       }`}>
         <div className="flex items-center gap-2 px-2 py-2">
           {/* Court number circle */}
@@ -1817,21 +1817,21 @@ export default function EventDetailPage() {
               const liveReceiverId = hasLiveScore ? rallyLiveScore?.receiverId : undefined;
               const p1 = teamPlayers[0];
               const p2 = teamPlayers[1];
-              const renderPlayer = (mp: MatchPlayer, align: "left" | "right") => {
+              const nameColor = won && !isEditing ? "text-green-700" : "";
+              const renderPlayerRow = (mp: MatchPlayer) => {
                 const isServerPlayer = liveServerId === mp.player.id;
                 const isReceiverPlayer = liveReceiverId === mp.player.id;
+                const isMe = mp.playerId === userId;
                 return (
-                  <div className={`flex-1 flex flex-col ${align === "right" ? "items-end" : "items-start"}`}>
-                    <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
-                      <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                      <span className={won && !isEditing ? "font-bold" : "font-medium"}>{mp.player.name}</span>
-                    </span>
-                    {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1.5 py-0 rounded-full font-bold mt-0.5">SRV</span>}
-                    {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1.5 py-0 rounded-full font-medium mt-0.5">RCV</span>}
+                  <div key={mp.id} className="flex items-center gap-1.5">
+                    <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+                    <span className={`text-sm truncate ${isMe ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
+                    {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1 py-0 rounded-full font-bold">SRV</span>}
+                    {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1 py-0 rounded-full font-medium">RCV</span>}
                   </div>
                 );
               };
-              // Target score from format (e.g. "1x11" → 11, "3x15" → 15)
+              // Target score from format
               const targetScore = (() => {
                 const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
                 const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
@@ -1840,13 +1840,12 @@ export default function EventDetailPage() {
               const teamKey = teamNum === 1 ? "team1" : "team2";
               const canQuickScore = showInputs && !hasLiveScore;
               return (
-                <div className={`flex items-center gap-1 p-2 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}
+                <div className={`flex items-center gap-1 p-1.5 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}
                   onClick={() => { if (canQuickScore) setMatchScore(match.id, teamKey, String(targetScore)); }}
                   style={canQuickScore ? { cursor: "pointer" } : undefined}>
-                  {p1 && renderPlayer(p1, "right")}
-                  {p2 && <span className="text-muted text-sm shrink-0">·</span>}
-                  {p2 && renderPlayer(p2, "left")}
-                  {!p2 && <div className="flex-1" />}
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    {teamPlayers.map((mp) => renderPlayerRow(mp))}
+                  </div>
                   <div className="shrink-0 ml-1">
                     {isCompleted && !isEditing ? (
                       <span className={`text-2xl font-bold min-w-[2.5rem] text-center block ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
