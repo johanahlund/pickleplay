@@ -10,7 +10,7 @@ const defaultTabs = [
   { href: "/events", label: "Events", icon: "📅" },
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
   { href: "/leagues", label: "Leagues", icon: "🏆" },
-  { href: "/matches", label: "Matches", icon: "🏓" },
+  { href: "/matches", label: "My Matches", icon: "🏓" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -104,7 +104,7 @@ export function BottomNav() {
         { href: "/events", label: "Events", icon: "📅" },
         { href: "/clubs", label: "Clubs", icon: "🏟️" },
         { href: "/leagues", label: "Leagues", icon: "🏆" },
-        { href: "/matches", label: "Matches", icon: "🏓" },
+        { href: "/matches", label: "My Matches", icon: "🏓" },
       ]
     : defaultTabs;
 
