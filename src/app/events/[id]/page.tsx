@@ -2584,7 +2584,12 @@ export default function EventDetailPage() {
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
           <span className="text-sm text-muted">Ranking</span>
-          <span className="text-sm font-medium flex-1 text-right">{rankingLabel(event.rankingMode || "ranked")}</span>
+          <span className="flex-1 text-right">
+            <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+            <span className="block text-[10px] text-muted">
+              ({event.rankingMode === "ranked" ? "scores count towards rating" : event.rankingMode === "approval" ? "scores need confirmation" : "scores not counted"})
+            </span>
+          </span>
           {canManage && <span className="text-xs text-muted ml-1">✏️</span>}
         </button>
       </div>
