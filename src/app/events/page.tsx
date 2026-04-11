@@ -292,10 +292,10 @@ function EventsPage() {
             const canDelete = isAdmin || event.createdById === userId;
             return (
             <div key={event.id} className="relative group">
-              {/* Delete button — top right, visible on hover */}
+              {/* Delete button — top right corner */}
               {canDelete && (
                 <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id); }}
-                  className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-sm hover:bg-red-600"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white flex items-center justify-center text-[10px] font-bold z-20 shadow hover:bg-red-600"
                   title="Delete event">×</button>
               )}
             <div className={`${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden`}>
