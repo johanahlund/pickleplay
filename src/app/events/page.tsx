@@ -380,7 +380,7 @@ function EventsPage() {
             <div className="space-y-4">
               {/* Today's events — green background */}
               {todayEvents.length > 0 && (
-                <div className="bg-green-50 -mx-4 px-4 py-3 border-y border-green-200">
+                <div className="bg-green-100 -mx-4 px-4 py-3 border-y border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
