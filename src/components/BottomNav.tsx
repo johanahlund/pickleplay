@@ -7,9 +7,9 @@ import { useViewRole, hasRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
 
 const defaultTabs = [
-  { href: "/events", label: "Events", icon: "📅" },
   { href: "/clubs", label: "Clubs", icon: "🏟️" },
   { href: "/leagues", label: "Leagues", icon: "🏆" },
+  { href: "/events", label: "Events", icon: "📅" },
   { href: "/matches", label: "My Matches", icon: "🏓" },
 ];
 
@@ -99,17 +99,10 @@ export function BottomNav() {
   const clubMatch = pathname.match(/^\/clubs\/([^/]+)/);
   const clubId = clubMatch ? clubMatch[1] : null;
 
-  const tabs = clubId
-    ? [
-        { href: "/events", label: "Events", icon: "📅" },
-        { href: "/clubs", label: "Clubs", icon: "🏟️" },
-        { href: "/leagues", label: "Leagues", icon: "🏆" },
-        { href: "/matches", label: "My Matches", icon: "🏓" },
-      ]
-    : defaultTabs;
+  const tabs = defaultTabs;
 
   const allTabs = isAdmin && !clubId
-    ? [...tabs, { href: "/players", label: "Players", icon: "👤" }]
+    ? [{ href: "/players", label: "Players", icon: "👤" }, ...tabs]
     : tabs;
 
   const isOnActiveEvent = activeEvent && pathname === `/events/${activeEvent.id}`;
