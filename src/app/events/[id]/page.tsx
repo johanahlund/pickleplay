@@ -1200,7 +1200,7 @@ export default function EventDetailPage() {
           <option value="none">Unranked</option>
         </select>
         <p className="text-xs text-muted mt-1">
-          {editRankingMode === "ranked" ? "Scores count towards player ratings immediately" : editRankingMode === "approval" ? "Scores need confirmation before affecting ratings" : "Scores recorded but don't affect ratings"}
+          {editRankingMode === "ranked" ? "Scores count towards player rankings immediately" : editRankingMode === "approval" ? "Scores need confirmation by both teams or event admin" : "Scores recorded but don't affect rankings"}
         </p>
       </div>
     </div>
@@ -1289,9 +1289,9 @@ export default function EventDetailPage() {
         ))}
       </div>
       <p className="text-xs text-muted">
-        {editRankingMode === "ranked" && "Scores count towards player ratings immediately after each match."}
-        {editRankingMode === "approval" && "Scores are recorded but need confirmation before affecting ratings."}
-        {editRankingMode === "none" && "Scores are recorded for the event but don't affect player ratings."}
+        {editRankingMode === "ranked" && "Scores count towards player rankings immediately after each match."}
+        {editRankingMode === "approval" && "Scores are recorded but need confirmation before affecting rankings."}
+        {editRankingMode === "none" && "Scores are recorded for the event but don't affect player rankings."}
       </p>
     </div>
   );
@@ -2391,9 +2391,9 @@ export default function EventDetailPage() {
                 ))}
               </div>
               <p className="text-xs text-muted">
-                {editRankingMode === "ranked" && "Scores count towards player ratings immediately."}
-                {editRankingMode === "approval" && "Scores need confirmation before affecting ratings."}
-                {editRankingMode === "none" && "Scores recorded but don't affect ratings."}
+                {editRankingMode === "ranked" && "Scores count towards player rankings immediately."}
+                {editRankingMode === "approval" && "Scores need confirmation by both teams or event admin."}
+                {editRankingMode === "none" && "Scores recorded but don't affect rankings."}
               </p>
             </div>
 
@@ -2503,7 +2503,7 @@ export default function EventDetailPage() {
             <span className="flex-1 text-right">
               <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
               <span className="block text-[10px] text-muted">
-                ({event.rankingMode === "ranked" ? "scores count towards rating" : event.rankingMode === "approval" ? "scores need confirmation" : "scores not counted"})
+                ({event.rankingMode === "ranked" ? "scores count towards rankings" : event.rankingMode === "approval" ? "confirmation by both teams or admin" : "scores not counted"})
               </span>
             </span>
             {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
@@ -2595,7 +2595,7 @@ export default function EventDetailPage() {
           <span className="flex-1 text-right">
             <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
             <span className="block text-[10px] text-muted">
-              ({event.rankingMode === "ranked" ? "scores count towards rating" : event.rankingMode === "approval" ? "scores need confirmation" : "scores not counted"})
+              ({event.rankingMode === "ranked" ? "scores count towards rankings" : event.rankingMode === "approval" ? "confirmation by both teams or admin" : "scores not counted"})
             </span>
           </span>
           {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
