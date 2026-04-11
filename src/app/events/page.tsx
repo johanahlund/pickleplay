@@ -386,7 +386,7 @@ function EventsPage() {
                     <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
                     <div className="flex-1 h-px bg-green-200" />
                   </div>
-                  <div className="space-y-2 bg-green-50/50 rounded-xl p-2 -mx-1">
+                  <div className="space-y-2 bg-green-100 rounded-xl p-2.5 -mx-1 border border-green-200">
                     {todayEvents.map(renderEventCard)}
                   </div>
                 </div>
@@ -412,7 +412,7 @@ function EventsPage() {
                     <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
-                  <div className="space-y-2 bg-gray-50/50 rounded-xl p-2 -mx-1">
+                  <div className="space-y-2 bg-gray-100 rounded-xl p-2.5 -mx-1 border border-gray-200">
                     {pastEvents.map(renderEventCard)}
                   </div>
                 </div>
