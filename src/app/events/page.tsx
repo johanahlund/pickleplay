@@ -378,21 +378,21 @@ function EventsPage() {
 
           return (
             <div className="space-y-4">
-              {/* Today's events — highlighted */}
+              {/* Today's events — green background */}
               {todayEvents.length > 0 && (
-                <div>
+                <div className="bg-green-50 -mx-4 px-4 py-3 border-y border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
                     <div className="flex-1 h-px bg-green-200" />
                   </div>
-                  <div className="space-y-2 bg-green-100 rounded-xl p-2.5 -mx-1 border border-green-200">
+                  <div className="space-y-2">
                     {todayEvents.map(renderEventCard)}
                   </div>
                 </div>
               )}
 
-              {/* Upcoming events */}
+              {/* Upcoming events — normal background */}
               {upcomingEvents.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-2">
@@ -405,14 +405,14 @@ function EventsPage() {
                 </div>
               )}
 
-              {/* Past events — dimmed */}
+              {/* Past events — grey background */}
               {pastEvents.length > 0 && (
-                <div>
+                <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
-                    <div className="flex-1 h-px bg-border" />
+                    <div className="flex-1 h-px bg-gray-300" />
                   </div>
-                  <div className="space-y-2 bg-gray-100 rounded-xl p-2.5 -mx-1 border border-gray-200">
+                  <div className="space-y-2">
                     {pastEvents.map(renderEventCard)}
                   </div>
                 </div>
