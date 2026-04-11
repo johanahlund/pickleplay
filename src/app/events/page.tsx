@@ -67,6 +67,7 @@ function EventsPage() {
   const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
   const [clubsLoaded, setClubsLoaded] = useState(false);
+  const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
 
   const fetchEvents = useCallback(() => {
     fetch("/api/events")
@@ -286,16 +287,15 @@ function EventsPage() {
           const pastEvents = filteredEvents.filter((e) => new Date(e.date) < today).reverse(); // most recent past first
 
           const renderEventCard = (event: Event) => {
-            const [hovered, setHovered] = useState(false); // eslint-disable-line react-hooks/rules-of-hooks
             const timeStatus = getTimeStatus(event);
             const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "past" ? "border-l-gray-300" : "border-l-blue-400";
             const cardBg = timeStatus === "past" ? "bg-gray-50" : "bg-white";
             const canDelete = isAdmin || event.createdById === userId;
             return (
             <div key={event.id} className="relative"
-              onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+              onMouseEnter={() => setHoveredEventId(event.id)} onMouseLeave={() => setHoveredEventId(null)}>
               {/* Delete button — top right corner, visible on hover */}
-              {canDelete && hovered && (
+              {canDelete && hoveredEventId === event.id && (
                 <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id); }}
                   className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white flex items-center justify-center text-[10px] font-bold z-20 shadow hover:bg-red-600"
                   title="Delete event">×</button>
