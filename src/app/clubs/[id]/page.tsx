@@ -654,8 +654,10 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-3">
-      {/* Back to overview button on sub-tabs */}
-      {tab !== "feed" && (
+      {/* Back navigation */}
+      {tab === "feed" ? (
+        <Link href="/clubs" className="text-sm text-action font-medium">← Clubs</Link>
+      ) : (
         <button onClick={() => { setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`); }}
           className="text-sm text-action font-medium">← {club.name}</button>
       )}
