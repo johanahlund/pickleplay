@@ -204,9 +204,10 @@ function EventsPage() {
   return (
     <div className="space-y-3">
       {/* Back to club link when filtered by single club */}
-      {legacyClubFilter && (
-        <Link href={`/clubs/${legacyClubFilter}`} className="text-sm text-action font-medium">← Back to club</Link>
-      )}
+      {legacyClubFilter && (() => {
+        const clubName = userClubs.find((c) => c.id === legacyClubFilter)?.name;
+        return <Link href={`/clubs/${legacyClubFilter}`} className="text-sm text-action font-medium">← {clubName || "Back to club"}</Link>;
+      })()}
 
       {/* Header */}
       <div className="flex items-center justify-between">
