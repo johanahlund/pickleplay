@@ -1800,7 +1800,7 @@ export default function EventDetailPage() {
 
     return (
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
-        isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action/40" : "border-border"
+        isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action border-l-4" : "border-border"
       }`}>
         <div className="flex items-center gap-2 px-2 py-2">
           {/* Court number circle */}
