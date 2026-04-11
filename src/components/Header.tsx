@@ -291,17 +291,6 @@ export function Header() {
           </div>
 
           {/* Club context row + tab bar */}
-          {activeClubId && clubName && (
-            <div className="flex items-center gap-2 mt-1 pt-1 border-t border-white/10">
-              <button
-                onClick={() => router.push(`/clubs/${activeClubId}`)}
-                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-              >
-                {clubLogoUrl ? <img src={clubLogoUrl} alt="" className="w-5 h-5 rounded object-cover" /> : <span className="text-sm">{clubEmoji}</span>}
-                <span className="text-sm font-semibold opacity-90">{clubName}</span>
-              </button>
-            </div>
-          )}
         </div>
       </header>
       {showPasswordModal && (
