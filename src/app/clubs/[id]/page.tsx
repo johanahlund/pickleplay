@@ -973,101 +973,10 @@ export default function ClubDetailPage() {
               + New Event
             </Link>
           )}
-
-          <ClearInput value={eventSearch} onChange={setEventSearch} placeholder="Search events..." className="text-sm" />
-
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { value: "all", label: "All" },
-              { value: "past7", label: "P7" },
-              { value: "today", label: "Today" },
-              { value: "tomorrow", label: "Tomorrow" },
-              { value: "next7", label: "N7" },
-              { value: "next30", label: "N30" },
-            ].map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setDateFilter(f.value)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  dateFilter === f.value ? "bg-selected text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {(dateFilter === "all" ? windowedEvents : filteredEvents).length === 0 ? (
-            <div className="text-center py-8"><p className="text-muted text-sm">No events found</p></div>
-          ) : (
-            <>
-              {/* Load more past */}
-              {dateFilter === "all" && hasMorePast && (
-                <button
-                  onClick={() => setVisiblePast((p) => p + 25)}
-                  className="w-full py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
-                >
-                  Load {Math.min(25, pastEvents.length - visiblePast)} older events
-                </button>
-              )}
-
-              {(dateFilter === "all" ? windowedEvents : filteredEvents).map((event, idx) => {
-                const ts = getTimeStatus(event);
-                const borderColor = ts === "active" ? "border-l-green-500" : ts === "upcoming" ? "border-l-blue-400" : "border-l-gray-300";
-                const cardOpacity = ts === "past" ? "opacity-60" : "";
-
-                // Insert "Today" marker at the boundary
-                const eventTime = new Date(event.date).getTime();
-                const prevEvent = (dateFilter === "all" ? windowedEvents : filteredEvents)[idx - 1];
-                const prevTime = prevEvent ? new Date(prevEvent.date).getTime() : 0;
-                const showTodayMarker = dateFilter === "all" && eventTime >= todayStart && prevTime < todayStart;
-
-                return (
-                  <div key={event.id}>
-                    {showTodayMarker && (
-                      <div ref={todayRef} className="flex items-center gap-2 py-2">
-                        <div className="flex-1 h-px bg-primary/40" />
-                        <span className="text-xs font-semibold text-primary px-2">Today</span>
-                        <div className="flex-1 h-px bg-primary/40" />
-                      </div>
-                    )}
-                    <Link
-                      href={`/events/${event.id}`}
-                      className={`block bg-card rounded-xl border border-border border-l-4 ${borderColor} ${cardOpacity} p-3 active:bg-gray-50 transition-colors`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-center min-w-[44px]">
-                          <div className="text-xs text-muted uppercase">{new Date(event.date).toLocaleDateString(undefined, { month: "short" })}</div>
-                          <div className="text-xl font-bold leading-tight">{new Date(event.date).getDate()}</div>
-                          <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm flex items-center gap-2 truncate">
-                            {event.name}
-                            {ts === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
-                          </h3>
-                          <p className="text-xs text-muted">
-                            {event.players.length} players &middot; {event._count.matches} matches &middot; {event.format}
-                          </p>
-                        </div>
-                        <span className="text-xl text-muted">›</span>
-                      </div>
-                    </Link>
-                  </div>
-                );
-              })}
-
-              {/* Load more future */}
-              {dateFilter === "all" && hasMoreFuture && (
-                <button
-                  onClick={() => setVisibleFuture((f) => f + 25)}
-                  className="w-full py-2 rounded-lg text-xs font-medium text-muted border border-border hover:bg-gray-50 transition-all"
-                >
-                  Load {Math.min(25, todayAndFutureEvents.length - visibleFuture)} newer events
-                </button>
-              )}
-            </>
-          )}
+          <Link href={`/events?club=${id}`}
+            className="block w-full py-3 text-center rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-colors">
+            View all {club.name} events →
+          </Link>
         </div>
       )}
 
