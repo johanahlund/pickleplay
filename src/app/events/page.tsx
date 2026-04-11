@@ -288,7 +288,7 @@ function EventsPage() {
           const renderEventCard = (event: Event) => {
             const timeStatus = getTimeStatus(event);
             const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "past" ? "border-l-gray-300" : "border-l-blue-400";
-            const cardOpacity = timeStatus === "past" ? "opacity-50" : "";
+            const cardOpacity = "";
             return (
             <div key={event.id} className={`bg-white rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
               <div className="p-3">
