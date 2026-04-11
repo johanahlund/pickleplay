@@ -2550,7 +2550,6 @@ export default function EventDetailPage() {
             {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
-          {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5">✏️</span>}
         </button>
         {event.format === "doubles" && event.pairs.length > 0 && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
