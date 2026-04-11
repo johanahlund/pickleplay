@@ -854,7 +854,7 @@ export default function ClubDetailPage() {
                 {myMembership && <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{myMembership.role}</span>}
               </div>
               {canManage && (
-                <button onClick={() => setShowInfo(true)} className="ml-auto text-sm text-muted hover:text-foreground">✏️</button>
+                <button onClick={() => { setShowInfo(true); setEditing(true); }} className="ml-auto text-sm text-muted hover:text-foreground">✏️</button>
               )}
             </div>
             {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}
