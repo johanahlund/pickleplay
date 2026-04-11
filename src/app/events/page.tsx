@@ -357,9 +357,28 @@ function EventsPage() {
                     <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
+                    {/* Club + Location row */}
                     {event.club && (
-                      <div className="text-[10px] text-muted font-medium mb-0.5">{event.club.emoji} {event.club.name}</div>
+                      <div className="flex items-center gap-1 mb-0.5 text-[10px]">
+                        {event.club && (
+                          <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()}
+                            className="text-muted font-medium hover:text-action">{event.club.emoji} {event.club.name}</Link>
+                        )}
+                        {event.club?.locations?.[0] && (
+                          <>
+                            <span className="text-muted">·</span>
+                            {event.club.locations[0].googleMapsUrl ? (
+                              <a href={event.club.locations[0].googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-action hover:underline">📍 {event.club.locations[0].name}</a>
+                            ) : (
+                              <span className="text-muted">📍 {event.club.locations[0].name}</span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
+                    {/* Event name + type */}
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
@@ -369,20 +388,12 @@ function EventsPage() {
                         <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
                       )}
                     </div>
+                    {/* Time + DUPR */}
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-xs text-muted">
                         {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                         {event.endDate && ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
                       </span>
-                      {event.club?.locations?.[0] && (
-                        event.club.locations[0].googleMapsUrl ? (
-                          <a href={event.club.locations[0].googleMapsUrl} target="_blank" rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-[10px] text-action font-medium hover:underline">📍 {event.club.locations[0].name}</a>
-                        ) : (
-                          <span className="text-[10px] text-muted">📍 {event.club.locations[0].name}</span>
-                        )
-                      )}
                       {(() => {
                         const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
                         if (!cls?.skillMin && !cls?.skillMax) return null;
