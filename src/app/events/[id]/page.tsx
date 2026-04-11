@@ -918,10 +918,29 @@ export default function EventDetailPage() {
   );
 
   const eventHeader = (
-    <div className="bg-card rounded-xl border border-border p-3 flex">
-      {/* Left side — tap to edit (managers only) */}
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      {/* Top row: club name (clickable) + location (clickable) */}
+      {(event.club || location) && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border-b border-border text-xs">
+          {event.club && (
+            <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()} className="text-muted hover:text-action font-medium">
+              {event.club.emoji} {event.club.name}
+            </Link>
+          )}
+          {event.club && location && <span className="text-muted">·</span>}
+          {location && (
+            location.googleMapsUrl ? (
+              <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                className="text-action hover:underline">📍 {location.name}</a>
+            ) : (
+              <span className="text-muted">📍 {location.name}</span>
+            )
+          )}
+        </div>
+      )}
+      {/* Event info — clickable for managers */}
       <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("when"); } }}
-        className={`flex-1 min-w-0 text-left ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
+        className={`p-3 ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
         <div className="flex items-center gap-2">
           <h2 className="font-bold text-lg truncate">{event.name}</h2>
           {event.status !== "setup" && (
@@ -931,8 +950,9 @@ export default function EventDetailPage() {
               "bg-blue-100 text-blue-700"
             }`}>{event.status}</span>
           )}
+          {canManage && <span className="text-[10px] text-muted/50 ml-auto">✏️</span>}
         </div>
-        <p className="text-xs text-muted">
+        <p className="text-xs text-muted mt-0.5">
           {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           {" at "}
           {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
@@ -944,19 +964,6 @@ export default function EventDetailPage() {
           {helperNames.length > 0 && <span className="text-muted"> ({helperNames.join(", ")})</span>}
         </p>
       </div>
-      {/* Right side — location link */}
-      {location && (
-        <div className="shrink-0 flex items-end ml-2">
-          {location.googleMapsUrl ? (
-            <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-              📍 {location.name}
-            </a>
-          ) : (
-            <span className="text-xs text-muted whitespace-nowrap">📍 {location.name}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 
