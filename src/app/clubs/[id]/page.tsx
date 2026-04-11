@@ -864,7 +864,7 @@ export default function ClubDetailPage() {
                 {myMembership ? (
                   <span className="text-xs">
                     <span className="text-green-600 font-medium">✓ Member</span>
-                    {myMembership.role !== "member" && <span className="text-muted"> · {myMembership.role}</span>}
+                    {myMembership.role !== "member" && <span className="text-muted"> ({myMembership.role})</span>}
                   </span>
                 ) : userId ? (
                   (() => {
