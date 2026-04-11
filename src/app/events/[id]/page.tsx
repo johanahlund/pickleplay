@@ -505,17 +505,17 @@ export default function EventDetailPage() {
       alert("Scores cannot be tied!");
       return;
     }
-    await fetch(`/api/matches/${matchId}/score`, {
+    // Optimistic: mark completed immediately
+    setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => {
+      if (m.id !== matchId) return m;
+      return { ...m, status: "completed", players: m.players.map((p) => ({ ...p, score: p.team === 1 ? team1Score : team2Score })) };
+    }) } : prev);
+    setScores((prev) => { const next = { ...prev }; delete next[matchId]; return next; });
+    fetch(`/api/matches/${matchId}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ team1Score, team2Score }),
-    });
-    setScores((prev) => {
-      const next = { ...prev };
-      delete next[matchId];
-      return next;
-    });
-    await fetchEvent();
+    }).then(() => fetchEvent());
   };
 
   const editScore = async (matchId: string) => {
