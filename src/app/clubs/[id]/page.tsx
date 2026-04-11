@@ -842,9 +842,56 @@ export default function ClubDetailPage() {
       {/* ── Feed Tab ── */}
       {tab === "feed" && !showInfo && (
         <div className="space-y-3">
+          {/* Club overview */}
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}
+            <div className="p-3 space-y-2">
+              {club.description && <p className="text-sm text-muted">{club.description}</p>}
+              {(club.city || club.country) && <p className="text-sm text-muted">{[club.city, club.country].filter(Boolean).join(", ")}</p>}
+              {club.locations && club.locations.length > 0 && (
+                <div className="space-y-1">
+                  {club.locations.map((loc: { id: string; name: string; googleMapsUrl?: string | null }) => (
+                    <div key={loc.id}>
+                      {loc.googleMapsUrl ? (
+                        <a href={loc.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-action hover:underline">📍 {loc.name}</a>
+                      ) : (
+                        <span className="text-sm text-muted">📍 {loc.name}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Clickable sections */}
+          <div className="space-y-1.5">
+            <button onClick={() => { setTab("events"); window.history.replaceState(null, "", `?tab=events`); }}
+              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
+              <span className="text-xl">📅</span>
+              <span className="text-sm font-semibold flex-1 text-left">Events</span>
+              <span className="text-xs text-muted">{events.length}</span>
+              <span className="text-muted">›</span>
+            </button>
+            <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
+              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
+              <span className="text-xl">👥</span>
+              <span className="text-sm font-semibold flex-1 text-left">Members</span>
+              <span className="text-xs text-muted">{club.members.length}</span>
+              <span className="text-muted">›</span>
+            </button>
+            <button onClick={() => { setTab("rankings"); window.history.replaceState(null, "", `?tab=rankings`); }}
+              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
+              <span className="text-xl">🏆</span>
+              <span className="text-sm font-semibold flex-1 text-left">Rankings</span>
+              <span className="text-xs text-muted">{rankings.ranked.length} ranked</span>
+              <span className="text-muted">›</span>
+            </button>
+          </div>
+
           {/* Join requests alert */}
           {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
-            <button onClick={() => setTab("members")}
+            <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
               className="w-full bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 active:bg-amber-100">
               <span className="text-lg">👋</span>
               <span className="text-sm font-medium text-amber-800 flex-1 text-left">
