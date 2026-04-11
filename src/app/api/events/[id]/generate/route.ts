@@ -80,8 +80,7 @@ export async function POST(
     );
 
     if (activePairs.length >= 2) {
-      // Delete only pending/paused matches for non-incremental (keep completed/active)
-      await prisma.match.deleteMany({ where: { eventId: id, status: { in: ["pending", "paused"] } } });
+      // Keep all existing matches — new rounds are added on top
 
       // Shuffle pairs, then pit them against each other
       const matchesPerRound = Math.min(event.numCourts, Math.floor(activePairs.length / 2));
@@ -213,8 +212,11 @@ export async function POST(
 
     nextRound = maxRound + 1;
   } else {
-    // For non-incremental modes, delete only pending/paused matches (keep completed/active)
-    await prisma.match.deleteMany({ where: { eventId: id, status: { in: ["pending", "paused"] } } });
+    // Keep all existing matches — new rounds are added on top
+    const maxRound = event.matches.length > 0
+      ? Math.max(...event.matches.map((m) => m.round))
+      : 0;
+    nextRound = maxRound + 1;
   }
 
   const rounds = generateRounds(
@@ -241,7 +243,7 @@ export async function POST(
           eventId: id,
           classId: cls.id,
           courtNum: match.court,
-          round: isIncremental ? nextRound + roundIdx : roundIdx + 1,
+          round: nextRound + roundIdx,
           rankingMode: cls.rankingMode,
           players: {
             create: [

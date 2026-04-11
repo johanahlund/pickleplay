@@ -616,8 +616,9 @@ export default function EventDetailPage() {
       ? "Are you sure you want to delete this scored match? ELO changes will be reversed."
       : "Are you sure you want to delete this match?";
     if (!confirm(msg)) return;
-    await fetch(`/api/matches/${matchId}/players`, { method: "DELETE" });
-    await fetchEvent();
+    // Optimistic: remove from UI immediately
+    setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => m.id !== matchId) } : prev);
+    fetch(`/api/matches/${matchId}/players`, { method: "DELETE" }).then(() => fetchEvent());
   };
 
   const removePlayer = async (playerId: string, playerName: string) => {
@@ -1808,18 +1809,20 @@ export default function EventDetailPage() {
           </span>
           <div className="flex items-center gap-2">
             {(isPending || match.status === "paused") && canScore && match.players.length >= 2 && (
-              <button onClick={async () => {
-                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
+              <button onClick={() => {
+                // Optimistic update
+                setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "active" } : m) } : prev);
                 setMatchTab("current");
-                fetchEvent();
+                fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) }).then(() => fetchEvent());
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-green-100 transition-colors" title="Start match">▶️</button>
             )}
             {isActive && canScore && (
-              <button onClick={async () => {
-                await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) });
+              <button onClick={() => {
+                // Optimistic update
+                setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev);
                 setMatchTab("paused");
-                fetchEvent();
+                fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent());
               }}
                 className="text-lg px-1.5 py-0.5 rounded hover:bg-amber-100 transition-colors" title="Pause match">⏸️</button>
             )}
