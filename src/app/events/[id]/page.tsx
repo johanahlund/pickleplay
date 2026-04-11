@@ -2361,9 +2361,7 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {(activeSection === "rounds" || activeSection === "players") ? (
-          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
-        ) : sectionBar}
+        <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
@@ -2525,7 +2523,7 @@ export default function EventDetailPage() {
       {/* Matches — first for quick access */}
       <div className={frameClass}>
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
-          <span className="text-sm text-muted">Matches</span>
+          <span className="text-sm text-muted flex-1 text-left">Matches</span>
           <span className="text-sm font-medium">
             {event.matches.length === 0
               ? "None"
@@ -2547,11 +2545,12 @@ export default function EventDetailPage() {
       <div className={frameClass}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
           <span className="text-sm text-muted">Players</span>
-          <span className="text-sm font-medium">
+          <span className="text-sm font-medium flex-1 text-right">
             {activePlayers.length}
             {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
+          {canManage && <span className="text-xs text-muted ml-1">✏️</span>}
         </button>
         {event.format === "doubles" && event.pairs.length > 0 && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
@@ -2563,15 +2562,21 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Scoring & Pairing */}
+      {/* Format */}
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass}>
-          <span className="text-sm text-muted">Scoring</span>
-          <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
+          <span className="text-sm text-muted">Format</span>
+          <span className="text-sm font-medium capitalize flex-1 text-right">{event.format} · {scoringDisplay}</span>
+          {canManage && <span className="text-xs text-muted ml-1">✏️</span>}
         </button>
+      </div>
+
+      {/* Pairing */}
+      <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
-          <span className="text-sm font-medium">{pairingLabel(event.pairingMode)}</span>
+          <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
+          {canManage && <span className="text-xs text-muted ml-1">✏️</span>}
         </button>
       </div>
 
@@ -2579,7 +2584,8 @@ export default function EventDetailPage() {
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
           <span className="text-sm text-muted">Ranking</span>
-          <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
+          <span className="text-sm font-medium flex-1 text-right">{rankingLabel(event.rankingMode || "ranked")}</span>
+          {canManage && <span className="text-xs text-muted ml-1">✏️</span>}
         </button>
       </div>
 
