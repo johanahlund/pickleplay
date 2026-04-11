@@ -1830,7 +1830,7 @@ export default function EventDetailPage() {
                   onClick={() => { if (canQuickScore) setMatchScore(match.id, teamKey, String(targetScore)); }}
                   style={canQuickScore ? { cursor: "pointer" } : undefined}>
                   {p1 && renderPlayer(p1, "right")}
-                  {p2 && <span className="text-muted text-sm shrink-0">&</span>}
+                  {p2 && <span className="text-muted text-sm shrink-0">·</span>}
                   {p2 && renderPlayer(p2, "left")}
                   {!p2 && <div className="flex-1" />}
                   <div className="shrink-0 ml-1">
@@ -1947,8 +1947,80 @@ export default function EventDetailPage() {
   };
 
   const renderRounds = () => (
-    <div className="space-y-4">
-      {/* Tab bar */}
+    <div className="space-y-3">
+      {/* Actions + refresh */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <>
+              {event.pairingMode !== "manual" && (
+                <div className="flex items-center gap-1">
+                  {!isIncremental && (
+                    <div className="flex items-center gap-0 mr-1">
+                      <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+                      <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+                      <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+                    </div>
+                  )}
+                  <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
+                    className="bg-action text-white px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50">
+                    {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
+                  </button>
+                </div>
+              )}
+              <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-2 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
+            </>
+          )}
+        </div>
+        <button onClick={() => fetchEvent()} className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-lg hover:bg-gray-100">🔄</button>
+      </div>
+
+      {/* Court availability */}
+      {freeCourts.length > 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm text-green-700 flex items-center gap-2">
+          <span>🏟</span><span>Courts {freeCourts.join(", ")} available</span>
+        </div>
+      )}
+
+      {/* Active — orange */}
+      {activeMatches.length > 0 && (
+        <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
+          <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" /><span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span></div>
+          <div className="space-y-2">{activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+        </div>
+      )}
+
+      {/* Paused — amber */}
+      {pausedMatches.length > 0 && (
+        <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200">
+          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span></div>
+          <div className="space-y-2">{pausedMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+        </div>
+      )}
+
+      {/* Pending — normal */}
+      {pendingMatches.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span></div>
+          <div className="space-y-2">{pendingMatches.sort((a, b) => a.round - b.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+        </div>
+      )}
+
+      {/* Completed — grey */}
+      {completedMatches.length > 0 && (
+        <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
+          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-muted uppercase tracking-wider">Completed</span></div>
+          <div className="space-y-2">{[...completedMatches].sort((a, b) => b.round - a.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+        </div>
+      )}
+
+      {event.matches.length === 0 && <p className="text-center py-8 text-muted text-sm">No matches yet</p>}
+    </div>
+  );
+
+  /* Old tab-based match view removed — see renderRounds above */
+  if (false as boolean) { return ( // dead code block for removed tabs
+    <div>
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {([
           { key: "previous", label: "Previous", count: completedMatches.length },
@@ -2064,7 +2136,7 @@ export default function EventDetailPage() {
       )}
 
     </div>
-  );
+  ); }
 
   // ── Section: Add Match Manually ──
   const renderManual = () => (
@@ -2276,7 +2348,7 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {sectionBar}
+        {activeSection !== "rounds" && sectionBar}
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
