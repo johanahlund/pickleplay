@@ -310,8 +310,6 @@ export default function ClubsPage() {
                       <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{club.myRole}</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-sm text-muted">
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
-                        className="text-muted hover:text-foreground w-4 h-4 flex items-center justify-center rounded-full text-xs">ⓘ</button>
                       <span>{club._count.members} member{club._count.members !== 1 ? "s" : ""} · {club._count.events} event{club._count.events !== 1 ? "s" : ""}</span>
                     </div>
                   </div>
@@ -390,8 +388,6 @@ export default function ClubsPage() {
                         <div className="flex-1 min-w-0">
                           <span className="font-semibold">{club.name}</span>
                           <div className="flex items-center gap-1.5 text-xs text-muted">
-                            <button onClick={(e) => { e.stopPropagation(); setInfoClubId(infoClubId === club.id ? null : club.id); }}
-                              className="text-muted hover:text-foreground w-4 h-4 flex items-center justify-center rounded-full text-[10px]">ⓘ</button>
                             <span>
                               {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
                               {club.city && ` · ${club.city}`}
