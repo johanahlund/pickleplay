@@ -387,6 +387,7 @@ export default function EventDetailPage() {
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
   const [editPrioFairness, setEditPrioFairness] = useState(true);
   const [editPrioSkill, setEditPrioSkill] = useState(true);
+  const [editPrioVariety, setEditPrioVariety] = useState(false);
   const [editRankingMode, setEditRankingMode] = useState("ranked");
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
@@ -666,6 +667,7 @@ export default function EventDetailPage() {
     setEditPrioSpeed(cls?.prioSpeed ?? true);
     setEditPrioFairness(cls?.prioFairness ?? true);
     setEditPrioSkill(cls?.prioSkill ?? false);
+    setEditPrioVariety((cls as unknown as Record<string, boolean>)?.prioVariety ?? false);
     setEditRankingMode(event.rankingMode || "ranked");
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
@@ -704,6 +706,7 @@ export default function EventDetailPage() {
         prioSpeed: editPrioSpeed,
         prioFairness: editPrioFairness,
         prioSkill: editPrioSkill,
+        prioVariety: editPrioVariety,
         rankingMode: editRankingMode,
         openSignup: editOpenSignup,
         visibility: editVisibility,
@@ -1253,8 +1256,9 @@ export default function EventDetailPage() {
           <label className="block text-sm font-medium text-muted">Prioritize</label>
           {[
             { key: "speed", value: editPrioSpeed, set: setEditPrioSpeed, label: "⚡ Speed", desc: "Fill courts immediately" },
-            { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "⚖️ Fairness", desc: "Equal play time, varied partners & opponents" },
+            { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "⚖️ Fairness", desc: "Equal play time for everyone" },
             { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "📊 Skill", desc: "Group by level" },
+            { key: "variety", value: editPrioVariety, set: setEditPrioVariety, label: "🔀 Variety", desc: "Play with and against everybody" },
           ].map((p) => (
             <label key={p.key} className={`flex items-center gap-3 py-2 px-3 rounded-lg cursor-pointer transition-all ${
                 p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"

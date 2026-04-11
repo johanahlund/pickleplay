@@ -215,6 +215,7 @@ model EventClass {
   prioSpeed    Boolean  @default(true)
   prioFairness Boolean  @default(true)
   prioSkill    Boolean  @default(false)
+  prioVariety  Boolean  @default(false)
   rankingMode  String   @default("ranked")
   minPlayers   Int?
   maxPlayers   Int?
