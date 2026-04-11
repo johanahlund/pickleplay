@@ -1252,9 +1252,9 @@ export default function EventDetailPage() {
         <div className="space-y-2">
           <label className="block text-sm font-medium text-muted">Prioritize</label>
           {[
-            { key: "speed", value: editPrioSpeed, set: setEditPrioSpeed, label: "Speed", desc: "Fill courts immediately" },
-            { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "Fairness", desc: "Equal matches for everyone" },
-            { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "Skill", desc: "Group by level" },
+            { key: "speed", value: editPrioSpeed, set: setEditPrioSpeed, label: "⚡ Speed", desc: "Fill courts immediately" },
+            { key: "fairness", value: editPrioFairness, set: setEditPrioFairness, label: "⚖️ Fairness", desc: "Equal play time, varied partners & opponents" },
+            { key: "skill", value: editPrioSkill, set: setEditPrioSkill, label: "📊 Skill", desc: "Group by level" },
           ].map((p) => (
             <label key={p.key} className={`flex items-center gap-3 py-2 px-3 rounded-lg cursor-pointer transition-all ${
                 p.value ? "bg-selected/10 border border-selected/30" : "bg-gray-50 border border-transparent"
