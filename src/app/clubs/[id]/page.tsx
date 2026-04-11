@@ -908,13 +908,17 @@ export default function ClubDetailPage() {
 
           {/* Clickable sections */}
           <div className="space-y-1.5">
-            <Link href={`/events?club=${id}`}
-              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
-              <span className="text-xl">📅</span>
-              <span className="text-sm font-semibold flex-1 text-left">Club Events</span>
-              <span className="text-xs text-muted">{events.length}</span>
-              <span className="text-muted">›</span>
-            </Link>
+            <div className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+              <Link href={`/events?club=${id}`} className="flex items-center gap-3 flex-1 active:opacity-70">
+                <span className="text-xl">📅</span>
+                <span className="text-sm font-semibold flex-1 text-left">Club Events</span>
+                <span className="text-xs text-muted">{events.length}</span>
+                <span className="text-muted">›</span>
+              </Link>
+              {canManage && (
+                <Link href={`/events/new?clubId=${id}`} className="text-xs text-action font-medium px-2 py-1 rounded-lg border border-action/30 hover:bg-action/5 shrink-0">+ Add</Link>
+              )}
+            </div>
             <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">👥</span>
@@ -1054,16 +1058,8 @@ export default function ClubDetailPage() {
       {/* ── Events Tab ── */}
       {tab === "events" && !showInfo && (
         <div className="space-y-3">
-          {canManage && (
-            <Link
-              href={`/events/new?clubId=${id}`}
-              className="block w-full py-3 text-center rounded-xl text-sm font-semibold text-white bg-primary active:bg-primary-dark transition-colors shadow-sm"
-            >
-              + New Event
-            </Link>
-          )}
           <Link href={`/events?club=${id}`}
-            className="block w-full py-3 text-center rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-colors">
+            className="block w-full py-2.5 text-center rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-colors">
             View all {club.name} events →
           </Link>
         </div>
