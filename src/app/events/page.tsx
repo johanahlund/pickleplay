@@ -168,7 +168,7 @@ function EventsPage() {
       }
       return true;
     })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
 
@@ -276,11 +276,19 @@ function EventsPage() {
           <Link href="/events/new" className="text-primary font-medium mt-2 inline-block">Create your first event</Link>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filteredEvents.map((event) => {
+        (() => {
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrow = new Date(today.getTime() + 86400000);
+
+          const todayEvents = filteredEvents.filter((e) => { const d = new Date(e.date); return d >= today && d < tomorrow; });
+          const upcomingEvents = filteredEvents.filter((e) => new Date(e.date) >= tomorrow);
+          const pastEvents = filteredEvents.filter((e) => new Date(e.date) < today).reverse(); // most recent past first
+
+          const renderEventCard = (event: Event) => {
             const timeStatus = getTimeStatus(event);
             const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "past" ? "border-l-gray-300" : "border-l-blue-400";
-            const cardOpacity = timeStatus === "past" ? "opacity-60" : "";
+            const cardOpacity = timeStatus === "past" ? "opacity-50" : "";
             return (
             <div key={event.id} className={`bg-card rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden ${cardOpacity}`}>
               <div className="p-3">
@@ -366,8 +374,52 @@ function EventsPage() {
                 </div>
               )}
             </div>
-          );})}
-        </div>
+          );};
+
+          return (
+            <div className="space-y-4">
+              {/* Today's events — highlighted */}
+              {todayEvents.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
+                    <div className="flex-1 h-px bg-green-200" />
+                  </div>
+                  <div className="space-y-2 bg-green-50/50 rounded-xl p-2 -mx-1">
+                    {todayEvents.map(renderEventCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* Upcoming events */}
+              {upcomingEvents.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span>
+                    <div className="flex-1 h-px bg-blue-200" />
+                  </div>
+                  <div className="space-y-2">
+                    {upcomingEvents.map(renderEventCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* Past events — dimmed */}
+              {pastEvents.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <div className="space-y-2 bg-gray-50/50 rounded-xl p-2 -mx-1">
+                    {pastEvents.map(renderEventCard)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()
       )}
     </div>
   );
