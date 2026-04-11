@@ -1825,7 +1825,7 @@ export default function EventDetailPage() {
                 return (
                   <div key={mp.id} className="flex items-center gap-1.5">
                     <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                    <span className={`text-sm truncate ${isMe ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
+                    <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
                     {isServerPlayer && <span className="text-[8px] bg-green-500 text-white px-1 py-0 rounded-full font-bold">SRV</span>}
                     {isReceiverPlayer && <span className="text-[8px] bg-yellow-500 text-white px-1 py-0 rounded-full font-medium">RCV</span>}
                   </div>

@@ -115,7 +115,7 @@ function MatchesPage() {
             {players.map((mp) => (
               <div key={mp.id} className="flex items-center gap-1.5">
                 <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-                <span className={`text-sm truncate ${mp.playerId === userId ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
+                <span className={`text-base truncate ${mp.playerId === userId ? "font-bold" : "font-medium"} ${nameColor}`}>{mp.player.name}</span>
               </div>
             ))}
           </div>
