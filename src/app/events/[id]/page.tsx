@@ -2574,7 +2574,12 @@ export default function EventDetailPage() {
       <div className={frameClass}>
         <button onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass}>
           <span className="text-sm text-muted">Format</span>
-          <span className="text-sm font-medium capitalize flex-1 text-right">{event.format} · {scoringDisplay}</span>
+          <span className="flex-1 text-right">
+            <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
+            {event.rankingMode !== "none" && (
+              <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
+            )}
+          </span>
           {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
         </button>
       </div>
@@ -2584,20 +2589,6 @@ export default function EventDetailPage() {
         <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
-          {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
-        </button>
-      </div>
-
-      {/* Ranking */}
-      <div className={frameClass}>
-        <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
-          <span className="text-sm text-muted">Ranking</span>
-          <span className="flex-1 text-right">
-            <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
-            <span className="block text-[10px] text-muted">
-              ({event.rankingMode === "ranked" ? "scores count towards rankings" : event.rankingMode === "approval" ? "confirmation by both teams or admin" : "scores not counted"})
-            </span>
-          </span>
           {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
         </button>
       </div>
