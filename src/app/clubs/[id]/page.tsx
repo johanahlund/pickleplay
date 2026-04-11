@@ -911,21 +911,21 @@ export default function ClubDetailPage() {
             <Link href={`/events?club=${id}`}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">📅</span>
-              <span className="text-sm font-semibold flex-1 text-left">Events</span>
+              <span className="text-sm font-semibold flex-1 text-left">Club Events</span>
               <span className="text-xs text-muted">{events.length}</span>
               <span className="text-muted">›</span>
             </Link>
             <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">👥</span>
-              <span className="text-sm font-semibold flex-1 text-left">Members</span>
+              <span className="text-sm font-semibold flex-1 text-left">Club Members</span>
               <span className="text-xs text-muted">{club.members.length}</span>
               <span className="text-muted">›</span>
             </button>
             <button onClick={() => { setTab("rankings"); window.history.replaceState(null, "", `?tab=rankings`); }}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">🏆</span>
-              <span className="text-sm font-semibold flex-1 text-left">Rankings</span>
+              <span className="text-sm font-semibold flex-1 text-left">Club Rankings</span>
               <span className="text-xs text-muted">{rankings.ranked.length} ranked</span>
               <span className="text-muted">›</span>
             </button>
