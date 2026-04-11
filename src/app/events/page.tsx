@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -70,6 +70,8 @@ function EventsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [clubsLoaded, setClubsLoaded] = useState(false);
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
+  const todayRef = useRef<HTMLDivElement>(null);
+  const [scrolledToToday, setScrolledToToday] = useState(false);
 
   const fetchEvents = useCallback(() => {
     fetch("/api/events")
@@ -117,6 +119,16 @@ function EventsPage() {
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem("pickleplay_lastPage", "/events");
   }, []);
+
+  // Scroll to Today section on first load
+  useEffect(() => {
+    if (!loading && !scrolledToToday && todayRef.current) {
+      setTimeout(() => {
+        todayRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setScrolledToToday(true);
+      }, 100);
+    }
+  }, [loading, scrolledToToday]);
 
   const deleteEvent = async (id: string) => {
     if (!confirm("Delete this event and all its matches?")) return;
@@ -429,7 +441,7 @@ function EventsPage() {
             <div className="space-y-4">
               {/* Today's events — green background */}
               {todayEvents.length > 0 && (
-                <div className="bg-green-100 -mx-4 px-4 py-3 border-y border-green-200">
+                <div ref={todayRef} className="bg-green-100 -mx-4 px-4 py-3 border-y border-green-200">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
