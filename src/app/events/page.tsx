@@ -80,7 +80,11 @@ function EventsPage() {
   useEffect(() => {
     fetchEvents();
     const interval = setInterval(fetchEvents, 30000);
-    return () => clearInterval(interval);
+    // Refetch when user returns to the page/tab
+    const onFocus = () => fetchEvents();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) fetchEvents(); });
+    return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); };
   }, [clubFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteEvent = async (id: string) => {
