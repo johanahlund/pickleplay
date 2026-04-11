@@ -919,9 +919,9 @@ export default function EventDetailPage() {
 
   const eventHeader = (
     <div className="bg-card rounded-xl border border-border p-3 flex">
-      {/* Left side — tap to edit */}
-      <button onClick={() => { startEditEvent(); setActiveSection("when"); }}
-        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity">
+      {/* Left side — tap to edit (managers only) */}
+      <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("when"); } }}
+        className={`flex-1 min-w-0 text-left ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
         <div className="flex items-center gap-2">
           <h2 className="font-bold text-lg truncate">{event.name}</h2>
           {event.status !== "setup" && (
@@ -943,7 +943,7 @@ export default function EventDetailPage() {
           {ownerName || "—"}
           {helperNames.length > 0 && <span className="text-muted"> ({helperNames.join(", ")})</span>}
         </p>
-      </button>
+      </div>
       {/* Right side — location link */}
       {location && (
         <div className="shrink-0 flex items-end ml-2">
@@ -2578,7 +2578,7 @@ export default function EventDetailPage() {
 
       {/* Format */}
       <div className={frameClass}>
-        <button onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass}>
+        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("scoring"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
           <span className="text-sm text-muted">Format</span>
           <span className="flex-1 text-right">
             <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
@@ -2587,16 +2587,16 @@ export default function EventDetailPage() {
             )}
           </span>
           {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
-        </button>
+        </div>
       </div>
 
       {/* Pairing */}
       <div className={frameClass}>
-        <button onClick={() => { startEditEvent(); setActiveSection("pairing"); }} className={rowClass}>
+        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("pairing"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
           {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
-        </button>
+        </div>
       </div>
 
       {(isOwner || isAdmin) && (
