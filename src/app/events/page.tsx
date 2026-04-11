@@ -277,28 +277,24 @@ function EventsPage() {
           </div>
 
           {/* Type filter */}
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {([
-              { value: "all", label: "All" },
+              { value: "all", label: "All types" },
               { value: "events", label: "🎾 Social" },
               { value: "competitions", label: "🏆 Competition" },
             ] as const).map((t) => (
               <button key={t.value} onClick={() => setTypeFilter(t.value)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  typeFilter === t.value ? "bg-white text-foreground shadow-sm border border-border" : "text-muted hover:text-foreground"
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  typeFilter === t.value ? "bg-selected text-white" : "bg-gray-100 text-muted"
                 }`}>{t.label}</button>
             ))}
-          </div>
-
-          {/* Toggle filters */}
-          <div className="flex gap-2">
             <button onClick={() => setMyEventsOnly(!myEventsOnly)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted"
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                myEventsOnly ? "bg-selected text-white" : "bg-gray-100 text-muted"
               }`}>👤 My events</button>
             <button onClick={() => setActiveOnly(!activeOnly)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activeOnly ? "bg-green-600 text-white" : "bg-gray-100 text-muted"
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                activeOnly ? "bg-selected text-white" : "bg-gray-100 text-muted"
               }`}>🟢 Live now</button>
           </div>
         </div>
