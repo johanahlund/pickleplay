@@ -391,11 +391,21 @@ export default function ClubDetailPage() {
   const canManage = hasRole(viewRole, "club") && (myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin);
   const isOwner = hasRole(viewRole, "club") && (myMembership?.role === "owner" || isGlobalAdmin);
 
+  const [myPendingRequest, setMyPendingRequest] = useState(false);
+
   // Fetch join requests for managers
   useEffect(() => {
     if (!canManage || !club) return;
     fetch(`/api/clubs/${club.id}/join-request`).then((r) => r.ok ? r.json() : []).then(setJoinRequests);
   }, [canManage, club?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check if current user has a pending join request
+  useEffect(() => {
+    if (!userId || !club || myMembership) return;
+    fetch(`/api/clubs/${club.id}/join-request/mine`).then((r) => r.ok ? r.json() : null).then((data) => {
+      setMyPendingRequest(data?.pending || false);
+    }).catch(() => {});
+  }, [userId, club?.id, myMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAllPlayers = async () => {
     if (allPlayers.length > 0) return;
@@ -849,12 +859,28 @@ export default function ClubDetailPage() {
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <div className="flex items-center gap-3 px-3 py-2.5 bg-white">
               {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
-              <div>
+              <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg">{club.name}</h3>
-                {myMembership && <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{myMembership.role}</span>}
+                {myMembership ? (
+                  <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium capitalize">✓ {myMembership.role}</span>
+                ) : userId ? (
+                  (() => {
+                    return myPendingRequest ? (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⏳ Requested</span>
+                    ) : (
+                      <button onClick={async () => {
+                        const r = await fetch(`/api/clubs/${id}/join-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+                        if (r.ok) { alert("Join request sent!"); fetchClub(); }
+                        else { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); }
+                      }} className="text-[10px] bg-action text-white px-2 py-0.5 rounded-full font-medium hover:bg-action-dark transition-colors">
+                        Request to Join
+                      </button>
+                    );
+                  })()
+                ) : null}
               </div>
               {canManage && (
-                <button onClick={() => { setShowInfo(true); setEditing(true); }} className="ml-auto text-sm text-muted hover:text-foreground">✏️</button>
+                <button onClick={() => { setShowInfo(true); setEditing(true); }} className="text-sm text-muted hover:text-foreground">✏️</button>
               )}
             </div>
             {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}
