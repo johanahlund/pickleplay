@@ -1195,10 +1195,13 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Ranking</label>
         <select value={editRankingMode} onChange={(e) => { setEditRankingMode(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="ranked">Ranked — scores count towards ratings</option>
-          <option value="approval">Approval — scores need confirmation</option>
-          <option value="none">Unranked — scores don&apos;t affect ratings</option>
+          <option value="ranked">Ranked</option>
+          <option value="approval">Approval</option>
+          <option value="none">Unranked</option>
         </select>
+        <p className="text-xs text-muted mt-1">
+          {editRankingMode === "ranked" ? "Scores count towards player ratings immediately" : editRankingMode === "approval" ? "Scores need confirmation before affecting ratings" : "Scores recorded but don't affect ratings"}
+        </p>
       </div>
     </div>
   );
