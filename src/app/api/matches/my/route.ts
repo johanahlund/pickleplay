@@ -19,7 +19,7 @@ export async function GET() {
       players: {
         include: { player: { select: { id: true, name: true, emoji: true, photoUrl: true } } },
       },
-      event: { select: { id: true, name: true, date: true, clubId: true } },
+      event: { select: { id: true, name: true, date: true, clubId: true, club: { select: { name: true, emoji: true } } } },
       class: { select: { format: true } },
     },
   });
