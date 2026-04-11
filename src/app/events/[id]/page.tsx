@@ -2349,7 +2349,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {activeSection === "rounds" ? (
-          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← {event.name}</button>
+          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-muted font-normal">({event.name})</span></button>
         ) : sectionBar}
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
