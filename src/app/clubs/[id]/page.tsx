@@ -908,13 +908,13 @@ export default function ClubDetailPage() {
 
           {/* Clickable sections */}
           <div className="space-y-1.5">
-            <button onClick={() => { setTab("events"); window.history.replaceState(null, "", `?tab=events`); }}
+            <Link href={`/events?club=${id}`}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">📅</span>
               <span className="text-sm font-semibold flex-1 text-left">Events</span>
               <span className="text-xs text-muted">{events.length}</span>
               <span className="text-muted">›</span>
-            </button>
+            </Link>
             <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
               className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
               <span className="text-xl">👥</span>
@@ -1213,14 +1213,30 @@ export default function ClubDetailPage() {
       {/* ── Rankings Tab ── */}
       {tab === "rankings" && !showInfo && (
         <div className="space-y-2">
-          {rankings.ranked.length === 0 ? (
+          {/* Filters — same as members */}
+          <div className="flex gap-2">
+            <ClearInput value={memberSearch} onChange={setMemberSearch} placeholder="Search players..." className="text-sm" />
+            {(["M", "F"] as const).map((g) => (
+              <button key={g} onClick={() => setMemberGender(memberGender === g ? null : g)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  memberGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                }`}>{g === "M" ? "♂" : "♀"}</button>
+            ))}
+          </div>
+          {(() => {
+            const filterPlayer = (p: { name: string; gender?: string | null }) =>
+              (!memberSearch || p.name.toLowerCase().includes(memberSearch.toLowerCase())) &&
+              (!memberGender || p.gender === memberGender);
+            const filteredRanked = rankings.ranked.filter(filterPlayer);
+            const filteredUnranked = rankings.unranked.filter(filterPlayer);
+            return filteredRanked.length === 0 && filteredUnranked.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-4xl mb-2">🏆</div>
-              <p className="text-muted">No ranked players yet</p>
-              <p className="text-sm text-muted">Play some matches!</p>
+              <p className="text-muted">{rankings.ranked.length === 0 ? "No ranked players yet" : "No players match filter"}</p>
             </div>
           ) : (
-            rankings.ranked.map((p, i) => (
+            <>
+            {filteredRanked.map((p, i) => (
               <div
                 key={p.id}
                 className={`bg-card rounded-xl border p-3 flex items-center gap-3 ${
@@ -1239,13 +1255,12 @@ export default function ClubDetailPage() {
                   <div className="text-lg font-bold text-primary">{Math.round(p.rating)}</div>
                 </div>
               </div>
-            ))
-          )}
+            ))}
 
-          {rankings.unranked.length > 0 && (
+          {filteredUnranked.length > 0 && (
             <>
-              <h3 className="text-xs font-medium text-muted mt-4">Unranked ({rankings.unranked.length})</h3>
-              {rankings.unranked.map((p) => (
+              <h3 className="text-xs font-medium text-muted mt-4">Unranked ({filteredUnranked.length})</h3>
+              {filteredUnranked.map((p) => (
                 <div key={p.id} className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-50">
                   <span className="text-xl w-8 text-center">-</span>
                   <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
@@ -1255,6 +1270,9 @@ export default function ClubDetailPage() {
               ))}
             </>
           )}
+          </>
+          );
+          })()}
         </div>
       )}
 
