@@ -211,7 +211,7 @@ function EventsPage() {
       <div className="flex items-center gap-1.5 flex-wrap">
         <button onClick={() => setShowFilters(!showFilters)}
           className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
-          ☰
+          ☰ Filter
         </button>
         {activeFilters.length > 0 && (
           <>
