@@ -342,7 +342,7 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
-  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 0 });
+  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 30000 });
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);

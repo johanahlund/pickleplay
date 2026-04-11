@@ -56,11 +56,10 @@ function EventsPage() {
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
 
-  useEffect(() => {
+  const fetchEvents = () => {
     fetch("/api/events")
       .then((r) => r.json())
       .then((data) => {
-        // Derive format fields from default class
         const enriched = (data || []).map((e: Event & { classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string }[] }) => {
           const cls = e.classes?.find((c) => c.isDefault) || e.classes?.[0];
           if (cls) {
@@ -70,14 +69,19 @@ function EventsPage() {
           }
           return e;
         });
-        // Filter by club if query param present
         const filtered = clubFilter
           ? enriched.filter((e: Event) => e.clubId === clubFilter)
           : enriched;
         setEvents(filtered);
         setLoading(false);
       });
-  }, [clubFilter]);
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 30000);
+    return () => clearInterval(interval);
+  }, [clubFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteEvent = async (id: string) => {
     if (!confirm("Are you sure you want to delete this event and all its matches?")) return;
