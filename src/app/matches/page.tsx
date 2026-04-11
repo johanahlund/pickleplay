@@ -119,7 +119,7 @@ function MatchesPage() {
               </div>
             ))}
           </div>
-          <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${teamWon ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score : "-"}</span>
+          <span className={`text-2xl font-bold tabular-nums min-w-[2.5rem] text-center ${teamWon ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score : "-"}</span>
         </div>
       );
     };
