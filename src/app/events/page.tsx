@@ -340,15 +340,15 @@ function EventsPage() {
             const cardBg = timeStatus === "past" ? "bg-gray-50" : "bg-white";
             const canDelete = isAdmin || event.createdById === userId;
             return (
-            <div key={event.id} className="relative"
-              onMouseEnter={() => setHoveredEventId(event.id)} onMouseLeave={() => setHoveredEventId(null)}>
-              {/* Delete button — top right corner, visible on hover */}
-              {canDelete && hoveredEventId === event.id && (
-                <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id); }}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-400 text-white flex items-center justify-center text-[10px] font-bold z-20 shadow hover:bg-red-600"
-                  title="Delete event">×</button>
-              )}
-            <div className={`${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden`}>
+            <div key={event.id} className="relative">
+            <Link href={`/events/${event.id}`} onClick={() => {
+              const clubName = legacyClubFilter ? userClubs.find((c) => c.id === legacyClubFilter)?.name : null;
+              sessionStorage.setItem("pickleplay_eventsRef", JSON.stringify({
+                href: legacyClubFilter ? `/events?club=${legacyClubFilter}` : "/events",
+                label: clubName ? "Club Events" : "Events",
+                subtitle: clubName || null,
+              }));
+            }} className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}>
               <div className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center min-w-[44px]">
@@ -432,19 +432,10 @@ function EventsPage() {
                       </span>
                     </div>
                   </div>
-                  <Link href={`/events/${event.id}`} onClick={() => {
-                    const clubName = legacyClubFilter ? userClubs.find((c) => c.id === legacyClubFilter)?.name : null;
-                    sessionStorage.setItem("pickleplay_eventsRef", JSON.stringify({
-                      href: legacyClubFilter ? `/events?club=${legacyClubFilter}` : "/events",
-                      label: clubName ? "Club Events" : "Events",
-                      subtitle: clubName || null,
-                    }));
-                  }} className="flex items-center pl-2 self-stretch hover:bg-gray-50 active:bg-gray-100 transition-colors -my-3 -mr-3 pr-3 rounded-r-xl">
-                    <span className="text-xl text-muted">›</span>
-                  </Link>
+                  <span className="text-xl text-muted shrink-0">›</span>
                 </div>
               </div>
-            </div>
+            </Link>
             </div>
           );};
 
