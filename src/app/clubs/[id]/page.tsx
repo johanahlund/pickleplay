@@ -644,8 +644,11 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-3">
-      {/* Tab bar — portaled into header if available, otherwise inline */}
-      {portalTarget ? createPortal(tabBar, portalTarget) : tabBar}
+      {/* Back to overview button on sub-tabs */}
+      {tab !== "feed" && (
+        <button onClick={() => { setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`); }}
+          className="text-sm text-action font-medium">← {club.name}</button>
+      )}
 
       {/* ── Club Info Panel ── */}
       {showInfo && (
@@ -844,6 +847,16 @@ export default function ClubDetailPage() {
         <div className="space-y-3">
           {/* Club overview */}
           <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="flex items-center gap-3 px-3 py-2.5 bg-white">
+              {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
+              <div>
+                <h3 className="font-bold text-lg">{club.name}</h3>
+                {myMembership && <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{myMembership.role}</span>}
+              </div>
+              {canManage && (
+                <button onClick={() => setShowInfo(true)} className="ml-auto text-sm text-muted hover:text-foreground">✏️</button>
+              )}
+            </div>
             {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}
             <div className="p-3 space-y-2">
               {club.description && <p className="text-sm text-muted">{club.description}</p>}

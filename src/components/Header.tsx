@@ -292,41 +292,15 @@ export function Header() {
 
           {/* Club context row + tab bar */}
           {activeClubId && clubName && (
-            <>
-              <div className="flex items-center gap-2 mt-1 pt-1 border-t border-white/10">
-                <button
-                  onClick={() => router.push(`/clubs/${activeClubId}`)}
-                  className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-                >
-                  {clubLogoUrl ? <img src={clubLogoUrl} alt="" className="w-5 h-5 rounded object-cover" /> : <span className="text-sm">{clubEmoji}</span>}
-                  <span className="text-sm font-semibold opacity-90">{clubName}</span>
-                </button>
-              </div>
-              {/* Club tab bar — always visible when in club context */}
-              <div className="mt-1.5 relative">
-                <div id="club-tab-bar-portal" className="relative z-10" />
-                {/* Fallback tabs when portal isn't filled (e.g., on event page) */}
-                <div id="club-tab-bar-fallback" className="flex gap-1 bg-white/10 rounded-xl p-1">
-                  {[
-                    { key: "feed", label: "Feed" },
-                    { key: "events", label: "Events" },
-                    { key: "members", label: "Members" },
-                    { key: "rankings", label: "Rankings" },
-                  ].map((t) => {
-                    const isActive = (t.key === "events" && pathname.startsWith("/events/"));
-                    return (
-                    <button
-                      key={t.key}
-                      onClick={() => { window.location.href = `/clubs/${activeClubId}?tab=${t.key}`; }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${isActive ? "bg-white text-black" : "text-white hover:opacity-80"}`}
-                    >
-                      {t.label}
-                    </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
+            <div className="flex items-center gap-2 mt-1 pt-1 border-t border-white/10">
+              <button
+                onClick={() => router.push(`/clubs/${activeClubId}`)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+              >
+                {clubLogoUrl ? <img src={clubLogoUrl} alt="" className="w-5 h-5 rounded object-cover" /> : <span className="text-sm">{clubEmoji}</span>}
+                <span className="text-sm font-semibold opacity-90">{clubName}</span>
+              </button>
+            </div>
           )}
         </div>
       </header>
