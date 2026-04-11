@@ -1224,9 +1224,10 @@ export default function EventDetailPage() {
         <select value={editPairingMode} onChange={(e) => { setEditPairingMode(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
           {pairingOptions.map((m) => (
-            <option key={m.value} value={m.value}>{m.label} — {m.desc}</option>
+            <option key={m.value} value={m.value}>{m.icon} {m.label}</option>
           ))}
         </select>
+        <p className="text-xs text-muted mt-1">{pairingOptions.find((p) => p.value === editPairingMode)?.desc}</p>
       </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Skill Source</label>
@@ -1240,9 +1241,10 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Play Mode</label>
         <select value={editPlayMode} onChange={(e) => { setEditPlayMode(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="round_based">Round-based — all matches finish before next round</option>
-          <option value="continuous">Continuous — new match when a court is free</option>
+          <option value="round_based">🔄 Round-based</option>
+          <option value="continuous">⚡ Continuous</option>
         </select>
+        <p className="text-xs text-muted mt-1">{editPlayMode === "round_based" ? "All matches finish before generating next round" : "New match starts as soon as a court is free"}</p>
       </div>
 
       {/* Priority toggles — only for continuous */}
