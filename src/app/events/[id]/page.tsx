@@ -340,7 +340,7 @@ export default function EventDetailPage() {
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
 
   // Remember last visited page + read referrer
-  const [eventsBackLink, setEventsBackLink] = useState<{ href: string; label: string } | null>(null);
+  const [eventsBackLink, setEventsBackLink] = useState<{ href: string; label: string; subtitle?: string | null } | null>(null);
   useEffect(() => {
     if (typeof window !== "undefined" && id) {
       localStorage.setItem("pickleplay_lastPage", `/events/${id}`);
@@ -911,7 +911,7 @@ export default function EventDetailPage() {
   const helperNames = event.helpers.map((h) => h.player.name);
 
   const eventBackLink = eventsBackLink && (
-    <Link href={eventsBackLink.href} className="text-sm text-action font-medium">← {eventsBackLink.label}</Link>
+    <Link href={eventsBackLink.href} className="text-sm text-action font-medium">← {eventsBackLink.label}{eventsBackLink.subtitle && <span className="text-xs text-muted font-normal"> ({eventsBackLink.subtitle})</span>}</Link>
   );
 
   const eventHeader = (
@@ -2363,7 +2363,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {activeSection === "rounds" ? (
-          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-muted font-normal">({event.name})</span></button>
+          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
         ) : sectionBar}
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
