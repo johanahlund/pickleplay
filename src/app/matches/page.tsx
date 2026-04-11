@@ -127,7 +127,7 @@ function MatchesPage() {
     };
 
     return (
-      <Link key={m.id} href={`/events/${m.event.id}`} className="block bg-white rounded-xl border border-border overflow-hidden active:bg-gray-50">
+      <Link key={m.id} href={`/events/${m.event.id}`} className="block bg-white rounded-xl border border-action border-l-4 overflow-hidden active:bg-gray-50">
         <div className="px-2.5 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1.5">
           {m.event.club && <span className="text-[10px] text-muted">{m.event.club.emoji} {m.event.club.name} ·</span>}
           <span className="text-[10px] text-muted flex-1">{m.event.name} · {new Date(m.event.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
