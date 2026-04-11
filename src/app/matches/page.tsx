@@ -107,41 +107,41 @@ function MatchesPage() {
     const score2 = team2[0]?.score ?? 0;
     const isCompleted = m.status === "completed";
     const won = isCompleted ? (myTeam === 1 ? score1 > score2 : score2 > score1) : false;
-    const courtColor = m.status === "active" ? "bg-orange-500 text-white" : m.status === "paused" ? "bg-amber-500 text-white" : isCompleted ? (won ? "bg-green-500 text-white" : "bg-red-400 text-white") : "bg-gray-100 text-muted";
-
-    const renderTeam = (players: MatchPlayer[]) => (
-      <div className="flex items-center gap-1 flex-1 min-w-0">
-        {players.map((mp, i) => (
-          <span key={mp.id} className="inline-flex items-center gap-1">
-            {i > 0 && <span className="text-muted text-xs">·</span>}
-            <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
-            <span className={`text-xs ${mp.playerId === userId ? "font-bold" : "font-medium"}`}>{mp.player.name}</span>
-          </span>
-        ))}
+    const renderPlayer = (mp: MatchPlayer, align: "left" | "right") => (
+      <div className={`flex-1 flex flex-col ${align === "right" ? "items-end" : "items-start"}`}>
+        <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+          <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+          <span className={mp.playerId === userId ? "font-bold" : "font-medium"}>{mp.player.name}</span>
+        </span>
       </div>
     );
 
+    const p1t1 = team1[0], p2t1 = team1[1];
+    const p1t2 = team2[0], p2t2 = team2[1];
+
     return (
       <Link key={m.id} href={`/events/${m.event.id}`} className="block bg-white rounded-xl border border-border overflow-hidden active:bg-gray-50">
-        {/* Event info */}
         <div className="px-2.5 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1.5">
           {m.event.club && <span className="text-[10px] text-muted">{m.event.club.emoji} {m.event.club.name} ·</span>}
           <span className="text-[10px] text-muted flex-1">{m.event.name} · {new Date(m.event.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
           {isCompleted && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${won ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{won ? "W" : "L"}</span>}
           {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}
         </div>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${courtColor}`}>{m.courtNum}</div>
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <div className="flex items-center gap-1">
-              {renderTeam(team1)}
-              <span className={`text-sm font-bold tabular-nums min-w-[1.5rem] text-center ${isCompleted && score1 > score2 ? "text-green-600" : "text-muted"}`}>{isCompleted ? score1 : "-"}</span>
-            </div>
-            <div className="h-px bg-border mx-1" />
-            <div className="flex items-center gap-1">
-              {renderTeam(team2)}
-              <span className={`text-sm font-bold tabular-nums min-w-[1.5rem] text-center ${isCompleted && score2 > score1 ? "text-green-600" : "text-muted"}`}>{isCompleted ? score2 : "-"}</span>
-            </div>
+        <div className="px-2 py-1.5 space-y-0.5">
+          <div className={`flex items-center gap-1 p-1 rounded-lg ${isCompleted && score1 > score2 ? "bg-green-50" : ""}`}>
+            {p1t1 && renderPlayer(p1t1, "right")}
+            {p2t1 && <span className="text-muted text-sm shrink-0">·</span>}
+            {p2t1 && renderPlayer(p2t1, "left")}
+            {!p2t1 && <div className="flex-1" />}
+            <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${isCompleted && score1 > score2 ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score1 : "-"}</span>
+          </div>
+          <div className="h-px bg-border mx-2" />
+          <div className={`flex items-center gap-1 p-1 rounded-lg ${isCompleted && score2 > score1 ? "bg-green-50" : ""}`}>
+            {p1t2 && renderPlayer(p1t2, "right")}
+            {p2t2 && <span className="text-muted text-sm shrink-0">·</span>}
+            {p2t2 && renderPlayer(p2t2, "left")}
+            {!p2t2 && <div className="flex-1" />}
+            <span className={`text-lg font-bold tabular-nums min-w-[2rem] text-center ${isCompleted && score2 > score1 ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score2 : "-"}</span>
           </div>
         </div>
       </Link>
