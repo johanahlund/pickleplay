@@ -384,7 +384,6 @@ function EventsPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Today</span>
-                    <div className="flex-1 h-px bg-green-200" />
                   </div>
                   <div className="space-y-2">
                     {todayEvents.map(renderEventCard)}
@@ -397,7 +396,6 @@ function EventsPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span>
-                    <div className="flex-1 h-px bg-blue-200" />
                   </div>
                   <div className="space-y-2">
                     {upcomingEvents.map(renderEventCard)}
@@ -410,7 +408,6 @@ function EventsPage() {
                 <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
-                    <div className="flex-1 h-px bg-gray-300" />
                   </div>
                   <div className="space-y-2">
                     {pastEvents.map(renderEventCard)}
