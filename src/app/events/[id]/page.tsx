@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
@@ -338,9 +339,18 @@ export default function EventDetailPage() {
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
 
-  // Remember last visited page
+  // Remember last visited page + read referrer
+  const [eventsBackLink, setEventsBackLink] = useState<{ href: string; label: string } | null>(null);
   useEffect(() => {
-    if (typeof window !== "undefined" && id) localStorage.setItem("pickleplay_lastPage", `/events/${id}`);
+    if (typeof window !== "undefined" && id) {
+      localStorage.setItem("pickleplay_lastPage", `/events/${id}`);
+      const ref = sessionStorage.getItem("pickleplay_eventsRef");
+      if (ref) {
+        try { setEventsBackLink(JSON.parse(ref)); } catch {}
+      } else {
+        setEventsBackLink({ href: "/events", label: "Events" });
+      }
+    }
   }, [id]);
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
@@ -899,6 +909,10 @@ export default function EventDetailPage() {
 
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
+
+  const eventBackLink = eventsBackLink && (
+    <Link href={eventsBackLink.href} className="text-sm text-action font-medium">← {eventsBackLink.label}</Link>
+  );
 
   const eventHeader = (
     <div className="bg-card rounded-xl border border-border p-3 flex">
@@ -2438,6 +2452,7 @@ export default function EventDetailPage() {
     const uniquePlayerIds = new Set(event.players.map((ep) => ep.player.id));
     return (
       <div className="space-y-3">
+        {eventBackLink}
         {eventHeader}
         <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
@@ -2502,6 +2517,7 @@ export default function EventDetailPage() {
   // Non-competition overview
   return (
     <div className="space-y-3">
+      {eventBackLink}
       {eventHeader}
 
       {/* Speaker */}

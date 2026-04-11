@@ -410,7 +410,13 @@ function EventsPage() {
                       </span>
                     </div>
                   </div>
-                  <Link href={`/events/${event.id}`} className="flex items-center pl-2 self-stretch hover:bg-gray-50 active:bg-gray-100 transition-colors -my-3 -mr-3 pr-3 rounded-r-xl">
+                  <Link href={`/events/${event.id}`} onClick={() => {
+                    const clubName = legacyClubFilter ? userClubs.find((c) => c.id === legacyClubFilter)?.name : null;
+                    sessionStorage.setItem("pickleplay_eventsRef", JSON.stringify({
+                      href: legacyClubFilter ? `/events?club=${legacyClubFilter}` : "/events",
+                      label: clubName ? `Club Events (${clubName})` : "Events",
+                    }));
+                  }} className="flex items-center pl-2 self-stretch hover:bg-gray-50 active:bg-gray-100 transition-colors -my-3 -mr-3 pr-3 rounded-r-xl">
                     <span className="text-xl text-muted">›</span>
                   </Link>
                 </div>
