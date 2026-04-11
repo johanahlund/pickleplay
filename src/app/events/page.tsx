@@ -188,25 +188,25 @@ function EventsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Events</h2>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowFilters(!showFilters)}
-            className={`text-sm px-2.5 py-1 rounded-lg transition-colors ${showFilters || activeFilters.length > 0 ? "bg-action/10 text-action" : "bg-gray-100 text-muted"}`}>
-            🔍 {activeFilters.length > 0 ? activeFilters.length : ""}
-          </button>
-          <Link href="/events/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ New</Link>
-        </div>
+        <Link href="/events/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ New</Link>
       </div>
 
-      {/* Active filter summary */}
-      {activeFilters.length > 0 && !showFilters && (
-        <div className="flex flex-wrap gap-1">
-          {activeFilters.map((f, i) => (
-            <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
-          ))}
-          <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); }}
-            className="text-[10px] text-muted hover:text-foreground px-1">Clear</button>
-        </div>
-      )}
+      {/* Filter bar — always visible */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <button onClick={() => setShowFilters(!showFilters)}
+          className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
+          🔍
+        </button>
+        {activeFilters.length > 0 && (
+          <>
+            {activeFilters.map((f, i) => (
+              <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
+            ))}
+            <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); }}
+              className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
+          </>
+        )}
+      </div>
 
       {/* Filter panel */}
       {showFilters && (
