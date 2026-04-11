@@ -346,7 +346,7 @@ function EventsPage() {
                     <div className="text-[10px] text-muted">{new Date(event.date).toLocaleDateString(undefined, { weekday: "short" })}</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    {!legacyClubFilter && event.club && (
+                    {event.club && (
                       <div className="text-[10px] text-muted font-medium mb-0.5">{event.club.emoji} {event.club.name}</div>
                     )}
                     <div className="flex items-center gap-1.5">
