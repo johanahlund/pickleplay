@@ -212,7 +212,6 @@ function EventsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">{legacyClubFilter ? "Club Events" : "Events"}</h2>
-        {!showFilters && <Link href="/events/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ New</Link>}
       </div>
 
       {/* Filter bar — always visible */}
