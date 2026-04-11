@@ -107,10 +107,12 @@ function MatchesPage() {
     const score2 = team2[0]?.score ?? 0;
     const isCompleted = m.status === "completed";
     const won = isCompleted ? (myTeam === 1 ? score1 > score2 : score2 > score1) : false;
-    const renderTeamRow = (players: MatchPlayer[], teamWon: boolean, score: number) => {
-      const nameColor = teamWon ? "text-green-700" : "";
+    const renderTeamRow = (players: MatchPlayer[], teamWon: boolean, teamLost: boolean, score: number, isMyTeam: boolean) => {
+      const nameColor = isMyTeam && isCompleted ? (teamWon ? "text-green-700" : "text-red-600") : teamWon ? "text-green-700" : "";
+      const scoreColor = isMyTeam && isCompleted ? (teamWon ? "text-green-600" : "text-red-500") : teamWon ? "text-green-600" : "text-gray-400";
+      const bgColor = isMyTeam && isCompleted ? (teamWon ? "bg-green-50" : "bg-red-50") : teamWon ? "bg-green-50" : "";
       return (
-        <div className={`flex items-center gap-1 p-1.5 rounded-lg ${teamWon ? "bg-green-50" : ""}`}>
+        <div className={`flex items-center gap-1 p-1.5 rounded-lg ${bgColor}`}>
           <div className="flex-1 min-w-0 space-y-0.5">
             {players.map((mp) => (
               <div key={mp.id} className="flex items-center gap-1.5">
@@ -119,7 +121,7 @@ function MatchesPage() {
               </div>
             ))}
           </div>
-          <span className={`text-2xl font-bold tabular-nums min-w-[2.5rem] text-center ${teamWon ? "text-green-600" : "text-gray-400"}`}>{isCompleted ? score : "-"}</span>
+          <span className={`text-2xl font-bold tabular-nums min-w-[2.5rem] text-center ${scoreColor}`}>{isCompleted ? score : "-"}</span>
         </div>
       );
     };
@@ -133,9 +135,9 @@ function MatchesPage() {
           {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}
         </div>
         <div className="px-2 py-1.5 space-y-0.5">
-          {renderTeamRow(team1, isCompleted && score1 > score2, score1)}
+          {renderTeamRow(team1, isCompleted && score1 > score2, isCompleted && score1 < score2, score1, myTeam === 1)}
           <div className="h-px bg-border mx-2" />
-          {renderTeamRow(team2, isCompleted && score2 > score1, score2)}
+          {renderTeamRow(team2, isCompleted && score2 > score1, isCompleted && score2 < score1, score2, myTeam === 2)}
         </div>
       </Link>
     );
