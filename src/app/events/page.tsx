@@ -65,6 +65,8 @@ function EventsPage() {
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
   const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
+  const [myEventsOnly, setMyEventsOnly] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [clubsLoaded, setClubsLoaded] = useState(false);
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
@@ -167,6 +169,18 @@ function EventsPage() {
       if (typeFilter === "events") {
         if (e.classes?.some((c) => c.competitionMode)) return false;
       }
+      // My events only
+      if (myEventsOnly && userId) {
+        const isPlayer = e.players.some((p) => p.playerId === userId);
+        const isCreator = e.createdById === userId;
+        const isHelper = e.helpers?.some((h) => h.playerId === userId);
+        if (!isPlayer && !isCreator && !isHelper) return false;
+      }
+      // Active only
+      if (activeOnly) {
+        const ts = getTimeStatus(e);
+        if (ts !== "active") return false;
+      }
       return true;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -182,6 +196,8 @@ function EventsPage() {
   if (searchQuery) activeFilters.push(`"${searchQuery}"`);
   if (dateFilter !== "all") activeFilters.push(dateFilter === "past7" ? "Past 7d" : dateFilter === "today" ? "Today" : dateFilter === "tomorrow" ? "Tomorrow" : dateFilter === "next7" ? "Next 7d" : "Next 30d");
   if (typeFilter !== "all") activeFilters.push(typeFilter === "competitions" ? "Competitions" : "Social");
+  if (myEventsOnly) activeFilters.push("My events");
+  if (activeOnly) activeFilters.push("Live");
 
   return (
     <div className="space-y-3">
@@ -195,14 +211,14 @@ function EventsPage() {
       <div className="flex items-center gap-1.5 flex-wrap">
         <button onClick={() => setShowFilters(!showFilters)}
           className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
-          🔍
+          ☰
         </button>
         {activeFilters.length > 0 && (
           <>
             {activeFilters.map((f, i) => (
               <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
             ))}
-            <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); }}
+            <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
               className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
           </>
         )}
@@ -265,11 +281,23 @@ function EventsPage() {
                 }`}>{t.label}</button>
             ))}
           </div>
+
+          {/* Toggle filters */}
+          <div className="flex gap-2">
+            <button onClick={() => setMyEventsOnly(!myEventsOnly)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted"
+              }`}>👤 My events</button>
+            <button onClick={() => setActiveOnly(!activeOnly)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeOnly ? "bg-green-600 text-white" : "bg-gray-100 text-muted"
+              }`}>🟢 Live now</button>
+          </div>
         </div>
       )}
 
-      {/* Events list */}
-      {filteredEvents.length === 0 && events.length > 0 ? (
+      {/* Events list — hidden when filter panel is open */}
+      {!showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
         <div className="text-center py-8"><p className="text-muted text-sm">No events match your filters.</p></div>
       ) : filteredEvents.length === 0 ? (
         <div className="text-center py-12">
@@ -424,7 +452,7 @@ function EventsPage() {
             </div>
           );
         })()
-      )}
+      ))}
     </div>
   );
 }
