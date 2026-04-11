@@ -179,6 +179,7 @@ function EventsPage() {
     const names = userClubs.filter((c) => selectedClubIds.has(c.id)).map((c) => c.name);
     activeFilters.push(names.length <= 2 ? names.join(", ") : `${names.length} clubs`);
   }
+  if (searchQuery) activeFilters.push(`"${searchQuery}"`);
   if (dateFilter !== "all") activeFilters.push(dateFilter === "past7" ? "Past 7d" : dateFilter === "today" ? "Today" : dateFilter === "tomorrow" ? "Tomorrow" : dateFilter === "next7" ? "Next 7d" : "Next 30d");
   if (typeFilter !== "all") activeFilters.push(typeFilter === "competitions" ? "Competitions" : "Social");
 
