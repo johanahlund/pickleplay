@@ -289,8 +289,17 @@ function EventsPage() {
             const timeStatus = getTimeStatus(event);
             const borderColor = timeStatus === "active" ? "border-l-green-500" : timeStatus === "past" ? "border-l-gray-300" : "border-l-blue-400";
             const cardBg = timeStatus === "past" ? "bg-gray-50" : "bg-white";
+            const canDelete = isAdmin || event.createdById === userId;
             return (
-            <div key={event.id} className={`${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden`}>
+            <div key={event.id} className="relative group">
+              {/* Delete action — revealed on swipe left or hover */}
+              {canDelete && (
+                <button onClick={() => deleteEvent(event.id)}
+                  className="absolute right-0 top-0 bottom-0 w-20 bg-red-500 text-white flex items-center justify-center rounded-r-xl text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity z-0">
+                  Delete
+                </button>
+              )}
+            <div className={`${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden relative z-10`}>
               <div className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center min-w-[44px]">
@@ -368,11 +377,7 @@ function EventsPage() {
                   </Link>
                 </div>
               </div>
-              {(isAdmin || event.createdById === userId) && (
-                <div className="border-t border-border px-3 py-1.5 flex justify-end">
-                  <button onClick={() => deleteEvent(event.id)} className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50">Delete</button>
-                </div>
-              )}
+            </div>
             </div>
           );};
 
