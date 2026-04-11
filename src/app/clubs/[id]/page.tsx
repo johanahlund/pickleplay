@@ -862,7 +862,7 @@ export default function ClubDetailPage() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg">{club.name}</h3>
                 {myMembership ? (
-                  <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium capitalize">✓ {myMembership.role}</span>
+                  <span className="text-[10px] text-muted">Member · {myMembership.role}</span>
                 ) : userId ? (
                   (() => {
                     return myPendingRequest ? (
