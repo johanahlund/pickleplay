@@ -1810,10 +1810,13 @@ export default function EventDetailPage() {
     const isPending = match.status === "pending";
     const isPaused = match.status === "paused";
     const isEditing = editingMatchId === match.id;
-    const team1Score = isCompleted ? team1[0]?.score ?? 0 : null;
-    const team2Score = isCompleted ? team2[0]?.score ?? 0 : null;
-    const team1Won = team1Score !== null && team2Score !== null && team1Score > team2Score;
-    const team2Won = team1Score !== null && team2Score !== null && team2Score > team1Score;
+    const team1Score = isCompleted ? (team1[0]?.score ?? 0) : null;
+    const team2Score = isCompleted ? (team2[0]?.score ?? 0) : null;
+    // Use pending scores if available (during optimistic update)
+    const displayScore1 = scores[match.id]?.team1 ? parseInt(scores[match.id].team1) : team1Score;
+    const displayScore2 = scores[match.id]?.team2 ? parseInt(scores[match.id].team2) : team2Score;
+    const team1Won = (displayScore1 ?? team1Score) !== null && (displayScore2 ?? team2Score) !== null && (displayScore1 ?? team1Score ?? 0) > (displayScore2 ?? team2Score ?? 0);
+    const team2Won = (displayScore1 ?? team1Score) !== null && (displayScore2 ?? team2Score) !== null && (displayScore2 ?? team2Score ?? 0) > (displayScore1 ?? team1Score ?? 0);
     const isMatchPlayer = session?.user ? [...team1, ...team2].some((mp) => mp.playerId === (session.user as { id: string }).id) : false;
     const canScore = canManage || isMatchPlayer;
     const showInputs = canScore && (isActive || isPaused || isEditing);
@@ -1902,9 +1905,9 @@ export default function EventDetailPage() {
             };
             return (
               <>
-                {renderTeamRow(team1, 1, team1Won, team1Score)}
+                {renderTeamRow(team1, 1, team1Won, displayScore1)}
                 <div className="h-px bg-border mx-2" />
-                {renderTeamRow(team2, 2, team2Won, team2Score)}
+                {renderTeamRow(team2, 2, team2Won, displayScore2)}
               </>
             );
           })()}
