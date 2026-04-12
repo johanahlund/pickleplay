@@ -1970,8 +1970,9 @@ export default function EventDetailPage() {
 
   const renderRounds = () => (
     <div className="space-y-3">
-      {/* Sticky header: courts + actions */}
-      <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-1 space-y-2 shadow-sm">
+      {/* Sticky header: back + courts + actions */}
+      <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-2 space-y-2 shadow-sm">
+      <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event?.name})</span></button>
       {/* Court availability */}
       {freeCourts.length > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-2 text-sm text-green-700 flex items-center gap-2">
@@ -2376,7 +2377,11 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
+        {activeSection !== "rounds" && (
+          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+            <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
+          </div>
+        )}
 
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
