@@ -2204,7 +2204,8 @@ export default function EventDetailPage() {
     <div className="space-y-3">
       {/* Court card */}
       <div className="bg-card rounded-xl border border-border p-3">
-        <span className="text-sm font-semibold text-muted block mb-1.5">Court</span>
+        <div className="flex items-center gap-3">
+        <span className="text-sm font-semibold text-muted">Court</span>
         <div className="flex gap-1.5">
           {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
             <button key={c} type="button" onClick={() => setManualCourt(c)}
@@ -2212,6 +2213,7 @@ export default function EventDetailPage() {
                 manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
               }`}>{c}</button>
           ))}
+        </div>
         </div>
       </div>
 
