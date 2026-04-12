@@ -2232,6 +2232,7 @@ export default function EventDetailPage() {
       </div>
       {/* Match overrides */}
       <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+        {/* Format + Win by */}
         <div className="flex gap-2">
           <div className="flex-1">
             <label className="block text-xs text-muted mb-1">Format</label>
@@ -2246,36 +2247,37 @@ export default function EventDetailPage() {
               <option value="1xR15">Rally to 15</option>
               <option value="1xR21">Rally to 21</option>
             </select>
+            <p className="text-[10px] text-muted mt-0.5">
+              {(() => { const fmt = manualMatchFormat || event.scoringFormat || "1x11"; return fmt.startsWith("3") ? `Best of 3 sets to ${fmt.replace(/^3x/, "").replace("R", "")}` : `1 set to ${fmt.replace(/^1x/, "").replace("R", "")}${fmt.includes("R") ? " (rally scoring)" : ""}`; })()}
+            </p>
           </div>
-          <div className="w-20">
+          <div className="w-24">
             <label className="block text-xs text-muted mb-1">Win by</label>
             <select value={manualWinBy} onChange={(e) => setManualWinBy(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (def)</option>
+              <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (default)</option>
               <option value="1">1</option>
               <option value="2">2</option>
             </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-xs text-muted mb-1">Ranking</label>
-            <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
-              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">{(event.rankingMode || "ranked").charAt(0).toUpperCase() + (event.rankingMode || "ranked").slice(1)} (default)</option>
-              <option value="ranked">Ranked</option>
-              <option value="approval">Approval</option>
-              <option value="none">Unranked</option>
-            </select>
+            <p className="text-[10px] text-muted mt-0.5">
+              {(manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2") === "1" ? "First to target wins" : "Must lead by 2 points"}
+            </p>
           </div>
         </div>
-        <p className="text-[10px] text-muted mt-1">
-          {(() => {
-            const fmt = manualMatchFormat || event.scoringFormat || "1x11";
-            const wb = manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2";
-            const rm = manualRankingMode || event.rankingMode || "ranked";
-            const fmtLabel = fmt.startsWith("3") ? `Best of 3 to ${fmt.replace(/^3x/, "").replace("R", "")}` : `1 set to ${fmt.replace(/^1x/, "").replace("R", "")}${fmt.includes("R") ? " (rally)" : ""}`;
-            return `${fmtLabel}, win by ${wb}. ${rm === "ranked" ? "Counts towards rankings." : rm === "approval" ? "Needs confirmation." : "Not ranked."}`;
-          })()}
-        </p>
+        {/* Ranking */}
+        <div>
+          <label className="block text-xs text-muted mb-1">Ranking</label>
+          <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
+            className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+            <option value="">{(event.rankingMode || "ranked").charAt(0).toUpperCase() + (event.rankingMode || "ranked").slice(1)} (default)</option>
+            <option value="ranked">Ranked</option>
+            <option value="approval">Approval</option>
+            <option value="none">Unranked</option>
+          </select>
+          <p className="text-[10px] text-muted mt-0.5">
+            {(() => { const rm = manualRankingMode || event.rankingMode || "ranked"; return rm === "ranked" ? "Scores count towards player rankings immediately" : rm === "approval" ? "Scores need confirmation by both teams or event admin" : "Scores recorded but don't affect rankings"; })()}
+          </p>
+        </div>
       </div>
 
       <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
