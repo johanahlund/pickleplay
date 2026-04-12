@@ -66,18 +66,18 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
   const baseRows = targetScore <= 11 ? 4 : targetScore <= 15 ? 5 : 6;
   const cols = 4;
   const visibleCount = (baseRows + extraRows) * cols;
-  const numbers = Array.from({ length: visibleCount }, (_, i) => i);
+  const allNumbers = Array.from({ length: visibleCount }, (_, i) => i);
 
   const otherScore = parseInt(otherTeamScore);
   const hasOtherScore = !isNaN(otherScore);
 
+  // Only show valid numbers when the other team's score is already set
+  const numbers = hasOtherScore
+    ? allNumbers.filter((n) => isValidPair(n, otherScore, targetScore, winBy))
+    : allNumbers;
+
   const handleSelect = (n: number) => {
-    if (hasOtherScore && !isValidPair(n, otherScore, targetScore, winBy)) {
-      const msg = getErrorMessage(n, otherScore, targetScore, winBy);
-      setError(msg || `${n}-${otherScore} — adjust other team's score too`);
-    } else {
-      setError(null);
-    }
+    setError(null);
     onChange(String(n));
     setOpen(false);
   };
@@ -108,7 +108,6 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
               {numbers.map((n) => {
                 const isSelected = String(n) === value;
                 const isTarget = n === targetScore;
-                const wouldBeInvalid = hasOtherScore && !isValidPair(n, otherScore, targetScore, winBy);
                 return (
                   <button
                     key={n}
@@ -116,11 +115,9 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
                     className={`h-14 rounded-xl text-xl font-bold transition-all ${
                       isSelected
                         ? "bg-action text-white ring-2 ring-action/50 scale-110"
-                        : wouldBeInvalid
-                          ? "bg-gray-50 text-gray-300"
-                          : isTarget
-                            ? "bg-green-500 text-white shadow-md"
-                            : "bg-gray-100 text-foreground hover:bg-gray-200 active:bg-gray-300"
+                        : isTarget
+                          ? "bg-green-500 text-white shadow-md"
+                          : "bg-gray-100 text-foreground hover:bg-gray-200 active:bg-gray-300"
                     }`}
                   >
                     {n}
@@ -129,9 +126,11 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
               })}
             </div>
             <div className="flex mt-3">
-              <button onClick={() => setExtraRows(extraRows + 1)} className="flex-1 py-1.5 text-xs text-action font-medium hover:underline">
-                More numbers...
-              </button>
+              {!hasOtherScore && (
+                <button onClick={() => setExtraRows(extraRows + 1)} className="flex-1 py-1.5 text-xs text-action font-medium hover:underline">
+                  More numbers...
+                </button>
+              )}
               {hasOtherScore && onClearBoth && (
                 <button onClick={() => { onClearBoth(); setError(null); }} className="py-1.5 text-xs text-red-500 font-medium hover:underline px-2">
                   Clear both scores
