@@ -215,11 +215,10 @@ function EventsPage() {
 
   return (
     <div className="space-y-3">
-      {/* Back to club link when filtered by single club */}
-      {legacyClubFilter && (() => {
-        const clubName = userClubs.find((c) => c.id === legacyClubFilter)?.name;
-        return <Link href={`/clubs/${legacyClubFilter}`} className="text-sm text-action font-medium">← {clubName || "Back to club"}</Link>;
-      })()}
+      {/* Back link when filtered by club */}
+      {legacyClubFilter && (
+        <button onClick={() => window.history.back()} className="text-sm text-action font-medium">← Club <span className="text-xs text-muted font-normal">({userClubs.find((c) => c.id === legacyClubFilter)?.name || ""})</span></button>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -341,14 +340,7 @@ function EventsPage() {
             const canDelete = isAdmin || event.createdById === userId;
             return (
             <div key={event.id} className="relative">
-            <Link href={`/events/${event.id}`} onClick={() => {
-              const clubName = legacyClubFilter ? userClubs.find((c) => c.id === legacyClubFilter)?.name : null;
-              sessionStorage.setItem("pickleplay_eventsRef", JSON.stringify({
-                href: legacyClubFilter ? `/events?club=${legacyClubFilter}` : "/events",
-                label: clubName ? "Club Events" : "Events",
-                subtitle: clubName || null,
-              }));
-            }} className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}>
+            <Link href={`/events/${event.id}`} className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}>
               <div className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center min-w-[44px]">
