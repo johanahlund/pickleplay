@@ -16,7 +16,7 @@ import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
 import { RallyTracker } from "@/components/RallyTracker";
-import { ScorePicker } from "@/components/ScorePicker";
+import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 
 interface Player {
   id: string;
@@ -404,6 +404,7 @@ export default function EventDetailPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
+  const [openMenuMatchId, setOpenMenuMatchId] = useState<string | null>(null);
   const [rallyVisible, setRallyVisible] = useState(false);
   const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -512,6 +513,23 @@ export default function EventDetailPage() {
     if (team1Score === team2Score) {
       alert("Scores cannot be tied!");
       return;
+    }
+    // Validate against match scoring rules
+    const match = event?.matches.find((m) => m.id === matchId);
+    if (match && event) {
+      const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
+      const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
+      const target = parseInt(fmt.replace(/^[13]x/, "").replace("R", "")) || 11;
+      const wb = parseInt(cls?.winBy || "2") || 2;
+      if (!isValidPair(team1Score, team2Score, target, wb)) {
+        const winner = Math.max(team1Score, team2Score);
+        if (winner < target) {
+          alert(`Invalid score: winner must reach at least ${target}`);
+        } else {
+          alert(`Invalid score: ${team1Score}-${team2Score} doesn't follow win-by-${wb} rules`);
+        }
+        return;
+      }
     }
     // Optimistic: mark completed immediately
     setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => {
@@ -1907,9 +1925,10 @@ export default function EventDetailPage() {
               </span>
             )}
             {/* Menu */}
-            <div className="relative group">
-              <button className="w-7 h-7 rounded-full flex items-center justify-center text-muted hover:bg-gray-100 text-sm">⋮</button>
-              <div className="absolute right-0 top-7 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[150px] hidden group-hover:block">
+            <div className="relative">
+              <button onClick={() => setOpenMenuMatchId(openMenuMatchId === match.id ? null : match.id)} className="w-7 h-7 rounded-full flex items-center justify-center text-muted hover:bg-gray-100 text-sm">⋮</button>
+              {openMenuMatchId === match.id && (
+              <div className="absolute right-0 top-7 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[150px]">
                 {!isCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
                   <button onClick={async () => {
                     if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) { setRallyMatchId(match.id); setRallyVisible(true); return; }
@@ -1943,6 +1962,7 @@ export default function EventDetailPage() {
                   <button onClick={() => deleteMatch(match.id)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 text-danger">🗑️ Delete</button>
                 )}
               </div>
+              )}
             </div>
           </div>
         </div>

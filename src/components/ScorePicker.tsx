@@ -10,7 +10,7 @@ interface ScorePickerProps {
   onChange: (value: string) => void;
 }
 
-function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
+export function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
   if (score1 === score2) return false; // no ties
   const winner = Math.max(score1, score2);
   const loser = Math.min(score1, score2);
