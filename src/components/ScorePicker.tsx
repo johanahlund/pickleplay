@@ -30,12 +30,12 @@ export function ScorePicker({ value, targetScore, onChange }: ScorePickerProps) 
             <div className="text-center mb-4">
               <span className="text-sm font-semibold text-muted">Select Score</span>
             </div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 gap-2.5">
               {numbers.map((n) => (
                 <button
                   key={n}
                   onClick={() => { onChange(String(n)); setOpen(false); }}
-                  className={`h-12 rounded-xl text-lg font-bold transition-all ${
+                  className={`h-14 rounded-xl text-xl font-bold transition-all ${
                     String(n) === value
                       ? "bg-action text-white ring-2 ring-action/50 scale-110"
                       : n === targetScore
