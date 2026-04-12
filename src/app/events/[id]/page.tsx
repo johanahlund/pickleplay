@@ -350,6 +350,7 @@ export default function EventDetailPage() {
   useEffect(() => {
     if (typeof window !== "undefined" && id) localStorage.setItem("pickleplay_lastPage", `/events/${id}`);
   }, [id]);
+
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -400,6 +401,15 @@ export default function EventDetailPage() {
   const [editingManualMatchId, setEditingManualMatchId] = useState<string | null>(null);
   const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
+
+  // Hide bottom nav when in manual match edit
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (activeSection === "manual") nav?.classList.add("hidden");
+    else nav?.classList.remove("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, [activeSection]);
+
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
   const [pairMixed, setPairMixed] = useState(false);
@@ -2411,14 +2421,14 @@ export default function EventDetailPage() {
               <div className="flex flex-col gap-1.5 w-24">
                 {isMatchCompleted && (isOwner || isAdmin) ? (
                   <button onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex flex-col items-center gap-1">✏️ <span>Edit score</span></button>
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit score</span></button>
                 ) : !isMatchCompleted ? (
                   <button onClick={() => { close(); openEditMatch(match.id); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
                 ) : null}
                 {(isOwner || isAdmin) && (
                   <button onClick={() => { close(); deleteMatch(match.id); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-red-50 text-danger hover:bg-red-100 flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
                 )}
               </div>
             )}
@@ -2426,23 +2436,23 @@ export default function EventDetailPage() {
             <div className="flex-1 flex flex-col gap-1.5">
               {isMatchActive && (canManage || match.scorerId === userId) && (
                 <button onClick={() => { setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev); setMatchTab("paused"); fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent()); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex items-center justify-center gap-2">⏸️ Pause</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⏸️ Pause</button>
               )}
               {!isMatchCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
                 <button onClick={async () => { close(); if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) { setRallyMatchId(match.id); setRallyVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setRallyMatchId(match.id); setRallyVisible(true); }}
-                  className="py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex items-center justify-center gap-2">⚖️ Rally scorer</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⚖️ Rally scorer</button>
               )}
               {!isMatchCompleted && (
                 <button onClick={() => { setFocusedMatchId(match.id); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex items-center justify-center gap-2">📺 Focus view</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📺 Focus view</button>
               )}
               {(canManage || match.scorerId === userId) && (
                 <button onClick={() => { if (typeof window !== "undefined" && window.speechSynthesis?.speaking) stopAnnouncement(); else { const n1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => p.player.name); const n2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => p.player.name); sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, n1, n2, event.pairingMode === "king_of_court")); } close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex items-center justify-center gap-2">🔊 {isMatchCompleted ? "Announce result" : "Announce"}</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">🔊 {isMatchCompleted ? "Announce result" : "Announce"}</button>
               )}
               {isMatchCompleted && match.rankingMode === "approval" && !match.scoreConfirmed && (
                 <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 flex items-center justify-center gap-2">✓ Confirm score</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2">✓ Confirm score</button>
               )}
             </div>
           </div>
