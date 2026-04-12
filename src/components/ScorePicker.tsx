@@ -117,7 +117,7 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChang
                 More numbers...
               </button>
               {hasOtherScore && onClearBoth && (
-                <button onClick={() => { onClearBoth(); setOpen(false); setError(null); }} className="py-1.5 text-xs text-red-500 font-medium hover:underline px-2">
+                <button onClick={() => { onClearBoth(); setError(null); }} className="py-1.5 text-xs text-red-500 font-medium hover:underline px-2">
                   Clear both scores
                 </button>
               )}
