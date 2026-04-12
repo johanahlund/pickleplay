@@ -1839,13 +1839,13 @@ export default function EventDetailPage() {
                   </div>
                 );
               };
-              // Target score from format
-              const targetScore = (() => {
-                const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
-                const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
-                return parseInt(fmt.replace(/^[13]x/, "").replace("R", "")) || 11;
-              })();
+              // Target score and winBy from format
+              const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
+              const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
+              const targetScore = parseInt(fmt.replace(/^[13]x/, "").replace("R", "")) || 11;
+              const matchWinBy = parseInt(cls?.winBy || "2") || 2;
               const teamKey = teamNum === 1 ? "team1" : "team2";
+              const otherTeamKey = teamNum === 1 ? "team2" : "team1";
               const canQuickScore = showInputs && !hasLiveScore;
               return (
                 <div className={`flex items-center gap-1 p-1.5 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}
@@ -1861,7 +1861,8 @@ export default function EventDetailPage() {
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
                     ) : showInputs ? (
                       <div onClick={(e) => e.stopPropagation()}>
-                        <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore}
+                        <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
+                          otherTeamScore={scores[match.id]?.[otherTeamKey] ?? ""}
                           onChange={(v) => setMatchScore(match.id, teamKey, v)} />
                       </div>
                     ) : (
