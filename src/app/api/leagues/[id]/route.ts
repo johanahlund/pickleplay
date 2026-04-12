@@ -13,14 +13,14 @@ export async function GET(
     include: {
       createdBy: { select: { id: true, name: true } },
       deputy: { select: { id: true, name: true } },
-      helpers: { include: { player: { select: { id: true, name: true, photoUrl: true } } } },
+      helpers: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true } } } },
       categories: { orderBy: { sortOrder: "asc" } },
       teams: {
         include: {
           club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
-          captain: { select: { id: true, name: true, photoUrl: true } },
-          viceCaptain: { select: { id: true, name: true, photoUrl: true } },
-          players: { include: { player: { select: { id: true, name: true, photoUrl: true, rating: true, gender: true } } } },
+          captain: { select: { id: true, name: true, email: true, photoUrl: true } },
+          viceCaptain: { select: { id: true, name: true, email: true, photoUrl: true } },
+          players: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true, rating: true, gender: true } } } },
           _count: { select: { players: true } },
         },
       },

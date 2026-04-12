@@ -9,14 +9,14 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 
-interface Player { id: string; name: string; photoUrl?: string | null; rating: number; gender?: string | null }
+interface Player { id: string; name: string; email?: string | null; photoUrl?: string | null; rating: number; gender?: string | null }
 interface LeagueTeam {
   id: string; name: string; slogan?: string | null;
   logoUrl: string | null; photoUrl?: string | null;
   clubId?: string | null;
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
-  captain?: { id: string; name: string; photoUrl?: string | null } | null;
-  viceCaptain?: { id: string; name: string; photoUrl?: string | null } | null;
+  captain?: { id: string; name: string; email?: string | null; photoUrl?: string | null } | null;
+  viceCaptain?: { id: string; name: string; email?: string | null; photoUrl?: string | null } | null;
   players: { id: string; playerId: string; player: Player }[];
   _count: { players: number };
 }
@@ -36,7 +36,7 @@ interface LeagueMatchDay {
   event?: { id: string; name: string; date: string; status: string } | null;
 }
 interface LeagueRound { id: string; roundNumber: number; name: string | null; suggestedDate: string | null; status: string; matchDays: LeagueMatchDay[] }
-interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; photoUrl?: string | null } }
+interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
   config: { maxRoster?: number; maxPointsPerMatchDay?: number } | null;
@@ -107,9 +107,11 @@ export default function LeagueDetailPage() {
   const [newRoundTeam1, setNewRoundTeam1] = useState("");
   const [newRoundTeam2, setNewRoundTeam2] = useState("");
 
-  // Add player to team state
-  const [addingPlayerTeamId, setAddingPlayerTeamId] = useState<string | null>(null);
-  const [playerSearch, setPlayerSearch] = useState("");
+  // Add player to team state (modal)
+  const [addPlayerTeam, setAddPlayerTeam] = useState<LeagueTeam | null>(null);
+  const [addPlayerFilter, setAddPlayerFilter] = useState<"all" | "club">("all");
+  const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [clubMembersCache, setClubMembersCache] = useState<Record<string, Player[]>>({});
 
   // Edit state
   const [dirty, setDirty] = useState(false);
@@ -290,6 +292,22 @@ export default function LeagueDetailPage() {
     for (const cat of editCats) await saveCategoryEdit(cat);
     setEditSection("");
     fetchLeague();
+  };
+
+  const openAddPlayerModal = async (team: LeagueTeam) => {
+    setAddPlayerTeam(team);
+    setAddPlayerSearch("");
+    const clubId = team.clubId || team.club?.id;
+    setAddPlayerFilter(clubId ? "club" : "all");
+    fetchPlayers();
+    if (clubId && !clubMembersCache[clubId]) {
+      const r = await fetch(`/api/clubs/${clubId}`);
+      if (r.ok) {
+        const club = await r.json();
+        const members: Player[] = (club.members || []).map((m: { player: Player }) => m.player);
+        setClubMembersCache((prev) => ({ ...prev, [clubId]: members }));
+      }
+    }
   };
 
   const openTeamEdit = (team: LeagueTeam | null) => {
@@ -866,7 +884,10 @@ export default function LeagueDetailPage() {
             {league.helpers?.map((h) => (
               <div key={h.id} className="flex items-center gap-2 py-1">
                 <PlayerAvatar name={h.player.name} photoUrl={h.player.photoUrl} size="xs" />
-                <span className="text-sm font-medium flex-1">{h.player.name}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{h.player.name}</div>
+                  {h.player.email && <div className="text-[10px] text-muted truncate">{h.player.email}</div>}
+                </div>
                 <button onClick={() => removeHelper(h.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>
               </div>
             ))}
@@ -1362,29 +1383,16 @@ export default function LeagueDetailPage() {
                 {team.players.map((tp) => (
                   <div key={tp.id} className="flex items-center gap-2 py-1">
                     <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
-                    <span className="text-sm font-medium flex-1">{tp.player.name}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{tp.player.name}</div>
+                      {tp.player.email && <div className="text-[10px] text-muted truncate">{tp.player.email}</div>}
+                    </div>
                     <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
-                    <button onClick={() => removePlayerFromTeam(team.id, tp.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>
+                    {canEdit && <button onClick={() => removePlayerFromTeam(team.id, tp.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>}
                   </div>
                 ))}
-                {addingPlayerTeamId === team.id ? (
-                  <div className="pt-1">
-                    <input type="text" value={playerSearch} onChange={(e) => setPlayerSearch(e.target.value)}
-                      placeholder="Search player..." autoFocus
-                      className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
-                    <div className="max-h-32 overflow-y-auto space-y-0.5">
-                      {allPlayers.filter((p) => !allTeamPlayerIds.has(p.id) && p.name.toLowerCase().includes(playerSearch.toLowerCase())).slice(0, 10).map((p) => (
-                        <button key={p.id} onClick={() => { addPlayerToTeam(team.id, p.id); setPlayerSearch(""); }}
-                          className="w-full flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 text-left">
-                          <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
-                          <span className="text-sm">{p.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => { setAddingPlayerTeamId(null); setPlayerSearch(""); }} className="text-xs text-muted mt-1">Cancel</button>
-                  </div>
-                ) : (
-                  <button onClick={() => { setAddingPlayerTeamId(team.id); fetchPlayers(); }}
+                {canEdit && (
+                  <button onClick={() => openAddPlayerModal(team)}
                     className="text-xs text-primary font-medium mt-1">+ Add Player</button>
                 )}
               </div>
@@ -1399,6 +1407,74 @@ export default function LeagueDetailPage() {
           )}
         </div>
       )}
+
+      {/* Add Player Modal */}
+      {addPlayerTeam && (() => {
+        const team = addPlayerTeam;
+        const teamClubId = team.clubId || team.club?.id;
+        const onTeamIds = new Set(team.players.map((tp) => tp.playerId));
+        const allClubMembers = teamClubId ? (clubMembersCache[teamClubId] || []) : [];
+        const source = addPlayerFilter === "club" ? allClubMembers : allPlayers;
+        const search = addPlayerSearch.toLowerCase();
+        const results = source
+          .filter((p) => !onTeamIds.has(p.id) && p.name.toLowerCase().includes(search))
+          .slice(0, 50);
+
+        return (
+          <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setAddPlayerTeam(null)}>
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-sm">Add Player to {team.name}</h3>
+                  <button onClick={() => setAddPlayerTeam(null)} className="text-muted text-lg leading-none">✕</button>
+                </div>
+                {teamClubId && (
+                  <div className="flex gap-1 mb-2">
+                    <button onClick={() => setAddPlayerFilter("club")}
+                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "club" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}>
+                      {team.club?.name || "Club"} members
+                    </button>
+                    <button onClick={() => setAddPlayerFilter("all")}
+                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "all" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}>
+                      All players
+                    </button>
+                  </div>
+                )}
+                <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
+                  placeholder="Search by name..." autoFocus
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div className="flex-1 overflow-y-auto px-2 py-1">
+                {results.length === 0 ? (
+                  <p className="text-xs text-muted text-center py-6">
+                    {addPlayerFilter === "club" && allClubMembers.length === 0 ? "No club members found" : "No players match"}
+                  </p>
+                ) : (
+                  results.map((p) => (
+                    <button key={p.id} onClick={async () => {
+                      await addPlayerToTeam(team.id, p.id);
+                      // refresh team in modal so the just-added player disappears from results
+                      const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
+                      if (updated) {
+                        setLeague(updated);
+                        const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
+                        if (fresh) setAddPlayerTeam(fresh);
+                      }
+                    }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 text-left">
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
+                      </div>
+                      <span className="text-xs text-muted">{p.rating?.toFixed(0)}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
