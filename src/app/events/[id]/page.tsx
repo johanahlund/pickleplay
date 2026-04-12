@@ -400,6 +400,8 @@ export default function EventDetailPage() {
   const [pairMixed, setPairMixed] = useState(false);
   const [generatingPairs, setGeneratingPairs] = useState(false);
   const [manualPairSelect, setManualPairSelect] = useState<string | null>(null);
+  const [manualMatchFormat, setManualMatchFormat] = useState("");
+  const [manualRankingMode, setManualRankingMode] = useState("");
   const [pairingInProgress, setPairingInProgress] = useState<Set<string>>(new Set());
   const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
@@ -841,6 +843,11 @@ export default function EventDetailPage() {
 
   const addManualMatch = async () => {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
+    // Warn if singles in a doubles event
+    const isSingles = manualTeam1.length === 1 && manualTeam2.length === 1;
+    if (isSingles && event?.format === "doubles") {
+      if (!confirm("This is a doubles event. Create a singles match?")) return;
+    }
     await fetch(`/api/events/${id}/matches`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -848,12 +855,16 @@ export default function EventDetailPage() {
         team1PlayerIds: manualTeam1,
         team2PlayerIds: manualTeam2,
         courtNum: manualCourt,
+        ...(manualMatchFormat ? { matchFormat: manualMatchFormat } : {}),
+        ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
       }),
     });
     setShowAddMatch(false);
     setManualTeam1([]);
     setManualTeam2([]);
     setManualCourt(1);
+    setManualMatchFormat("");
+    setManualRankingMode("");
     setActiveSection("rounds");
     await fetchEvent();
   };
@@ -2217,6 +2228,36 @@ export default function EventDetailPage() {
           </div>
         </div>
       </div>
+      {/* Match overrides */}
+      <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block text-xs text-muted mb-1">Format</label>
+            <select value={manualMatchFormat} onChange={(e) => setManualMatchFormat(e.target.value)}
+              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+              <option value="">Event default ({event.scoringFormat || "1x11"})</option>
+              <option value="1x11">1 set to 11</option>
+              <option value="1x15">1 set to 15</option>
+              <option value="1x21">1 set to 21</option>
+              <option value="3x11">Bo3 to 11</option>
+              <option value="3x15">Bo3 to 15</option>
+              <option value="1xR15">Rally to 15</option>
+              <option value="1xR21">Rally to 21</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs text-muted mb-1">Ranking</label>
+            <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
+              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+              <option value="">Event default ({event.rankingMode || "ranked"})</option>
+              <option value="ranked">Ranked</option>
+              <option value="approval">Approval</option>
+              <option value="none">Unranked</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
         className="w-full bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">Create Match</button>
     </div>

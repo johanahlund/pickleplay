@@ -13,7 +13,7 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
-  const { team1PlayerIds, team2PlayerIds, courtNum } = await req.json();
+  const { team1PlayerIds, team2PlayerIds, courtNum, matchFormat, rankingMode: matchRankingMode } = await req.json();
 
   if (!team1PlayerIds?.length || !team2PlayerIds?.length) {
     return NextResponse.json({ error: "Both teams need players" }, { status: 400 });
@@ -46,7 +46,8 @@ export async function POST(
       courtNum: courtNum || 1,
       round,
       status: "pending",
-      rankingMode: cls.rankingMode,
+      rankingMode: matchRankingMode || cls.rankingMode,
+      ...(matchFormat ? { matchFormat } : {}),
       players: {
         create: [
           ...team1PlayerIds.map((pid: string) => ({ playerId: pid, team: 1 })),
