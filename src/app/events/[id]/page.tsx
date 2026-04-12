@@ -2265,9 +2265,9 @@ export default function EventDetailPage() {
             {!isMatchCompleted && (
               <button onClick={() => { setFocusedMatchId(match.id); close(); }} className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">📺 <span>Focus view</span></button>
             )}
-            {!isMatchCompleted && (
+            {canManage && (
               <button onClick={() => { if (typeof window !== "undefined" && window.speechSynthesis?.speaking) stopAnnouncement(); else { const n1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => p.player.name); const n2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => p.player.name); sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, n1, n2, event.pairingMode === "king_of_court")); } close(); }}
-                className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">🔊 <span>Announce</span></button>
+                className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">🔊 <span>{isMatchCompleted ? "Announce result" : "Announce match"}</span></button>
             )}
             {isMatchCompleted && match.rankingMode === "approval" && !match.scoreConfirmed && (
               <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); close(); }}
