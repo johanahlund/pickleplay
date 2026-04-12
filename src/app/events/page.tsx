@@ -396,7 +396,7 @@ function EventsPage() {
                         return <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto shrink-0">DUPR {label}</span>;
                       })()}
                     </div>
-                    <div className="flex items-center gap-1 mt-1" onClick={(e) => e.preventDefault()}>
+                    <div className="flex items-center gap-1 mt-1">
                       <div className="flex -space-x-1.5">
                         {event.players.slice(0, 8).map((ep, i) => (
                           <div key={i} className="ring-2 ring-white rounded-full">
