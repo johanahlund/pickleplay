@@ -402,6 +402,7 @@ export default function EventDetailPage() {
   const [manualPairSelect, setManualPairSelect] = useState<string | null>(null);
   const [manualMatchFormat, setManualMatchFormat] = useState("");
   const [manualRankingMode, setManualRankingMode] = useState("");
+  const [manualWinBy, setManualWinBy] = useState("");
   const [pairingInProgress, setPairingInProgress] = useState<Set<string>>(new Set());
   const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
@@ -865,6 +866,7 @@ export default function EventDetailPage() {
     setManualCourt(1);
     setManualMatchFormat("");
     setManualRankingMode("");
+    setManualWinBy("");
     setActiveSection("rounds");
     await fetchEvent();
   };
@@ -2235,7 +2237,7 @@ export default function EventDetailPage() {
             <label className="block text-xs text-muted mb-1">Format</label>
             <select value={manualMatchFormat} onChange={(e) => setManualMatchFormat(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">Event default ({event.scoringFormat || "1x11"})</option>
+              <option value="">Default ({event.scoringFormat || "1x11"})</option>
               <option value="1x11">1 set to 11</option>
               <option value="1x15">1 set to 15</option>
               <option value="1x21">1 set to 21</option>
@@ -2245,17 +2247,35 @@ export default function EventDetailPage() {
               <option value="1xR21">Rally to 21</option>
             </select>
           </div>
+          <div className="w-20">
+            <label className="block text-xs text-muted mb-1">Win by</label>
+            <select value={manualWinBy} onChange={(e) => setManualWinBy(e.target.value)}
+              className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+              <option value="">Def</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </div>
           <div className="flex-1">
             <label className="block text-xs text-muted mb-1">Ranking</label>
             <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">Event default ({event.rankingMode || "ranked"})</option>
+              <option value="">Default</option>
               <option value="ranked">Ranked</option>
               <option value="approval">Approval</option>
               <option value="none">Unranked</option>
             </select>
           </div>
         </div>
+        <p className="text-[10px] text-muted mt-1">
+          {(() => {
+            const fmt = manualMatchFormat || event.scoringFormat || "1x11";
+            const wb = manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2";
+            const rm = manualRankingMode || event.rankingMode || "ranked";
+            const fmtLabel = fmt.startsWith("3") ? `Best of 3 to ${fmt.replace(/^3x/, "").replace("R", "")}` : `1 set to ${fmt.replace(/^1x/, "").replace("R", "")}${fmt.includes("R") ? " (rally)" : ""}`;
+            return `${fmtLabel}, win by ${wb}. ${rm === "ranked" ? "Counts towards rankings." : rm === "approval" ? "Needs confirmation." : "Not ranked."}`;
+          })()}
+        </p>
       </div>
 
       <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
