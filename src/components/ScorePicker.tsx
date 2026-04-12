@@ -55,17 +55,14 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChang
   const hasOtherScore = !isNaN(otherScore);
 
   const handleSelect = (n: number) => {
-    if (hasOtherScore) {
-      if (!isValidPair(n, otherScore, targetScore, winBy)) {
-        const msg = getErrorMessage(n, otherScore, targetScore, winBy);
-        setError(msg || `${n}-${otherScore} is not a valid score`);
-        setTimeout(() => setError(null), 3000);
-        return;
-      }
+    if (hasOtherScore && !isValidPair(n, otherScore, targetScore, winBy)) {
+      const msg = getErrorMessage(n, otherScore, targetScore, winBy);
+      setError(msg || `${n}-${otherScore} — adjust other team's score too`);
+    } else {
+      setError(null);
     }
     onChange(String(n));
     setOpen(false);
-    setError(null);
   };
 
   return (
