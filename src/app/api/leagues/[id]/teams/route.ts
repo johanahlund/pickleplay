@@ -10,7 +10,7 @@ export async function POST(
   const { id } = await params;
   try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
-  const { name, clubId, captainId, viceCaptainId } = await req.json();
+  const { name, clubId, captainId, viceCaptainId, slogan } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Team name required" }, { status: 400 });
 
   const team = await prisma.leagueTeam.create({
@@ -20,6 +20,7 @@ export async function POST(
       clubId: clubId || null,
       captainId: captainId || null,
       viceCaptainId: viceCaptainId || null,
+      slogan: slogan?.trim() || null,
       // Copy club logo if linked
       ...(clubId ? { logoUrl: (await prisma.club.findUnique({ where: { id: clubId }, select: { logoUrl: true } }))?.logoUrl } : {}),
     },

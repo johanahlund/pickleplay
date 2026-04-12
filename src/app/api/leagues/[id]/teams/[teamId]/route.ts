@@ -30,6 +30,9 @@ export async function PATCH(
   if (body.captainId !== undefined) data.captainId = body.captainId || null;
   if (body.viceCaptainId !== undefined) data.viceCaptainId = body.viceCaptainId || null;
   if (body.logoUrl !== undefined) data.logoUrl = body.logoUrl;
+  if (body.photoUrl !== undefined) data.photoUrl = body.photoUrl;
+  if (body.slogan !== undefined) data.slogan = body.slogan ? String(body.slogan).trim() : null;
+  if (body.clubId !== undefined) data.clubId = body.clubId || null;
 
   const team = await prisma.leagueTeam.update({ where: { id: teamId }, data });
   return NextResponse.json(team);

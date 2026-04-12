@@ -11,7 +11,9 @@ import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 
 interface Player { id: string; name: string; photoUrl?: string | null; rating: number; gender?: string | null }
 interface LeagueTeam {
-  id: string; name: string; logoUrl: string | null;
+  id: string; name: string; slogan?: string | null;
+  logoUrl: string | null; photoUrl?: string | null;
+  clubId?: string | null;
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
   captain?: { id: string; name: string; photoUrl?: string | null } | null;
   viceCaptain?: { id: string; name: string; photoUrl?: string | null } | null;
@@ -60,7 +62,7 @@ export default function LeagueDetailPage() {
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
-  const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management">("");
+  const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [allClubs, setAllClubs] = useState<{ id: string; name: string; emoji: string }[]>([]);
@@ -79,10 +81,23 @@ export default function LeagueDetailPage() {
   const [matchTeamFilter, setMatchTeamFilter] = useState("");
   const [matchStatusFilter, setMatchStatusFilter] = useState("");
 
-  // Add team state
-  const [showAddTeam, setShowAddTeam] = useState(false);
-  const [newTeamName, setNewTeamName] = useState("");
-  const [newTeamClubId, setNewTeamClubId] = useState("");
+  // Team edit state (used for both add and edit)
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null); // null = creating new
+  const [editTeamName, setEditTeamName] = useState("");
+  const [editTeamSlogan, setEditTeamSlogan] = useState("");
+  const [editTeamClubId, setEditTeamClubId] = useState("");
+  const [editTeamCaptainId, setEditTeamCaptainId] = useState("");
+  const [editTeamViceCaptainId, setEditTeamViceCaptainId] = useState("");
+  const [editTeamLogoUrl, setEditTeamLogoUrl] = useState<string | null>(null);
+  const [editTeamPhotoUrl, setEditTeamPhotoUrl] = useState<string | null>(null);
+  const [editTeamLogoFile, setEditTeamLogoFile] = useState<File | null>(null);
+  const [editTeamLogoPreview, setEditTeamLogoPreview] = useState<string | null>(null);
+  const [editTeamPhotoFile, setEditTeamPhotoFile] = useState<File | null>(null);
+  const [editTeamPhotoPreview, setEditTeamPhotoPreview] = useState<string | null>(null);
+  const [showTeamCaptainPicker, setShowTeamCaptainPicker] = useState(false);
+  const [showTeamVicePicker, setShowTeamVicePicker] = useState(false);
+  const [teamCaptainSearch, setTeamCaptainSearch] = useState("");
+  const [teamViceSearch, setTeamViceSearch] = useState("");
 
   // Add round state
   const [showAddRound, setShowAddRound] = useState(false);
@@ -234,7 +249,7 @@ export default function LeagueDetailPage() {
   };
 
   const deleteCategory = async (catId: string) => {
-    const ok = await confirm({ title: "Remove category", message: "Remove this category? Any games in it will also be removed.", danger: true, confirmText: "Remove" });
+    const ok = await confirm({ title: "Delete category", message: "Delete this category? Any games in it will also be deleted.", danger: true, confirmText: "Delete" });
     if (!ok) return;
     await fetch(`/api/leagues/${id}/categories`, {
       method: "DELETE",
@@ -277,19 +292,75 @@ export default function LeagueDetailPage() {
     fetchLeague();
   };
 
-  const addTeam = async () => {
-    if (!newTeamName.trim()) return;
-    await fetch(`/api/leagues/${id}/teams`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newTeamName.trim(), clubId: newTeamClubId || undefined }),
-    });
-    setNewTeamName(""); setNewTeamClubId(""); setShowAddTeam(false);
+  const openTeamEdit = (team: LeagueTeam | null) => {
+    if (team) {
+      setEditingTeamId(team.id);
+      setEditTeamName(team.name);
+      setEditTeamSlogan(team.slogan || "");
+      setEditTeamClubId(team.clubId || team.club?.id || "");
+      setEditTeamCaptainId(team.captain?.id || "");
+      setEditTeamViceCaptainId(team.viceCaptain?.id || "");
+      setEditTeamLogoUrl(team.logoUrl || null);
+      setEditTeamPhotoUrl(team.photoUrl || null);
+    } else {
+      setEditingTeamId(null);
+      setEditTeamName(""); setEditTeamSlogan(""); setEditTeamClubId("");
+      setEditTeamCaptainId(""); setEditTeamViceCaptainId("");
+      setEditTeamLogoUrl(null); setEditTeamPhotoUrl(null);
+    }
+    setEditTeamLogoFile(null); setEditTeamLogoPreview(null);
+    setEditTeamPhotoFile(null); setEditTeamPhotoPreview(null);
+    setShowTeamCaptainPicker(false); setShowTeamVicePicker(false);
+    setTeamCaptainSearch(""); setTeamViceSearch("");
+    setDirty(false);
+    fetchClubs();
+    fetchPlayers();
+    setEditSection("editTeam");
+  };
+
+  const saveTeamEdit = async () => {
+    const name = editTeamName.trim();
+    if (!name) { alert("Team name required"); return; }
+    let teamId = editingTeamId;
+    const body = {
+      name,
+      slogan: editTeamSlogan.trim() || null,
+      clubId: editTeamClubId || null,
+      captainId: editTeamCaptainId || null,
+      viceCaptainId: editTeamViceCaptainId || null,
+    };
+    if (teamId) {
+      const r = await fetch(`/api/leagues/${id}/teams/${teamId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed to save team"); return; }
+    } else {
+      const r = await fetch(`/api/leagues/${id}/teams`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed to create team"); return; }
+      const created = await r.json();
+      teamId = created.id;
+    }
+    if (teamId && editTeamLogoFile) {
+      const fd = new FormData();
+      fd.append("file", editTeamLogoFile); fd.append("type", "logo");
+      await fetch(`/api/leagues/${id}/teams/${teamId}/photo`, { method: "POST", body: fd });
+    }
+    if (teamId && editTeamPhotoFile) {
+      const fd = new FormData();
+      fd.append("file", editTeamPhotoFile); fd.append("type", "photo");
+      await fetch(`/api/leagues/${id}/teams/${teamId}/photo`, { method: "POST", body: fd });
+    }
+    setDirty(false);
+    setEditSection("");
     fetchLeague();
   };
 
   const removeTeam = async (teamId: string) => {
-    const ok = await confirm({ title: "Remove team", message: "Remove this team and all its players from the league?", danger: true, confirmText: "Remove" });
+    const ok = await confirm({ title: "Delete team", message: "Delete this team and all its players from the league?", danger: true, confirmText: "Delete" });
     if (!ok) return;
     await fetch(`/api/leagues/${id}/teams/${teamId}`, { method: "DELETE" });
     fetchLeague();
@@ -540,6 +611,158 @@ export default function LeagueDetailPage() {
             <button onClick={() => { setDirty(false); setEditSection("categories"); }}
               className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (editSection === "editTeam") {
+    const captainPlayer = editTeamCaptainId ? allPlayers.find((p) => p.id === editTeamCaptainId) : null;
+    const vicePlayer = editTeamViceCaptainId ? allPlayers.find((p) => p.id === editTeamViceCaptainId) : null;
+    const playerResults = (search: string, excludeIds: string[]) =>
+      allPlayers.filter((p) => !excludeIds.includes(p.id) && p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10);
+
+    return (
+      <div className="space-y-2">
+        {editBackLink("")}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">{editingTeamId ? "Edit Team" : "Add Team"}</h3>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Team Name</label>
+            <input type="text" value={editTeamName}
+              onChange={(e) => { setEditTeamName(e.target.value); setDirty(true); }}
+              placeholder="e.g. Leiria"
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Slogan (optional)</label>
+            <input type="text" value={editTeamSlogan}
+              onChange={(e) => { setEditTeamSlogan(e.target.value); setDirty(true); }}
+              placeholder="e.g. Smashing Champions"
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Link to Club (optional)</label>
+            <select value={editTeamClubId}
+              onChange={(e) => {
+                setEditTeamClubId(e.target.value); setDirty(true);
+                if (!editTeamName && e.target.value) {
+                  const c = allClubs.find((c) => c.id === e.target.value);
+                  if (c) setEditTeamName(c.name);
+                }
+              }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">No club</option>
+              {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Logo</label>
+            <div className="flex items-center gap-3">
+              {(editTeamLogoPreview || editTeamLogoUrl) ? (
+                <img src={editTeamLogoPreview || editTeamLogoUrl || ""} alt="" className="w-14 h-14 rounded object-cover border border-border" />
+              ) : (
+                <div className="w-14 h-14 rounded bg-gray-100 flex items-center justify-center text-muted text-xs border border-border">No logo</div>
+              )}
+              <input type="file" accept="image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { setEditTeamLogoFile(f); setEditTeamLogoPreview(URL.createObjectURL(f)); setDirty(true); }
+                }}
+                className="text-xs flex-1" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Team Photo</label>
+            <div className="space-y-2">
+              {(editTeamPhotoPreview || editTeamPhotoUrl) ? (
+                <img src={editTeamPhotoPreview || editTeamPhotoUrl || ""} alt="" className="w-full max-h-48 rounded object-cover border border-border" />
+              ) : (
+                <div className="w-full h-24 rounded bg-gray-100 flex items-center justify-center text-muted text-xs border border-border">No photo</div>
+              )}
+              <input type="file" accept="image/*"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { setEditTeamPhotoFile(f); setEditTeamPhotoPreview(URL.createObjectURL(f)); setDirty(true); }
+                }}
+                className="text-xs" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Team Leader</label>
+            {captainPlayer && !showTeamCaptainPicker ? (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <PlayerAvatar name={captainPlayer.name} photoUrl={captainPlayer.photoUrl} size="xs" />
+                <span className="text-sm font-medium flex-1">{captainPlayer.name}</span>
+                <button onClick={() => { setEditTeamCaptainId(""); setDirty(true); }} className="text-xs text-danger px-1">✕</button>
+                <button onClick={() => { setShowTeamCaptainPicker(true); setTeamCaptainSearch(""); }} className="text-xs text-muted hover:text-foreground">Change</button>
+              </div>
+            ) : showTeamCaptainPicker ? (
+              <div>
+                <input type="text" value={teamCaptainSearch}
+                  onChange={(e) => setTeamCaptainSearch(e.target.value)}
+                  placeholder="Search team leader..." autoFocus
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
+                <div className="max-h-40 overflow-y-auto space-y-0.5">
+                  {playerResults(teamCaptainSearch, [editTeamViceCaptainId]).map((p) => (
+                    <button key={p.id} onClick={() => { setEditTeamCaptainId(p.id); setShowTeamCaptainPicker(false); setDirty(true); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                      <span className="text-sm">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setShowTeamCaptainPicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => { setShowTeamCaptainPicker(true); setTeamCaptainSearch(""); }}
+                className="w-full text-left border border-dashed border-border rounded-lg px-3 py-2 text-sm text-muted hover:bg-gray-50">
+                + Select team leader
+              </button>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs text-muted mb-1">Deputy</label>
+            {vicePlayer && !showTeamVicePicker ? (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <PlayerAvatar name={vicePlayer.name} photoUrl={vicePlayer.photoUrl} size="xs" />
+                <span className="text-sm font-medium flex-1">{vicePlayer.name}</span>
+                <button onClick={() => { setEditTeamViceCaptainId(""); setDirty(true); }} className="text-xs text-danger px-1">✕</button>
+                <button onClick={() => { setShowTeamVicePicker(true); setTeamViceSearch(""); }} className="text-xs text-muted hover:text-foreground">Change</button>
+              </div>
+            ) : showTeamVicePicker ? (
+              <div>
+                <input type="text" value={teamViceSearch}
+                  onChange={(e) => setTeamViceSearch(e.target.value)}
+                  placeholder="Search deputy..." autoFocus
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
+                <div className="max-h-40 overflow-y-auto space-y-0.5">
+                  {playerResults(teamViceSearch, [editTeamCaptainId]).map((p) => (
+                    <button key={p.id} onClick={() => { setEditTeamViceCaptainId(p.id); setShowTeamVicePicker(false); setDirty(true); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                      <span className="text-sm">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setShowTeamVicePicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => { setShowTeamVicePicker(true); setTeamViceSearch(""); }}
+                className="w-full text-left border border-dashed border-border rounded-lg px-3 py-2 text-sm text-muted hover:bg-gray-50">
+                + Select deputy
+              </button>
+            )}
+          </div>
+
+          {editFooter(saveTeamEdit, "")}
         </div>
       </div>
     );
@@ -1105,19 +1328,35 @@ export default function LeagueDetailPage() {
         <div className="space-y-3">
           {league.teams.map((team) => (
             <div key={team.id} className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {team.club?.logoUrl ? <img src={team.club.logoUrl} alt="" className="w-6 h-6 rounded object-cover" /> : <span>{team.club?.emoji || "🏓"}</span>}
-                  <span className="font-semibold text-sm">{team.name}</span>
-                  <span className="text-xs text-muted">({team._count.players} players)</span>
+              {team.photoUrl && (
+                <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
+              )}
+              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {team.logoUrl ? <img src={team.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
+                    : team.club?.logoUrl ? <img src={team.club.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
+                    : <span className="text-lg">{team.club?.emoji || "🏓"}</span>}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-sm truncate">{team.name}</span>
+                      <span className="text-xs text-muted shrink-0">({team._count.players})</span>
+                    </div>
+                    {team.slogan && <div className="text-[11px] italic text-muted truncate">&ldquo;{team.slogan}&rdquo;</div>}
+                  </div>
                 </div>
-                <button onClick={() => removeTeam(team.id)} className="text-xs text-danger hover:underline">Remove</button>
+                {canEdit && (
+                  <button onClick={() => openTeamEdit(team)} className="text-muted hover:text-foreground p-1 shrink-0" aria-label="Edit team">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  </button>
+                )}
               </div>
-              {/* Captain / Vice */}
-              <div className="px-3 py-1.5 text-xs text-muted flex gap-3 border-b border-border">
-                {team.captain && <span>Captain: <span className="font-medium text-foreground">{team.captain.name}</span></span>}
-                {team.viceCaptain && <span>Vice: <span className="font-medium text-foreground">{team.viceCaptain.name}</span></span>}
-              </div>
+              {/* Leader / Deputy */}
+              {(team.captain || team.viceCaptain) && (
+                <div className="px-3 py-1.5 text-xs text-muted flex gap-3 border-b border-border">
+                  {team.captain && <span>Leader: <span className="font-medium text-foreground">{team.captain.name}</span></span>}
+                  {team.viceCaptain && <span>Deputy: <span className="font-medium text-foreground">{team.viceCaptain.name}</span></span>}
+                </div>
+              )}
               {/* Player roster */}
               <div className="px-3 py-2 space-y-1">
                 {team.players.map((tp) => (
@@ -1152,35 +1391,11 @@ export default function LeagueDetailPage() {
             </div>
           ))}
 
-          {/* Add team */}
-          {!showAddTeam ? (
-            <button onClick={() => { setShowAddTeam(true); fetchClubs(); }}
+          {canEdit && (
+            <button onClick={() => openTeamEdit(null)}
               className="w-full py-2.5 rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5">
               + Add Team
             </button>
-          ) : (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-              <div>
-                <label className="block text-xs text-muted mb-1">Team Name</label>
-                <input type="text" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)}
-                  placeholder="e.g. Leiria" autoFocus
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs text-muted mb-1">Link to Club (optional)</label>
-                <select value={newTeamClubId} onChange={(e) => { setNewTeamClubId(e.target.value); if (!newTeamName && e.target.value) { const c = allClubs.find((c) => c.id === e.target.value); if (c) setNewTeamName(c.name); } }}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm">
-                  <option value="">No club</option>
-                  {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={addTeam} disabled={!newTeamName.trim()}
-                  className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">Add Team</button>
-                <button onClick={() => setShowAddTeam(false)}
-                  className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-              </div>
-            </div>
           )}
         </div>
       )}

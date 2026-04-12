@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
+import { COUNTRIES } from "@/lib/countries";
 
 // ── Long press to delete ──
 function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void; confirmMessage: string }) {
@@ -110,6 +111,7 @@ interface Club {
   description?: string | null;
   city?: string | null;
   country?: string | null;
+  status?: string | null;
   createdById: string | null;
   members: ClubMember[];
   whatsappGroups: WaGroup[];
@@ -344,6 +346,7 @@ export default function ClubDetailPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editCity, setEditCity] = useState("");
   const [editCountry, setEditCountry] = useState("");
+  const [editStatus, setEditStatus] = useState<"draft" | "active" | "closed">("active");
   const [editLocations, setEditLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostContent, setNewPostContent] = useState("");
@@ -441,6 +444,7 @@ export default function ClubDetailPage() {
         description: editDescription,
         city: editCity,
         country: editCountry,
+        status: editStatus,
         locations: editLocations.filter((l) => l.name.trim()),
       }),
     });
@@ -455,6 +459,7 @@ export default function ClubDetailPage() {
     setEditDescription(club.description || "");
     setEditCity(club.city || "");
     setEditCountry(club.country || "");
+    setEditStatus((club.status as "draft" | "active" | "closed") || "active");
     setEditLocations(
       club.locations.length > 0
         ? club.locations.map((l) => ({ name: l.name, googleMapsUrl: l.googleMapsUrl || "" }))
@@ -744,10 +749,21 @@ export default function ClubDetailPage() {
                 </div>
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-muted mb-1">Country</label>
-                  <input type="text" value={editCountry} onChange={(e) => { setEditCountry(e.target.value); setClubDirty(true); }}
-                    placeholder="e.g. Portugal"
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                  <select value={editCountry} onChange={(e) => { setEditCountry(e.target.value); setClubDirty(true); }}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+                    <option value="">Select country...</option>
+                    {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Status</label>
+                <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value as "draft" | "active" | "closed"); setClubDirty(true); }}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+                  <option value="draft">Draft</option>
+                  <option value="active">Active</option>
+                  <option value="closed">Closed</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">Description</label>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ClearInput } from "@/components/ClearInput";
+import { COUNTRIES } from "@/lib/countries";
 
 interface ClubLocation {
   id: string;
@@ -49,6 +50,7 @@ export default function ClubsPage() {
   const [newDescription, setNewDescription] = useState("");
   const [newCity, setNewCity] = useState("");
   const [newCountry, setNewCountry] = useState("");
+  const [newStatus, setNewStatus] = useState<"draft" | "active" | "closed">("active");
   const [newLocations, setNewLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
   const [newLogoFile, setNewLogoFile] = useState<File | null>(null);
   const [newLogoPreview, setNewLogoPreview] = useState<string | null>(null);
@@ -91,6 +93,7 @@ export default function ClubsPage() {
         description: newDescription.trim() || undefined,
         city: newCity.trim() || undefined,
         country: newCountry.trim() || undefined,
+        status: newStatus,
         locations: newLocations.filter((l) => l.name.trim()),
       }),
     });
@@ -112,7 +115,7 @@ export default function ClubsPage() {
       }
       await Promise.all(uploads);
     }
-    setNewName(""); setNewDescription(""); setNewCity(""); setNewCountry("");
+    setNewName(""); setNewDescription(""); setNewCity(""); setNewCountry(""); setNewStatus("active");
     setNewLocations([]); setNewLogoFile(null); setNewLogoPreview(null);
     setNewCoverFile(null); setNewCoverPreview(null);
     setShowCreate(false);
@@ -228,10 +231,21 @@ export default function ClubsPage() {
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium text-muted mb-1">Country</label>
-              <input type="text" value={newCountry} onChange={(e) => setNewCountry(e.target.value)}
-                placeholder="e.g. Portugal"
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              <select value={newCountry} onChange={(e) => setNewCountry(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+                <option value="">Select country...</option>
+                {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Status</label>
+            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as "draft" | "active" | "closed")}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white">
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Description</label>

@@ -71,6 +71,7 @@ model Club {
   description String?
   city        String?
   country     String?
+  status      String   @default("active") // "draft" | "active" | "closed"
   ratingOffset Float?  // club rating - global rating offset (calculated)
   ratingBridgePlayers Int @default(0) // how many players have global ratings
   createdAt   DateTime @default(now())
@@ -473,9 +474,11 @@ model LeagueTeam {
   leagueId      String
   clubId        String? // optional link to Club
   name          String
+  slogan        String?
   logoUrl       String?
-  captainId     String?
-  viceCaptainId String?
+  photoUrl      String? // team group photo
+  captainId     String? // "Team Leader"
+  viceCaptainId String? // "Deputy"
 
   league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   club        Club?    @relation(fields: [clubId], references: [id])
