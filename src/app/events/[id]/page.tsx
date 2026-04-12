@@ -1970,44 +1970,42 @@ export default function EventDetailPage() {
 
   const renderRounds = () => (
     <div className="space-y-3">
-      {/* Sticky header: actions + courts */}
+      {/* Sticky header: courts + actions */}
       <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-1 space-y-2 shadow-sm">
-      {/* Actions + refresh */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {canManage && (
-            <>
-              {event.pairingMode !== "manual" && (
-                <div className="flex items-center gap-1">
-                  {!isIncremental && (
-                    <div className="flex items-center gap-0 mr-1">
-                      <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
-                      <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
-                      <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
-                    </div>
-                  )}
-                  <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
-                    className="bg-action text-white px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50">
-                    {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
-                  </button>
-                </div>
-              )}
-              <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-2 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
-            </>
-          )}
-        </div>
-        <button onClick={() => fetchEvent()} className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-lg hover:bg-gray-100">🔄</button>
-      </div>
-
       {/* Court availability */}
       {freeCourts.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm text-green-700 flex items-center gap-2">
+        <div className="bg-green-50 border border-green-200 rounded-xl p-2 text-sm text-green-700 flex items-center gap-2">
           <span className="font-medium">Courts available:</span>
           <div className="flex gap-1.5">
             {freeCourts.map((c) => (
               <span key={c} className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">{c}</span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Actions + refresh */}
+      {canManage && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {event.pairingMode !== "manual" && (
+              <div className="flex items-center gap-1">
+                {!isIncremental && (
+                  <div className="flex items-center gap-0 mr-1">
+                    <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+                    <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+                    <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+                  </div>
+                )}
+                <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
+                  className="bg-action text-white px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50">
+                  {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
+                </button>
+              </div>
+            )}
+            <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-2 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
+          </div>
+          <button onClick={() => fetchEvent()} className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-lg hover:bg-gray-100">🔄</button>
         </div>
       )}
       </div>{/* end sticky */}
