@@ -158,9 +158,7 @@ export default function ClubsPage() {
     setRequesting(null);
   };
 
-  if (loading) {
-    return <div className="text-center py-12 text-muted">Loading...</div>;
-  }
+  // Loading handled inline
 
   return (
     <div className="space-y-4">
@@ -288,7 +286,9 @@ export default function ClubsPage() {
       )}
 
       {/* My clubs */}
-      {clubs.length === 0 && isLoggedIn ? (
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+      ) : clubs.length === 0 && isLoggedIn ? (
         <div className="text-center py-8">
           <p className="text-muted text-sm">You haven&apos;t joined any clubs yet</p>
         </div>

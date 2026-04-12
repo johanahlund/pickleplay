@@ -82,7 +82,7 @@ function MatchesPage() {
     return { wins, losses, total: filtered.filter((m) => m.status === "completed").length };
   }, [filtered, userId]);
 
-  if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
+  // Loading handled inline
 
   // Filter pills
   const activeFilters: string[] = [];
@@ -218,7 +218,9 @@ function MatchesPage() {
       )}
 
       {/* Match list — grouped */}
-      {!showFilters && (
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+      ) : !showFilters && (
         <>
           {/* Active */}
           {activeMatches.length > 0 && (

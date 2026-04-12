@@ -197,7 +197,7 @@ function EventsPage() {
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
+  // Loading handled inline below — header always shows
 
   // Active filter summary
   const activeFilters: string[] = [];
@@ -315,7 +315,9 @@ function EventsPage() {
       )}
 
       {/* Events list — hidden when filter panel is open */}
-      {!showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+      ) : !showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
         <div className="text-center py-8"><p className="text-muted text-sm">No events match your filters.</p></div>
       ) : filteredEvents.length === 0 ? (
         <div className="text-center py-12">
