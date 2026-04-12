@@ -854,6 +854,7 @@ export default function EventDetailPage() {
     setManualTeam1([]);
     setManualTeam2([]);
     setManualCourt(1);
+    setActiveSection("rounds");
     await fetchEvent();
   };
 
