@@ -30,7 +30,7 @@ export function ScorePicker({ value, targetScore, onChange }: ScorePickerProps) 
             <div className="text-center mb-4">
               <span className="text-sm font-semibold text-muted">Select Score</span>
             </div>
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {numbers.map((n) => (
                 <button
                   key={n}
