@@ -2000,7 +2000,12 @@ export default function EventDetailPage() {
       {/* Court availability */}
       {freeCourts.length > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 text-sm text-green-700 flex items-center gap-2">
-          <span>🏟</span><span>Courts {freeCourts.join(", ")} available</span>
+          <span className="font-medium">Courts available:</span>
+          <div className="flex gap-1.5">
+            {freeCourts.map((c) => (
+              <span key={c} className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">{c}</span>
+            ))}
+          </div>
         </div>
       )}
 
