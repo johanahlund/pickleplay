@@ -2195,14 +2195,16 @@ export default function EventDetailPage() {
   // ── Section: Add Match Manually ──
   const renderManual = () => (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <span className="text-lg font-semibold text-foreground">Court</span>
-        <button type="button" onClick={() => setManualCourt(manualCourt >= event.numCourts ? 1 : manualCourt + 1)}
-          className="w-14 h-14 rounded-xl bg-selected text-white font-bold text-3xl flex items-center justify-center active:opacity-80">{manualCourt}</button>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-lg font-semibold text-foreground mb-1">Team 1 ({manualTeam1.length})</label>
+      {/* Players card */}
+      <div className="bg-card rounded-xl border border-border p-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-muted">Court</span>
+          <button type="button" onClick={() => setManualCourt(manualCourt >= event.numCourts ? 1 : manualCourt + 1)}
+            className="w-12 h-12 rounded-xl bg-selected text-white font-bold text-2xl flex items-center justify-center active:opacity-80">{manualCourt}</button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-1">Team 1 ({manualTeam1.length})</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 1)}
@@ -2216,7 +2218,7 @@ export default function EventDetailPage() {
           </div>
         </div>
         <div>
-          <label className="block text-lg font-semibold text-foreground mb-1">Team 2 ({manualTeam2.length})</label>
+          <label className="block text-sm font-semibold text-foreground mb-1">Team 2 ({manualTeam2.length})</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 2)}
@@ -2229,16 +2231,17 @@ export default function EventDetailPage() {
             ))}
           </div>
         </div>
+        </div>
       </div>
-      {/* Match overrides */}
-      <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      {/* Match settings card */}
+      <div className="bg-card rounded-xl border border-border p-3 space-y-2">
         {/* Format + Win by */}
         <div className="flex gap-2">
           <div className="w-[55%]">
             <label className="block text-xs text-muted mb-1">Format</label>
             <select value={manualMatchFormat} onChange={(e) => setManualMatchFormat(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">{event.scoringFormat || "1x11"} (default)</option>
+              <option value="">{event.scoringFormat || "1x11"} (event default)</option>
               <option value="1x11">1 set to 11</option>
               <option value="1x15">1 set to 15</option>
               <option value="1x21">1 set to 21</option>
@@ -2255,12 +2258,12 @@ export default function EventDetailPage() {
             <label className="block text-xs text-muted mb-1">Win by</label>
             <select value={manualWinBy} onChange={(e) => setManualWinBy(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (default)</option>
+              <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (event default)</option>
               <option value="1">1</option>
               <option value="2">2</option>
             </select>
             <p className="text-[10px] text-muted mt-0.5">
-              {(manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2") === "1" ? "First to target wins" : "Must lead by 2 points"}
+              {(manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2") === "1" ? "First to target wins" : "Must win by 2 points"}
             </p>
           </div>
         </div>
@@ -2269,7 +2272,7 @@ export default function EventDetailPage() {
           <label className="block text-xs text-muted mb-1">Ranking</label>
           <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
             className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-            <option value="">{(event.rankingMode || "ranked").charAt(0).toUpperCase() + (event.rankingMode || "ranked").slice(1)} (default)</option>
+            <option value="">{(event.rankingMode || "ranked").charAt(0).toUpperCase() + (event.rankingMode || "ranked").slice(1)} (event default)</option>
             <option value="ranked">Ranked</option>
             <option value="approval">Approval</option>
             <option value="none">Unranked</option>
