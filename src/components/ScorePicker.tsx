@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ScorePickerProps {
   value: string;
@@ -8,6 +8,8 @@ interface ScorePickerProps {
   winBy: number;
   otherTeamScore: string;
   teamLabel?: string;
+  autoOpen?: boolean;
+  onAutoOpened?: () => void;
   onChange: (value: string) => void;
   onClearBoth?: () => void;
 }
@@ -43,10 +45,23 @@ function getErrorMessage(score: number, otherScore: number, target: number, winB
   return null;
 }
 
-export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, onChange, onClearBoth }: ScorePickerProps) {
+export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, autoOpen, onAutoOpened, onChange, onClearBoth }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+
+  // Auto-open when requested (for team 2 after team 1 is selected)
+  useEffect(() => {
+    if (autoOpen && !open) {
+      setOpen(true);
+      setExtraRows(0);
+      setError(null);
+      setFlash(true);
+      setTimeout(() => setFlash(false), 1500);
+      onAutoOpened?.();
+    }
+  }, [autoOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const baseRows = targetScore <= 11 ? 4 : targetScore <= 15 ? 5 : 6;
   const cols = 4;
@@ -80,8 +95,8 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
       {open && (
         <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center" onClick={() => { setOpen(false); setError(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="text-center mb-4">
-              <span className="text-sm font-semibold">{teamLabel || "Select Score"}</span>
+            <div className={`text-center mb-4 py-2 rounded-xl transition-all ${flash ? "bg-action/10 scale-105" : ""}`}>
+              <span className={`font-bold ${flash ? "text-xl text-action animate-pulse" : "text-lg"}`}>{teamLabel || "Select Score"}</span>
               {hasOtherScore && <span className="text-xs text-muted block mt-0.5">Other team: {otherScore}</span>}
             </div>
             {error && (

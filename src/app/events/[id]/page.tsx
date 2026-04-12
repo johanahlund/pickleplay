@@ -405,6 +405,7 @@ export default function EventDetailPage() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
   const [openMenuMatchId, setOpenMenuMatchId] = useState<string | null>(null);
+  const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
   const [rallyVisible, setRallyVisible] = useState(false);
   const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -1867,8 +1868,7 @@ export default function EventDetailPage() {
               const canQuickScore = showInputs && !hasLiveScore;
               return (
                 <div className={`flex items-center gap-1 p-1.5 rounded-lg ${won && !isEditing ? "bg-green-50" : ""}`}
-                  onClick={() => { if (canQuickScore) setMatchScore(match.id, teamKey, String(targetScore)); }}
-                  style={canQuickScore ? { cursor: "pointer" } : undefined}>
+>
                   <div className="flex-1 min-w-0 space-y-0.5">
                     {teamPlayers.map((mp) => renderPlayerRow(mp))}
                   </div>
@@ -1882,7 +1882,15 @@ export default function EventDetailPage() {
                         <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
                           otherTeamScore={scores[match.id]?.[otherTeamKey] ?? ""}
                           teamLabel={teamPlayers.map((mp) => mp.player.name.split(" ")[0]).join(" & ")}
-                          onChange={(v) => setMatchScore(match.id, teamKey, v)}
+                          autoOpen={autoOpenScoreTeam?.matchId === match.id && autoOpenScoreTeam?.team === teamKey}
+                          onAutoOpened={() => setAutoOpenScoreTeam(null)}
+                          onChange={(v) => {
+                            setMatchScore(match.id, teamKey, v);
+                            // Auto-open other team's picker if it doesn't have a score yet
+                            if (!scores[match.id]?.[otherTeamKey]) {
+                              setTimeout(() => setAutoOpenScoreTeam({ matchId: match.id, team: otherTeamKey }), 300);
+                            }
+                          }}
                           onClearBoth={() => setScores((prev) => { const next = { ...prev }; delete next[match.id]; return next; })} />
                       </div>
                     ) : (
