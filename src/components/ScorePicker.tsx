@@ -66,10 +66,15 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
   const baseRows = targetScore <= 11 ? 4 : targetScore <= 15 ? 5 : 6;
   const cols = 4;
   const visibleCount = (baseRows + extraRows) * cols;
-  const allNumbers = Array.from({ length: visibleCount }, (_, i) => i);
 
   const otherScore = parseInt(otherTeamScore);
   const hasOtherScore = !isNaN(otherScore);
+
+  // When other score is set, generate enough numbers to include winning scores
+  const maxNum = hasOtherScore
+    ? Math.max(visibleCount, otherScore + winBy + 4)
+    : visibleCount;
+  const allNumbers = Array.from({ length: maxNum }, (_, i) => i);
 
   // Only show valid numbers when the other team's score is already set
   const numbers = hasOtherScore
