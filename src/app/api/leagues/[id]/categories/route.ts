@@ -12,7 +12,7 @@ export async function POST(
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, format, gender, scoringFormat, winBy } = await req.json();
+  const { name, format, gender, ageGroup, skillMin, skillMax, scoringFormat, winBy } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
   const count = await prisma.leagueCategory.count({ where: { leagueId: id } });
@@ -22,7 +22,10 @@ export async function POST(
       name: name.trim(),
       format: format || "doubles",
       gender: gender || "open",
-      scoringFormat: scoringFormat || "3x15",
+      ageGroup: ageGroup || "open",
+      skillMin: skillMin ?? null,
+      skillMax: skillMax ?? null,
+      scoringFormat: scoringFormat || "3x11",
       winBy: winBy || "2",
       sortOrder: count,
     },

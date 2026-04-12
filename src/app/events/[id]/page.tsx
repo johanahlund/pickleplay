@@ -987,6 +987,7 @@ export default function EventDetailPage() {
     }
   };
 
+  const penIcon = <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>;
   const location = event.club?.locations?.[0];
 
   const ownerName = event.createdBy?.name;
@@ -1029,7 +1030,7 @@ export default function EventDetailPage() {
               "bg-blue-100 text-blue-700"
             }`}>{event.status}</span>
           )}
-          {canManage && <span className="text-[10px] text-muted/50 ml-auto">✏️</span>}
+          {canManage && <span className="text-muted/50 ml-auto">{penIcon}</span>}
         </div>
         <p className="text-xs text-muted mt-0.5">
           {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
@@ -1038,11 +1039,21 @@ export default function EventDetailPage() {
           {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
           {" · "}{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
         </p>
-        <p className="text-xs text-muted mt-0.5">
+        </div>
+    </div>
+  );
+
+  const managerCard = (
+    <div onClick={() => { if (canManage) { fetchAllPlayers(); setActiveSection("admins"); } }}
+      className={`bg-card rounded-xl border border-border p-3 flex items-center gap-2 ${canManage ? "active:opacity-70 cursor-pointer" : ""}`}>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-muted">Event Manager</p>
+        <p className="text-sm font-medium truncate">
           {ownerName || "—"}
-          {helperNames.length > 0 && <span className="text-muted"> ({helperNames.join(", ")})</span>}
+          {helperNames.length > 0 && <span className="text-muted font-normal"> + {helperNames.join(", ")}</span>}
         </p>
       </div>
+      {canManage && <span className="text-muted shrink-0">{penIcon}</span>}
     </div>
   );
 
@@ -1135,6 +1146,15 @@ export default function EventDetailPage() {
 
   // ── Section: When (name + date/time) ──
   const edit = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setHasEdits(true); };
+
+  const editButtons = hasEdits ? (
+    <div className="flex gap-2 mt-4">
+      <button onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
+        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm">Save</button>
+      <button onClick={() => { startEditEvent(); setActiveSection("overview"); }}
+        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
+    </div>
+  ) : null;
 
   const renderWhen = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
@@ -1231,6 +1251,7 @@ export default function EventDetailPage() {
           </div>
         </label>
       </div>
+      {editButtons}
     </div>
   );
 
@@ -1292,6 +1313,7 @@ export default function EventDetailPage() {
           {editRankingMode === "ranked" ? "Scores count towards player rankings immediately" : editRankingMode === "approval" ? "Scores need confirmation by both teams or event admin" : "Scores recorded but don't affect rankings"}
         </p>
       </div>
+      {editButtons}
     </div>
   );
 
@@ -1359,6 +1381,7 @@ export default function EventDetailPage() {
           ))}
         </div>
       )}
+      {editButtons}
     </div>
   );
 
@@ -2593,7 +2616,14 @@ export default function EventDetailPage() {
       <div className="space-y-2">
         {activeSection !== "rounds" && activeSection !== "manual" && (
           <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-            <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
+            <button onClick={async () => {
+              if (hasEdits) {
+                const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+                if (!ok) return;
+                startEditEvent();
+              }
+              setActiveSection("overview");
+            }} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
           </div>
         )}
 
@@ -2687,6 +2717,7 @@ export default function EventDetailPage() {
       <div className="space-y-3">
         {eventBackLink}
         {eventHeader}
+        {managerCard}
         <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
         {/* Total players */}
@@ -2739,7 +2770,7 @@ export default function EventDetailPage() {
                 ({event.rankingMode === "ranked" ? "scores count towards rankings" : event.rankingMode === "approval" ? "confirmation by both teams or admin" : "scores not counted"})
               </span>
             </span>
-            {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
+            {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
           </button>
         </div>
 
@@ -2758,6 +2789,7 @@ export default function EventDetailPage() {
     <div className="space-y-3">
       {eventBackLink}
       {eventHeader}
+      {managerCard}
 
       {/* Speaker */}
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
@@ -2813,7 +2845,7 @@ export default function EventDetailPage() {
               <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
             )}
           </span>
-          {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
+          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
         </div>
       </div>
 
@@ -2822,7 +2854,7 @@ export default function EventDetailPage() {
         <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("pairing"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
           <span className="text-sm text-muted">Pairing</span>
           <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
-          {canManage && <span className="text-[10px] text-muted/50 self-start mt-0.5 ml-3">✏️</span>}
+          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
         </div>
       </div>
 

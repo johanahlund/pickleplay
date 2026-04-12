@@ -3,6 +3,8 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useViewRole, hasRole } from "@/components/RoleToggle";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 
@@ -15,7 +17,7 @@ interface LeagueTeam {
   players: { id: string; playerId: string; player: Player }[];
   _count: { players: number };
 }
-interface LeagueCategory { id: string; name: string; format: string; gender: string; scoringFormat: string; winBy: string; sortOrder: number }
+interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number }
 interface LeagueGame {
   id: string; categoryId: string;
   category: { id: string; name: string };
@@ -31,28 +33,50 @@ interface LeagueMatchDay {
   event?: { id: string; name: string; date: string; status: string } | null;
 }
 interface LeagueRound { id: string; roundNumber: number; name: string | null; suggestedDate: string | null; status: string; matchDays: LeagueMatchDay[] }
+interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; photoUrl?: string | null } }
 interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
   config: { maxRoster?: number; maxPointsPerMatchDay?: number } | null;
   createdBy?: { id: string; name: string } | null;
+  deputy?: { id: string; name: string } | null;
+  helpers: LeagueHelperEntry[];
   teams: LeagueTeam[]; rounds: LeagueRound[]; categories: LeagueCategory[];
 }
 interface Standing { teamId: string; teamName: string; logoUrl: string | null; played: number; won: number; lost: number; drawn: number; points: number; totalCategoryWins: number }
 
-type Tab = "standings" | "rounds" | "teams" | "settings";
+type Tab = "overview" | "standings" | "rounds" | "matches" | "teams";
 
 export default function LeagueDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { viewRole } = useViewRole();
+  const { confirm } = useConfirm();
   const userId = (session?.user as { id?: string })?.id;
+  const userRole = (session?.user as { role?: string })?.role;
 
   const [league, setLeague] = useState<League | null>(null);
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("standings");
+  const [tab, setTab] = useState<Tab>("overview");
+  const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management">("");
+  const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [allClubs, setAllClubs] = useState<{ id: string; name: string; emoji: string }[]>([]);
+
+  // League matches state
+  interface LeagueMatch {
+    id: string; courtNum: number; round: number; status: string; createdAt: string;
+    players: { id: string; playerId: string; team: number; score: number; player: { id: string; name: string; emoji: string; photoUrl?: string | null } }[];
+    roundNumber: number; roundName: string; matchDayId: string;
+    teams: { id: string; name: string }[];
+    event: { id: string; name: string; date: string };
+  }
+  const [leagueMatches, setLeagueMatches] = useState<LeagueMatch[]>([]);
+  const [matchesLoaded, setMatchesLoaded] = useState(false);
+  const [matchRoundFilter, setMatchRoundFilter] = useState("");
+  const [matchTeamFilter, setMatchTeamFilter] = useState("");
+  const [matchStatusFilter, setMatchStatusFilter] = useState("");
 
   // Add team state
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -71,9 +95,38 @@ export default function LeagueDetailPage() {
   const [addingPlayerTeamId, setAddingPlayerTeamId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
 
+  // Edit state
+  const [dirty, setDirty] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSeason, setEditSeason] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editMaxRoster, setEditMaxRoster] = useState(14);
+  const [editMaxPoints, setEditMaxPoints] = useState(3);
+  const [editDeputyId, setEditDeputyId] = useState("");
+  const [helperSearch, setHelperSearch] = useState("");
+  const [showAddHelper, setShowAddHelper] = useState(false);
+  const [showDeputyPicker, setShowDeputyPicker] = useState(false);
+  const [deputySearch, setDeputySearch] = useState("");
+  const [showTransferPicker, setShowTransferPicker] = useState(false);
+  const [transferSearch, setTransferSearch] = useState("");
+
+  // Edit categories state
+  const [editCats, setEditCats] = useState<LeagueCategory[]>([]);
+  const [addingCat, setAddingCat] = useState(false);
+  const [dirtyCats, setDirtyCats] = useState<Set<string>>(new Set());
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatFormat, setNewCatFormat] = useState("doubles");
+  const [newCatGender, setNewCatGender] = useState("open");
+  const [newCatAge, setNewCatAge] = useState("open");
+  const [newCatSkillMin, setNewCatSkillMin] = useState("");
+  const [newCatSkillMax, setNewCatSkillMax] = useState("");
+  const [newCatScoring, setNewCatScoring] = useState("3x11");
+  const [newCatWinBy, setNewCatWinBy] = useState("2");
+
   const fetchLeague = useCallback(async () => {
     const r = await fetch(`/api/leagues/${id}`);
-    if (!r.ok) { router.push("/leagues"); return; }
+    if (!r.ok) { console.error("League fetch failed", r.status, await r.text().catch(() => "")); router.push("/leagues"); return; }
     const data = await r.json();
     setLeague(data);
     setLoading(false);
@@ -88,10 +141,145 @@ export default function LeagueDetailPage() {
 
   useEffect(() => { fetchLeague(); fetchStandings(); }, [fetchLeague, fetchStandings]);
 
+  const fetchLeagueMatches = useCallback(async () => {
+    const r = await fetch(`/api/leagues/${id}/matches`);
+    if (r.ok) { setLeagueMatches(await r.json()); setMatchesLoaded(true); }
+  }, [id]);
+
+  // Lazy-load matches when tab is selected
+  useEffect(() => { if (tab === "matches" && !matchesLoaded) fetchLeagueMatches(); }, [tab, matchesLoaded, fetchLeagueMatches]);
+
+  // Hide bottom nav when in edit views
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (editSection) nav?.classList.add("hidden");
+    else nav?.classList.remove("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, [editSection]);
+
   const fetchPlayers = async () => { if (allPlayers.length) return; const r = await fetch("/api/players"); if (r.ok) setAllPlayers(await r.json()); };
   const fetchClubs = async () => { if (allClubs.length) return; const r = await fetch("/api/clubs"); if (r.ok) setAllClubs(await r.json()); };
 
   if (loading || !league) return <div className="text-center py-12 text-muted">Loading...</div>;
+
+  const isAppAdmin = userRole === "admin" && hasRole(viewRole, "admin");
+  const isDirector = league.createdBy?.id === userId;
+  const isDeputy = league.deputy?.id === userId;
+  const isHelper = league.helpers?.some((h) => h.playerId === userId);
+  const canEdit = isAppAdmin || isDirector || isDeputy || isHelper;
+
+  const startEditInfo = () => {
+    setEditName(league.name);
+    setEditDescription(league.description || "");
+    setEditSeason(league.season || "");
+    setEditStatus(league.status);
+    setEditMaxRoster(league.config?.maxRoster || 14);
+    setEditMaxPoints(league.config?.maxPointsPerMatchDay || 3);
+    setEditDeputyId(league.deputy?.id || "");
+    setShowAddHelper(false);
+    setHelperSearch("");
+    setDirty(false);
+    setEditSection("info");
+  };
+
+  const saveInfo = async () => {
+    await fetch(`/api/leagues/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editName.trim(),
+        description: editDescription.trim() || null,
+        season: editSeason.trim() || null,
+        status: editStatus,
+        config: { maxRoster: editMaxRoster, maxPointsPerMatchDay: editMaxPoints },
+        deputyId: editDeputyId || null,
+      }),
+    });
+    setEditSection("");
+    fetchLeague();
+  };
+
+  const addHelper = async (playerId: string) => {
+    await fetch(`/api/leagues/${id}/helpers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    setHelperSearch("");
+    fetchLeague();
+  };
+
+  const removeHelper = async (playerId: string) => {
+    await fetch(`/api/leagues/${id}/helpers`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    fetchLeague();
+  };
+
+  const startEditCategories = () => {
+    setEditCats(league.categories.map((c) => ({ ...c })));
+    setDirty(false);
+    setEditSection("categories");
+  };
+
+  const saveCategoryEdit = async (cat: LeagueCategory) => {
+    await fetch(`/api/leagues/${id}/categories`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryId: cat.id, name: cat.name, format: cat.format, gender: cat.gender, ageGroup: cat.ageGroup, skillMin: cat.skillMin, skillMax: cat.skillMax, scoringFormat: cat.scoringFormat, winBy: cat.winBy, status: cat.status }),
+    });
+  };
+
+  const deleteCategory = async (catId: string) => {
+    const ok = await confirm({ title: "Remove category", message: "Remove this category? Any games in it will also be removed.", danger: true, confirmText: "Remove" });
+    if (!ok) return;
+    await fetch(`/api/leagues/${id}/categories`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryId: catId }),
+    });
+    setEditCats((prev) => prev.filter((c) => c.id !== catId));
+    fetchLeague();
+  };
+
+  const autoCatName = (format = newCatFormat, gender = newCatGender, age = newCatAge, sMin = newCatSkillMin, sMax = newCatSkillMax) => {
+    const parts = [];
+    if (gender !== "open") parts.push(gender === "male" ? "Men's" : gender === "female" ? "Women's" : "Mixed");
+    parts.push(format === "doubles" ? "Doubles" : "Singles");
+    if (age !== "open") parts.push(age);
+    if (sMin || sMax) parts.push(`${sMin || ""}${sMin && sMax ? "-" : ""}${sMax || ""}+`);
+    return parts.join(" ") || "Open";
+  };
+
+  const addCategory = async () => {
+    const name = autoCatName();
+    if (!name) return;
+    const r = await fetch(`/api/leagues/${id}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name, format: newCatFormat, gender: newCatGender, ageGroup: newCatAge,
+        skillMin: newCatSkillMin ? parseFloat(newCatSkillMin) : null,
+        skillMax: newCatSkillMax ? parseFloat(newCatSkillMax) : null,
+        scoringFormat: newCatScoring, winBy: newCatWinBy,
+      }),
+    });
+    if (r.ok) {
+      setNewCatFormat("doubles"); setNewCatGender("open"); setNewCatAge("open");
+      setNewCatSkillMin(""); setNewCatSkillMax(""); setNewCatScoring("3x11"); setNewCatWinBy("2");
+      await fetchLeague();
+    } else {
+      console.error("Failed to add category", r.status, await r.text().catch(() => ""));
+    }
+  };
+
+  const saveAllCategories = async () => {
+    for (const cat of editCats) await saveCategoryEdit(cat);
+    setEditSection("");
+    fetchLeague();
+  };
 
   const addTeam = async () => {
     if (!newTeamName.trim()) return;
@@ -105,7 +293,8 @@ export default function LeagueDetailPage() {
   };
 
   const removeTeam = async (teamId: string) => {
-    if (!confirm("Remove this team?")) return;
+    const ok = await confirm({ title: "Remove team", message: "Remove this team and all its players from the league?", danger: true, confirmText: "Remove" });
+    if (!ok) return;
     await fetch(`/api/leagues/${id}/teams/${teamId}`, { method: "DELETE" });
     fetchLeague();
   };
@@ -160,31 +349,461 @@ export default function LeagueDetailPage() {
 
   const allTeamPlayerIds = new Set(league.teams.flatMap((t) => t.players.map((p) => p.playerId)));
 
+  // ── Shared edit UI helpers ──
+  const editBackLink = (target: string, label = "← League") => (
+    <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+      <button onClick={async () => {
+        if (dirty) {
+          const ok = await confirm({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+          if (!ok) return;
+        }
+        setDirty(false);
+        setEditSection(target as typeof editSection);
+      }} className="text-sm text-action font-medium">{label} <span className="text-xs text-muted font-normal">({league.name})</span></button>
+    </div>
+  );
+
+  const editFooter = (onSave: () => Promise<void>, target: string) => dirty ? (
+    <div className="flex gap-2 mt-4">
+      <button onClick={async () => { await onSave(); setDirty(false); setEditSection(target as typeof editSection); }}
+        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm">Save</button>
+      <button onClick={() => { setDirty(false); setEditSection(target as typeof editSection); }}
+        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
+    </div>
+  ) : null;
+
+  const d = (fn: (...args: unknown[]) => void) => (...args: unknown[]) => { fn(...args); setDirty(true); };
+
+  // ── Edit section views (clean page) ──
+  if (editSection === "info") {
+    return (
+      <div className="space-y-2">
+        {editBackLink("")}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Edit League Info</h3>
+          <div>
+            <label className="block text-xs text-muted mb-1">Name</label>
+            <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setDirty(true); }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Description</label>
+            <textarea value={editDescription} onChange={(e) => { setEditDescription(e.target.value); setDirty(true); }} rows={2}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted mb-1">Season</label>
+              <input type="text" value={editSeason} onChange={(e) => { setEditSeason(e.target.value); setDirty(true); }} placeholder="e.g. 2025/26"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Status</label>
+              <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setDirty(true); }}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm">
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+          {editFooter(saveInfo, "")}
+        </div>
+      </div>
+    );
+  }
+
+  if (editSection === "format") {
+    return (
+      <div className="space-y-2">
+        {editBackLink("")}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Edit League Format</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted mb-1">Max Roster</label>
+              <input type="number" value={editMaxRoster} onChange={(e) => { setEditMaxRoster(parseInt(e.target.value) || 0); setDirty(true); }} min={1}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Max Pts / Match Day</label>
+              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(parseInt(e.target.value) || 0); setDirty(true); }} min={1}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+          {editFooter(saveInfo, "")}
+        </div>
+      </div>
+    );
+  }
+
+  const scoringSelect = (value: string, onChange: (v: string) => void) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
+      <optgroup label="Normal — 1 Set"><option value="1x7">1 set to 7</option><option value="1x9">1 set to 9</option><option value="1x11">1 set to 11</option><option value="1x15">1 set to 15</option></optgroup>
+      <optgroup label="Normal — Best of 3"><option value="3x11">Bo3 to 11</option><option value="3x15">Bo3 to 15</option></optgroup>
+      <optgroup label="Rally — 1 Set"><option value="1xR15">Rally to 15</option><option value="1xR21">Rally to 21</option></optgroup>
+      <optgroup label="Rally — Best of 3"><option value="3xR15">Bo3 rally 15</option><option value="3xR21">Bo3 rally 21</option></optgroup>
+    </select>
+  );
+  const winBySelect = (value: string, onChange: (v: string) => void) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
+      <option value="1">1</option><option value="2">2</option>
+      <option value="cap13">Cap 13</option><option value="cap15">Cap 15</option><option value="cap17">Cap 17</option>
+      <option value="cap18">Cap 18</option><option value="cap23">Cap 23</option><option value="cap25">Cap 25</option>
+    </select>
+  );
+  const AGE_OPTS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"];
+  const SKILL_OPTS = ["", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"];
+
+  const scoringLabel = (v: string) => {
+    const m: Record<string, string> = { "1x7": "1×7", "1x9": "1×9", "1x11": "1×11", "1x15": "1×15", "3x11": "Bo3×11", "3x15": "Bo3×15", "1xR15": "Rally 15", "1xR21": "Rally 21", "3xR15": "Bo3R15", "3xR21": "Bo3R21" };
+    return m[v] || v;
+  };
+  const genderLabel = (v: string) => ({ male: "Men", female: "Women", mix: "Mixed", open: "Open" }[v] || v);
+
+  if (editSection === "categories") {
+    return (
+      <div className="space-y-2">
+        {editBackLink("")}
+        <h3 className="text-sm font-semibold px-1">Categories</h3>
+        {league.categories.map((cat, idx) => (
+          <div key={cat.id} onClick={() => { setEditCats(league.categories.map((c) => ({ ...c }))); setEditCatIdx(idx); setDirty(false); setEditSection("editCat"); }}
+            className="bg-card rounded-xl border border-border p-3 flex items-center gap-2 active:opacity-70 cursor-pointer">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">{cat.name}</p>
+              <p className="text-xs text-muted">{cat.format} · {genderLabel(cat.gender)}{cat.ageGroup !== "open" ? ` · ${cat.ageGroup}` : ""} · {scoringLabel(cat.scoringFormat)} · win by {cat.winBy}</p>
+            </div>
+            {cat.status === "draft" && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">Draft</span>}
+            <span className="text-muted shrink-0"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>
+          </div>
+        ))}
+        <button onClick={() => { setNewCatFormat("doubles"); setNewCatGender("open"); setNewCatAge("open"); setNewCatSkillMin(""); setNewCatSkillMax(""); setNewCatScoring("3x11"); setNewCatWinBy("2"); setDirty(false); setEditSection("newCat"); }}
+          className="w-full py-2.5 rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5">+ Add Category</button>
+      </div>
+    );
+  }
+
+  if (editSection === "editCat") {
+    const cat = editCats[editCatIdx];
+    if (!cat) { setEditSection("categories"); return null; }
+    const updateCat = (field: string, value: unknown) => {
+      const updated = { ...editCats[editCatIdx], [field]: value };
+      const nameParts = [];
+      const g = field === "gender" ? value as string : cat.gender;
+      const f = field === "format" ? value as string : cat.format;
+      const a = field === "ageGroup" ? value as string : cat.ageGroup;
+      const sMin = field === "skillMin" ? value as number | null : cat.skillMin;
+      const sMax = field === "skillMax" ? value as number | null : cat.skillMax;
+      if (g !== "open") nameParts.push(g === "male" ? "Men's" : g === "female" ? "Women's" : "Mixed");
+      nameParts.push(f === "doubles" ? "Doubles" : "Singles");
+      if (a !== "open") nameParts.push(a);
+      if (sMin || sMax) nameParts.push(`${sMin || ""}${sMin && sMax ? "-" : ""}${sMax || ""}+`);
+      updated.name = nameParts.join(" ") || "Open";
+      const c = [...editCats]; c[editCatIdx] = updated; setEditCats(c);
+      setDirty(true);
+    };
+    return (
+      <div className="space-y-2">
+        {editBackLink("categories", "← Categories")}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">{cat.name}</h3>
+            <button onClick={() => updateCat("status", cat.status === "draft" ? "active" : "draft")}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cat.status === "draft" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
+              {cat.status === "draft" ? "Draft" : "Active"}
+            </button>
+          </div>
+          <div><label className="block text-xs text-muted mb-1">Format</label><select value={cat.format} onChange={(e) => updateCat("format", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="doubles">Doubles</option><option value="singles">Singles</option></select></div>
+          <div><label className="block text-xs text-muted mb-1">Gender</label><select value={cat.gender} onChange={(e) => updateCat("gender", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="open">Open</option><option value="male">Men</option><option value="female">Women</option><option value="mix">Mixed</option></select></div>
+          <div><label className="block text-xs text-muted mb-1">Age Group</label><select value={cat.ageGroup} onChange={(e) => updateCat("ageGroup", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm">{AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}</select></div>
+          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5"><select value={cat.skillMin ?? ""} onChange={(e) => updateCat("skillMin", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "From"}</option>)}</select><span className="text-xs text-muted">–</span><select value={cat.skillMax ?? ""} onChange={(e) => updateCat("skillMax", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "To"}</option>)}</select></div></div>
+          <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(cat.scoringFormat, (v) => updateCat("scoringFormat", v))}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(cat.winBy, (v) => updateCat("winBy", v))}</div></div>
+          {editFooter(async () => { await saveCategoryEdit(cat); fetchLeague(); }, "categories")}
+          <button onClick={async () => { await deleteCategory(cat.id); setDirty(false); setEditSection("categories"); }}
+            className="w-full py-2 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50">Remove Category</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (editSection === "newCat") {
+    return (
+      <div className="space-y-2">
+        {editBackLink("categories", "← Categories")}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">New Category</h3>
+          <div><label className="block text-xs text-muted mb-1">Format</label><select value={newCatFormat} onChange={(e) => setNewCatFormat(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="doubles">Doubles</option><option value="singles">Singles</option></select></div>
+          <div><label className="block text-xs text-muted mb-1">Gender</label><select value={newCatGender} onChange={(e) => setNewCatGender(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="open">Open</option><option value="male">Men</option><option value="female">Women</option><option value="mix">Mixed</option></select></div>
+          <div><label className="block text-xs text-muted mb-1">Age Group</label><select value={newCatAge} onChange={(e) => setNewCatAge(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm">{AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}</select></div>
+          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5"><select value={newCatSkillMin} onChange={(e) => setNewCatSkillMin(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "From"}</option>)}</select><span className="text-xs text-muted">–</span><select value={newCatSkillMax} onChange={(e) => setNewCatSkillMax(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "To"}</option>)}</select></div></div>
+          <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(newCatScoring, setNewCatScoring)}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(newCatWinBy, setNewCatWinBy)}</div></div>
+          <div className="bg-gray-50 rounded-lg px-3 py-2"><span className="text-xs text-muted">Name: </span><span className="text-sm font-medium">{autoCatName()}</span></div>
+          <div className="flex gap-2 mt-4">
+            <button onClick={async () => { await addCategory(); setEditSection("categories"); }}
+              className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm">Add</button>
+            <button onClick={() => { setDirty(false); setEditSection("categories"); }}
+              className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (editSection === "management") {
+    const playerSearchResults = (search: string, excludeIds: string[]) =>
+      allPlayers.filter((p) => !excludeIds.includes(p.id) && p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10);
+
+    const deputyPlayer = editDeputyId ? allPlayers.find((p) => p.id === editDeputyId) : null;
+
+    return (
+      <div className="space-y-2">
+        {editBackLink("")}
+        {/* Directors */}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Directors</h3>
+
+          {/* Director */}
+          <div>
+            <label className="block text-xs text-muted mb-1">Director</label>
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <PlayerAvatar name={league.createdBy?.name || "?"} size="xs" />
+              <span className="text-sm font-medium flex-1">{league.createdBy?.name || "—"}</span>
+              {(isDirector || isAppAdmin) && !showTransferPicker && (
+                <button onClick={() => { setShowTransferPicker(true); setTransferSearch(""); fetchPlayers(); }}
+                  className="text-[10px] text-muted hover:text-foreground">Transfer</button>
+              )}
+            </div>
+            {showTransferPicker && (
+              <div className="mt-1">
+                <input type="text" value={transferSearch} onChange={(e) => setTransferSearch(e.target.value)}
+                  placeholder="Search new director..." autoFocus
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
+                <div className="max-h-40 overflow-y-auto space-y-0.5">
+                  {playerSearchResults(transferSearch, [league.createdBy?.id || ""]).map((p) => (
+                    <button key={p.id} onClick={async () => {
+                      const ok = await confirm({ message: `Transfer director role to ${p.name}? You will become a helper.` });
+                      if (!ok) return;
+                      await fetch(`/api/leagues/${id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ createdById: p.id }),
+                      });
+                      if (userId) await addHelper(userId);
+                      setShowTransferPicker(false);
+                      fetchLeague();
+                    }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                      <span className="text-sm">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setShowTransferPicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+              </div>
+            )}
+          </div>
+
+          {/* Deputy */}
+          <div>
+            <label className="block text-xs text-muted mb-1">Deputy Director</label>
+            {deputyPlayer && !showDeputyPicker ? (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <PlayerAvatar name={deputyPlayer.name} photoUrl={deputyPlayer.photoUrl} size="xs" />
+                <span className="text-sm font-medium flex-1">{deputyPlayer.name}</span>
+                <button onClick={() => { setEditDeputyId(""); setDirty(true); }} className="text-xs text-danger px-1">✕</button>
+                <button onClick={() => { setShowDeputyPicker(true); setDeputySearch(""); fetchPlayers(); }}
+                  className="text-xs text-muted hover:text-foreground">Change</button>
+              </div>
+            ) : showDeputyPicker ? (
+              <div>
+                <input type="text" value={deputySearch} onChange={(e) => setDeputySearch(e.target.value)}
+                  placeholder="Search deputy..." autoFocus
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
+                <div className="max-h-40 overflow-y-auto space-y-0.5">
+                  {playerSearchResults(deputySearch, [league.createdBy?.id || ""]).map((p) => (
+                    <button key={p.id} onClick={() => { setEditDeputyId(p.id); setShowDeputyPicker(false); setDirty(true); }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                      <span className="text-sm">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setShowDeputyPicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => { setShowDeputyPicker(true); setDeputySearch(""); fetchPlayers(); }}
+                className="w-full text-left border border-dashed border-border rounded-lg px-3 py-2 text-sm text-muted hover:bg-gray-50">
+                + Select deputy director
+              </button>
+            )}
+          </div>
+
+          {editFooter(saveInfo, "")}
+        </div>
+
+        {/* Helpers */}
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Helpers ({league.helpers?.length || 0})</h3>
+          <div className="space-y-1">
+            {league.helpers?.map((h) => (
+              <div key={h.id} className="flex items-center gap-2 py-1">
+                <PlayerAvatar name={h.player.name} photoUrl={h.player.photoUrl} size="xs" />
+                <span className="text-sm font-medium flex-1">{h.player.name}</span>
+                <button onClick={() => removeHelper(h.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>
+              </div>
+            ))}
+            {(!league.helpers || league.helpers.length === 0) && <p className="text-xs text-muted">No helpers yet</p>}
+          </div>
+          {showAddHelper ? (
+            <div>
+              <input type="text" value={helperSearch} onChange={(e) => setHelperSearch(e.target.value)}
+                placeholder="Search player..." autoFocus
+                className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
+              <div className="max-h-40 overflow-y-auto space-y-0.5">
+                {playerSearchResults(helperSearch, [league.createdBy?.id || "", ...(league.helpers?.map((h) => h.playerId) || [])]).map((p) => (
+                  <button key={p.id} onClick={() => addHelper(p.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                    <span className="text-sm">{p.name}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowAddHelper(false)} className="text-xs text-muted mt-1">Done</button>
+            </div>
+          ) : (
+            <button onClick={() => { setShowAddHelper(true); setHelperSearch(""); fetchPlayers(); }}
+              className="text-xs text-primary font-medium">+ Add Helper</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div>
+      <div onClick={() => { if (canEdit) startEditInfo(); }}
+        className={canEdit ? "active:opacity-70 cursor-pointer" : ""}>
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold">{league.name}</h2>
-            {league.season && <span className="text-sm text-muted">{league.season}</span>}
+            <span className="text-sm text-muted">Season {league.season || "—"}</span>
           </div>
-          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            league.status === "active" ? "bg-green-100 text-green-700" : league.status === "completed" ? "bg-gray-100 text-muted" : "bg-blue-100 text-blue-700"
-          }`}>{league.status}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              league.status === "active" ? "bg-green-100 text-green-700" : league.status === "completed" ? "bg-gray-100 text-muted" : "bg-blue-100 text-blue-700"
+            }`}>{league.status}</span>
+            {canEdit && (
+              <span className="text-muted">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              </span>
+            )}
+          </div>
         </div>
         {league.description && <p className="text-sm text-muted mt-1">{league.description}</p>}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["standings", "rounds", "teams", "settings"] as const).map((t) => (
+        {(["overview", "standings", "rounds", "matches", "teams"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
               tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
             }`}>{t}</button>
         ))}
       </div>
+
+      {/* ── Overview Tab ── */}
+      {tab === "overview" && (
+        <div className="space-y-3">
+          {/* League Format card */}
+          <div onClick={() => { if (canEdit) { startEditInfo(); setEditSection("format"); } }}
+            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">League Format</h3>
+              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+            </div>
+            <div className="text-sm space-y-1">
+              <p><span className="text-xs text-muted">Max roster </span><span className="font-medium">{league.config?.maxRoster || "—"}</span><span className="text-xs text-muted"> · Max pts/day </span><span className="font-medium">{league.config?.maxPointsPerMatchDay || "—"}</span></p>
+            </div>
+          </div>
+
+          {/* Management card */}
+          <div onClick={() => { if (canEdit) { fetchPlayers(); startEditInfo(); setEditSection("management"); } }}
+            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Management</h3>
+              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+            </div>
+            <div>
+              <p className="text-sm">
+                <span className="text-xs text-muted">Director </span><span className="font-medium">{league.createdBy?.name || "—"}</span>
+                {league.deputy && <><span className="text-xs text-muted"> · Deputy </span><span className="font-medium">{league.deputy.name}</span></>}
+              </p>
+              {league.helpers?.length > 0 && (
+                <p className="text-sm mt-0.5">
+                  <span className="text-xs text-muted">Helpers </span>
+                  {league.helpers.map((h, i) => (
+                    <span key={h.id}><span className="font-medium">{h.player.name}</span>{i < league.helpers.length - 1 && ", "}</span>
+                  ))}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Categories card */}
+          <div onClick={() => { if (canEdit) startEditCategories(); }}
+            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Categories ({league.categories.length})</h3>
+              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+            </div>
+            <div className="space-y-1">
+              {league.categories.map((cat) => (
+                <div key={cat.id} className="flex items-center gap-2 text-sm py-0.5">
+                  <span className="font-medium flex-1">{cat.name}</span>
+                  <span className="text-xs text-muted">{cat.format} · {cat.gender}</span>
+                  {cat.status === "draft" && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Draft</span>}
+                </div>
+              ))}
+              {league.categories.length === 0 && <p className="text-xs text-muted">No categories yet</p>}
+            </div>
+          </div>
+
+          {/* Rounds preview */}
+          <div onClick={() => setTab("rounds")}
+            className="bg-card rounded-xl border border-border p-4 space-y-2 active:opacity-70 cursor-pointer">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Rounds ({league.rounds.length})</h3>
+              <span className="text-xs text-muted">View all ›</span>
+            </div>
+            {league.rounds.length > 0 ? (
+              <div className="space-y-1">
+                {league.rounds.slice(-3).map((r) => (
+                  <div key={r.id} className="flex items-center gap-2 text-sm">
+                    <span className="font-medium flex-1">{r.name || `Round ${r.roundNumber}`}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                      r.status === "completed" ? "bg-green-100 text-green-700" : r.status === "in_progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-muted"
+                    }`}>{r.status}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted">No rounds yet</p>
+            )}
+          </div>
+
+          {canEdit && (
+            <button onClick={async () => {
+              const ok = await confirm({ title: "Delete league", message: "This will permanently delete the league and all its data. This cannot be undone!", danger: true, confirmText: "Delete" });
+              if (!ok) return;
+              await fetch(`/api/leagues/${id}`, { method: "DELETE" });
+              router.push("/leagues");
+            }} className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50">
+              Delete League
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Standings Tab ── */}
       {tab === "standings" && standings && (
@@ -381,6 +1000,110 @@ export default function LeagueDetailPage() {
         </div>
       )}
 
+      {/* ── Matches Tab ── */}
+      {tab === "matches" && (
+        <div className="space-y-3">
+          {/* Filters */}
+          <div className="flex gap-1.5 flex-wrap">
+            <select value={matchRoundFilter} onChange={(e) => setMatchRoundFilter(e.target.value)}
+              className="border border-border rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">All rounds</option>
+              {league.rounds.map((r) => <option key={r.id} value={String(r.roundNumber)}>{r.name || `Round ${r.roundNumber}`}</option>)}
+            </select>
+            <select value={matchTeamFilter} onChange={(e) => setMatchTeamFilter(e.target.value)}
+              className="border border-border rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">All teams</option>
+              {league.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <select value={matchStatusFilter} onChange={(e) => setMatchStatusFilter(e.target.value)}
+              className="border border-border rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">All status</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          {!matchesLoaded ? (
+            <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+          ) : (() => {
+            const filtered = leagueMatches.filter((m) => {
+              if (matchRoundFilter && String(m.roundNumber) !== matchRoundFilter) return false;
+              if (matchTeamFilter && !m.teams.some((t) => t.id === matchTeamFilter)) return false;
+              if (matchStatusFilter && m.status !== matchStatusFilter) return false;
+              return true;
+            });
+
+            if (filtered.length === 0) return <p className="text-center py-8 text-muted text-sm">No matches found</p>;
+
+            // Group by round
+            const byRound = new Map<number, typeof filtered>();
+            for (const m of filtered) {
+              const arr = byRound.get(m.roundNumber) || [];
+              arr.push(m);
+              byRound.set(m.roundNumber, arr);
+            }
+
+            return [...byRound.entries()].sort((a, b) => b[0] - a[0]).map(([roundNum, matches]) => (
+              <div key={roundNum}>
+                <div className="text-xs font-bold text-muted uppercase tracking-wider mb-2">
+                  {matches[0].roundName}
+                </div>
+                <div className="space-y-2">
+                  {matches.map((m) => {
+                    const team1 = m.players.filter((mp) => mp.team === 1);
+                    const team2 = m.players.filter((mp) => mp.team === 2);
+                    const score1 = team1[0]?.score ?? 0;
+                    const score2 = team2[0]?.score ?? 0;
+                    const isCompleted = m.status === "completed";
+                    const myTeam = m.players.find((mp) => mp.playerId === userId)?.team;
+
+                    return (
+                      <Link key={m.id} href={`/events/${m.event.id}`}
+                        className={`block bg-white rounded-xl border border-l-4 overflow-hidden active:bg-gray-50 ${
+                          isCompleted ? (myTeam ? (myTeam === 1 ? score1 > score2 : score2 > score1) ? "border-green-500" : "border-red-400" : "border-gray-300") : "border-action"
+                        }`}>
+                        <div className="px-2.5 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted flex-1">
+                            {m.teams.map((t) => t.name).join(" vs ")} · Court {m.courtNum}
+                          </span>
+                          {isCompleted && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-muted">Done</span>}
+                          {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}
+                        </div>
+                        <div className="px-2 py-1.5">
+                          {[{ players: team1, score: score1 }, { players: team2, score: score2 }].map((side, si) => {
+                            const won = isCompleted && side.score > (si === 0 ? score2 : score1);
+                            const isMyTeam = myTeam === (si + 1);
+                            return (
+                              <div key={si}>
+                              {si === 1 && <div className="h-px bg-border mx-2 my-0.5" />}
+                              <div className={`flex items-center gap-1 p-1.5 rounded-lg ${isMyTeam && isCompleted ? (won ? "bg-green-50" : "bg-red-50") : ""}`}>
+                                <div className="flex-1 min-w-0 space-y-0.5">
+                                  {side.players.map((mp) => (
+                                    <div key={mp.id} className="flex items-center gap-1.5">
+                                      <PlayerAvatar name={mp.player.name} photoUrl={mp.player.photoUrl} size="xs" />
+                                      <span className={`text-sm truncate ${mp.playerId === userId ? "font-bold" : "font-medium"} ${isMyTeam && isCompleted ? (won ? "text-green-700" : "text-red-600") : ""}`}>{mp.player.name}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <span className={`text-2xl font-bold tabular-nums min-w-[2.5rem] text-center ${isCompleted ? (won ? "text-green-600" : "text-red-500") : "text-gray-400"}`}>
+                                  {isCompleted ? side.score : "-"}
+                                </span>
+                              </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
       {/* ── Teams Tab ── */}
       {tab === "teams" && (
         <div className="space-y-3">
@@ -466,54 +1189,6 @@ export default function LeagueDetailPage() {
         </div>
       )}
 
-      {/* ── Settings Tab ── */}
-      {tab === "settings" && (
-        <div className="space-y-3">
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-            <h3 className="text-sm font-semibold">League Info</h3>
-            <div className="text-sm text-muted space-y-1">
-              <p>Created by: {league.createdBy?.name || "Unknown"}</p>
-              <p>Max roster: {league.config?.maxRoster || "No limit"}</p>
-              <p>Max points per match day: {league.config?.maxPointsPerMatchDay || "No limit"}</p>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Categories ({league.categories.length})</h3>
-            <div className="space-y-1">
-              {league.categories.map((cat) => (
-                <div key={cat.id} className="flex items-center gap-2 text-sm py-1">
-                  <span className="font-medium flex-1">{cat.name}</span>
-                  <span className="text-xs text-muted">{cat.format} · {cat.gender} · {cat.scoringFormat}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            {league.status === "draft" && (
-              <button onClick={async () => {
-                await fetch(`/api/leagues/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
-                fetchLeague();
-              }} className="flex-1 bg-green-600 text-white py-2.5 rounded-xl font-medium text-sm">Start League</button>
-            )}
-            {league.status === "active" && (
-              <button onClick={async () => {
-                await fetch(`/api/leagues/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "completed" }) });
-                fetchLeague();
-              }} className="flex-1 bg-gray-600 text-white py-2.5 rounded-xl font-medium text-sm">Complete League</button>
-            )}
-          </div>
-
-          <button onClick={async () => {
-            if (!confirm("Delete this league?") || !confirm("Are you sure? This cannot be undone!")) return;
-            await fetch(`/api/leagues/${id}`, { method: "DELETE" });
-            router.push("/leagues");
-          }} className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50">
-            Delete League
-          </button>
-        </div>
-      )}
     </div>
   );
 }

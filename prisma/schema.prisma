@@ -58,6 +58,8 @@ model Player {
   leagueCaptain     LeagueTeam[]       @relation("teamCaptain")
   leagueViceCaptain LeagueTeam[]       @relation("teamViceCaptain")
   createdLeagues    League[]           @relation("leagueCreator")
+  deputyLeagues     League[]           @relation("leagueDeputy")
+  leagueHelpers     LeagueHelper[]
 }
 
 model Club {
@@ -431,13 +433,27 @@ model League {
   season      String?  // "2025", "Spring 2026"
   status      String   @default("draft") // draft, active, completed
   config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
-  createdById String?
+  createdById String?  // League Director
+  deputyId    String?  // Deputy Director
   createdAt   DateTime @default(now())
 
   createdBy  Player?          @relation("leagueCreator", fields: [createdById], references: [id])
+  deputy     Player?          @relation("leagueDeputy", fields: [deputyId], references: [id])
   teams      LeagueTeam[]
   rounds     LeagueRound[]
   categories LeagueCategory[]
+  helpers    LeagueHelper[]
+}
+
+model LeagueHelper {
+  id       String @id @default(cuid())
+  leagueId String
+  playerId String
+
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId])
 }
 
 model LeagueTeam {
@@ -477,8 +493,12 @@ model LeagueCategory {
   name          String  // "Men's Doubles", "Women's Doubles", "Mixed Doubles", "Singles"
   format        String  @default("doubles") // "doubles" or "singles"
   gender        String  @default("open")    // "male", "female", "mix", "open"
-  scoringFormat String  @default("3x15")    // best of 3 to 15
+  ageGroup      String  @default("open")    // "open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"
+  skillMin      Float?  // DUPR min (e.g. 3.0)
+  skillMax      Float?  // DUPR max (e.g. 4.0)
+  scoringFormat String  @default("3x11")    // e.g. "1x11", "3x11", "1xR15"
   winBy         String  @default("2")
+  status        String  @default("active") // "draft" | "active"
   sortOrder     Int     @default(0)
 
   league League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)

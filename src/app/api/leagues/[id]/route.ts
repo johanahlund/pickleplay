@@ -12,6 +12,8 @@ export async function GET(
     where: { id },
     include: {
       createdBy: { select: { id: true, name: true } },
+      deputy: { select: { id: true, name: true } },
+      helpers: { include: { player: { select: { id: true, name: true, photoUrl: true } } } },
       categories: { orderBy: { sortOrder: "asc" } },
       teams: {
         include: {
@@ -64,6 +66,8 @@ export async function PATCH(
   if (body.season !== undefined) data.season = body.season?.trim() || null;
   if (body.status !== undefined) data.status = body.status;
   if (body.config !== undefined) data.config = body.config;
+  if (body.deputyId !== undefined) data.deputyId = body.deputyId || null;
+  if (body.createdById !== undefined) data.createdById = body.createdById;
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 

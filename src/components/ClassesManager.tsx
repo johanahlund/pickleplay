@@ -28,8 +28,8 @@ interface ClassesManagerProps {
 
 const GENDER_OPTIONS = [
   { value: "open", label: "Any Gender" },
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
+  { value: "male", label: "Men" },
+  { value: "female", label: "Women" },
   { value: "mix", label: "Mixed" },
 ];
 

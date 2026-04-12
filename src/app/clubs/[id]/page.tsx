@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
+import { useConfirm } from "@/components/ConfirmDialog";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -301,6 +302,7 @@ export default function ClubDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { confirm: confirmDialog } = useConfirm();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isGlobalAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -336,6 +338,7 @@ export default function ClubDetailPage() {
   const [addMemberSearch, setAddMemberSearch] = useState("");
   const [showInfo, setShowInfo] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [clubDirty, setClubDirty] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -457,6 +460,7 @@ export default function ClubDetailPage() {
         ? club.locations.map((l) => ({ name: l.name, googleMapsUrl: l.googleMapsUrl || "" }))
         : [{ name: "", googleMapsUrl: "" }]
     );
+    setClubDirty(false);
     setEditing(true);
   };
 
@@ -656,10 +660,23 @@ export default function ClubDetailPage() {
     <div className="space-y-3">
       {/* Back navigation */}
       {tab === "feed" ? (
-        <button onClick={() => router.back()} className="text-sm text-action font-medium">← Back</button>
+        <button onClick={async () => {
+          if (editing && clubDirty) {
+            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+            if (!ok) return;
+            setClubDirty(false); setEditing(false);
+          }
+          router.back();
+        }} className="text-sm text-action font-medium">← Back</button>
       ) : (
-        <button onClick={() => { setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`); }}
-          className="text-sm text-action font-medium">← {club.name}</button>
+        <button onClick={async () => {
+          if (editing && clubDirty) {
+            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+            if (!ok) return;
+            setClubDirty(false); setEditing(false);
+          }
+          setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
+        }} className="text-sm text-action font-medium">← {club.name}</button>
       )}
 
       {/* ── Club Info Panel ── */}
@@ -670,7 +687,7 @@ export default function ClubDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">Club Name</label>
                 <input
-                  type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                  type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setClubDirty(true); }}
                   className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>
@@ -721,13 +738,13 @@ export default function ClubDetailPage() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-muted mb-1">City</label>
-                  <input type="text" value={editCity} onChange={(e) => setEditCity(e.target.value)}
+                  <input type="text" value={editCity} onChange={(e) => { setEditCity(e.target.value); setClubDirty(true); }}
                     placeholder="e.g. Setúbal"
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-muted mb-1">Country</label>
-                  <input type="text" value={editCountry} onChange={(e) => setEditCountry(e.target.value)}
+                  <input type="text" value={editCountry} onChange={(e) => { setEditCountry(e.target.value); setClubDirty(true); }}
                     placeholder="e.g. Portugal"
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
                 </div>
@@ -735,7 +752,7 @@ export default function ClubDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">Description</label>
                 <textarea
-                  value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
+                  value={editDescription} onChange={(e) => { setEditDescription(e.target.value); setClubDirty(true); }}
                   rows={3} placeholder="Tell members about this club..."
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
                 />
@@ -780,10 +797,12 @@ export default function ClubDetailPage() {
 
 
 
-              <div className="flex gap-2">
-                <button onClick={saveEdit} className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium">Save</button>
-                <button onClick={() => setEditing(false)} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-              </div>
+              {clubDirty && (
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium">Save</button>
+                  <button onClick={() => { setClubDirty(false); setEditing(false); }} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+                </div>
+              )}
 
               {isOwner && (
                 <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
@@ -885,7 +904,9 @@ export default function ClubDetailPage() {
                 ) : null}
               </div>
               {canManage && (
-                <button onClick={() => { setShowInfo(true); setEditing(true); }} className="text-sm text-muted hover:text-foreground">✏️</button>
+                <button onClick={() => { setShowInfo(true); setEditing(true); }} className="text-muted hover:text-foreground p-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                </button>
               )}
             </div>
             {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}

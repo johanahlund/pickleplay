@@ -103,8 +103,8 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium"
         >
           <option value="open">Any Gender</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
+          <option value="male">Men</option>
+          <option value="female">Women</option>
           {cls.format === "doubles" && <option value="mix">Mixed</option>}
         </select>
       </div>
