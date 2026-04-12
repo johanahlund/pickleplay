@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -340,6 +341,7 @@ function SwipeablePlayerRow({
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -492,7 +494,7 @@ export default function EventDetailPage() {
   };
 
   const deleteEvent = async () => {
-    if (!confirm("Are you sure you want to delete this event? This cannot be undone.")) return;
+    if (!await confirmDialog({ title: "Delete Event", message: "This will delete the event and all matches. This cannot be undone.", confirmText: "Delete", danger: true })) return;
     await fetch(`/api/events/${id}`, { method: "DELETE" });
     router.push("/events");
   };
@@ -515,11 +517,11 @@ export default function EventDetailPage() {
     const team2Score = parseInt(s.team2);
     if (isNaN(team1Score) || isNaN(team2Score)) return;
     if (team1Score < 0 || team2Score < 0) {
-      alert("Scores cannot be negative!");
+      alertDialog("Scores cannot be negative!");
       return;
     }
     if (team1Score === team2Score) {
-      alert("Scores cannot be tied!");
+      alertDialog("Scores cannot be tied!");
       return;
     }
     // Validate against match scoring rules
@@ -532,9 +534,9 @@ export default function EventDetailPage() {
       if (!isValidPair(team1Score, team2Score, target, wb)) {
         const winner = Math.max(team1Score, team2Score);
         if (winner < target) {
-          alert(`Invalid score: winner must reach at least ${target}`);
+          alertDialog(`Invalid score: winner must reach at least ${target}`);
         } else {
-          alert(`Invalid score: ${team1Score}-${team2Score} doesn't follow win-by-${wb} rules`);
+          alertDialog(`Invalid score: ${team1Score}-${team2Score} doesn't follow win-by-${wb} rules`);
         }
         return;
       }
@@ -559,11 +561,11 @@ export default function EventDetailPage() {
     const team2Score = parseInt(s.team2);
     if (isNaN(team1Score) || isNaN(team2Score)) return;
     if (team1Score < 0 || team2Score < 0) {
-      alert("Scores cannot be negative!");
+      alertDialog("Scores cannot be negative!");
       return;
     }
     if (team1Score === team2Score) {
-      alert("Scores cannot be tied!");
+      alertDialog("Scores cannot be tied!");
       return;
     }
     if (!confirm("Are you sure you want to edit this score? This will recalculate ELO ratings.")) return;
@@ -848,12 +850,12 @@ export default function EventDetailPage() {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
     // Warn if uneven teams
     if (manualTeam1.length !== manualTeam2.length) {
-      if (!confirm(`Teams are uneven (${manualTeam1.length} vs ${manualTeam2.length}). Create match anyway?`)) return;
+      if (!await confirmDialog({ message: `Teams are uneven (${manualTeam1.length} vs ${manualTeam2.length}). Create match anyway?` })) return;
     }
     // Warn if singles in a doubles event
     const isSingles = manualTeam1.length === 1 && manualTeam2.length === 1;
     if (isSingles && event?.format === "doubles") {
-      if (!confirm("This is a doubles event. Create a singles match?")) return;
+      if (!await confirmDialog({ message: "This is a doubles event. Create a singles match?" })) return;
     }
     await fetch(`/api/events/${id}/matches`, {
       method: "POST",
