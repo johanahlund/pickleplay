@@ -395,7 +395,7 @@ export default function EventDetailPage() {
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
-  const [numRounds, setNumRounds] = useState(3);
+  const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
@@ -2014,28 +2014,27 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Actions + refresh */}
+      {/* Actions */}
       {canManage && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {event.pairingMode !== "manual" && (
-              <div className="flex items-center gap-1">
-                {!isIncremental && (
-                  <div className="flex items-center gap-0 mr-1">
-                    <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
-                    <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
-                    <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
-                  </div>
-                )}
-                <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
-                  className="bg-action text-white px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50">
-                  {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
-                </button>
-              </div>
-            )}
-            <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-2 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
-          </div>
-          <button onClick={() => fetchEvent()} className="text-xs text-muted hover:text-foreground px-2 py-1 rounded-lg hover:bg-gray-100">🔄</button>
+        <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-3">
+          {event.pairingMode !== "manual" && (
+            <>
+              {!isIncremental && (
+                <div className="flex items-center gap-0">
+                  <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+                  <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+                  <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+                </div>
+              )}
+              <span className="text-xs text-muted">{isIncremental ? "" : numRounds === 1 ? "Round" : "Rounds"}</span>
+              <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
+                className="bg-action text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
+                {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
+              </button>
+            </>
+          )}
+          <div className="flex-1" />
+          <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-3 py-2 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
         </div>
       )}
       </div>{/* end sticky */}
