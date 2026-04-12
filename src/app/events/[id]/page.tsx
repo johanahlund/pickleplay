@@ -2254,7 +2254,7 @@ export default function EventDetailPage() {
             <span className="text-xs text-muted ml-2">{t1.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")} vs {t2.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")}</span>
           </div>
           <div className="py-1">
-            {isMatchActive && canManage && (
+            {isMatchActive && (canManage || match.scorerId === userId) && (
               <button onClick={() => { setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev); setMatchTab("paused"); fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent()); close(); }}
                 className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">⏸️ <span>Pause match</span></button>
             )}
