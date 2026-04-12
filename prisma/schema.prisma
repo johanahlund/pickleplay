@@ -124,6 +124,7 @@ model ClubMember {
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([clubId, playerId])
+  @@index([playerId])
 }
 
 model ClubJoinRequest {
@@ -191,6 +192,10 @@ model Event {
   helpers        EventHelper[]
   whatsappGroups EventWhatsAppGroup[]
   leagueMatchDay LeagueMatchDay?
+
+  @@index([clubId])
+  @@index([status])
+  @@index([date])
 }
 
 model EventClass {
@@ -239,6 +244,8 @@ model EventClass {
   players  EventPlayer[]
   pairs    EventPair[]
   matches  Match[]
+
+  @@index([eventId])
 }
 
 model Notification {
@@ -278,6 +285,7 @@ model EventPlayer {
   player Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, playerId, classId])
+  @@index([playerId])
 }
 
 model EventPair {
@@ -340,6 +348,9 @@ model Match {
   scorer  Player?       @relation("matchScorer", fields: [scorerId], references: [id])
   players MatchPlayer[]
   leagueGame LeagueGame?
+
+  @@index([eventId])
+  @@index([status])
 }
 
 model CompetitionResult {
@@ -377,6 +388,7 @@ model MatchPlayer {
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, playerId])
+  @@index([playerId])
 }
 
 model WhatsAppGroup {
