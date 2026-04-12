@@ -1925,10 +1925,13 @@ export default function EventDetailPage() {
               </span>
             )}
             {/* Menu */}
-            <div className="relative">
+            <div>
               <button onClick={() => setOpenMenuMatchId(openMenuMatchId === match.id ? null : match.id)} className="w-7 h-7 rounded-full flex items-center justify-center text-muted hover:bg-gray-100 text-sm">⋮</button>
               {openMenuMatchId === match.id && (
-              <div className="absolute right-0 top-7 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[150px]">
+              <>
+              <div className="fixed inset-0 z-[70]" onClick={() => setOpenMenuMatchId(null)} />
+              <div className="fixed right-4 z-[71] bg-white rounded-lg shadow-xl border border-border overflow-hidden min-w-[160px]" style={{ top: "auto", marginTop: "-2rem" }}
+                onClick={() => setOpenMenuMatchId(null)}>
                 {!isCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
                   <button onClick={async () => {
                     if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) { setRallyMatchId(match.id); setRallyVisible(true); return; }
@@ -1962,6 +1965,7 @@ export default function EventDetailPage() {
                   <button onClick={() => deleteMatch(match.id)} className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 text-danger">🗑️ Delete</button>
                 )}
               </div>
+              </>
               )}
             </div>
           </div>
