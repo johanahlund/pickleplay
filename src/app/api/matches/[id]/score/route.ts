@@ -469,12 +469,44 @@ export async function PATCH(
     return NextResponse.json({ error: "Score already confirmed" }, { status: 400 });
   }
 
-  // Allow admin or any player in this match to confirm
-  const isMatchPlayer = match.players.some((mp) => mp.playerId === user.id);
-  if (user.role !== "admin" && !isMatchPlayer) {
-    return NextResponse.json({ error: "Only match participants or admins can confirm" }, { status: 403 });
+  const body = await req.json().catch(() => ({}));
+  const teamToConfirm = body.team as number | undefined; // 1 or 2
+
+  const myTeam = match.players.find((mp) => mp.playerId === user.id)?.team;
+  const isAdmin = user.role === "admin";
+  const isScorer = match.scorerId === user.id;
+  const isEventManager = await (async () => {
+    const evt = await prisma.event.findUnique({ where: { id: match.eventId }, select: { createdById: true } });
+    if (evt?.createdById === user.id) return true;
+    const helper = await prisma.eventHelper.findFirst({ where: { eventId: match.eventId, playerId: user.id } });
+    return !!helper;
+  })();
+
+  const canManagerConfirm = isAdmin || isEventManager || isScorer;
+
+  if (teamToConfirm) {
+    // Per-team confirmation: player confirms their own team, or manager/scorer confirms any team
+    if (teamToConfirm !== myTeam && !canManagerConfirm) {
+      return NextResponse.json({ error: "You can only confirm your own team's score" }, { status: 403 });
+    }
+    const data = teamToConfirm === 1 ? { team1Confirmed: true } : { team2Confirmed: true };
+    await prisma.match.update({ where: { id }, data });
+
+    // Check if both teams now confirmed
+    const updated = await prisma.match.findUnique({ where: { id } });
+    if (updated?.team1Confirmed && updated?.team2Confirmed) {
+      const change = await applyElo(id);
+      return NextResponse.json({ ok: true, eloChange: change, confirmed: true, bothTeams: true });
+    }
+    return NextResponse.json({ ok: true, teamConfirmed: teamToConfirm });
   }
 
+  // Manager/scorer full confirmation (overrides team-by-team)
+  if (!canManagerConfirm) {
+    return NextResponse.json({ error: "Only event managers or scorer can do full confirmation" }, { status: 403 });
+  }
+
+  await prisma.match.update({ where: { id }, data: { team1Confirmed: true, team2Confirmed: true, confirmedById: user.id } });
   const change = await applyElo(id);
 
   return NextResponse.json({

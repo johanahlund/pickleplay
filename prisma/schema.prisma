@@ -315,6 +315,9 @@ model Match {
   status         String   @default("pending")
   rankingMode    String   @default("ranked")
   scoreConfirmed Boolean  @default(false)
+  team1Confirmed Boolean  @default(false)
+  team2Confirmed Boolean  @default(false)
+  confirmedById  String?  // who did final/manager confirmation
   eloChange      Float    @default(0)
 
   // Competition metadata

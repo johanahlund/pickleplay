@@ -47,6 +47,8 @@ interface Match {
   status: string;
   players: MatchPlayer[];
   scoreConfirmed?: boolean;
+  team1Confirmed?: boolean;
+  team2Confirmed?: boolean;
   rankingMode?: string;
   matchFormat?: string | null;
   classId?: string | null;
@@ -1910,6 +1912,33 @@ export default function EventDetailPage() {
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
                     )}
                   </div>
+                  {/* Confirmation checkbox — approval mode only */}
+                  {isCompleted && !isEditing && match.rankingMode === "approval" && !match.scoreConfirmed && (() => {
+                    const teamConfirmed = teamNum === 1 ? match.team1Confirmed : match.team2Confirmed;
+                    const isMyTeam = teamPlayers.some((mp) => mp.playerId === userId);
+                    const canConfirmThis = isMyTeam || canManage || match.scorerId === userId;
+                    return (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!canConfirmThis) return;
+                          if (teamConfirmed) return;
+                          fetch(`/api/matches/${match.id}/score`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ team: teamNum }),
+                          }).then(() => fetchEvent());
+                        }}
+                        disabled={!!teamConfirmed || !canConfirmThis}
+                        className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm transition-all ${
+                          teamConfirmed ? "bg-green-100 text-green-600" : canConfirmThis ? "bg-red-50 text-red-400 border border-red-200 hover:bg-red-100 cursor-pointer" : "bg-gray-50 text-gray-300 border border-gray-200"
+                        }`}
+                        title={teamConfirmed ? "Confirmed" : canConfirmThis ? "Tap to confirm" : "Waiting for confirmation"}
+                      >
+                        {teamConfirmed ? "☑" : "☐"}
+                      </button>
+                    );
+                  })()}
                 </div>
               );
             };
@@ -1923,11 +1952,9 @@ export default function EventDetailPage() {
           })()}
           </div>
 
-          {/* Status indicator */}
-          {isCompleted && !isEditing && (
-            <span className={`text-sm font-medium shrink-0 ${match.rankingMode === "approval" && !match.scoreConfirmed ? "text-amber-600" : "text-green-600"}`}>
-              {match.rankingMode === "approval" && !match.scoreConfirmed ? "⏳" : "✓"}
-            </span>
+          {/* Status indicator — only for non-approval or fully confirmed */}
+          {isCompleted && !isEditing && (match.rankingMode !== "approval" || match.scoreConfirmed) && (
+            <span className="text-sm font-medium shrink-0 text-green-600">✓</span>
           )}
         </div>
         {/* Submit / Edit bar */}
