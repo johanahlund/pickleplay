@@ -140,7 +140,7 @@ export async function POST(
   // Mark match as completed
   await prisma.match.update({
     where: { id },
-    data: { status: "completed" },
+    data: { status: "completed", completedAt: new Date() },
   });
 
   if (match.rankingMode === "ranked") {

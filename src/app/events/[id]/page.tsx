@@ -49,6 +49,8 @@ interface Match {
   scoreConfirmed?: boolean;
   team1Confirmed?: boolean;
   team2Confirmed?: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
   rankingMode?: string;
   matchFormat?: string | null;
   classId?: string | null;
@@ -1851,18 +1853,20 @@ export default function EventDetailPage() {
         <div className="flex items-center gap-2 px-2 py-2"
           onClick={() => { if (!isPending) setActionSheetMatchId(match.id); }}>
           {/* Court number circle — start button for pending */}
-          <div className="flex flex-col items-center shrink-0">
+          <div className="flex flex-col items-center shrink-0 min-w-[2.5rem]">
+            {match.startedAt && <span className="text-[8px] text-muted">{new Date(match.startedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
             {(isPending || isPaused) && canScore && match.players.length >= 2 ? (
               <button onClick={(e) => {
                 e.stopPropagation();
-                setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "active" } : m) } : prev);
+                setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "active", startedAt: new Date().toISOString() } : m) } : prev);
                 setMatchTab("current");
                 fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) }).then(() => fetchEvent());
               }} className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center text-lg font-bold shadow-sm hover:bg-green-600 active:bg-green-700 transition-colors" title="Start match">▶</button>
             ) : (
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${courtColor}`}>{match.courtNum}</div>
             )}
-            {statusText && <span className="text-[8px] text-muted mt-0.5">{statusText}</span>}
+            {match.completedAt ? <span className="text-[8px] text-muted">{new Date(match.completedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+              : statusText ? <span className="text-[8px] text-muted">{statusText}</span> : null}
           </div>
 
           {/* Teams + scores */}

@@ -37,6 +37,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
     data.status = status;
+    if (status === "active" && !match.startedAt) {
+      data.startedAt = new Date();
+    }
   }
 
   if (scorerId !== undefined) {

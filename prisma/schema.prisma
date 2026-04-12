@@ -329,7 +329,9 @@ model Match {
   isCrossClub    Boolean  @default(false) // players from different clubs
   scorerId       String?  // player assigned as scorer/judge
 
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
 
   event   Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class   EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
