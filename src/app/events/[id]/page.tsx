@@ -1881,6 +1881,7 @@ export default function EventDetailPage() {
                       <div onClick={(e) => e.stopPropagation()}>
                         <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
                           otherTeamScore={scores[match.id]?.[otherTeamKey] ?? ""}
+                          teamLabel={teamPlayers.map((mp) => mp.player.name.split(" ")[0]).join(" & ")}
                           onChange={(v) => setMatchScore(match.id, teamKey, v)}
                           onClearBoth={() => setScores((prev) => { const next = { ...prev }; delete next[match.id]; return next; })} />
                       </div>

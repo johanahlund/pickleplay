@@ -7,6 +7,7 @@ interface ScorePickerProps {
   targetScore: number;
   winBy: number;
   otherTeamScore: string;
+  teamLabel?: string;
   onChange: (value: string) => void;
   onClearBoth?: () => void;
 }
@@ -42,7 +43,7 @@ function getErrorMessage(score: number, otherScore: number, target: number, winB
   return null;
 }
 
-export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChange, onClearBoth }: ScorePickerProps) {
+export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, onChange, onClearBoth }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChang
         <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center" onClick={() => { setOpen(false); setError(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
             <div className="text-center mb-4">
-              <span className="text-sm font-semibold text-muted">Select Score</span>
+              <span className="text-sm font-semibold">{teamLabel || "Select Score"}</span>
               {hasOtherScore && <span className="text-xs text-muted block mt-0.5">Other team: {otherScore}</span>}
             </div>
             {error && (
