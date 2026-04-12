@@ -1,7 +1,16 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
 import { prisma } from "./db";
+
+/** Map an error thrown by require* helpers to the appropriate JSON response. */
+export function authErrorResponse(e: unknown) {
+  const msg = e instanceof Error ? e.message : "Unauthorized";
+  if (msg === "NotFound") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (msg === "Forbidden") return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  return NextResponse.json({ error: "Login required" }, { status: 401 });
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -95,6 +104,42 @@ export async function requireEventManager(eventId: string) {
     where: { eventId, playerId: user.id },
   });
   if (helper) return user;
+
+  throw new Error("Forbidden");
+}
+
+/** Check if the current user can manage the given league (admin, director, deputy, or helper) */
+export async function requireLeagueManager(leagueId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { createdById: true, deputyId: true },
+  });
+  if (!league) throw new Error("NotFound");
+  if (league.createdById === user.id) return user;
+  if (league.deputyId === user.id) return user;
+
+  const helper = await prisma.leagueHelper.findFirst({
+    where: { leagueId, playerId: user.id },
+  });
+  if (helper) return user;
+
+  throw new Error("Forbidden");
+}
+
+/** Check if the current user is the league director (admin or createdBy) — not deputy/helper. */
+export async function requireLeagueOwner(leagueId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { createdById: true },
+  });
+  if (!league) throw new Error("NotFound");
+  if (league.createdById === user.id) return user;
 
   throw new Error("Forbidden");
 }

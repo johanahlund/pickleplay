@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // POST: add a team to the league
@@ -8,9 +8,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
   const { name, clubId, captainId, viceCaptainId } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Team name required" }, { status: 400 });

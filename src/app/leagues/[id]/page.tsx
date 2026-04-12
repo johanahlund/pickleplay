@@ -7,6 +7,7 @@ import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
+import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 
 interface Player { id: string; name: string; photoUrl?: string | null; rating: number; gender?: string | null }
 interface LeagueTeam {
@@ -244,14 +245,8 @@ export default function LeagueDetailPage() {
     fetchLeague();
   };
 
-  const autoCatName = (format = newCatFormat, gender = newCatGender, age = newCatAge, sMin = newCatSkillMin, sMax = newCatSkillMax) => {
-    const parts = [];
-    if (gender !== "open") parts.push(gender === "male" ? "Men's" : gender === "female" ? "Women's" : "Mixed");
-    parts.push(format === "doubles" ? "Doubles" : "Singles");
-    if (age !== "open") parts.push(age);
-    if (sMin || sMax) parts.push(`${sMin || ""}${sMin && sMax ? "-" : ""}${sMax || ""}+`);
-    return parts.join(" ") || "Open";
-  };
+  const autoCatName = (format = newCatFormat, gender = newCatGender, age = newCatAge, sMin = newCatSkillMin, sMax = newCatSkillMax) =>
+    buildCatName({ format, gender, ageGroup: age, skillMin: sMin, skillMax: sMax });
 
   const addCategory = async () => {
     const name = autoCatName();
@@ -271,7 +266,8 @@ export default function LeagueDetailPage() {
       setNewCatSkillMin(""); setNewCatSkillMax(""); setNewCatScoring("3x11"); setNewCatWinBy("2");
       await fetchLeague();
     } else {
-      console.error("Failed to add category", r.status, await r.text().catch(() => ""));
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || "Failed to add category");
     }
   };
 

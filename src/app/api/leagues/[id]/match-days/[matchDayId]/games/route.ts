@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // POST: record game result (set winner)
@@ -7,13 +7,21 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string; matchDayId: string }> }
 ) {
-  const { matchDayId } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  const { id, matchDayId } = await params;
+  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
   const { gameId, winnerId } = await req.json();
   if (!gameId) return NextResponse.json({ error: "gameId required" }, { status: 400 });
+
+  // Verify game belongs to this match day, which belongs to this league
+  const game = await prisma.leagueGame.findUnique({
+    where: { id: gameId },
+    select: { matchDayId: true, matchDay: { select: { round: { select: { leagueId: true } } } } },
+  });
+  if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
+  if (game.matchDayId !== matchDayId || game.matchDay.round.leagueId !== id) {
+    return NextResponse.json({ error: "Game does not belong to this league" }, { status: 403 });
+  }
 
   await prisma.leagueGame.update({
     where: { id: gameId },

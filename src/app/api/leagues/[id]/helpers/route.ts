@@ -1,16 +1,15 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueOwner, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// POST: add a helper
+// POST: add a helper (director-only)
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  try { await requireLeagueOwner(id); } catch (e) { return authErrorResponse(e); }
+
   const { playerId } = await req.json();
   if (!playerId) return NextResponse.json({ error: "playerId required" }, { status: 400 });
 
@@ -21,15 +20,14 @@ export async function POST(
   return NextResponse.json(helper);
 }
 
-// DELETE: remove a helper
+// DELETE: remove a helper (director-only)
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  try { await requireLeagueOwner(id); } catch (e) { return authErrorResponse(e); }
+
   const { playerId } = await req.json();
   if (!playerId) return NextResponse.json({ error: "playerId required" }, { status: 400 });
 

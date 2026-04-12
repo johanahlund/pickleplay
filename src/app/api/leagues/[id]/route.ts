@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueManager, requireLeagueOwner, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // GET: league details with all relations
@@ -55,15 +55,22 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const body = await req.json();
+  // Transferring director or assigning deputy is owner-only.
+  const ownerOnly = body.createdById !== undefined || body.deputyId !== undefined;
+  try {
+    if (ownerOnly) await requireLeagueOwner(id);
+    else await requireLeagueManager(id);
+  } catch (e) { return authErrorResponse(e); }
+
   const data: Record<string, unknown> = {};
-  if (body.name !== undefined) data.name = body.name.trim();
-  if (body.description !== undefined) data.description = body.description?.trim() || null;
-  if (body.season !== undefined) data.season = body.season?.trim() || null;
+  if (body.name !== undefined) data.name = String(body.name).trim();
+  if (body.description !== undefined) data.description = body.description ? String(body.description).trim() : null;
+  if (body.season !== undefined) data.season = body.season ? String(body.season).trim() : null;
   if (body.status !== undefined) data.status = body.status;
   if (body.config !== undefined) data.config = body.config;
   if (body.deputyId !== undefined) data.deputyId = body.deputyId || null;
@@ -81,9 +88,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  try { await requireLeagueOwner(id); } catch (e) { return authErrorResponse(e); }
   await prisma.league.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

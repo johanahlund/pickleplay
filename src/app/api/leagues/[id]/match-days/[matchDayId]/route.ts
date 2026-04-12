@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // PATCH: update match day (date, status, create event)
@@ -8,8 +8,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string; matchDayId: string }> }
 ) {
   const { id, matchDayId } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  let user;
+  try { user = await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
+
+  // Verify match day belongs to this league
+  const mdCheck = await prisma.leagueMatchDay.findUnique({
+    where: { id: matchDayId },
+    select: { round: { select: { leagueId: true } } },
+  });
+  if (!mdCheck) return NextResponse.json({ error: "Match day not found" }, { status: 404 });
+  if (mdCheck.round.leagueId !== id) {
+    return NextResponse.json({ error: "Match day does not belong to this league" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -37,7 +46,7 @@ export async function PATCH(
         date: matchDay.date || new Date(),
         numCourts: 2,
         status: "draft",
-        createdById: (await requireAuth()).id,
+        createdById: user.id,
         clubId: hostClubId || null,
         classes: {
           create: league.categories.map((cat, i) => ({
@@ -58,8 +67,6 @@ export async function PATCH(
     // Create LeagueGame entries for each category × team pair
     if (matchDay.teams.length === 2) {
       const [t1, t2] = matchDay.teams;
-      const eventClasses = await prisma.eventClass.findMany({ where: { eventId: event.id }, orderBy: { id: "asc" } });
-
       for (let i = 0; i < league.categories.length; i++) {
         await prisma.leagueGame.create({
           data: {

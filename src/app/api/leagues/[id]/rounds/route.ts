@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // POST: add a round (jornada) with match days
@@ -8,9 +8,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
   const { roundNumber, name, suggestedDate, matchDays } = await req.json();
   if (!roundNumber) return NextResponse.json({ error: "roundNumber required" }, { status: 400 });
@@ -46,11 +44,23 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await params;
-  try { await requireAuth(); } catch {
-    return NextResponse.json({ error: "Login required" }, { status: 401 });
-  }
+  const { id } = await params;
+  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
+
   const { roundId } = await req.json();
+  if (!roundId || typeof roundId !== "string") {
+    return NextResponse.json({ error: "roundId required" }, { status: 400 });
+  }
+
+  const round = await prisma.leagueRound.findUnique({
+    where: { id: roundId },
+    select: { leagueId: true },
+  });
+  if (!round) return NextResponse.json({ error: "Round not found" }, { status: 404 });
+  if (round.leagueId !== id) {
+    return NextResponse.json({ error: "Round does not belong to this league" }, { status: 403 });
+  }
+
   await prisma.leagueRound.delete({ where: { id: roundId } });
   return NextResponse.json({ ok: true });
 }
