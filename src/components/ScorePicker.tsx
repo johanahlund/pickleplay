@@ -10,14 +10,18 @@ interface ScorePickerProps {
 
 export function ScorePicker({ value, targetScore, onChange }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
+  const [extraRows, setExtraRows] = useState(0);
 
-  const maxScore = Math.max(targetScore + 5, 21);
-  const numbers = Array.from({ length: maxScore + 1 }, (_, i) => i);
+  // Base rows: to 11 → 4 rows, to 15 → 5 rows, to 21 → 6 rows
+  const baseRows = targetScore <= 11 ? 4 : targetScore <= 15 ? 5 : 6;
+  const cols = 4;
+  const visibleCount = (baseRows + extraRows) * cols;
+  const numbers = Array.from({ length: visibleCount }, (_, i) => i);
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); setExtraRows(0); }}
         className={`w-14 h-10 text-center border rounded-lg text-xl font-bold transition-colors ${
           value ? "border-action bg-action/5 text-action" : "border-border text-gray-400"
         }`}
@@ -47,7 +51,10 @@ export function ScorePicker({ value, targetScore, onChange }: ScorePickerProps) 
                 </button>
               ))}
             </div>
-            <button onClick={() => setOpen(false)} className="w-full mt-4 py-2 text-sm text-muted hover:text-foreground">Cancel</button>
+            <button onClick={() => setExtraRows(extraRows + 1)} className="w-full mt-3 py-1.5 text-xs text-action font-medium hover:underline">
+              More numbers...
+            </button>
+            <button onClick={() => setOpen(false)} className="w-full py-1.5 text-xs text-muted hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}
