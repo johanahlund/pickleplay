@@ -2237,7 +2237,7 @@ export default function EventDetailPage() {
             <label className="block text-xs text-muted mb-1">Format</label>
             <select value={manualMatchFormat} onChange={(e) => setManualMatchFormat(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">Default ({event.scoringFormat || "1x11"})</option>
+              <option value="">{event.scoringFormat || "1x11"} (default)</option>
               <option value="1x11">1 set to 11</option>
               <option value="1x15">1 set to 15</option>
               <option value="1x21">1 set to 21</option>
@@ -2251,7 +2251,7 @@ export default function EventDetailPage() {
             <label className="block text-xs text-muted mb-1">Win by</label>
             <select value={manualWinBy} onChange={(e) => setManualWinBy(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">Def</option>
+              <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (def)</option>
               <option value="1">1</option>
               <option value="2">2</option>
             </select>
@@ -2260,7 +2260,7 @@ export default function EventDetailPage() {
             <label className="block text-xs text-muted mb-1">Ranking</label>
             <select value={manualRankingMode} onChange={(e) => setManualRankingMode(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-              <option value="">Default</option>
+              <option value="">{(event.rankingMode || "ranked").charAt(0).toUpperCase() + (event.rankingMode || "ranked").slice(1)} (default)</option>
               <option value="ranked">Ranked</option>
               <option value="approval">Approval</option>
               <option value="none">Unranked</option>
