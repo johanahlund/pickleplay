@@ -47,7 +47,16 @@ export function PlayerAvatar({ photoUrl, name, size = "md" }: PlayerAvatarProps)
         <img
           src={photoUrl}
           alt={name}
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowFull(true); }}
+          onClick={(e) => {
+            // Only trigger if clicked within inner 70% of the circle (avoids edge clicks)
+            const rect = (e.target as HTMLElement).getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dist = Math.sqrt((e.clientX - cx) ** 2 + (e.clientY - cy) ** 2);
+            const radius = rect.width / 2;
+            if (dist > radius * 0.7) return;
+            e.stopPropagation(); e.preventDefault(); setShowFull(true);
+          }}
           className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0 cursor-pointer`}
         />
         {showFull && (
