@@ -10,34 +10,20 @@ interface ScorePickerProps {
   onChange: (value: string) => void;
 }
 
-function isValidScore(score: number, otherScore: number, target: number, winBy: number): boolean {
-  // Both can't be winners
-  if (score >= target && otherScore >= target) {
-    // Both above target — diff must be exactly winBy, one must be the winner
-    const diff = Math.abs(score - otherScore);
-    if (diff !== winBy) return false;
-  }
-  // If this score is the winning score
-  if (score >= target && score > otherScore) {
-    if (otherScore < target - 1) return true; // clean win (e.g. 11-5)
-    // Deuce territory — diff must be exactly winBy
-    if (score - otherScore !== winBy) return false;
-  }
-  // If this score is below target, it's always valid (loser's score)
-  return true;
-}
-
 function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
   if (score1 === score2) return false; // no ties
   const winner = Math.max(score1, score2);
   const loser = Math.min(score1, score2);
-  if (winner < target) return false; // no winner yet — only valid during play, not as final score
-  if (loser >= target) {
-    // Both reached target — deuce, diff must be winBy
-    return winner - loser === winBy;
-  }
-  // Winner reached target, loser didn't — valid
-  return winner >= target;
+
+  // Winner must reach target
+  if (winner < target) return false;
+
+  // Winner exactly at target — loser can be anything below target
+  if (winner === target) return loser < target;
+
+  // Winner above target — must have gone through deuce
+  // So loser must be at least target-1, and diff must be exactly winBy
+  return loser >= target - 1 && winner - loser === winBy;
 }
 
 export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChange }: ScorePickerProps) {
