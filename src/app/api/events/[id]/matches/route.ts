@@ -68,3 +68,51 @@ export async function POST(
 
   return NextResponse.json(match);
 }
+
+// PATCH: update an existing match (court, players, format)
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try {
+    await requireEventManager(id);
+  } catch {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+
+  const { matchId, team1PlayerIds, team2PlayerIds, courtNum, matchFormat, rankingMode: matchRankingMode } = await req.json();
+  if (!matchId) return NextResponse.json({ error: "matchId required" }, { status: 400 });
+
+  const match = await prisma.match.findUnique({ where: { id: matchId }, include: { players: true } });
+  if (!match || match.eventId !== id) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+
+  // Update match fields
+  const data: Record<string, unknown> = {};
+  if (courtNum !== undefined) data.courtNum = courtNum;
+  if (matchFormat !== undefined) data.matchFormat = matchFormat || null;
+  if (matchRankingMode !== undefined) data.rankingMode = matchRankingMode;
+
+  if (Object.keys(data).length > 0) {
+    await prisma.match.update({ where: { id: matchId }, data });
+  }
+
+  // Update players if changed
+  if (team1PlayerIds && team2PlayerIds) {
+    // Delete existing players and recreate
+    await prisma.matchPlayer.deleteMany({ where: { matchId } });
+    await prisma.matchPlayer.createMany({
+      data: [
+        ...team1PlayerIds.map((pid: string) => ({ matchId, playerId: pid, team: 1 })),
+        ...team2PlayerIds.map((pid: string) => ({ matchId, playerId: pid, team: 2 })),
+      ],
+    });
+  }
+
+  const updated = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { players: { include: { player: true } } },
+  });
+
+  return NextResponse.json(updated);
+}

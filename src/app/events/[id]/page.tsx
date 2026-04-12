@@ -397,6 +397,7 @@ export default function EventDetailPage() {
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
   const [manualCourt, setManualCourt] = useState(1);
+  const [editingManualMatchId, setEditingManualMatchId] = useState<string | null>(null);
   const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
   const [adminSearch, setAdminSearch] = useState("");
@@ -846,6 +847,19 @@ export default function EventDetailPage() {
     });
   };
 
+  const openEditMatch = (matchId: string) => {
+    const match = event?.matches.find((m) => m.id === matchId);
+    if (!match) return;
+    setEditingManualMatchId(matchId);
+    setManualCourt(match.courtNum);
+    setManualTeam1(match.players.filter((p) => p.team === 1).map((p) => p.playerId));
+    setManualTeam2(match.players.filter((p) => p.team === 2).map((p) => p.playerId));
+    setManualMatchFormat(match.matchFormat || "");
+    setManualRankingMode(match.rankingMode !== (event?.rankingMode || "ranked") ? match.rankingMode || "" : "");
+    setManualWinBy("");
+    setActiveSection("manual");
+  };
+
   const addManualMatch = async () => {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
     // Warn if uneven teams
@@ -857,17 +871,34 @@ export default function EventDetailPage() {
     if (isSingles && event?.format === "doubles") {
       if (!await confirmDialog({ message: "This is a doubles event. Create a singles match?" })) return;
     }
-    await fetch(`/api/events/${id}/matches`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        team1PlayerIds: manualTeam1,
-        team2PlayerIds: manualTeam2,
-        courtNum: manualCourt,
-        ...(manualMatchFormat ? { matchFormat: manualMatchFormat } : {}),
-        ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
-      }),
-    });
+    if (editingManualMatchId) {
+      // Update existing match
+      await fetch(`/api/events/${id}/matches`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId: editingManualMatchId,
+          team1PlayerIds: manualTeam1,
+          team2PlayerIds: manualTeam2,
+          courtNum: manualCourt,
+          ...(manualMatchFormat ? { matchFormat: manualMatchFormat } : {}),
+          ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
+        }),
+      });
+    } else {
+      // Create new match
+      await fetch(`/api/events/${id}/matches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          team1PlayerIds: manualTeam1,
+          team2PlayerIds: manualTeam2,
+          courtNum: manualCourt,
+          ...(manualMatchFormat ? { matchFormat: manualMatchFormat } : {}),
+          ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
+        }),
+      });
+    }
     setShowAddMatch(false);
     setManualTeam1([]);
     setManualTeam2([]);
@@ -875,6 +906,7 @@ export default function EventDetailPage() {
     setManualMatchFormat("");
     setManualRankingMode("");
     setManualWinBy("");
+    setEditingManualMatchId(null);
     setActiveSection("rounds");
     await fetchEvent();
   };
@@ -2307,8 +2339,8 @@ export default function EventDetailPage() {
 
       <div className="flex gap-2">
         <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
-          className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">Create Match</button>
-        <button onClick={() => { setManualTeam1([]); setManualTeam2([]); setActiveSection("rounds"); }}
+          className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">{editingManualMatchId ? "Save Match" : "Create Match"}</button>
+        <button onClick={() => { setManualTeam1([]); setManualTeam2([]); setEditingManualMatchId(null); setActiveSection("rounds"); }}
           className="px-4 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">Cancel</button>
       </div>
     </div>
@@ -2379,9 +2411,9 @@ export default function EventDetailPage() {
               <div className="flex flex-col gap-1.5 w-24">
                 {isMatchCompleted && (isOwner || isAdmin) ? (
                   <button onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex flex-col items-center gap-1">✏️ <span>Edit score</span></button>
                 ) : !isMatchCompleted ? (
-                  <button onClick={() => { close(); startEditMatch(match.id, 0, 0); }}
+                  <button onClick={() => { close(); openEditMatch(match.id); }}
                     className="flex-1 py-2.5 rounded-xl text-xs font-medium bg-gray-100 hover:bg-gray-200 flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
                 ) : null}
                 {(isOwner || isAdmin) && (
