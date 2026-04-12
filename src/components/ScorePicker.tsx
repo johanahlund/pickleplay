@@ -8,6 +8,7 @@ interface ScorePickerProps {
   winBy: number;
   otherTeamScore: string;
   onChange: (value: string) => void;
+  onClearBoth?: () => void;
 }
 
 export function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
@@ -41,7 +42,7 @@ function getErrorMessage(score: number, otherScore: number, target: number, winB
   return null;
 }
 
-export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChange }: ScorePickerProps) {
+export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChange, onClearBoth }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -111,9 +112,16 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChang
                 );
               })}
             </div>
-            <button onClick={() => setExtraRows(extraRows + 1)} className="w-full mt-3 py-1.5 text-xs text-action font-medium hover:underline">
-              More numbers...
-            </button>
+            <div className="flex mt-3">
+              <button onClick={() => setExtraRows(extraRows + 1)} className="flex-1 py-1.5 text-xs text-action font-medium hover:underline">
+                More numbers...
+              </button>
+              {hasOtherScore && onClearBoth && (
+                <button onClick={() => { onClearBoth(); setOpen(false); setError(null); }} className="py-1.5 text-xs text-red-500 font-medium hover:underline px-2">
+                  Clear both scores
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

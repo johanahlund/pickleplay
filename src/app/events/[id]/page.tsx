@@ -1881,7 +1881,8 @@ export default function EventDetailPage() {
                       <div onClick={(e) => e.stopPropagation()}>
                         <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
                           otherTeamScore={scores[match.id]?.[otherTeamKey] ?? ""}
-                          onChange={(v) => setMatchScore(match.id, teamKey, v)} />
+                          onChange={(v) => setMatchScore(match.id, teamKey, v)}
+                          onClearBoth={() => setScores((prev) => { const next = { ...prev }; delete next[match.id]; return next; })} />
                       </div>
                     ) : (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
