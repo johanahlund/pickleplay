@@ -2265,7 +2265,7 @@ export default function EventDetailPage() {
             {!isMatchCompleted && (
               <button onClick={() => { setFocusedMatchId(match.id); close(); }} className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">📺 <span>Focus view</span></button>
             )}
-            {canManage && (
+            {(canManage || match.scorerId === userId) && (
               <button onClick={() => { if (typeof window !== "undefined" && window.speechSynthesis?.speaking) stopAnnouncement(); else { const n1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => p.player.name); const n2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => p.player.name); sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, n1, n2, event.pairingMode === "king_of_court")); } close(); }}
                 className="w-full text-left px-5 py-3 text-sm hover:bg-gray-50 flex items-center gap-3">🔊 <span>{isMatchCompleted ? "Announce result" : "Announce match"}</span></button>
             )}
