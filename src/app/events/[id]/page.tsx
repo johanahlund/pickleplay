@@ -2200,10 +2200,16 @@ export default function EventDetailPage() {
     <div className="space-y-3">
       {/* Players card */}
       <div className="bg-card rounded-xl border border-border p-3 space-y-3">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-muted">Court</span>
-          <button type="button" onClick={() => setManualCourt(manualCourt >= event.numCourts ? 1 : manualCourt + 1)}
-            className="w-12 h-12 rounded-xl bg-selected text-white font-bold text-2xl flex items-center justify-center active:opacity-80">{manualCourt}</button>
+        <div>
+          <span className="text-sm font-semibold text-muted block mb-1.5">Court</span>
+          <div className="flex gap-1.5">
+            {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
+              <button key={c} type="button" onClick={() => setManualCourt(c)}
+                className={`w-10 h-10 rounded-xl font-bold text-lg flex items-center justify-center transition-all ${
+                  manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                }`}>{c}</button>
+            ))}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -2286,8 +2292,12 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
-        className="w-full bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">Create Match</button>
+      <div className="flex gap-2">
+        <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
+          className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">Create Match</button>
+        <button onClick={() => { setManualTeam1([]); setManualTeam2([]); setActiveSection("rounds"); }}
+          className="px-4 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">Cancel</button>
+      </div>
     </div>
   );
 
@@ -2512,7 +2522,7 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {activeSection !== "rounds" && (
+        {activeSection !== "rounds" && activeSection !== "manual" && (
           <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
             <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
           </div>
