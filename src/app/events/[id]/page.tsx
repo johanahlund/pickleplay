@@ -2234,7 +2234,7 @@ export default function EventDetailPage() {
       <div className="bg-gray-50 rounded-xl p-3 space-y-2">
         {/* Format + Win by */}
         <div className="flex gap-2">
-          <div className="flex-1">
+          <div className="w-[55%]">
             <label className="block text-xs text-muted mb-1">Format</label>
             <select value={manualMatchFormat} onChange={(e) => setManualMatchFormat(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
@@ -2251,7 +2251,7 @@ export default function EventDetailPage() {
               {(() => { const fmt = manualMatchFormat || event.scoringFormat || "1x11"; return fmt.startsWith("3") ? `Best of 3 sets to ${fmt.replace(/^3x/, "").replace("R", "")}` : `1 set to ${fmt.replace(/^1x/, "").replace("R", "")}${fmt.includes("R") ? " (rally scoring)" : ""}`; })()}
             </p>
           </div>
-          <div className="w-24">
+          <div className="flex-1">
             <label className="block text-xs text-muted mb-1">Win by</label>
             <select value={manualWinBy} onChange={(e) => setManualWinBy(e.target.value)}
               className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
