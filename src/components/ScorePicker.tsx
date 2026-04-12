@@ -18,11 +18,14 @@ function isValidPair(score1: number, score2: number, target: number, winBy: numb
   // Winner must reach target
   if (winner < target) return false;
 
-  // Winner exactly at target — loser can be anything below target
-  if (winner === target) return loser < target;
+  // Diff must be at least winBy
+  if (winner - loser < winBy) return false;
 
-  // Winner above target — must have gone through deuce
-  // So loser must be at least target-1, and diff must be exactly winBy
+  // At exactly target — loser can be 0 to target-winBy (e.g., 11-9 max for win-by-2)
+  if (winner === target) return loser <= target - winBy;
+
+  // Above target — must have gone through deuce
+  // Loser must be at least target-1, and diff must be exactly winBy
   return loser >= target - 1 && winner - loser === winBy;
 }
 
