@@ -2246,8 +2246,8 @@ export default function EventDetailPage() {
     const isMatchActive = match.status === "active";
     const close = () => setActionSheetMatchId(null);
     return (
-      <div className="fixed inset-0 z-[80] bg-black/50 flex items-end justify-center" onClick={close}>
-        <div className="bg-white rounded-t-2xl w-full max-w-lg shadow-2xl pb-[env(safe-area-inset-bottom)]" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
+        <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-16 mx-auto" onClick={(e) => e.stopPropagation()}>
           <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
           <div className="text-center px-4 pb-3 border-b border-border">
             <span className="text-sm font-semibold">Court {match.courtNum}</span>
