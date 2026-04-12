@@ -846,6 +846,10 @@ export default function EventDetailPage() {
 
   const addManualMatch = async () => {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
+    // Warn if uneven teams
+    if (manualTeam1.length !== manualTeam2.length) {
+      if (!confirm(`Teams are uneven (${manualTeam1.length} vs ${manualTeam2.length}). Create match anyway?`)) return;
+    }
     // Warn if singles in a doubles event
     const isSingles = manualTeam1.length === 1 && manualTeam2.length === 1;
     if (isSingles && event?.format === "doubles") {
@@ -1851,7 +1855,7 @@ export default function EventDetailPage() {
         isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action border-l-4" : "border-border"
       }`}>
         <div className="flex items-center gap-2 px-2 py-2"
-          onClick={() => { if (!isPending) setActionSheetMatchId(match.id); }}>
+          onClick={() => setActionSheetMatchId(match.id)}>
           {/* Court number circle — start button for pending */}
           <div className="flex flex-col items-center shrink-0 min-w-[2.5rem]">
             {match.startedAt && <span className="text-[8px] text-muted">{new Date(match.startedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
@@ -2198,22 +2202,24 @@ export default function EventDetailPage() {
   // ── Section: Add Match Manually ──
   const renderManual = () => (
     <div className="space-y-3">
-      {/* Players card */}
-      <div className="bg-card rounded-xl border border-border p-3 space-y-3">
-        <div>
-          <span className="text-sm font-semibold text-muted block mb-1.5">Court</span>
-          <div className="flex gap-1.5">
-            {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
-              <button key={c} type="button" onClick={() => setManualCourt(c)}
-                className={`w-10 h-10 rounded-xl font-bold text-lg flex items-center justify-center transition-all ${
-                  manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                }`}>{c}</button>
-            ))}
-          </div>
+      {/* Court card */}
+      <div className="bg-card rounded-xl border border-border p-3">
+        <span className="text-sm font-semibold text-muted block mb-1.5">Court</span>
+        <div className="flex gap-1.5">
+          {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
+            <button key={c} type="button" onClick={() => setManualCourt(c)}
+              className={`w-10 h-10 rounded-xl font-bold text-lg flex items-center justify-center transition-all ${
+                manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}>{c}</button>
+          ))}
         </div>
+      </div>
+
+      {/* Players card */}
+      <div className="bg-card rounded-xl border border-border p-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1">Team 1 ({manualTeam1.length})</label>
+            <label className="block text-sm font-semibold text-foreground mb-1">Team 1</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 1)}
@@ -2227,7 +2233,7 @@ export default function EventDetailPage() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-1">Team 2 ({manualTeam2.length})</label>
+          <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
               <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 2)}
