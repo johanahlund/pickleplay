@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
 export async function POST(
@@ -18,7 +19,7 @@ export async function POST(
     include: {
       matches: {
         where: { status: "completed" },
-        include: { players: { include: { player: true } } },
+        include: { players: { include: { player: { select: safePlayerSelect } } } },
         orderBy: { createdAt: "desc" },
       },
     },

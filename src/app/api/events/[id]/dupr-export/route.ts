@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 import { generateDuprCsv, toDuprScoringFormat } from "@/lib/dupr-export";
 import { getEventClass } from "@/lib/eventClass";
@@ -19,7 +20,7 @@ export async function GET(
     include: {
       matches: {
         where: { status: "completed" },
-        include: { players: { include: { player: true } } },
+        include: { players: { include: { player: { select: safePlayerSelect } } } },
       },
     },
   });

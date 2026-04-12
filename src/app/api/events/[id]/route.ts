@@ -1,26 +1,31 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireEventOwner, requireEventManager } from "@/lib/auth";
+import { requireAuth, requireEventOwner, requireEventManager, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user;
+  try { user = await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const { id } = await params;
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
       classes: true,
       sessions: { orderBy: { date: "asc" } },
-      players: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
       matches: {
         include: {
-          players: { include: { player: true } },
+          players: { include: { player: { select: safePlayerSelect } } },
           scorer: { select: { id: true, name: true, photoUrl: true } },
         },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
-      helpers: { include: { player: true } },
+      helpers: { include: { player: { select: safePlayerSelect } } },
       pairs: {
         include: {
           player1: { select: { id: true, name: true, emoji: true, photoUrl: true, rating: true, gender: true } },
@@ -34,7 +39,8 @@ export async function GET(
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
-  return NextResponse.json(event);
+  const allowEmail = await canSeeEmails(user.id, user.role);
+  return NextResponse.json(allowEmail ? event : stripEmailsDeep(event));
 }
 
 export async function DELETE(
@@ -153,10 +159,10 @@ export async function PATCH(
     where: { id },
     include: {
       classes: true,
-      players: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
       matches: {
         include: {
-          players: { include: { player: true } },
+          players: { include: { player: { select: safePlayerSelect } } },
           scorer: { select: { id: true, name: true, photoUrl: true } },
         },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],

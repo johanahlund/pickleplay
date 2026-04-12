@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 import { generateRounds, PlayerInfo, CompletedMatch } from "@/lib/matchgen";
 import { getEventClass } from "@/lib/eventClass";
@@ -20,7 +21,7 @@ export async function POST(
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
-      players: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
       pairs: true,
       matches: {
         include: { players: true },

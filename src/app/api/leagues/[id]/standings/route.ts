@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export interface TeamStanding {
@@ -14,11 +15,14 @@ export interface TeamStanding {
   categoryWins: Record<string, number>; // per category
 }
 
-// GET: compute league standings
+// GET: compute league standings (login required)
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try { await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const { id } = await params;
   const league = await prisma.league.findUnique({
     where: { id },

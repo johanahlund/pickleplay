@@ -4,6 +4,38 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { prisma } from "./db";
 
+/**
+ * Returns true if the given user is allowed to see email addresses on
+ * other users (app admin OR owner/admin of any club).
+ */
+export async function canSeeEmails(userId: string | null | undefined, role: string | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  if (role === "admin") return true;
+  const m = await prisma.clubMember.findFirst({
+    where: { playerId: userId, role: { in: ["owner", "admin"] } },
+    select: { id: true },
+  });
+  return !!m;
+}
+
+/**
+ * Recursively strips `email` (and any `email`-keyed property) from a JSON-shaped
+ * object/array. Mutates a deep clone — does NOT modify the input.
+ */
+export function stripEmailsDeep<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((v) => stripEmailsDeep(v)) as unknown as T;
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === "email") continue;
+      out[k] = stripEmailsDeep(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 /** Map an error thrown by require* helpers to the appropriate JSON response. */
 export function authErrorResponse(e: unknown) {
   const msg = e instanceof Error ? e.message : "Unauthorized";

@@ -1,17 +1,22 @@
 import { prisma } from "@/lib/db";
-import { auth, requireAuth } from "@/lib/auth";
+import { auth, requireAuth, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   const session = await auth();
-  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (!session?.user) {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+  const userId = (session.user as { id?: string }).id;
+  const userRole = (session.user as { role?: string }).role;
 
   const events = await prisma.event.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       classes: true,
-      players: { include: { player: true } },
-      helpers: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
+      helpers: { include: { player: { select: safePlayerSelect } } },
       club: { select: { id: true, name: true, emoji: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
     },
@@ -29,7 +34,8 @@ export async function GET() {
     return false;
   });
 
-  return NextResponse.json(filtered);
+  const allowEmail = await canSeeEmails(userId, userRole);
+  return NextResponse.json(allowEmail ? filtered : stripEmailsDeep(filtered));
 }
 
 export async function POST(req: Request) {
@@ -89,8 +95,8 @@ export async function POST(req: Request) {
     where: { id: event.id },
     include: {
       classes: true,
-      players: { include: { player: true } },
-      helpers: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
+      helpers: { include: { player: { select: safePlayerSelect } } },
     },
   });
   return NextResponse.json(result);

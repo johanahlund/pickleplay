@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireAuth } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
 // ELO rating update for doubles
@@ -15,7 +16,7 @@ function eloChange(
 async function applyElo(matchId: string) {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
   if (!match) return 0;
 
@@ -60,7 +61,7 @@ async function applyElo(matchId: string) {
 async function reverseElo(matchId: string) {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
   if (!match || match.eloChange === 0) return;
 
@@ -111,7 +112,7 @@ export async function POST(
 
   const match = await prisma.match.findUnique({
     where: { id },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
 
   if (!match) {
@@ -265,7 +266,7 @@ async function handlePostScore(matchId: string) {
     // Get all event players with match stats
     const eventPlayers = await prisma.eventPlayer.findMany({
       where: { eventId: match.eventId, status: { in: ["registered", "checked_in"] } },
-      include: { player: true },
+      include: { player: { select: safePlayerSelect } },
     });
 
     // Count matches and find last match time per player
@@ -397,7 +398,7 @@ export async function PUT(
 
   const match = await prisma.match.findUnique({
     where: { id },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
 
   if (!match) {

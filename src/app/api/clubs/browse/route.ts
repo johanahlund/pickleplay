@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/db";
+import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// GET: browse all clubs (public, no auth required)
+// GET: browse all clubs (login required)
 export async function GET(req: Request) {
+  try { await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const url = new URL(req.url);
   const search = url.searchParams.get("q") || "";
   const city = url.searchParams.get("city") || "";

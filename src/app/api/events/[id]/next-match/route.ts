@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 import { generateNextMatch } from "@/lib/rotation";
 import { getEventClass } from "@/lib/eventClass";
@@ -15,7 +16,7 @@ export async function GET(
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
-      players: { include: { player: true } },
+      players: { include: { player: { select: safePlayerSelect } } },
       matches: { include: { players: true } },
     },
   });
@@ -44,7 +45,7 @@ export async function GET(
 
   const eventPlayers = await prisma.eventPlayer.findMany({
     where: { eventId: id, status: { in: ["registered", "checked_in"] } },
-    include: { player: true },
+    include: { player: { select: safePlayerSelect } },
   });
 
   const playerStats = eventPlayers.map((ep) => ({

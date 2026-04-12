@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 import { getEventClass } from "@/lib/eventClass";
 
@@ -55,7 +56,7 @@ export async function POST(
         ],
       },
     },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
 
   // Set event to active if it was in setup
@@ -111,7 +112,7 @@ export async function PATCH(
 
   const updated = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
 
   return NextResponse.json(updated);

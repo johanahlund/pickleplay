@@ -2,8 +2,11 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// GET: list all leagues (or leagues user is part of)
+// GET: list all leagues (login required)
 export async function GET() {
+  try { await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const leagues = await prisma.league.findMany({
     orderBy: { createdAt: "desc" },
     include: {

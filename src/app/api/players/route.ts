@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/db";
+import { requireAuth, canSeeEmails } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  let user;
+  try { user = await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
   const players = await prisma.player.findMany({
     where: { status: "active" },
     orderBy: { rating: "desc" },
@@ -22,9 +27,12 @@ export async function GET() {
     },
   });
 
-  // Strip passwordHash, add hasAccount flag
-  const safe = players.map(({ passwordHash, ...rest }) => ({
+  const allowEmail = await canSeeEmails(user.id, user.role);
+
+  // Strip passwordHash, add hasAccount flag, optionally strip email
+  const safe = players.map(({ passwordHash, email, ...rest }) => ({
     ...rest,
+    ...(allowEmail ? { email } : {}),
     hasAccount: !!passwordHash,
   }));
 

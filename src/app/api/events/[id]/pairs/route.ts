@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireEventManager } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 import { generatePairs, PairPlayer, PairMode } from "@/lib/pairgen";
 
@@ -74,7 +75,7 @@ export async function POST(
       eventId: id,
       status: { in: ["registered", "checked_in"] },
     },
-    include: { player: true },
+    include: { player: { select: safePlayerSelect } },
   });
 
   const players: PairPlayer[] = eventPlayers.map((ep) => ({

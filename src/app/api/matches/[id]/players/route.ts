@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
 // Admin swaps a player in an unscored match
@@ -67,7 +68,7 @@ export async function DELETE(
 
   const match = await prisma.match.findUnique({
     where: { id },
-    include: { players: { include: { player: true } } },
+    include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
   if (!match) {
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
