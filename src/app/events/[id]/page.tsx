@@ -579,7 +579,7 @@ export default function EventDetailPage() {
       alertDialog("Scores cannot be tied!");
       return;
     }
-    if (!confirm("Are you sure you want to edit this score? This will recalculate ELO ratings.")) return;
+    if (!await confirmDialog({ message: "Edit score? This will recalculate rankings.", confirmText: "Edit" })) return;
     await fetch(`/api/matches/${matchId}/score`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -618,7 +618,7 @@ export default function EventDetailPage() {
   };
 
   const unsignFromEvent = async () => {
-    if (!confirm("Are you sure you want to leave this event?")) return;
+    if (!await confirmDialog({ message: "Leave this event?" })) return;
     const r = await fetch(`/api/events/${id}/signup`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json();
@@ -659,17 +659,19 @@ export default function EventDetailPage() {
   const deleteMatch = async (matchId: string) => {
     const match = event?.matches.find((m) => m.id === matchId);
     const isScored = match?.status === "completed";
-    const msg = isScored
-      ? "Are you sure you want to delete this scored match? ELO changes will be reversed."
-      : "Are you sure you want to delete this match?";
-    if (!confirm(msg)) return;
+    if (isScored) {
+      if (!await confirmDialog({ title: "Delete scored match?", message: "This match has scores. Rankings will be reversed.", confirmText: "Continue", danger: true })) return;
+      if (!await confirmDialog({ message: "Are you absolutely sure? This cannot be undone.", confirmText: "Delete", danger: true })) return;
+    } else {
+      if (!await confirmDialog({ message: "Delete this match?", confirmText: "Delete", danger: true })) return;
+    }
     // Optimistic: remove from UI immediately
     setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => m.id !== matchId) } : prev);
     fetch(`/api/matches/${matchId}/players`, { method: "DELETE" }).then(() => fetchEvent());
   };
 
   const removePlayer = async (playerId: string, playerName: string) => {
-    if (!confirm(`Remove ${playerName} from this event?`)) return;
+    if (!await confirmDialog({ message: `Remove ${playerName} from this event?`, danger: true })) return;
     const r = await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json().catch(() => ({ error: "Failed to remove" }));
@@ -770,7 +772,7 @@ export default function EventDetailPage() {
   };
 
   const resetEvent = async () => {
-    if (!confirm("Are you sure you want to reset this event? This will delete ALL matches and reverse all ELO changes. This cannot be undone.")) return;
+    if (!await confirmDialog({ title: "Reset Event", message: "This will delete ALL matches and reverse all ranking changes. Cannot be undone.", confirmText: "Reset", danger: true })) return;
     setResetting(true);
     await fetch(`/api/events/${id}/reset`, { method: "POST" });
     await fetchEvent();
@@ -829,7 +831,7 @@ export default function EventDetailPage() {
   };
 
   const clearAllPairs = async () => {
-    if (!confirm("Remove all pairs?")) return;
+    if (!await confirmDialog({ message: "Remove all pairs?", danger: true })) return;
     await fetch(`/api/events/${id}/pairs`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -1418,7 +1420,7 @@ export default function EventDetailPage() {
                     const newOwnerId = e.target.value;
                     if (!newOwnerId) return;
                     const newOwner = [...event.helpers.map((h) => h.player), ...event.players.map((ep) => ep.player)].find((p) => p.id === newOwnerId);
-                    if (!confirm(`Transfer ownership to ${newOwner?.name}? You will become a helper.`)) { e.target.value = ""; return; }
+                    if (!await confirmDialog({ message: `Transfer ownership to ${newOwner?.name}? You will become a helper.` })) { e.target.value = ""; return; }
                     await fetch(`/api/events/${id}`, {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },

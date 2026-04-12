@@ -147,39 +147,42 @@ function MatchesPage() {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-xl font-bold">My Matches</h2>
+      {/* Sticky header */}
+      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 pt-2 pb-2 space-y-2 shadow-sm">
+        <h2 className="text-xl font-bold">My Matches</h2>
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <button onClick={() => setShowFilters(!showFilters)}
-          className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
-          ☰ Filter
-        </button>
-        {activeFilters.length > 0 && (
-          <>
-            {activeFilters.map((f, i) => (
-              <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
-            ))}
-            <button onClick={clearFilters} className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
-          </>
-        )}
-      </div>
+        {/* Filter bar */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button onClick={() => setShowFilters(!showFilters)}
+            className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
+            ☰ Filter
+          </button>
+          {activeFilters.length > 0 && (
+            <>
+              {activeFilters.map((f, i) => (
+                <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
+              ))}
+              <button onClick={clearFilters} className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
+            </>
+          )}
+        </div>
 
-      {/* Stats */}
-      <div className="flex gap-2">
-        <div className="flex-1 bg-card rounded-xl border border-border p-2 text-center">
-          <div className="text-lg font-bold">{stats.total}</div>
-          <div className="text-[10px] text-muted">Played</div>
+        {/* Stats — compact */}
+        <div className="flex gap-2">
+          <div className="flex-1 bg-card rounded-lg border border-border px-2 py-1 text-center flex items-center justify-center gap-1.5">
+            <span className="text-sm font-bold">{stats.total}</span>
+            <span className="text-[10px] text-muted">Played</span>
+          </div>
+          <div className="flex-1 bg-card rounded-lg border border-border px-2 py-1 text-center flex items-center justify-center gap-1.5">
+            <span className="text-sm font-bold text-green-600">{stats.wins}</span>
+            <span className="text-[10px] text-muted">Wins</span>
+          </div>
+          <div className="flex-1 bg-card rounded-lg border border-border px-2 py-1 text-center flex items-center justify-center gap-1.5">
+            <span className="text-sm font-bold text-red-500">{stats.losses}</span>
+            <span className="text-[10px] text-muted">Losses</span>
+          </div>
         </div>
-        <div className="flex-1 bg-card rounded-xl border border-border p-2 text-center">
-          <div className="text-lg font-bold text-green-600">{stats.wins}</div>
-          <div className="text-[10px] text-muted">Wins</div>
-        </div>
-        <div className="flex-1 bg-card rounded-xl border border-border p-2 text-center">
-          <div className="text-lg font-bold text-red-500">{stats.losses}</div>
-          <div className="text-[10px] text-muted">Losses</div>
-        </div>
-      </div>
+      </div>{/* end sticky */}
 
       {/* Filter panel */}
       {showFilters && (
