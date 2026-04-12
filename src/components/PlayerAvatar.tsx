@@ -47,7 +47,7 @@ export function PlayerAvatar({ photoUrl, name, size = "md" }: PlayerAvatarProps)
         <img
           src={photoUrl}
           alt={name}
-          onClick={(e) => { e.stopPropagation(); setShowFull(true); }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setShowFull(true); }}
           className={`${sizeClasses[size]} rounded-full object-cover flex-shrink-0 cursor-pointer`}
         />
         {showFull && (
