@@ -16,6 +16,7 @@ import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
 import { RallyTracker } from "@/components/RallyTracker";
+import { ScorePicker } from "@/components/ScorePicker";
 
 interface Player {
   id: string;
@@ -1859,10 +1860,10 @@ export default function EventDetailPage() {
                     ) : hasLiveScore ? (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
                     ) : showInputs ? (
-                      <input type="number" inputMode="numeric" min="0" value={scores[match.id]?.[teamKey] ?? ""}
-                        onChange={(e) => setMatchScore(match.id, teamKey, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-16 text-center border border-border rounded-lg py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="-" />
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore}
+                          onChange={(v) => setMatchScore(match.id, teamKey, v)} />
+                      </div>
                     ) : (
                       <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
                     )}
