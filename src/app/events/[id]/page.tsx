@@ -1970,6 +1970,8 @@ export default function EventDetailPage() {
 
   const renderRounds = () => (
     <div className="space-y-3">
+      {/* Sticky header: actions + courts */}
+      <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-1 space-y-2 shadow-sm">
       {/* Actions + refresh */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -2008,6 +2010,7 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
+      </div>{/* end sticky */}
 
       {/* Active — orange */}
       {activeMatches.length > 0 && (
