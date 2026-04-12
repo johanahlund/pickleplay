@@ -93,7 +93,6 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, onChang
             <button onClick={() => setExtraRows(extraRows + 1)} className="w-full mt-3 py-1.5 text-xs text-action font-medium hover:underline">
               More numbers...
             </button>
-            <button onClick={() => setOpen(false)} className="w-full py-1.5 text-xs text-muted hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}
