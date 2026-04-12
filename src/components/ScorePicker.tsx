@@ -130,14 +130,14 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
                 );
               })}
             </div>
-            <div className="flex mt-3">
+            <div className="text-center mt-4 space-y-2">
               {!hasOtherScore && (
-                <button onClick={() => setExtraRows(extraRows + 1)} className="flex-1 py-1.5 text-xs text-action font-medium hover:underline">
+                <button onClick={() => setExtraRows(extraRows + 1)} className="text-sm text-action font-medium hover:underline">
                   More numbers...
                 </button>
               )}
               {hasOtherScore && onClearBoth && (
-                <button onClick={() => { onClearBoth(); setError(null); }} className="py-1.5 text-xs text-red-500 font-medium hover:underline px-2">
+                <button onClick={() => { onClearBoth(); setError(null); }} className="text-sm text-red-500 font-medium hover:underline">
                   Clear both scores
                 </button>
               )}
