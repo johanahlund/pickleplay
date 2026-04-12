@@ -21,6 +21,12 @@ function isValidPair(score1: number, score2: number, target: number, winBy: numb
   // Diff must be at least winBy
   if (winner - loser < winBy) return false;
 
+  if (winBy === 1) {
+    // Win-by-1: winner is always exactly target (game ends immediately)
+    return winner === target;
+  }
+
+  // Win-by-2+:
   // At exactly target — loser can be 0 to target-winBy (e.g., 11-9 max for win-by-2)
   if (winner === target) return loser <= target - winBy;
 
