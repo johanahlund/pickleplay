@@ -44,10 +44,10 @@ export default function RootLayout({
           <RoleProvider>
             <ToastProvider>
               <ConfirmProvider>
-              <Header />
-              <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
-              <BottomNav />
-              <RoleTogglePill />
+                <Header />
+                <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
+                <BottomNav />
+                <RoleTogglePill />
               </ConfirmProvider>
             </ToastProvider>
           </RoleProvider>
