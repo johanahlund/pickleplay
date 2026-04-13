@@ -46,6 +46,8 @@ model Player {
   eventHelpers  EventHelper[]
   pairsAsPlayer1 EventPair[]  @relation("pairPlayer1")
   pairsAsPlayer2 EventPair[]  @relation("pairPlayer2")
+  pairLocksAsA   EventPairLock[] @relation("pairLockA")
+  pairLocksAsB   EventPairLock[] @relation("pairLockB")
   clubMembers   ClubMember[]
   clubRatings   ClubPlayerRating[]
   createdClubs  Club[]        @relation("createdClubs")
@@ -190,6 +192,7 @@ model Event {
   classes        EventClass[]
   players        EventPlayer[]
   pairs          EventPair[]
+  pairLocks      EventPairLock[]
   matches        Match[]
   helpers        EventHelper[]
   whatsappGroups EventWhatsAppGroup[]
@@ -220,6 +223,10 @@ model EventClass {
   winBy         String  @default("2") // "1", "2", "cap13", "cap15", "cap17", "cap18", "cap23", "cap25"
   timedMinutes  Int?
   pairingMode  String   @default("random")
+  /// New unified pairing settings (v2 model). JSON shape matches
+  /// PairingSettings from src/lib/solver/types.ts. When present, the solver
+  /// uses this instead of the legacy pairingMode + prio* booleans.
+  pairingSettings Json?
   playMode     String   @default("round_based") // "round_based" | "continuous"
   prioSpeed    Boolean  @default(true)
   prioFairness Boolean  @default(true)
@@ -245,6 +252,7 @@ model EventClass {
   event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   players  EventPlayer[]
   pairs    EventPair[]
+  pairLocks EventPairLock[]
   matches  Match[]
 
   @@index([eventId])
@@ -274,13 +282,18 @@ model PairRequest {
 }
 
 model EventPlayer {
-  id         String   @id @default(cuid())
-  eventId    String
-  classId    String?
-  playerId   String
-  status     String   @default("registered")
-  skillLevel Int?
-  joinedAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  eventId         String
+  classId         String?
+  playerId        String
+  status          String   @default("registered")
+  /// Effective skill level used by the solver. L1–L5. Equals autoSkillLevel
+  /// unless an admin has overridden it. See src/lib/solver/skillAssign.ts.
+  skillLevel      Int?
+  /// Auto-assigned skill level from DUPR/rating at the time of add or
+  /// last recalculate. Preserved across overrides so admins can see the gap.
+  autoSkillLevel  Int?
+  joinedAt        DateTime @default(now())
 
   event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class  EventClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -288,6 +301,26 @@ model EventPlayer {
 
   @@unique([eventId, playerId, classId])
   @@index([playerId])
+}
+
+/// Manual pair lock — two players who MUST partner on every round they
+/// play. Used for tournament practice pairs, mentor-mentee, family etc.
+model EventPairLock {
+  id         String   @id @default(cuid())
+  eventId    String
+  classId    String?
+  playerAId  String
+  playerBId  String
+  note       String?  // optional reason, e.g. "practicing for tournament"
+  createdAt  DateTime @default(now())
+
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  class     EventClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  playerA   Player      @relation("pairLockA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB   Player      @relation("pairLockB", fields: [playerBId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerAId, playerBId])
+  @@index([eventId])
 }
 
 model EventPair {
