@@ -1330,6 +1330,15 @@ export default function EventDetailPage() {
 
   const renderPairing = () => (
     <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <Link
+        href={`/events/${id}/pairing`}
+        className="block bg-primary/5 border border-primary/30 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+      >
+        Try the new pairing configurator →
+        <span className="block text-[11px] font-normal text-muted mt-0.5">
+          Live feasibility analyzer, per-event skill levels, manual pair locks, and a unified solver.
+        </span>
+      </Link>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Match Pairing</label>
         <select value={editPairingMode} onChange={(e) => { setEditPairingMode(e.target.value); setHasEdits(true); }}

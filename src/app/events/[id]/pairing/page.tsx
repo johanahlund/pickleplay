@@ -106,6 +106,8 @@ export default function PairingConfigPage() {
   const [locks, setLocks] = useState<PairLockDTO[]>([]);
   const [generating, setGenerating] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -124,8 +126,20 @@ export default function PairingConfigPage() {
             setSettings({ ...DEFAULT_SETTINGS, ...data.classes[0].pairingSettings });
           }
         }
+        setSettingsLoaded(true);
       });
   }, [id]);
+
+  // When switching classes, load that class's saved settings if any.
+  useEffect(() => {
+    if (!event || !classId) return;
+    const cls = event.classes.find((c) => c.id === classId);
+    if (cls?.pairingSettings) {
+      setSettings({ ...DEFAULT_SETTINGS, ...cls.pairingSettings });
+    } else {
+      setSettings(DEFAULT_SETTINGS);
+    }
+  }, [classId, event]);
 
   // Load locks whenever class changes
   useEffect(() => {
@@ -155,6 +169,26 @@ export default function PairingConfigPage() {
     const timer = setTimeout(runAnalyze, 250); // debounce
     return () => clearTimeout(timer);
   }, [runAnalyze]);
+
+  // ── Auto-save settings to EventClass.pairingSettings (debounced) ────────
+  useEffect(() => {
+    if (!classId || !settingsLoaded) return;
+    setSaveStatus("saving");
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/events/${id}/pairing/settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ classId, settings }),
+        });
+        if (r.ok) setSaveStatus("saved");
+        else setSaveStatus("");
+      } catch {
+        setSaveStatus("");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [id, classId, settings, settingsLoaded]);
 
   // ── Generate next round ─────────────────────────────────────────────────
   const handleGenerate = async () => {
@@ -324,7 +358,11 @@ export default function PairingConfigPage() {
 
       {/* Settings */}
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-        <h3 className="text-sm font-semibold">Pairing settings</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Pairing settings</h3>
+          {saveStatus === "saving" && <span className="text-[10px] text-muted">Saving...</span>}
+          {saveStatus === "saved" && <span className="text-[10px] text-green-600">Saved ✓</span>}
+        </div>
 
         <SegPicker
           label="Base mode"
