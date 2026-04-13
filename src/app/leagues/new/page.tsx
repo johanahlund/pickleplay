@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const DEFAULT_CATEGORIES = [
@@ -10,24 +10,43 @@ const DEFAULT_CATEGORIES = [
   { name: "Singles", format: "singles", gender: "open", scoringFormat: "3x15", winBy: "2" },
 ];
 
+interface MyClub { id: string; name: string; emoji: string; myRole: string }
+
 export default function NewLeaguePage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [season, setSeason] = useState("");
+  const [clubId, setClubId] = useState("");
+  const [ownedClubs, setOwnedClubs] = useState<MyClub[]>([]);
+  const [loadingClubs, setLoadingClubs] = useState(true);
   const [maxRoster, setMaxRoster] = useState(14);
   const [maxPointsPerMatchDay, setMaxPointsPerMatchDay] = useState(3);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES.map((c) => ({ ...c, enabled: true, customFormat: "" })));
   const [scoringFormat, setScoringFormat] = useState("3x15");
   const [creating, setCreating] = useState(false);
 
+  useEffect(() => {
+    (async () => {
+      const r = await fetch("/api/clubs");
+      if (r.ok) {
+        const clubs: MyClub[] = await r.json();
+        const owned = clubs.filter((c) => c.myRole === "owner" || c.myRole === "admin");
+        setOwnedClubs(owned);
+        if (owned.length === 1) setClubId(owned[0].id);
+      }
+      setLoadingClubs(false);
+    })();
+  }, []);
+
   const handleCreate = async () => {
     if (!name.trim()) return;
+    if (!clubId) { alert("Please select an organizing club"); return; }
     setCreating(true);
-    const enabledCats = categories.filter((c) => c.enabled).map(({ enabled, customFormat, ...c }) => ({
-      ...c,
-      scoringFormat: customFormat || scoringFormat, // category override or league default
-    }));
+    const enabledCats = categories.filter((c) => c.enabled).map(({ enabled: _enabled, customFormat, ...c }) => {
+      void _enabled;
+      return { ...c, scoringFormat: customFormat || scoringFormat };
+    });
     const r = await fetch("/api/leagues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -35,6 +54,7 @@ export default function NewLeaguePage() {
         name: name.trim(),
         description: description.trim() || undefined,
         season: season.trim() || undefined,
+        clubId,
         config: { maxRoster, maxPointsPerMatchDay },
         categories: enabledCats,
       }),
@@ -44,15 +64,41 @@ export default function NewLeaguePage() {
       router.push(`/leagues/${league.id}`);
     } else {
       setCreating(false);
-      alert("Failed to create league");
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || "Failed to create league");
     }
   };
+
+  if (loadingClubs) {
+    return <div className="p-4 text-sm text-muted">Loading...</div>;
+  }
+
+  if (ownedClubs.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold">Create League</h2>
+        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+          <p className="text-sm">Only club owners and admins can create leagues.</p>
+          <p className="text-xs text-muted">You need to own or be an admin of a club before you can create a league. Visit the Clubs page to create one or ask an existing club owner to make you an admin.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Create League</h2>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-muted mb-1">Organizing Club</label>
+          <select value={clubId} onChange={(e) => setClubId(e.target.value)}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">Select club...</option>
+            {ownedClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+          </select>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-muted mb-1">League Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)}
@@ -134,7 +180,7 @@ export default function NewLeaguePage() {
           </div>
         </div>
 
-        <button onClick={handleCreate} disabled={!name.trim() || creating}
+        <button onClick={handleCreate} disabled={!name.trim() || !clubId || creating}
           className="w-full bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50">
           {creating ? "Creating..." : "Create League"}
         </button>

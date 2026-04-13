@@ -140,18 +140,31 @@ export async function requireEventManager(eventId: string) {
   throw new Error("Forbidden");
 }
 
-/** Check if the current user can manage the given league (admin, director, deputy, or helper) */
+/**
+ * Check if the current user can manage the given league. Allowed if:
+ *   - app admin, OR
+ *   - owner/admin of the league's organizing club, OR
+ *   - the league director (createdBy), deputy, or a helper
+ */
 export async function requireLeagueManager(leagueId: string) {
   const user = await requireAuth();
   if (user.role === "admin") return user;
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { createdById: true, deputyId: true },
+    select: { createdById: true, deputyId: true, clubId: true },
   });
   if (!league) throw new Error("NotFound");
   if (league.createdById === user.id) return user;
   if (league.deputyId === user.id) return user;
+
+  if (league.clubId) {
+    const clubMember = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: league.clubId, playerId: user.id } },
+      select: { role: true },
+    });
+    if (clubMember && (clubMember.role === "owner" || clubMember.role === "admin")) return user;
+  }
 
   const helper = await prisma.leagueHelper.findFirst({
     where: { leagueId, playerId: user.id },
@@ -161,18 +174,47 @@ export async function requireLeagueManager(leagueId: string) {
   throw new Error("Forbidden");
 }
 
-/** Check if the current user is the league director (admin or createdBy) — not deputy/helper. */
+/**
+ * Check if the current user is the league "owner" — the league director
+ * (createdBy), OR an owner/admin of the league's organizing club, OR an
+ * app admin. Used for sensitive operations (delete, transfer director,
+ * manage helpers).
+ */
 export async function requireLeagueOwner(leagueId: string) {
   const user = await requireAuth();
   if (user.role === "admin") return user;
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { createdById: true },
+    select: { createdById: true, clubId: true },
   });
   if (!league) throw new Error("NotFound");
   if (league.createdById === user.id) return user;
 
+  if (league.clubId) {
+    const clubMember = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: league.clubId, playerId: user.id } },
+      select: { role: true },
+    });
+    if (clubMember && (clubMember.role === "owner" || clubMember.role === "admin")) return user;
+  }
+
+  throw new Error("Forbidden");
+}
+
+/**
+ * Check if the current user is an owner or admin of the given club, or an
+ * app admin. Used to gate league creation and editing to club leadership.
+ */
+export async function requireClubOwner(clubId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+  const member = await prisma.clubMember.findUnique({
+    where: { clubId_playerId: { clubId, playerId: user.id } },
+    select: { role: true },
+  });
+  if (!member) throw new Error("NotFound");
+  if (member.role === "owner" || member.role === "admin") return user;
   throw new Error("Forbidden");
 }
 

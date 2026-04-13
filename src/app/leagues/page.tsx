@@ -11,18 +11,31 @@ interface League {
   season: string | null;
   status: string;
   createdAt: string;
+  club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
   teams: { id: string; name: string; club?: { name: string; emoji: string; logoUrl?: string | null } | null; _count: { players: number } }[];
   _count: { rounds: number; categories: number };
 }
+
+interface MyClub { myRole: string }
 
 export default function LeaguesPage() {
   const { data: session } = useSession();
   const [leagues, setLeagues] = useState<League[]>([]);
   const [loading, setLoading] = useState(true);
+  const [canCreate, setCanCreate] = useState(false);
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
 
   useEffect(() => {
     fetch("/api/leagues").then((r) => r.json()).then((data) => { setLeagues(data || []); setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    if (!session?.user) { setCanCreate(false); return; }
+    if (userRole === "admin") { setCanCreate(true); return; }
+    fetch("/api/clubs").then((r) => r.ok ? r.json() : []).then((clubs: MyClub[]) => {
+      setCanCreate(clubs.some((c) => c.myRole === "owner" || c.myRole === "admin"));
+    });
+  }, [session, userRole]);
 
   if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
 
@@ -30,7 +43,7 @@ export default function LeaguesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Leagues</h2>
-        {session?.user && (
+        {canCreate && (
           <Link href="/leagues/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ New League</Link>
         )}
       </div>
@@ -58,6 +71,12 @@ export default function LeaguesPage() {
                   <span className="text-xl text-muted">›</span>
                 </div>
               </div>
+              {league.club && (
+                <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
+                  <span>{league.club.emoji}</span>
+                  <span className="font-medium text-foreground">{league.club.name}</span>
+                </div>
+              )}
               {league.description && <p className="text-sm text-muted mt-1">{league.description}</p>}
               <div className="flex items-center gap-3 mt-2">
                 <span className="text-xs text-muted">{league.teams.length} teams</span>

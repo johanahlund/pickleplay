@@ -88,6 +88,7 @@ model Club {
   invites        ClubInvite[]
   joinRequests   ClubJoinRequest[]
   leagueTeams    LeagueTeam[]
+  leagues        League[]         @relation("clubLeagues")
 }
 
 model ClubPlayerRating {
@@ -446,16 +447,20 @@ model League {
   season      String?  // "2025", "Spring 2026"
   status      String   @default("draft") // draft, active, completed
   config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
+  clubId      String?  // Organizing club (required at creation; optional for legacy rows)
   createdById String?  // League Director
   deputyId    String?  // Deputy Director
   createdAt   DateTime @default(now())
 
+  club       Club?            @relation("clubLeagues", fields: [clubId], references: [id])
   createdBy  Player?          @relation("leagueCreator", fields: [createdById], references: [id])
   deputy     Player?          @relation("leagueDeputy", fields: [deputyId], references: [id])
   teams      LeagueTeam[]
   rounds     LeagueRound[]
   categories LeagueCategory[]
   helpers    LeagueHelper[]
+
+  @@index([clubId])
 }
 
 model LeagueHelper {
