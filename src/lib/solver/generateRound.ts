@@ -31,6 +31,7 @@ import { WEIGHTS } from "./types";
 import { buildRepeatCounts, pairKey, scoreMatch } from "./score";
 import type { RepeatCounts } from "./score";
 import { generateRoundSingles } from "./generateRoundSingles";
+import { generateRoundFixed } from "./generateRoundFixed";
 
 const PLAYERS_PER_MATCH = 4; // doubles
 
@@ -44,6 +45,9 @@ export function generateRound(input: SolverInput): SolverResult {
   // Route to format-specific implementation.
   if (input.format === "singles") {
     return generateRoundSingles(input);
+  }
+  if (input.settings.teams === "fixed") {
+    return generateRoundFixed(input);
   }
   const { settings, numCourts, history, locks } = input;
   const activePlayers = input.players.filter((p) => !p.paused);

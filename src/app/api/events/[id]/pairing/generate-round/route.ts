@@ -212,6 +212,16 @@ export async function POST(
     locks = dbLocks.map((l) => ({ playerAId: l.playerAId, playerBId: l.playerBId }));
   }
 
+  // For fixed-teams mode, pull the pre-formed EventPair rows.
+  let fixedTeams: { player1Id: string; player2Id: string }[] | undefined;
+  if (settings.teams === "fixed") {
+    const pairs = await prisma.eventPair.findMany({
+      where: { eventId: id, classId: body.classId },
+      select: { player1Id: true, player2Id: true },
+    });
+    fixedTeams = pairs.map((p) => ({ player1Id: p.player1Id, player2Id: p.player2Id }));
+  }
+
   const input: SolverInput = {
     players: solverPlayers,
     numCourts: courtsToFill,
@@ -219,6 +229,7 @@ export async function POST(
     settings,
     history,
     locks,
+    fixedTeams,
   };
 
   const result = generateRound(input);

@@ -105,6 +105,13 @@ export interface SolverInput {
   settings: PairingSettings;
   history: MatchHistoryEntry[];
   locks: PairLock[];
+  /**
+   * When settings.teams === "fixed", these are the pre-formed teams for
+   * the event. Each is an immutable pair of players. The solver schedules
+   * matchups between them rather than forming teams from individual players.
+   * Ignored when teams === "rotating".
+   */
+  fixedTeams?: Team[];
 }
 
 export type ViolationType = "matchCount" | "skill" | "gender" | "variety" | "wait";
