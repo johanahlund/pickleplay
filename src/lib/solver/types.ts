@@ -21,6 +21,13 @@ export interface SolverPlayer {
   gender: "M" | "F" | null;
   /** Total matches played in this event so far. Frozen while paused. */
   matchCount: number;
+  /**
+   * How many rounds since this player last played. 0 = just played or
+   * playing now. Caller computes this from history (currentRound -
+   * lastPlayedRound). Used by the maxWaitWindow fairness setting to keep
+   * bench-stuck players from being forgotten.
+   */
+  roundsSinceLastPlayed?: number;
   /** If true, excluded from the active pool for next round. */
   paused?: boolean;
 }
@@ -49,6 +56,14 @@ export interface PairingSettings {
   matchCountWindow: MatchCountWindow;
   /** Max number of repeats per partner-pair (or opponent-pair) across rounds. */
   varietyWindow: VarietyWindow;
+  /**
+   * Max number of rounds a player may sit out consecutively before the
+   * solver treats it as a violation. Different from matchCountWindow in
+   * that this catches the "bench forever" case when total counts happen
+   * to be balanced. Round-based only; in continuous play the queue
+   * naturally handles it.
+   */
+  maxWaitWindow?: number;
 }
 
 /** Two players who MUST partner together (e.g., tournament practice). */
@@ -89,7 +104,7 @@ export interface SolverInput {
   locks: PairLock[];
 }
 
-export type ViolationType = "matchCount" | "skill" | "gender" | "variety";
+export type ViolationType = "matchCount" | "skill" | "gender" | "variety" | "wait";
 
 export interface Violation {
   type: ViolationType;
@@ -116,6 +131,14 @@ export interface SolverResult {
 export const WEIGHTS = {
   /** Per step beyond the match count window. Huge — effectively hard. */
   matchCount: 10_000,
+  /**
+   * Per step beyond the wait window. Lower than matchCount because wait is
+   * already correlated with match count; this is a tiebreaker that only
+   * fires when a player is stuck on the bench while totals are otherwise
+   * balanced. Still dominates skill/variety because "nobody should wait
+   * forever" is a fairness concern.
+   */
+  wait: 5_000,
   /** Per step beyond the skill window. */
   skill: 100,
   /** Per non-compliant team when gender = "mixed" or "same" (require). */

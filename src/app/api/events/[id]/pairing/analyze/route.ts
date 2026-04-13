@@ -176,5 +176,6 @@ function normalizeSettings(s: Partial<PairingSettings>): PairingSettings {
     skillWindow: inf(s.skillWindow),
     matchCountWindow: inf(s.matchCountWindow),
     varietyWindow: inf(s.varietyWindow),
+    maxWaitWindow: s.maxWaitWindow === undefined ? Infinity : inf(s.maxWaitWindow),
   };
 }

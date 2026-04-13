@@ -36,6 +36,7 @@ export async function PUT(
     skillWindow: validWindow(s.skillWindow),
     matchCountWindow: validWindow(s.matchCountWindow),
     varietyWindow: validWindow(s.varietyWindow),
+    maxWaitWindow: validWindow(s.maxWaitWindow),
   };
 
   // Verify the class belongs to this event.

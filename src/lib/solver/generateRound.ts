@@ -27,6 +27,7 @@ import type {
   SolverResult,
   Violation,
 } from "./types";
+import { WEIGHTS } from "./types";
 import { buildRepeatCounts, pairKey, scoreMatch } from "./score";
 import type { RepeatCounts } from "./score";
 
@@ -58,51 +59,57 @@ export function generateRound(input: SolverInput): SolverResult {
     return { round: [], cost: 0, violations: [], sittingOut: activePlayers.map((p) => p.id) };
   }
 
-  // Single-court: pick the best foursome and split.
+  let raw: { round: Match[]; cost: number; violations: Violation[] } | null = null;
+
   if (courtsThisRound === 1) {
-    const best = findBestMatch(
-      activePlayers,
-      1,
-      playerMap,
-      settings,
-      repeats,
-      avg,
-      locks,
-    );
-    if (!best) {
-      return { round: [], cost: 0, violations: [], sittingOut: activePlayers.map((p) => p.id) };
-    }
-    return {
-      round: [best.match],
-      cost: best.cost,
-      violations: best.violations,
-      sittingOut: sittingOutFor(activePlayers, [best.match]),
-    };
+    const best = findBestMatch(activePlayers, 1, playerMap, settings, repeats, avg, locks);
+    if (best) raw = { round: [best.match], cost: best.cost, violations: best.violations };
+  } else if (courtsThisRound === 2) {
+    const best = findBestTwoCourtArrangement(activePlayers, playerMap, settings, repeats, avg, locks);
+    if (best) raw = { round: best.matches, cost: best.cost, violations: best.violations };
+  } else {
+    const result = greedyMultiCourt(activePlayers, courtsThisRound, playerMap, settings, repeats, avg, locks);
+    raw = { round: result.round, cost: result.cost, violations: result.violations };
   }
 
-  // Two-court: exhaustive with lookahead.
-  if (courtsThisRound === 2) {
-    const best = findBestTwoCourtArrangement(
-      activePlayers,
-      playerMap,
-      settings,
-      repeats,
-      avg,
-      locks,
-    );
-    if (!best) {
-      return { round: [], cost: 0, violations: [], sittingOut: activePlayers.map((p) => p.id) };
-    }
-    return {
-      round: best.matches,
-      cost: best.cost,
-      violations: best.violations,
-      sittingOut: sittingOutFor(activePlayers, best.matches),
-    };
+  if (!raw) {
+    return { round: [], cost: 0, violations: [], sittingOut: activePlayers.map((p) => p.id) };
   }
 
-  // 3+ courts: greedy per-court.
-  return greedyMultiCourt(activePlayers, courtsThisRound, playerMap, settings, repeats, avg, locks);
+  const sittingOut = sittingOutFor(activePlayers, raw.round);
+
+  // ── Round-level sit-out wait penalty ────────────────────────────────────
+  // After the solver picks its matches, check whether it left any player
+  // sitting out who has a wait count beyond the window. This catches the
+  // rare case where the match-count sort + wait tiebreaker still chose a
+  // bench-stuck player to sit out (possible when they're paired into an
+  // impossible lock or excluded by other constraints).
+  const extraViolations: Violation[] = [];
+  let extraCost = 0;
+  if (settings.maxWaitWindow !== undefined && Number.isFinite(settings.maxWaitWindow)) {
+    for (const id of sittingOut) {
+      const p = playerMap.get(id);
+      if (!p) continue;
+      const wait = p.roundsSinceLastPlayed || 0;
+      const beyond = wait - settings.maxWaitWindow;
+      if (beyond > 0) {
+        const c = beyond * WEIGHTS.wait;
+        extraCost += c;
+        extraViolations.push({
+          type: "wait",
+          cost: c,
+          details: `${p.name} sat out ${wait} round(s) (window ±${settings.maxWaitWindow})`,
+        });
+      }
+    }
+  }
+
+  return {
+    round: raw.round,
+    cost: raw.cost + extraCost,
+    violations: [...raw.violations, ...extraViolations],
+    sittingOut,
+  };
 }
 
 // ── Single-court best-match finder ────────────────────────────────────────
@@ -116,10 +123,16 @@ function findBestMatch(
   avg: number,
   locks: PairLock[],
 ): ScoredMatch | null {
-  // Sort by match count ASC (under-played first) with random tiebreaker.
+  // Sort by match count ASC (under-played first), then longest-waiting
+  // first, then random tiebreaker. The wait tiebreaker ensures bench-stuck
+  // players are prioritized when totals are tied — the core of the
+  // maxWaitWindow fairness story.
   const sorted = [...pool].sort((a, b) => {
     const diff = a.matchCount - b.matchCount;
-    return diff !== 0 ? diff : Math.random() - 0.5;
+    if (diff !== 0) return diff;
+    const waitDiff = (b.roundsSinceLastPlayed || 0) - (a.roundsSinceLastPlayed || 0);
+    if (waitDiff !== 0) return waitDiff;
+    return Math.random() - 0.5;
   });
 
   // Bound the search to the top K under-played players to keep cost low.

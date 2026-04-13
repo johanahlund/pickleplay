@@ -124,6 +124,7 @@ export async function POST(
   const history: MatchHistoryEntry[] = [];
   const activeMatches: typeof allMatches = [];
   const counts = new Map<string, number>();
+  const lastPlayedRound = new Map<string, number>();
   let maxRound = 0;
 
   for (const m of allMatches) {
@@ -139,7 +140,10 @@ export async function POST(
           team2Ids: [t2[0], t2[1]],
         });
       }
-      for (const p of m.players) counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
+      for (const p of m.players) {
+        counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
+        lastPlayedRound.set(p.playerId, Math.max(lastPlayedRound.get(p.playerId) || 0, m.round));
+      }
     } else {
       activeMatches.push(m);
     }
@@ -184,12 +188,14 @@ export async function POST(
           duprRating: ep.player.duprRating,
           globalRating: ep.player.globalRating,
         });
+      const last = lastPlayedRound.get(ep.playerId) || 0;
       return {
         id: ep.playerId,
         name: ep.player.name,
         skillLevel: level,
         gender: normalizeGender(ep.player.gender),
         matchCount: counts.get(ep.playerId) || 0,
+        roundsSinceLastPlayed: last > 0 ? maxRound - last : 0,
         paused: ep.status === "paused",
       };
     });
@@ -330,5 +336,6 @@ function normalizeSettings(s: Partial<PairingSettings>): PairingSettings {
     skillWindow: inf(s.skillWindow),
     matchCountWindow: inf(s.matchCountWindow),
     varietyWindow: inf(s.varietyWindow),
+    maxWaitWindow: s.maxWaitWindow === undefined ? Infinity : inf(s.maxWaitWindow),
   };
 }

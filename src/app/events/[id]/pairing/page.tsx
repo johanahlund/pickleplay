@@ -21,6 +21,7 @@ interface PairingSettings {
   skillWindow: Window;
   matchCountWindow: Window;
   varietyWindow: Window;
+  maxWaitWindow: Window;
 }
 
 interface EventClass {
@@ -118,6 +119,7 @@ const DEFAULT_SETTINGS: PairingSettings = {
   skillWindow: 1,
   matchCountWindow: 1,
   varietyWindow: 0,
+  maxWaitWindow: 1,
 };
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -578,6 +580,13 @@ export default function PairingConfigPage() {
           help="How many partner/opponent repeats allowed"
           value={settings.varietyWindow}
           onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))}
+        />
+
+        <WindowPicker
+          label="Max wait"
+          help="Max rounds a player may sit out consecutively"
+          value={settings.maxWaitWindow}
+          onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))}
         />
       </div>
 

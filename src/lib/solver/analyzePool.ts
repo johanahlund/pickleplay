@@ -173,6 +173,23 @@ export function analyzePool(
     }
   }
 
+  // Continuous play silo risk: when the pool barely fits the courts, the
+  // players on court 1 will keep playing each other (court silo). A rule
+  // of thumb: utilization (active ÷ (numCourts × 4)) below ~1.5 means
+  // continuous play will segregate the groups.
+  //
+  // We don't know the playMode from settings here — the playMode field
+  // lives on EventClass, not PairingSettings. The caller can suppress
+  // this warning if the event is round-based, but for now we always surface
+  // it and let the caller filter.
+  const utilization = active.length / (numCourts * 4);
+  if (utilization < 1.5 && active.length >= 4) {
+    const needed = Math.ceil(numCourts * 4 * 1.5) - active.length;
+    warnings.push(
+      `Tight pool for continuous play: ${active.length} players on ${numCourts} court(s) is ${utilization.toFixed(2)}× capacity. In continuous mode, players tend to get siloed by starting court. Consider round-based play, or add ${needed} more player(s).`,
+    );
+  }
+
   return {
     pool: {
       total: players.length,
