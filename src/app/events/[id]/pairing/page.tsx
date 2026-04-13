@@ -28,22 +28,24 @@ interface EventClass {
   name: string;
   format: string;
   pairingSettings: PairingSettings | null;
-  players: Array<{
+}
+
+interface EventPlayerDTO {
+  id: string;
+  playerId: string;
+  classId: string | null;
+  skillLevel: number | null;
+  autoSkillLevel: number | null;
+  status: string;
+  player: {
     id: string;
-    playerId: string;
-    skillLevel: number | null;
-    autoSkillLevel: number | null;
-    status: string;
-    player: {
-      id: string;
-      name: string;
-      gender: string | null;
-      photoUrl: string | null;
-      duprRating: number | null;
-      globalRating: number | null;
-      rating: number | null;
-    };
-  }>;
+    name: string;
+    gender: string | null;
+    photoUrl: string | null;
+    duprRating: number | null;
+    globalRating: number | null;
+    rating: number | null;
+  };
 }
 
 interface EventSummary {
@@ -51,6 +53,7 @@ interface EventSummary {
   name: string;
   numCourts: number;
   classes: EventClass[];
+  players: EventPlayerDTO[];
 }
 
 interface PoolAnalysis {
@@ -119,6 +122,7 @@ export default function PairingConfigPage() {
           name: data.name,
           numCourts: data.numCourts,
           classes: data.classes || [],
+          players: data.players || [],
         });
         if (data.classes?.[0]) {
           setClassId(data.classes[0].id);
@@ -251,15 +255,8 @@ export default function PairingConfigPage() {
       if (!prev) return prev;
       return {
         ...prev,
-        classes: prev.classes.map((c) =>
-          c.id === classId
-            ? {
-                ...c,
-                players: c.players.map((p) =>
-                  p.id === eventPlayerId ? { ...p, skillLevel: level } : p,
-                ),
-              }
-            : c,
+        players: prev.players.map((p) =>
+          p.id === eventPlayerId ? { ...p, skillLevel: level } : p,
         ),
       };
     });
@@ -290,6 +287,12 @@ export default function PairingConfigPage() {
   if (!event) return <div className="p-4 text-muted text-sm">Loading...</div>;
 
   const currentClass = event.classes.find((c) => c.id === classId);
+  // Event players are flat at the top level — filter by class here. Include
+  // players with null classId (the default/auto-created class) when the
+  // selected class is the first/default one.
+  const classPlayers = event.players.filter(
+    (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
+  );
 
   return (
     <div className="space-y-4 pb-24">
@@ -424,7 +427,7 @@ export default function PairingConfigPage() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Manual pair locks</h3>
           <LockAdder
-            players={currentClass?.players || []}
+            players={classPlayers}
             existingLocks={locks}
             onAdd={handleAddLock}
           />
@@ -460,7 +463,10 @@ export default function PairingConfigPage() {
         </div>
         {currentClass && (
           <div className="space-y-1">
-            {currentClass.players.map((ep) => (
+            {classPlayers.length === 0 && (
+              <p className="text-xs text-muted">No players registered in this class yet.</p>
+            )}
+            {classPlayers.map((ep) => (
               <div key={ep.id} className="flex items-center gap-2 p-1.5 rounded">
                 <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                 <span className="text-sm font-medium flex-1 truncate">{ep.player.name}</span>
@@ -588,7 +594,7 @@ function LockAdder({
   existingLocks,
   onAdd,
 }: {
-  players: EventClass["players"];
+  players: EventPlayerDTO[];
   existingLocks: PairLockDTO[];
   onAdd: (aId: string, bId: string) => void;
 }) {
