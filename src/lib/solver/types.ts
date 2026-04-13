@@ -80,6 +80,12 @@ export interface MatchHistoryEntry {
   courtNum: number;
   team1Ids: [string, string];
   team2Ids: [string, string];
+  /**
+   * Which team won this match. 1 | 2 | null. Required by Swiss (for W/L
+   * standings) and King (for winners-up/losers-down movement). Optional for
+   * Random / Manual where outcomes don't drive pairing.
+   */
+  winningTeam?: 1 | 2 | null;
 }
 
 // ── Output shapes ──────────────────────────────────────────────────────────

@@ -32,6 +32,8 @@ import { buildRepeatCounts, pairKey, scoreMatch } from "./score";
 import type { RepeatCounts } from "./score";
 import { generateRoundSingles } from "./generateRoundSingles";
 import { generateRoundFixed } from "./generateRoundFixed";
+import { generateRoundSwiss } from "./generateRoundSwiss";
+import { generateRoundKing } from "./generateRoundKing";
 
 const PLAYERS_PER_MATCH = 4; // doubles
 
@@ -42,7 +44,22 @@ interface ScoredMatch {
 }
 
 export function generateRound(input: SolverInput): SolverResult {
-  // Route to format-specific implementation.
+  // Route to base-mode / format-specific implementation.
+  if (input.settings.base === "manual") {
+    // Manual: solver does nothing. The UI creates matches directly.
+    return {
+      round: [],
+      cost: 0,
+      violations: [],
+      sittingOut: input.players.filter((p) => !p.paused).map((p) => p.id),
+    };
+  }
+  if (input.settings.base === "swiss") {
+    return generateRoundSwiss(input);
+  }
+  if (input.settings.base === "king") {
+    return generateRoundKing(input);
+  }
   if (input.format === "singles") {
     return generateRoundSingles(input);
   }

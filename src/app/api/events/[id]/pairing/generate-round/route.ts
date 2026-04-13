@@ -115,7 +115,7 @@ export async function POST(
       round: true,
       courtNum: true,
       status: true,
-      players: { select: { playerId: true, team: true } },
+      players: { select: { playerId: true, team: true, score: true } },
     },
     orderBy: [{ round: "asc" }, { courtNum: "asc" }],
   });
@@ -130,14 +130,21 @@ export async function POST(
   for (const m of allMatches) {
     maxRound = Math.max(maxRound, m.round);
     if (m.status === "completed") {
-      const t1 = m.players.filter((p) => p.team === 1).map((p) => p.playerId);
-      const t2 = m.players.filter((p) => p.team === 2).map((p) => p.playerId);
+      const t1Players = m.players.filter((p) => p.team === 1);
+      const t2Players = m.players.filter((p) => p.team === 2);
+      const t1 = t1Players.map((p) => p.playerId);
+      const t2 = t2Players.map((p) => p.playerId);
+      const t1Score = t1Players.reduce((s, p) => s + p.score, 0);
+      const t2Score = t2Players.reduce((s, p) => s + p.score, 0);
+      const winningTeam: 1 | 2 | null =
+        t1Score > t2Score ? 1 : t2Score > t1Score ? 2 : null;
       if (t1.length === 2 && t2.length === 2) {
         history.push({
           round: m.round,
           courtNum: m.courtNum,
           team1Ids: [t1[0], t1[1]],
           team2Ids: [t2[0], t2[1]],
+          winningTeam,
         });
       }
       for (const p of m.players) {
