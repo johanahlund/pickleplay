@@ -56,6 +56,32 @@ interface EventSummary {
   players: EventPlayerDTO[];
 }
 
+interface PreviewTeam {
+  player1Id: string;
+  player2Id: string;
+}
+
+interface PreviewMatch {
+  court: number;
+  team1: PreviewTeam;
+  team2: PreviewTeam;
+  team1Players: { id: string; name: string }[];
+  team2Players: { id: string; name: string }[];
+}
+
+interface NextMatchPreview {
+  preview: true;
+  round: PreviewMatch[];
+  cost: number;
+  violations: { type: string; cost: number; details: string }[];
+  sittingOut: string[];
+  idleCourtCount: number;
+  busyCourts: number[];
+  includedCourts: number[];
+  availablePlayerCount: number;
+  courtsToFill: number;
+}
+
 interface PoolAnalysis {
   pool: {
     total: number;
@@ -111,6 +137,9 @@ export default function PairingConfigPage() {
   const [bulkMode, setBulkMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [includeCourts, setIncludeCourts] = useState<Set<number>>(new Set());
+  const [preview, setPreview] = useState<NextMatchPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -194,12 +223,46 @@ export default function PairingConfigPage() {
     return () => clearTimeout(timer);
   }, [id, classId, settings, settingsLoaded]);
 
-  // ── Generate next round ─────────────────────────────────────────────────
+  // ── Live preview (debounced) ────────────────────────────────────────────
+  // Fetches the "what would happen if I generate now" state whenever
+  // settings or includeCourts change. Drives the court-circles + preview UI.
+  const runPreview = useCallback(async () => {
+    if (!classId) return;
+    setPreviewing(true);
+    try {
+      const r = await fetch(`/api/events/${id}/pairing/generate-round`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId,
+          settings,
+          includeCourts: [...includeCourts],
+          preview: true,
+        }),
+      });
+      if (r.ok) {
+        setPreview(await r.json());
+      } else {
+        setPreview(null);
+      }
+    } finally {
+      setPreviewing(false);
+    }
+  }, [id, classId, settings, includeCourts]);
+
+  useEffect(() => {
+    const timer = setTimeout(runPreview, 200);
+    return () => clearTimeout(timer);
+  }, [runPreview]);
+
+  // ── Commit the preview ──────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!classId) return;
     const ok = await confirm({
-      title: "Generate next round",
-      message: "This will create new matches based on the current settings. Continue?",
+      title: "Generate match(es)",
+      message: preview && preview.round.length > 1
+        ? `This will create ${preview.round.length} new matches based on the current settings and selected courts. Continue?`
+        : "This will create a new match based on the current settings. Continue?",
       confirmText: "Generate",
     });
     if (!ok) return;
@@ -208,18 +271,31 @@ export default function PairingConfigPage() {
       const r = await fetch(`/api/events/${id}/pairing/generate-round`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId, settings }),
+        body: JSON.stringify({
+          classId,
+          settings,
+          includeCourts: [...includeCourts],
+        }),
       });
       if (r.ok) {
-        await alert("Round generated successfully", "Done");
+        await alert("Match(es) generated successfully", "Done");
         router.push(`/events/${id}`);
       } else {
         const d = await r.json();
-        await alert(d.error || "Failed to generate round", "Error");
+        await alert(d.error || "Failed to generate", "Error");
       }
     } finally {
       setGenerating(false);
     }
+  };
+
+  const toggleCourt = (court: number) => {
+    setIncludeCourts((prev) => {
+      const next = new Set(prev);
+      if (next.has(court)) next.delete(court);
+      else next.add(court);
+      return next;
+    });
   };
 
   // ── Recalculate skill levels ────────────────────────────────────────────
@@ -354,6 +430,89 @@ export default function PairingConfigPage() {
               {analysis.warnings.map((w, i) => (
                 <div key={i} className="text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-1">⚠ {w}</div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Next match(es) — live preview with court selector */}
+      {preview && (
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Next match{preview.round.length !== 1 ? "es" : ""}</h3>
+            {previewing && <span className="text-[10px] text-muted">Updating...</span>}
+          </div>
+
+          {/* Courts in progress */}
+          {preview.busyCourts.length > 0 && (
+            <div>
+              <div className="text-[11px] text-muted mb-1">
+                Courts in progress — tap to include players who are about to finish:
+              </div>
+              <div className="flex gap-2">
+                {preview.busyCourts.map((c) => {
+                  const included = includeCourts.has(c);
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => toggleCourt(c)}
+                      className={`w-10 h-10 rounded-full border-2 text-sm font-semibold transition-colors ${
+                        included
+                          ? "bg-action text-white border-action"
+                          : "bg-white text-muted border-border hover:border-action"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted mt-1">
+                {includeCourts.size === 0
+                  ? "Currently only using idle players."
+                  : `Waiting for ${includeCourts.size} court${includeCourts.size > 1 ? "s" : ""} to finish.`}
+              </p>
+            </div>
+          )}
+
+          {/* Preview matches */}
+          {preview.round.length === 0 ? (
+            <p className="text-xs text-muted">
+              Not enough available players to form a match. Tap a court above to include more.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-[11px] text-muted">
+                {preview.availablePlayerCount} players available ·{" "}
+                {preview.round.length} match{preview.round.length > 1 ? "es" : ""} ready
+                {preview.cost > 0 && ` · cost ${preview.cost}`}
+              </div>
+              {preview.round.map((m, i) => (
+                <div key={i} className="bg-gray-50 rounded-lg p-2 text-xs">
+                  <div className="text-[10px] text-muted mb-0.5">Court {m.court}</div>
+                  <div className="flex items-center gap-1 font-medium">
+                    <span>{m.team1Players[0].name} + {m.team1Players[1].name}</span>
+                    <span className="text-muted text-[10px] mx-1">vs</span>
+                    <span>{m.team2Players[0].name} + {m.team2Players[1].name}</span>
+                  </div>
+                </div>
+              ))}
+              {preview.violations.length > 0 && (
+                <div className="text-[10px] text-yellow-700 bg-yellow-50 rounded px-2 py-1">
+                  ⚠ {preview.violations.length} soft constraint{preview.violations.length > 1 ? "s" : ""} violated:
+                  <ul className="mt-0.5 ml-3 list-disc">
+                    {preview.violations.slice(0, 3).map((v, i) => (
+                      <li key={i}>{v.details}</li>
+                    ))}
+                    {preview.violations.length > 3 && <li>and {preview.violations.length - 3} more...</li>}
+                  </ul>
+                </div>
+              )}
+              {preview.sittingOut.length > 0 && (
+                <div className="text-[10px] text-muted">
+                  Sitting out: {preview.sittingOut.length} player{preview.sittingOut.length > 1 ? "s" : ""}
+                </div>
+              )}
             </div>
           )}
         </div>
