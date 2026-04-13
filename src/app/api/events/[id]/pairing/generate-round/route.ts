@@ -93,9 +93,9 @@ export async function POST(
   if (eventClass.eventId !== id) {
     return NextResponse.json({ error: "Class does not belong to this event" }, { status: 403 });
   }
-  if (eventClass.format !== "doubles") {
+  if (eventClass.format !== "doubles" && eventClass.format !== "singles") {
     return NextResponse.json(
-      { error: "New solver only supports doubles in v1 — use legacy route for singles" },
+      { error: `Unknown format "${eventClass.format}"` },
       { status: 400 },
     );
   }
@@ -215,6 +215,7 @@ export async function POST(
   const input: SolverInput = {
     players: solverPlayers,
     numCourts: courtsToFill,
+    format: eventClass.format === "singles" ? "singles" : "doubles",
     settings,
     history,
     locks,
@@ -227,17 +228,22 @@ export async function POST(
   const playerNameMap = new Map(
     eventClass.players.map((ep) => [ep.playerId, ep.player.name]),
   );
-  const enrichedRound = result.round.map((m) => ({
-    ...m,
-    team1Players: [
+  const isSinglesPreview = eventClass.format === "singles";
+  const enrichedRound = result.round.map((m) => {
+    const team1Players = [
       { id: m.team1.player1Id, name: playerNameMap.get(m.team1.player1Id) || "?" },
-      { id: m.team1.player2Id, name: playerNameMap.get(m.team1.player2Id) || "?" },
-    ],
-    team2Players: [
+    ];
+    if (!isSinglesPreview) {
+      team1Players.push({ id: m.team1.player2Id, name: playerNameMap.get(m.team1.player2Id) || "?" });
+    }
+    const team2Players = [
       { id: m.team2.player1Id, name: playerNameMap.get(m.team2.player1Id) || "?" },
-      { id: m.team2.player2Id, name: playerNameMap.get(m.team2.player2Id) || "?" },
-    ],
-  }));
+    ];
+    if (!isSinglesPreview) {
+      team2Players.push({ id: m.team2.player2Id, name: playerNameMap.get(m.team2.player2Id) || "?" });
+    }
+    return { ...m, team1Players, team2Players };
+  });
 
   // Preview mode: return what would happen, don't write anything.
   if (body.preview) {
@@ -285,9 +291,20 @@ export async function POST(
     }
   }
 
+  const isSingles = eventClass.format === "singles";
   for (let i = 0; i < result.round.length; i++) {
     const m = result.round[i];
     const courtNum = targetCourtNums[i] || m.court;
+    // Singles uses a sentinel where player2Id === player1Id. Write only
+    // one player per team for singles; two per team for doubles.
+    const team1 = [{ playerId: m.team1.player1Id, team: 1, score: 0 }];
+    if (!isSingles) {
+      team1.push({ playerId: m.team1.player2Id, team: 1, score: 0 });
+    }
+    const team2 = [{ playerId: m.team2.player1Id, team: 2, score: 0 }];
+    if (!isSingles) {
+      team2.push({ playerId: m.team2.player2Id, team: 2, score: 0 });
+    }
     const match = await prisma.match.create({
       data: {
         eventId: id,
@@ -296,12 +313,7 @@ export async function POST(
         courtNum,
         status: "pending",
         players: {
-          create: [
-            { playerId: m.team1.player1Id, team: 1, score: 0 },
-            { playerId: m.team1.player2Id, team: 1, score: 0 },
-            { playerId: m.team2.player1Id, team: 2, score: 0 },
-            { playerId: m.team2.player2Id, team: 2, score: 0 },
-          ],
+          create: [...team1, ...team2],
         },
       },
       select: { id: true },

@@ -37,6 +37,7 @@ export interface SolverPlayer {
 export type BaseMode = "random" | "swiss" | "king" | "manual";
 export type TeamsMode = "fixed" | "rotating";
 export type GenderRule = "mixed" | "random" | "same";
+export type Format = "doubles" | "singles";
 
 /**
  * All the "tolerance window" settings use the same shape: a max distance
@@ -99,6 +100,8 @@ export type Round = Match[];
 export interface SolverInput {
   players: SolverPlayer[];
   numCourts: number;
+  /** "doubles" (4 players per match) or "singles" (2 players per match). */
+  format?: Format;
   settings: PairingSettings;
   history: MatchHistoryEntry[];
   locks: PairLock[];

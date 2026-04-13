@@ -30,6 +30,7 @@ import type {
 import { WEIGHTS } from "./types";
 import { buildRepeatCounts, pairKey, scoreMatch } from "./score";
 import type { RepeatCounts } from "./score";
+import { generateRoundSingles } from "./generateRoundSingles";
 
 const PLAYERS_PER_MATCH = 4; // doubles
 
@@ -40,6 +41,10 @@ interface ScoredMatch {
 }
 
 export function generateRound(input: SolverInput): SolverResult {
+  // Route to format-specific implementation.
+  if (input.format === "singles") {
+    return generateRoundSingles(input);
+  }
   const { settings, numCourts, history, locks } = input;
   const activePlayers = input.players.filter((p) => !p.paused);
   const playerMap = new Map(activePlayers.map((p) => [p.id, p]));
