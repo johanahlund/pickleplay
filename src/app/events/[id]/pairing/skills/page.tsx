@@ -6,19 +6,36 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useConfirm } from "@/components/ConfirmDialog";
 
-type Bucket = "unset" | 1 | 2 | 3 | 4 | 5;
+/**
+ * Skill level editor — two-pane layout:
+ *   Left:  scrollable list of every player in the class (drag source +
+ *          master reference), each card shows the current level badge.
+ *   Right: one row per level, highest first (L5 → L4 → L3 → L2 → L1 →
+ *          Unset). Each row is a drop target. Players currently assigned
+ *          to that level appear as chips in the row.
+ *
+ * Supported interactions:
+ *   - Drag a player card from the left into a level row on the right.
+ *   - Drag a chip between level rows on the right to reassign.
+ *   - Drag a chip off the right side back to Unset.
+ *   - Tap a player / chip to select, then tap a level row to place them
+ *     (mobile-friendly alternative to drag).
+ */
 
-const BUCKETS: { key: Bucket; label: string }[] = [
-  { key: "unset", label: "Unset" },
-  { key: 1, label: "L1" },
-  { key: 2, label: "L2" },
-  { key: 3, label: "L3" },
-  { key: 4, label: "L4" },
-  { key: 5, label: "L5" },
+type Level = 1 | 2 | 3 | 4 | 5 | null;
+
+// Top-to-bottom order: L5 first, Unset last.
+const LEVEL_ROWS: { key: Exclude<Level, null> | "unset"; label: string; level: Level }[] = [
+  { key: 5, label: "L5 — Expert", level: 5 },
+  { key: 4, label: "L4", level: 4 },
+  { key: 3, label: "L3", level: 3 },
+  { key: 2, label: "L2", level: 2 },
+  { key: 1, label: "L1 — Beginner", level: 1 },
+  { key: "unset", label: "Unset", level: null },
 ];
 
 interface EventPlayerRow {
-  id: string; // EventPlayer id
+  id: string;
   playerId: string;
   classId: string | null;
   skillLevel: number | null;
@@ -28,7 +45,6 @@ interface EventPlayerRow {
     name: string;
     photoUrl: string | null;
     duprRating: number | null;
-    globalRating: number | null;
   };
 }
 
@@ -51,9 +67,8 @@ export default function SkillEditorPage() {
   const [event, setEvent] = useState<EventSummary | null>(null);
   const [classId, setClassId] = useState<string>("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // tap-to-assign support for touch devices: one-tap to select, then tap a bucket
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [dragOverBucket, setDragOverBucket] = useState<Bucket | null>(null);
+  const [dragOverLevel, setDragOverLevel] = useState<Level | "unset" | null>(null);
 
   useEffect(() => {
     fetch(`/api/events/${id}`)
@@ -74,53 +89,47 @@ export default function SkillEditorPage() {
   const classPlayers = event.players.filter(
     (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
   );
+  const sortedPlayers = [...classPlayers].sort((a, b) =>
+    a.player.name.localeCompare(b.player.name),
+  );
 
-  // Group players by bucket
-  const byBucket: Record<string, EventPlayerRow[]> = {
-    unset: [],
-    "1": [],
-    "2": [],
-    "3": [],
-    "4": [],
-    "5": [],
-  };
+  // Group players by their current level for the right-hand rows.
+  const byLevel = new Map<string, EventPlayerRow[]>();
+  for (const r of LEVEL_ROWS) byLevel.set(String(r.key), []);
   for (const ep of classPlayers) {
     const key = ep.skillLevel == null ? "unset" : String(ep.skillLevel);
-    byBucket[key].push(ep);
+    byLevel.get(key)?.push(ep);
   }
 
-  // ── Assignment action (used by both drag-drop and tap) ─────────────────
-  const assign = async (eventPlayerId: string, bucket: Bucket) => {
-    const newLevel: number | null = bucket === "unset" ? null : bucket;
-    // Optimistic
+  // ── Assignment ─────────────────────────────────────────────────────────
+  const assign = async (eventPlayerId: string, level: Level) => {
     setEvent((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
         players: prev.players.map((p) =>
-          p.id === eventPlayerId ? { ...p, skillLevel: newLevel } : p,
+          p.id === eventPlayerId ? { ...p, skillLevel: level } : p,
         ),
       };
     });
     setSelectedId(null);
     setDraggingId(null);
-    setDragOverBucket(null);
+    setDragOverLevel(null);
 
-    // Persist
     await fetch(`/api/events/${id}/pairing/skill-levels`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        updates: [{ eventPlayerId, skillLevel: newLevel }],
+        updates: [{ eventPlayerId, skillLevel: level }],
       }),
     });
   };
 
-  // ── Recalculate from DUPR/rating ────────────────────────────────────────
   const handleRecalcAll = async () => {
     const ok = await confirm({
       title: "Recalculate from DUPR / rating?",
-      message: "Every player's skill level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
+      message:
+        "Every player's skill level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
       danger: true,
       confirmText: "Recalculate",
     });
@@ -131,7 +140,6 @@ export default function SkillEditorPage() {
       body: JSON.stringify({ action: "recalculate", classId }),
     });
     if (r.ok) {
-      // Re-fetch event
       const ev = await fetch(`/api/events/${id}`).then((x) => x.json());
       setEvent({
         id: ev.id,
@@ -144,52 +152,56 @@ export default function SkillEditorPage() {
     }
   };
 
-  // ── Drag & drop handlers ────────────────────────────────────────────────
+  // ── Drag-and-drop ──────────────────────────────────────────────────────
   const onDragStart = (e: React.DragEvent, eventPlayerId: string) => {
     setDraggingId(eventPlayerId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", eventPlayerId);
   };
 
-  const onDragOver = (e: React.DragEvent, bucket: Bucket) => {
+  const onDragOver = (e: React.DragEvent, target: Level | "unset") => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragOverBucket !== bucket) setDragOverBucket(bucket);
+    if (dragOverLevel !== target) setDragOverLevel(target);
   };
 
-  const onDragLeave = () => setDragOverBucket(null);
+  const onDragLeave = () => setDragOverLevel(null);
 
-  const onDrop = (e: React.DragEvent, bucket: Bucket) => {
+  const onDrop = (e: React.DragEvent, target: Level | "unset") => {
     e.preventDefault();
     const eventPlayerId = draggingId || e.dataTransfer.getData("text/plain");
-    if (eventPlayerId) assign(eventPlayerId, bucket);
+    if (!eventPlayerId) return;
+    const level: Level = target === "unset" ? null : (target as Level);
+    assign(eventPlayerId, level);
   };
 
-  // ── Tap-to-assign (mobile-friendly) ─────────────────────────────────────
+  // ── Tap-to-assign ──────────────────────────────────────────────────────
   const onTapPlayer = (eventPlayerId: string) => {
     setSelectedId((prev) => (prev === eventPlayerId ? null : eventPlayerId));
   };
 
-  const onTapBucket = (bucket: Bucket) => {
-    if (selectedId) assign(selectedId, bucket);
+  const onTapLevel = (target: Level | "unset") => {
+    if (!selectedId) return;
+    const level: Level = target === "unset" ? null : (target as Level);
+    assign(selectedId, level);
   };
 
   return (
     <div className="space-y-4 pb-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <Link href={`/events/${id}/pairing`} className="text-sm text-action">&larr; Back to pairing</Link>
-          <h2 className="text-xl font-bold mt-1">Skill levels: {event.name}</h2>
+          <h2 className="text-xl font-bold mt-1">Skill levels</h2>
+          <p className="text-xs text-muted">{event.name}</p>
         </div>
         <button
           onClick={handleRecalcAll}
-          className="text-xs text-muted hover:text-foreground"
+          className="text-xs text-muted hover:text-foreground underline"
         >
           Recalculate from ratings
         </button>
       </div>
 
-      {/* Class picker */}
       {event.classes.length > 1 && (
         <div>
           <label className="block text-xs text-muted mb-1">Class</label>
@@ -205,78 +217,173 @@ export default function SkillEditorPage() {
         </div>
       )}
 
-      <p className="text-xs text-muted">
-        Drag a player to a level, or tap a player then tap a level.
-        Auto-assigned values are shown when overridden.
+      <p className="text-[11px] text-muted">
+        Drag a player onto a level row, or tap a player then tap a row. Highest level is on top.
       </p>
 
-      {/* Bucket columns */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-        {BUCKETS.map((b) => {
-          const rows = byBucket[String(b.key)] || [];
-          const isOver = dragOverBucket === b.key;
-          const isHighlightedForTap = selectedId !== null;
-          return (
-            <div
-              key={String(b.key)}
-              onDragOver={(e) => onDragOver(e, b.key)}
-              onDragLeave={onDragLeave}
-              onDrop={(e) => onDrop(e, b.key)}
-              onClick={() => onTapBucket(b.key)}
-              className={`bg-card rounded-xl border-2 p-2 min-h-[160px] transition-colors ${
-                isOver
-                  ? "border-action bg-action/10"
-                  : isHighlightedForTap
-                    ? "border-primary/40 border-dashed cursor-pointer hover:bg-primary/5"
-                    : "border-border"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
-                <span className="text-sm font-bold">{b.label}</span>
-                <span className="text-[10px] text-muted">{rows.length}</span>
+      {/* Two-pane grid: players left, level rows right */}
+      <div className="grid grid-cols-[minmax(140px,180px)_1fr] gap-3">
+        {/* LEFT: player master list */}
+        <div className="bg-card rounded-xl border border-border p-2 space-y-1 self-start sticky top-2 max-h-[80vh] overflow-y-auto">
+          <div className="text-[11px] font-semibold text-muted uppercase tracking-wider px-1 py-1 border-b border-border mb-1">
+            Players ({sortedPlayers.length})
+          </div>
+          {sortedPlayers.length === 0 && (
+            <p className="text-[11px] text-muted italic p-2">No players in this class.</p>
+          )}
+          {sortedPlayers.map((ep) => (
+            <PlayerCard
+              key={ep.id}
+              ep={ep}
+              selected={selectedId === ep.id}
+              dragging={draggingId === ep.id}
+              onDragStart={onDragStart}
+              onTap={onTapPlayer}
+            />
+          ))}
+        </div>
+
+        {/* RIGHT: level rows, highest first */}
+        <div className="space-y-2">
+          {LEVEL_ROWS.map((row) => {
+            const rows = byLevel.get(String(row.key)) || [];
+            const isOver = dragOverLevel === row.key;
+            const highlightForTap = selectedId !== null;
+            return (
+              <div
+                key={String(row.key)}
+                onDragOver={(e) => onDragOver(e, row.key)}
+                onDragLeave={onDragLeave}
+                onDrop={(e) => onDrop(e, row.key)}
+                onClick={() => onTapLevel(row.key)}
+                className={`bg-card rounded-xl border-2 p-3 min-h-[72px] transition-colors ${
+                  isOver
+                    ? "border-action bg-action/10"
+                    : highlightForTap
+                      ? "border-primary/40 border-dashed cursor-pointer hover:bg-primary/5"
+                      : "border-border"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
+                    {row.label}
+                  </span>
+                  <span className="text-[10px] text-muted">{rows.length}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {rows.map((ep) => (
+                    <PlayerChip
+                      key={ep.id}
+                      ep={ep}
+                      selected={selectedId === ep.id}
+                      dragging={draggingId === ep.id}
+                      onDragStart={onDragStart}
+                      onTap={onTapPlayer}
+                    />
+                  ))}
+                  {rows.length === 0 && (
+                    <span className="text-[10px] text-muted italic">drop here</span>
+                  )}
+                </div>
               </div>
-              <div className="space-y-1">
-                {rows.map((ep) => (
-                  <div
-                    key={ep.id}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, ep.id)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTapPlayer(ep.id);
-                    }}
-                    className={`flex items-center gap-1.5 p-1.5 rounded-lg cursor-move transition-all ${
-                      selectedId === ep.id
-                        ? "bg-action text-white"
-                        : draggingId === ep.id
-                          ? "opacity-50 bg-gray-100"
-                          : "bg-gray-50 hover:bg-gray-100"
-                    }`}
-                  >
-                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
-                      {ep.skillLevel != null && ep.autoSkillLevel != null && ep.skillLevel !== ep.autoSkillLevel && (
-                        <div className={`text-[9px] ${selectedId === ep.id ? "text-white/70" : "text-muted"}`}>
-                          auto L{ep.autoSkillLevel}
-                        </div>
-                      )}
-                      {ep.player.duprRating != null && (
-                        <div className={`text-[9px] ${selectedId === ep.id ? "text-white/70" : "text-muted"}`}>
-                          DUPR {ep.player.duprRating.toFixed(2)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {rows.length === 0 && (
-                  <p className="text-[10px] text-muted italic py-4 text-center">empty</p>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ── Subcomponents ─────────────────────────────────────────────────────────
+
+function PlayerCard({
+  ep,
+  selected,
+  dragging,
+  onDragStart,
+  onTap,
+}: {
+  ep: EventPlayerRow;
+  selected: boolean;
+  dragging: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onTap: (id: string) => void;
+}) {
+  const level = ep.skillLevel ?? ep.autoSkillLevel;
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ep.id)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onTap(ep.id);
+      }}
+      className={`flex items-center gap-1.5 p-1.5 rounded-lg cursor-move transition-all ${
+        selected
+          ? "bg-action text-white"
+          : dragging
+            ? "opacity-50 bg-gray-100"
+            : "bg-gray-50 hover:bg-gray-100"
+      }`}
+    >
+      <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
+      </div>
+      <span
+        className={`text-[9px] font-bold ${
+          selected ? "text-white/90" : level == null ? "text-muted" : "text-foreground"
+        }`}
+      >
+        {level == null ? "—" : `L${level}`}
+      </span>
+    </div>
+  );
+}
+
+function PlayerChip({
+  ep,
+  selected,
+  dragging,
+  onDragStart,
+  onTap,
+}: {
+  ep: EventPlayerRow;
+  selected: boolean;
+  dragging: boolean;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onTap: (id: string) => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, ep.id)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onTap(ep.id);
+      }}
+      className={`flex items-center gap-1 px-1.5 py-1 rounded-lg cursor-move transition-all ${
+        selected
+          ? "bg-action text-white"
+          : dragging
+            ? "opacity-50 bg-gray-100"
+            : "bg-gray-100 hover:bg-gray-200"
+      }`}
+      title={
+        ep.skillLevel != null && ep.autoSkillLevel != null && ep.skillLevel !== ep.autoSkillLevel
+          ? `Auto: L${ep.autoSkillLevel}`
+          : undefined
+      }
+    >
+      <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+      <span className="text-[11px] font-medium">{ep.player.name}</span>
+      {ep.skillLevel != null &&
+        ep.autoSkillLevel != null &&
+        ep.skillLevel !== ep.autoSkillLevel && (
+          <span className={`text-[8px] ${selected ? "text-white/80" : "text-muted"}`}>
+            ≠L{ep.autoSkillLevel}
+          </span>
+        )}
     </div>
   );
 }

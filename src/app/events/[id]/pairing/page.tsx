@@ -598,9 +598,9 @@ export default function PairingConfigPage() {
         )}
       </div>
 
-      {/* Players — skill level + match count */}
-      <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-        <div className="flex items-center justify-between">
+      {/* Players — grouped by level, highest first */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between px-1">
           <h3 className="text-sm font-semibold">Players</h3>
           <Link
             href={`/events/${id}/pairing/skills`}
@@ -609,36 +609,87 @@ export default function PairingConfigPage() {
             Edit levels →
           </Link>
         </div>
-        {currentClass && (
-          <div className="space-y-1">
-            {classPlayers.length === 0 && (
-              <p className="text-xs text-muted">No players registered in this class yet.</p>
-            )}
-            {classPlayers.map((ep) => {
-              const count = playerMatchCounts.get(ep.playerId) || 0;
-              return (
-                <div key={ep.id} className="flex items-center gap-2 p-1.5 rounded">
-                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                  <span className="text-sm font-medium flex-1 truncate">{ep.player.name}</span>
-                  <span
-                    className="text-[10px] text-muted tabular-nums"
-                    title={`${count} match${count === 1 ? "" : "es"} played`}
-                  >
-                    {count}m
-                  </span>
-                  {ep.player.duprRating != null && (
-                    <span className="text-[10px] text-muted">DUPR {ep.player.duprRating.toFixed(2)}</span>
-                  )}
-                  <span className="text-xs font-semibold">
-                    L{ep.skillLevel ?? ep.autoSkillLevel ?? "—"}
-                    {ep.skillLevel != null && ep.autoSkillLevel != null && ep.skillLevel !== ep.autoSkillLevel && (
-                      <span className="text-[10px] text-muted font-normal"> · was L{ep.autoSkillLevel}</span>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        {classPlayers.length === 0 ? (
+          <p className="text-xs text-muted px-1">No players registered in this class yet.</p>
+        ) : (
+          <>
+            {(() => {
+              // Group players by effective level (manual override falls back to auto).
+              const byLevel = new Map<string, EventPlayerDTO[]>();
+              for (const ep of classPlayers) {
+                const eff = ep.skillLevel ?? ep.autoSkillLevel;
+                const key = eff == null ? "unset" : String(eff);
+                const list = byLevel.get(key) || [];
+                list.push(ep);
+                byLevel.set(key, list);
+              }
+
+              const rows: { key: string; label: string }[] = [
+                { key: "5", label: "L5 — Expert" },
+                { key: "4", label: "L4" },
+                { key: "3", label: "L3" },
+                { key: "2", label: "L2" },
+                { key: "1", label: "L1 — Beginner" },
+                { key: "unset", label: "Unset" },
+              ];
+
+              return rows
+                .filter((row) => (byLevel.get(row.key) || []).length > 0)
+                .map((row) => {
+                  const players = byLevel.get(row.key) || [];
+                  return (
+                    <div key={row.key} className="bg-card rounded-xl border border-border p-3">
+                      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
+                        <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
+                          {row.label}
+                        </span>
+                        <span className="text-[10px] text-muted">{players.length} player{players.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {players
+                          .sort((a, b) => a.player.name.localeCompare(b.player.name))
+                          .map((ep) => {
+                            const count = playerMatchCounts.get(ep.playerId) || 0;
+                            const overridden =
+                              ep.skillLevel != null &&
+                              ep.autoSkillLevel != null &&
+                              ep.skillLevel !== ep.autoSkillLevel;
+                            return (
+                              <div
+                                key={ep.id}
+                                className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1.5 min-w-0"
+                                title={
+                                  overridden
+                                    ? `Auto: L${ep.autoSkillLevel}`
+                                    : undefined
+                                }
+                              >
+                                <PlayerAvatar
+                                  name={ep.player.name}
+                                  photoUrl={ep.player.photoUrl}
+                                  size="xs"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
+                                  {overridden && (
+                                    <div className="text-[9px] text-muted">auto L{ep.autoSkillLevel}</div>
+                                  )}
+                                </div>
+                                <span
+                                  className="text-[10px] text-muted tabular-nums shrink-0"
+                                  title={`${count} match${count === 1 ? "" : "es"}`}
+                                >
+                                  {count}m
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  );
+                });
+            })()}
+          </>
         )}
       </div>
 
