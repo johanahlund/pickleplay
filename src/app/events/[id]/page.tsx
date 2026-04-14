@@ -1047,7 +1047,7 @@ export default function EventDetailPage() {
     <div onClick={() => { if (canManage) { fetchAllPlayers(); setActiveSection("admins"); } }}
       className={`bg-card rounded-xl border border-border p-3 flex items-center gap-2 ${canManage ? "active:opacity-70 cursor-pointer" : ""}`}>
       <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted">Event Manager</p>
+        <p className="text-base font-bold text-foreground">Event Manager</p>
         <p className="text-sm font-medium truncate">
           {ownerName || "—"}
           {helperNames.length > 0 && <span className="text-muted font-normal"> + {helperNames.join(", ")}</span>}
@@ -2732,7 +2732,7 @@ export default function EventDetailPage() {
         {/* Total players */}
         <div className={frameClass}>
           <button onClick={() => setActiveSection("players")} className={rowClass}>
-            <span className="text-sm text-muted">Players</span>
+            <span className="text-base font-bold text-foreground">Players</span>
             <span className="text-sm font-medium">{uniquePlayerIds.size} signed up</span>
           </button>
         </div>
@@ -2772,7 +2772,7 @@ export default function EventDetailPage() {
         {/* Ranking */}
         <div className={frameClass}>
           <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
-            <span className="text-sm text-muted">Ranking</span>
+            <span className="text-base font-bold text-foreground">Ranking</span>
             <span className="flex-1 text-right">
               <span className="text-sm font-medium">{rankingLabel(event.rankingMode || "ranked")}</span>
               <span className="block text-[10px] text-muted">
@@ -2806,7 +2806,7 @@ export default function EventDetailPage() {
       {/* Matches — first for quick access */}
       <div className={frameClass}>
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
-          <span className="text-sm text-muted flex-1 text-left">Matches</span>
+          <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
           <span className="text-sm font-medium">
             {event.matches.length === 0
               ? "None"
@@ -2827,7 +2827,7 @@ export default function EventDetailPage() {
       {/* Players & Pairs */}
       <div className={frameClass}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
-          <span className="text-sm text-muted">Players</span>
+          <span className="text-base font-bold text-foreground">Players</span>
           <span className="text-sm font-medium flex-1 text-right">
             {activePlayers.length}
             {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
@@ -2836,7 +2836,7 @@ export default function EventDetailPage() {
         </button>
         {event.format === "doubles" && event.pairs.length > 0 && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
-            <span className="text-sm text-muted">Pairs</span>
+            <span className="text-base font-bold text-foreground">Pairs</span>
             <span className="text-sm font-medium">
               {`${event.pairs.length} pair${event.pairs.length !== 1 ? "s" : ""}`}
             </span>
@@ -2847,7 +2847,7 @@ export default function EventDetailPage() {
       {/* Format */}
       <div className={frameClass}>
         <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("scoring"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
-          <span className="text-sm text-muted">Format</span>
+          <span className="text-base font-bold text-foreground">Format</span>
           <span className="flex-1 text-right">
             <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
             {event.rankingMode !== "none" && (
@@ -2861,7 +2861,7 @@ export default function EventDetailPage() {
       {/* Pairing */}
       <div className={frameClass}>
         <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("pairing"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
-          <span className="text-sm text-muted">Pairing</span>
+          <span className="text-base font-bold text-foreground">Pairing</span>
           <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
           {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
         </div>
