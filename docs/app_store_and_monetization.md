@@ -427,7 +427,98 @@ too (each transaction has a fixed component).
 
 ---
 
-## 9. Why This Makes PickleJ Sticky
+## 9. Three Pricing Archetypes (wallet-first strategy)
+
+The wallet from section 8 is the backbone. Every product type uses it, but
+in slightly different ways. The rule is:
+
+> **Stripe is only used for top-ups, subscriptions, and tournament entries.
+> Nothing else.** No €5 micro-transactions ever hit Stripe directly.
+
+### The wallet
+
+- **1 credit = €5 = 1 casual game.** Simple mental model.
+- **Top-up packs** (card-friendly round numbers):
+  - €10 → 2 credits
+  - €25 → 5 credits
+  - €50 → 10 credits (best value — anchor for upsell)
+- Balance is per-user, per-club.
+- Stripe fee applies once per top-up, not per game.
+
+### Archetype A — Individual (casual) games
+
+Display price: **€5 per game**. Actually paid from credits.
+
+Flow:
+1. User taps "Join game".
+2. If balance ≥ 1 credit → joined instantly, 1 credit deducted.
+3. If balance = 0 → prompt top-up modal (2/5/10 credit packs), then join.
+
+Stripe touchpoints: **only when topping up**. A user who plays twice a week
+tops up once a month. Stripe sees ~1 transaction/month instead of ~8.
+
+### Archetype B — Leagues (recurring structured play)
+
+Two sub-models, pick one per league at creation time:
+
+**B1 — Seasonal fee + wallet for matches**
+- Seasonal fee: €20–€40 upfront (covers admin, standings, ranking)
+- Match participation: still 1 credit per match from wallet
+- Good when the season has variable match counts or optional matches
+
+**B2 — Subscription (preferred)**
+- €25/month subscription via Stripe
+- Includes e.g. 6–10 matches/month as "included credits"
+- Matches beyond the cap deduct from the user's normal wallet
+- Good for predictable recurring revenue
+
+Stripe touchpoints: one subscription OR one season fee. No per-match Stripe
+calls regardless of sub-model.
+
+### Archetype C — Tournaments (one-off events)
+
+Entry fee: **€10–€25** per player, paid once via Stripe at registration.
+
+- After entry, no per-match payment friction — tournament participation is
+  fully included.
+- Optional add-ons consume credits: extra practice matches, priority entry,
+  partner matching, etc.
+
+Stripe touchpoints: one entry-fee charge per tournament. Add-ons use the
+wallet, so they don't touch Stripe.
+
+### Fee math — why this matters
+
+Stripe fees are roughly `2.9% + €0.30` per transaction. For small amounts
+the fixed €0.30 dominates.
+
+|  | Fee on €5 | Effective rate |
+|---|---|---|
+| Per-game micro-payment | €0.30 + €0.15 | **9%** |
+| Top-up €50 (10 games) | €0.30 + €1.45 | **3.5%** on the bundle, **0%** on each game |
+
+With the wallet-first model, effective platform fees drop from 6–9% down to
+roughly 2–3% — a 3–4× reduction — AND organizers see meaningfully bigger
+deposits land in their bank accounts instead of trickles.
+
+### Summary table
+
+| Product type | Stripe use | Per-game payment | Wallet role |
+|---|---|---|---|
+| Casual games | Top-ups only | 1 credit | Primary |
+| League (fee model) | Season fee | 1 credit / match | Supplementary |
+| League (sub model) | Monthly sub | Included + overflow credit | Overflow |
+| Tournament | Entry fee | Included | Add-ons only |
+
+### Key principle (the whole point)
+
+**Never charge Stripe for a €5 transaction.** Always convert frequent small
+actions into prepaid credits or subscriptions. The user experiences instant,
+frictionless joining; PickleJ and the club keep 3–4× more of the money.
+
+---
+
+## 10. Why This Makes PickleJ Sticky
 
 Once a club routes payments through PickleJ:
 - Player records, match history, ratings — all in PickleJ
