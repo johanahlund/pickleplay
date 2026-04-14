@@ -24,14 +24,14 @@ import { useConfirm } from "@/components/ConfirmDialog";
 
 type Level = 1 | 2 | 3 | 4 | 5 | null;
 
-// Top-to-bottom order: L5 first, Unset last.
-const LEVEL_ROWS: { key: Exclude<Level, null> | "unset"; label: string; level: Level }[] = [
+// Top-to-bottom order: L5 first. Unset is represented by the left player
+// column itself — there's no separate "unset row" on the right.
+const LEVEL_ROWS: { key: Exclude<Level, null>; label: string; level: Level }[] = [
   { key: 5, label: "L5 — Expert", level: 5 },
   { key: 4, label: "L4", level: 4 },
   { key: 3, label: "L3", level: 3 },
   { key: 2, label: "L2", level: 2 },
   { key: 1, label: "L1 — Beginner", level: 1 },
-  { key: "unset", label: "Unset", level: null },
 ];
 
 interface EventPlayerRow {
@@ -89,16 +89,17 @@ export default function SkillEditorPage() {
   const classPlayers = event.players.filter(
     (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
   );
-  const sortedPlayers = [...classPlayers].sort((a, b) =>
-    a.player.name.localeCompare(b.player.name),
-  );
+  // Left column: players without an assigned level.
+  const unassignedPlayers = [...classPlayers]
+    .filter((p) => p.skillLevel == null)
+    .sort((a, b) => a.player.name.localeCompare(b.player.name));
 
-  // Group players by their current level for the right-hand rows.
+  // Group assigned players by their level for the right-hand rows.
   const byLevel = new Map<string, EventPlayerRow[]>();
   for (const r of LEVEL_ROWS) byLevel.set(String(r.key), []);
   for (const ep of classPlayers) {
-    const key = ep.skillLevel == null ? "unset" : String(ep.skillLevel);
-    byLevel.get(key)?.push(ep);
+    if (ep.skillLevel == null) continue; // lives in left column, not a level row
+    byLevel.get(String(ep.skillLevel))?.push(ep);
   }
 
   // ── Assignment ─────────────────────────────────────────────────────────
@@ -219,19 +220,33 @@ export default function SkillEditorPage() {
 
       <p className="text-[11px] text-muted">
         Drag a player onto a level row, or tap a player then tap a row. Highest level is on top.
+        Drop a chip back onto the Players column to unset their level.
       </p>
 
-      {/* Two-pane grid: players left, level rows right */}
+      {/* Two-pane grid: unassigned players left, level rows right */}
       <div className="grid grid-cols-[minmax(140px,180px)_1fr] gap-3">
-        {/* LEFT: player master list */}
-        <div className="bg-card rounded-xl border border-border p-2 space-y-1 self-start sticky top-2 max-h-[80vh] overflow-y-auto">
-          <div className="text-[11px] font-semibold text-muted uppercase tracking-wider px-1 py-1 border-b border-border mb-1">
-            Players ({sortedPlayers.length})
+        {/* LEFT: unassigned player list. Doubles as the "Unset" drop target. */}
+        <div
+          onDragOver={(e) => onDragOver(e, "unset")}
+          onDragLeave={onDragLeave}
+          onDrop={(e) => onDrop(e, "unset")}
+          onClick={() => onTapLevel("unset")}
+          className={`rounded-xl border-2 p-2 space-y-1 self-start sticky top-2 max-h-[80vh] overflow-y-auto transition-colors ${
+            dragOverLevel === "unset"
+              ? "border-action bg-action/10"
+              : selectedId !== null
+                ? "border-primary/40 border-dashed cursor-pointer bg-card"
+                : "border-border bg-card"
+          }`}
+        >
+          <div className="text-[11px] font-semibold text-muted uppercase tracking-wider px-1 py-1 border-b border-border mb-1 flex items-center justify-between">
+            <span>No level yet</span>
+            <span className="text-[10px] normal-case font-normal">{unassignedPlayers.length}</span>
           </div>
-          {sortedPlayers.length === 0 && (
-            <p className="text-[11px] text-muted italic p-2">No players in this class.</p>
+          {unassignedPlayers.length === 0 && (
+            <p className="text-[11px] text-muted italic p-2">All players have a level.</p>
           )}
-          {sortedPlayers.map((ep) => (
+          {unassignedPlayers.map((ep) => (
             <PlayerCard
               key={ep.id}
               ep={ep}
@@ -265,9 +280,7 @@ export default function SkillEditorPage() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
-                    {row.label}
-                  </span>
+                  <span className="text-sm font-bold">{row.label}</span>
                   <span className="text-[10px] text-muted">{rows.length}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
