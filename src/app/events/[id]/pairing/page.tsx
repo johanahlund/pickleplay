@@ -49,12 +49,22 @@ interface EventPlayerDTO {
   };
 }
 
+interface EventMatchDTO {
+  id: string;
+  round: number;
+  courtNum: number;
+  classId: string | null;
+  status: string;
+  players: { playerId: string; team: number; score: number }[];
+}
+
 interface EventSummary {
   id: string;
   name: string;
   numCourts: number;
   classes: EventClass[];
   players: EventPlayerDTO[];
+  matches: EventMatchDTO[];
 }
 
 interface PreviewTeam {
@@ -136,7 +146,6 @@ export default function PairingConfigPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [locks, setLocks] = useState<PairLockDTO[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [bulkMode, setBulkMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [includeCourts, setIncludeCourts] = useState<Set<number>>(new Set());
@@ -154,6 +163,7 @@ export default function PairingConfigPage() {
           numCourts: data.numCourts,
           classes: data.classes || [],
           players: data.players || [],
+          matches: data.matches || [],
         });
         if (data.classes?.[0]) {
           setClassId(data.classes[0].id);
@@ -300,46 +310,6 @@ export default function PairingConfigPage() {
     });
   };
 
-  // ── Recalculate skill levels ────────────────────────────────────────────
-  const handleRecalcAll = async () => {
-    if (!classId) return;
-    const ok = await confirm({
-      title: "Recalculate all skill levels?",
-      message: "This will reset every player's skill level to the value computed from their DUPR / app rating. Any manual overrides will be lost.",
-      danger: true,
-      confirmText: "Recalculate",
-    });
-    if (!ok) return;
-    await fetch(`/api/events/${id}/pairing/skill-levels`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "recalculate", classId }),
-    });
-    // reload event
-    const r = await fetch(`/api/events/${id}`);
-    const reloaded = await r.json();
-    setEvent((prev) => (prev ? { ...prev, classes: reloaded.classes } : prev));
-  };
-
-  // Update a single player's skill level
-  const handleUpdateLevel = async (eventPlayerId: string, level: number | null) => {
-    await fetch(`/api/events/${id}/pairing/skill-levels`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ updates: [{ eventPlayerId, skillLevel: level }] }),
-    });
-    // Optimistic: patch in memory.
-    setEvent((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        players: prev.players.map((p) =>
-          p.id === eventPlayerId ? { ...p, skillLevel: level } : p,
-        ),
-      };
-    });
-  };
-
   // ── Pair lock CRUD ──────────────────────────────────────────────────────
   const handleAddLock = async (playerAId: string, playerBId: string) => {
     const r = await fetch(`/api/events/${id}/pairing/locks`, {
@@ -371,6 +341,16 @@ export default function PairingConfigPage() {
   const classPlayers = event.players.filter(
     (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
   );
+  // Derive played-match counts per player from the event's match history.
+  // Includes pending/in-progress matches too so the count represents all
+  // matches a player is scheduled for.
+  const playerMatchCounts = new Map<string, number>();
+  for (const m of event.matches) {
+    if (m.classId !== classId && !(m.classId === null && classId === event.classes[0]?.id)) continue;
+    for (const p of m.players) {
+      playerMatchCounts.set(p.playerId, (playerMatchCounts.get(p.playerId) || 0) + 1);
+    }
+  }
 
   return (
     <div className="space-y-4 pb-24">
@@ -618,52 +598,46 @@ export default function PairingConfigPage() {
         )}
       </div>
 
-      {/* Bulk skill editor */}
+      {/* Players — skill level + match count */}
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Skill levels</h3>
-          <div className="flex gap-2">
-            <button onClick={() => setBulkMode(!bulkMode)} className="text-xs text-action">
-              {bulkMode ? "Done" : "Edit"}
-            </button>
-            <button onClick={handleRecalcAll} className="text-xs text-muted">Recalculate</button>
-          </div>
+          <h3 className="text-sm font-semibold">Players</h3>
+          <Link
+            href={`/events/${id}/pairing/skills`}
+            className="text-xs text-action font-medium"
+          >
+            Edit levels →
+          </Link>
         </div>
         {currentClass && (
           <div className="space-y-1">
             {classPlayers.length === 0 && (
               <p className="text-xs text-muted">No players registered in this class yet.</p>
             )}
-            {classPlayers.map((ep) => (
-              <div key={ep.id} className="flex items-center gap-2 p-1.5 rounded">
-                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                <span className="text-sm font-medium flex-1 truncate">{ep.player.name}</span>
-                {ep.player.duprRating != null && (
-                  <span className="text-[10px] text-muted">DUPR {ep.player.duprRating.toFixed(2)}</span>
-                )}
-                {bulkMode ? (
-                  <select
-                    value={ep.skillLevel ?? ""}
-                    onChange={(e) =>
-                      handleUpdateLevel(ep.id, e.target.value ? parseInt(e.target.value) : null)
-                    }
-                    className="text-xs border border-border rounded px-1.5 py-1"
+            {classPlayers.map((ep) => {
+              const count = playerMatchCounts.get(ep.playerId) || 0;
+              return (
+                <div key={ep.id} className="flex items-center gap-2 p-1.5 rounded">
+                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                  <span className="text-sm font-medium flex-1 truncate">{ep.player.name}</span>
+                  <span
+                    className="text-[10px] text-muted tabular-nums"
+                    title={`${count} match${count === 1 ? "" : "es"} played`}
                   >
-                    <option value="">—</option>
-                    {[1, 2, 3, 4, 5].map((l) => (
-                      <option key={l} value={l}>L{l}</option>
-                    ))}
-                  </select>
-                ) : (
+                    {count}m
+                  </span>
+                  {ep.player.duprRating != null && (
+                    <span className="text-[10px] text-muted">DUPR {ep.player.duprRating.toFixed(2)}</span>
+                  )}
                   <span className="text-xs font-semibold">
                     L{ep.skillLevel ?? ep.autoSkillLevel ?? "—"}
                     {ep.skillLevel != null && ep.autoSkillLevel != null && ep.skillLevel !== ep.autoSkillLevel && (
                       <span className="text-[10px] text-muted font-normal"> · was L{ep.autoSkillLevel}</span>
                     )}
                   </span>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
