@@ -1041,13 +1041,13 @@ export default function EventDetailPage() {
   );
 
   const eventHeader = (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
-      {/* Top row: club name (clickable) + location (clickable) */}
+    <div className="bg-card rounded-xl border border-border p-4">
+      {/* Club + location row (muted, compact) */}
       {(event.club || location) && (
-        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border-b border-border text-xs">
+        <div className="flex items-center gap-1.5 mb-1 text-xs">
           {event.club && (
             <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()} className="text-muted hover:text-action font-medium">
-              {event.club.emoji} {event.club.name}
+              📌 {event.club.emoji} {event.club.name}
             </Link>
           )}
           {event.club && location && <span className="text-muted">·</span>}
@@ -1061,11 +1061,11 @@ export default function EventDetailPage() {
           )}
         </div>
       )}
-      {/* Event info — clickable for managers */}
+      {/* Title + status + pen — clickable for managers */}
       <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("when"); } }}
-        className={`p-3 ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
+        className={`${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
         <div className="flex items-center gap-2">
-          <h2 className="font-bold text-lg truncate">{event.name}</h2>
+          <h2 className="text-xl font-bold truncate">{event.name}</h2>
           {event.status !== "setup" && (
             <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
               event.status === "active" ? "bg-green-100 text-green-700" :
@@ -1075,14 +1075,14 @@ export default function EventDetailPage() {
           )}
           {canManage && <span className="text-muted/50 ml-auto">{penIcon}</span>}
         </div>
-        <p className="text-xs text-muted mt-0.5">
-          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+        <p className="text-sm text-muted mt-0.5">
+          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
           {" at "}
           {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
           {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
           {" · "}{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
         </p>
-        </div>
+      </div>
     </div>
   );
 
