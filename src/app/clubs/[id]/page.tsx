@@ -195,7 +195,14 @@ function SwipeableMemberRow({
   const touchStartY = useRef(0);
   const swipeOffset = useRef(0);
 
-  const canRemove = canManage && !isSelf && (member.role !== "owner" || isGlobalAdmin);
+  // Can this member row be removed by the current viewer?
+  //   - App admin can remove anyone, including themselves
+  //   - Club owner/admin can remove non-owner members other than themselves
+  //   - The sole owner cannot be removed (they must transfer ownership first)
+  //     unless the viewer is an app admin
+  const canRemove = canManage
+    && (!isSelf || isGlobalAdmin)
+    && (member.role !== "owner" || isGlobalAdmin);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!canRemove) return;
@@ -427,14 +434,31 @@ export default function ClubDetailPage() {
   };
 
   const removeMember = async (playerId: string, playerName?: string) => {
+    const removingSelf = playerId === userId;
     const ok = await confirmDialog({
-      title: "Remove member",
-      message: `Remove ${playerName || "this member"} from the club? They can always be added back later.`,
+      title: removingSelf ? "Leave club" : "Remove member",
+      message: removingSelf
+        ? `Leave ${club?.name || "the club"}? You can rejoin later if invited.`
+        : `Remove ${playerName || "this member"} from the club? They can always be added back later.`,
       danger: true,
-      confirmText: "Remove",
+      confirmText: removingSelf ? "Leave" : "Remove",
     });
     if (!ok) return;
-    await fetch(`/api/clubs/${id}/members`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
+    const r = await fetch(`/api/clubs/${id}/members`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to remove member", "Error");
+      return;
+    }
+    if (removingSelf && !isGlobalAdmin) {
+      // Non-admin user removed themselves — they no longer have access.
+      router.push("/clubs");
+      return;
+    }
     fetchClub();
   };
 
@@ -1318,7 +1342,10 @@ export default function ClubDetailPage() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted">
               {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
-              {canManage && filteredMembers.some((m) => (m.role !== "owner" || isGlobalAdmin) && m.playerId !== userId)
+              {canManage && filteredMembers.some((m) => {
+                const isSelfRow = m.playerId === userId;
+                return (m.role !== "owner" || isGlobalAdmin) && (!isSelfRow || isGlobalAdmin);
+              })
                 ? " · tap ✕ to remove"
                 : ""}
             </p>
