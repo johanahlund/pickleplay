@@ -223,33 +223,47 @@ function EventsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">{legacyClubFilter ? "Club Events" : "Events"}</h2>
-        {session?.user && (
+        <h2 className="text-xl font-bold">
+          {showFilters ? "Filter Events" : legacyClubFilter ? "Club Events" : "Events"}
+        </h2>
+        {/* Right-side action: Apply (when filtering) or Add (when browsing) */}
+        {showFilters ? (
+          <button
+            onClick={() => setShowFilters(false)}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+          >
+            Apply
+          </button>
+        ) : session?.user ? (
           <Link
             href="/events/new"
             className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
           >
             + Add
           </Link>
-        )}
+        ) : null}
       </div>
 
-      {/* Filter bar — always visible */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <button onClick={() => setShowFilters(!showFilters)}
-          className={`text-sm px-2 py-1 rounded-lg transition-colors ${showFilters ? "bg-action text-white" : "bg-gray-100 text-muted hover:text-foreground"}`}>
-          ☰ Filter
-        </button>
-        {activeFilters.length > 0 && (
-          <>
-            {activeFilters.map((f, i) => (
-              <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
-            ))}
-            <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
-              className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
-          </>
-        )}
-      </div>
+      {/* Filter bar — Filter toggle hidden while the panel is open */}
+      {(!showFilters || activeFilters.length > 0) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {!showFilters && (
+            <button onClick={() => setShowFilters(true)}
+              className="text-sm px-2 py-1 rounded-lg transition-colors bg-gray-100 text-muted hover:text-foreground">
+              ☰ Filter
+            </button>
+          )}
+          {activeFilters.length > 0 && (
+            <>
+              {activeFilters.map((f, i) => (
+                <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
+              ))}
+              <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
+                className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Filter panel */}
       {showFilters && (
