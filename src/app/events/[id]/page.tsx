@@ -413,13 +413,14 @@ export default function EventDetailPage() {
   const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
 
-  // Hide bottom nav when in manual match edit
+  // Hide bottom nav when in manual match edit OR the add-player flows
   useEffect(() => {
     const nav = document.querySelector("nav.fixed.bottom-0");
-    if (activeSection === "manual") nav?.classList.add("hidden");
+    const hide = activeSection === "manual" || showAddPlayer || bulkSelectMode;
+    if (hide) nav?.classList.add("hidden");
     else nav?.classList.remove("hidden");
     return () => { nav?.classList.remove("hidden"); };
-  }, [activeSection]);
+  }, [activeSection, showAddPlayer, bulkSelectMode]);
 
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
@@ -1788,11 +1789,15 @@ export default function EventDetailPage() {
 
     return (
       <div className="space-y-3">
-        <button onClick={() => { setShowAddPlayer(false); setAddPlayerSearch(""); setAddPlayerGender(null); }}
-          className="flex items-center gap-1 text-lg text-primary font-semibold active:opacity-70">
-          ← Players
-        </button>
-        <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
+          <button
+            onClick={() => { setShowAddPlayer(false); setAddPlayerSearch(""); setAddPlayerGender(null); }}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+          >
+            Done
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-base" />
@@ -1866,9 +1871,13 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Add Players</h3>
-          <button onClick={() => setBulkSelectMode(false)}
-            className="text-xs text-primary font-medium">Done</button>
+          <h3 className="text-xl font-bold text-foreground">Add Players</h3>
+          <button
+            onClick={() => setBulkSelectMode(false)}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+          >
+            Done
+          </button>
         </div>
         <PlayerSelector
           players={allPlayers as { id: string; name: string; gender?: string | null }[]}
