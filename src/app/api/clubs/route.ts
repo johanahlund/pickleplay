@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   const club = await prisma.club.create({
     data: {
       name: name.trim(),
-      emoji: "🏓",
+      emoji: "🏟️",
       description: description?.trim() || null,
       city: city?.trim() || null,
       country: country?.trim() || null,

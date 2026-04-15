@@ -87,7 +87,7 @@ export default function LeaguesPage() {
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {league.teams.map((t) => (
                     <span key={t.id} className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full font-medium">
-                      {t.club?.emoji || "🏓"} {t.name} ({t._count.players})
+                      {t.club?.emoji || "🏟️"} {t.name} ({t._count.players})
                     </span>
                   ))}
                 </div>

@@ -1862,7 +1862,7 @@ export default function EventDetailPage() {
             .map((p) => p.id),
         )
       : undefined;
-    const clubLabel = event.club?.emoji || "Club";
+    const clubLabel = "Club";
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">

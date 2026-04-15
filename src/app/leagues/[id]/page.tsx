@@ -1356,7 +1356,7 @@ export default function LeagueDetailPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   {team.logoUrl ? <img src={team.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
                     : team.club?.logoUrl ? <img src={team.club.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
-                    : <span className="text-lg">{team.club?.emoji || "🏓"}</span>}
+                    : <span className="text-lg">{team.club?.emoji || "🏟️"}</span>}
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="font-semibold text-sm truncate">{team.name}</span>
