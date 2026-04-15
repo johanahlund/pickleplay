@@ -1194,6 +1194,18 @@ export default function ClubDetailPage() {
       {/* ── Members Tab ── */}
       {tab === "members" && !showInfo && (
         <div className="space-y-3">
+          {/* Header row: title + Add Member button (top right) */}
+          {canManage && (
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-foreground">Members</h3>
+              <button
+                onClick={() => { fetchAllPlayers(); setShowAddMember(true); setAddMemberSearch(""); }}
+                className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+              >
+                + Member
+              </button>
+            </div>
+          )}
           {/* Join requests */}
           {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
             <div className="bg-card rounded-xl border border-amber-200 overflow-hidden">
@@ -1292,15 +1304,7 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          {canManage && (
-            !showAddMember ? (
-              <button
-                onClick={() => { fetchAllPlayers(); setShowAddMember(true); setAddMemberSearch(""); }}
-                className="w-full py-2.5 rounded-lg text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5 transition-all"
-              >
-                + Add Member
-              </button>
-            ) : (
+          {canManage && showAddMember && (
               <div className="bg-card rounded-xl border border-border p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-medium text-muted">Add Member</h4>
@@ -1327,7 +1331,6 @@ export default function ClubDetailPage() {
                   {nonMembers.length === 0 && <p className="text-center py-4 text-muted text-sm">No players to add</p>}
                 </div>
               </div>
-            )
           )}
         </div>
       )}
