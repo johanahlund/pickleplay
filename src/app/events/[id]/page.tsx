@@ -1852,6 +1852,17 @@ export default function EventDetailPage() {
 
   const renderBulkSelect = () => {
     const eventPlayerIds = new Set(event.players.map((ep) => ep.player.id));
+    // Build the club-member set from the enriched allPlayers list so the
+    // PlayerSelector can offer a "Club" filter when the event has one.
+    const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
+    const clubMemberIds = eventClubId
+      ? new Set(
+          (allPlayers as unknown as { id: string; clubs?: { id: string }[] }[])
+            .filter((p) => p.clubs?.some((c) => c.id === eventClubId))
+            .map((p) => p.id),
+        )
+      : undefined;
+    const clubLabel = event.club?.emoji || "Club";
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -1863,6 +1874,8 @@ export default function EventDetailPage() {
           players={allPlayers as { id: string; name: string; gender?: string | null }[]}
           selectedIds={eventPlayerIds}
           recentIds={eventPlayerIds}
+          clubMemberIds={clubMemberIds}
+          clubLabel={clubLabel}
           onToggle={async (pid) => {
             if (eventPlayerIds.has(pid)) {
               const p = allPlayers.find((pl) => pl.id === pid);

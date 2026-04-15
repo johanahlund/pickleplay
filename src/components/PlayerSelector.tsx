@@ -19,6 +19,10 @@ interface PlayerSelectorProps {
   onToggle: (id: string) => void | Promise<void>;
   onSelectAll?: () => void;
   recentIds?: Set<string>;
+  /** Player IDs who are members of the event/club context this selector is filtering for. */
+  clubMemberIds?: Set<string>;
+  /** Short label for the club filter button, e.g. "🏓 Setubal" or just "Club". */
+  clubLabel?: string;
 }
 
 function SwipeRow({ player, direction, onAction }: {
@@ -104,16 +108,26 @@ function SwipeRow({ player, direction, onAction }: {
   );
 }
 
+type FilterMode = "all" | "recent" | "club";
+
 export function PlayerSelector({
   players,
   selectedIds,
   onToggle,
   onSelectAll,
   recentIds,
+  clubMemberIds,
+  clubLabel = "Club",
 }: PlayerSelectorProps) {
   const [search, setSearch] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(!recentIds || recentIds.size === 0);
+  // Three-state filter: Recent / Club / All. Default priority:
+  // Club (if provided) > Recent (if provided) > All.
+  const [filterMode, setFilterMode] = useState<FilterMode>(() => {
+    if (clubMemberIds && clubMemberIds.size > 0) return "club";
+    if (recentIds && recentIds.size > 0) return "recent";
+    return "all";
+  });
   // Optimistic: track IDs that were just toggled (added/removed) to prevent flicker
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
   const [recentlyRemoved, setRecentlyRemoved] = useState<Set<string>>(new Set());
@@ -150,12 +164,15 @@ export function PlayerSelector({
     return true;
   };
 
+  const modeFilter = (p: Player) => {
+    if (filterMode === "recent" && recentIds && recentIds.size > 0) return recentIds.has(p.id);
+    if (filterMode === "club" && clubMemberIds && clubMemberIds.size > 0) return clubMemberIds.has(p.id);
+    return true; // "all" or fallback
+  };
+
   const available = players
     .filter((p) => !effectiveSelected.has(p.id))
-    .filter((p) => {
-      if (!showAll && recentIds && recentIds.size > 0 && !recentIds.has(p.id)) return false;
-      return baseFilter(p);
-    })
+    .filter((p) => modeFilter(p) && baseFilter(p))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const selected = players
@@ -163,31 +180,45 @@ export function PlayerSelector({
     .filter(baseFilter)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const isRecent = !showAll && recentIds && recentIds.size > 0;
+  const hasRecent = !!(recentIds && recentIds.size > 0);
+  const hasClub = !!(clubMemberIds && clubMemberIds.size > 0);
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-1 flex-wrap">
+      <div className="flex gap-1 flex-wrap items-center">
         {(["M", "F"] as const).map((g) => (
           <button key={g} type="button"
             onClick={() => setGenderFilter(genderFilter === g ? null : g)}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-              genderFilter === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+              genderFilter === g ? "bg-action text-white" : "bg-gray-100 text-foreground"
             }`}>
             {g === "M" ? "♂" : "♀"}
           </button>
         ))}
-        <button type="button" onClick={() => setShowAll(true)}
-          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${showAll ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}>
+        <span className="w-3" aria-hidden />
+        {hasRecent && (
+          <button type="button" onClick={() => setFilterMode("recent")}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+              filterMode === "recent" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+            }`}>
+            Recent
+          </button>
+        )}
+        {hasClub && (
+          <button type="button" onClick={() => setFilterMode("club")}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+              filterMode === "club" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+            }`}>
+            {clubLabel}
+          </button>
+        )}
+        <button type="button" onClick={() => setFilterMode("all")}
+          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+            filterMode === "all" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+          }`}>
           All
         </button>
-        <button type="button"
-          onClick={() => { if (recentIds && recentIds.size > 0) setShowAll(false); }}
-          disabled={!recentIds || recentIds.size === 0}
-          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${isRecent ? "bg-selected text-white" : "bg-gray-100 text-foreground"} disabled:opacity-40`}>
-          Recent
-        </button>
-        {isRecent && onSelectAll && (
+        {filterMode === "recent" && onSelectAll && (
           <button type="button" onClick={onSelectAll}
             className="text-action text-[10px] font-medium ml-auto whitespace-nowrap">
             Select all
