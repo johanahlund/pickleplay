@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { setPreview } from "@/lib/entityPreview";
 
 interface Event {
   id: string;
@@ -350,7 +351,11 @@ function EventsPage() {
             const canDelete = isAdmin || event.createdById === userId;
             return (
             <div key={event.id} className="relative">
-            <Link href={`/events/${event.id}`} className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}>
+            <Link
+              href={`/events/${event.id}`}
+              onClick={() => setPreview("event", event.id, event)}
+              className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}
+            >
               <div className="p-3">
                 <div className="flex items-center gap-3">
                   <div className="text-center min-w-[44px]">

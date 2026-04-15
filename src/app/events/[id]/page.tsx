@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
+import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -353,6 +354,14 @@ export default function EventDetailPage() {
 
   const userId = (session?.user as { id?: string } | undefined)?.id;
 
+  // Preview cache lookup. When a user clicks on an event card, the list
+  // page stores a minimal event summary under `event:<id>`. We read it here
+  // so the detail page can render a header card immediately on first paint
+  // instead of showing "Loading..." for the full round-trip. The preview is
+  // used ONLY for the loading state's header — the main render still waits
+  // for the full /api/events/[id] response because many sections (matches,
+  // players, pairs) need fields that aren't in the list response.
+  const preview = typeof id === "string" ? getPreview<Event>("event", id) : null;
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
@@ -451,7 +460,10 @@ export default function EventDetailPage() {
     }
     setEvent(data);
     setLoading(false);
-  }, [swrEvent.data, swrEvent.error, router]);
+    // Refresh the preview cache so navigating away and back uses the latest
+    // data as the preview.
+    if (typeof id === "string") setPreview("event", id, data);
+  }, [swrEvent.data, swrEvent.error, router, id]);
 
   // fetchEvent = trigger SWR revalidation (used by existing code)
   const fetchEvent = useCallback(() => { swrEvent.mutate(); }, [swrEvent]);
@@ -939,6 +951,37 @@ export default function EventDetailPage() {
   };
 
   if (loading || !event) {
+    // If we have a preview from the list, show the header card immediately
+    // so the user gets instant feedback on navigation instead of a blank
+    // "Loading..." screen. The rest of the page fades in once SWR arrives.
+    if (preview) {
+      const previewDate = new Date(preview.date);
+      return (
+        <div className="space-y-3 animate-in fade-in duration-200">
+          <Link href="/events" className="text-sm text-action">&larr; Events</Link>
+          <div className="bg-card rounded-xl border border-border p-4">
+            {preview.club && (
+              <div className="flex items-center gap-1.5 mb-1 text-xs text-muted">
+                <span>📌 {preview.club.emoji} {preview.club.name}</span>
+              </div>
+            )}
+            <h2 className="text-xl font-bold">{preview.name}</h2>
+            <p className="text-sm text-muted mt-0.5">
+              {previewDate.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+              {" at "}
+              {previewDate.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              {" · "}
+              {preview.numCourts} court{preview.numCourts !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-6 animate-pulse">
+            <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-1/2" />
+          </div>
+        </div>
+      );
+    }
     return <div className="text-center py-12 text-muted text-lg">Loading...</div>;
   }
 
