@@ -73,6 +73,7 @@ export async function POST(req: Request) {
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
+  const cleanName = name.trim();
 
   // Auth: app admin can always add. A club owner/admin can add only when
   // attaching the new player to their own club.
@@ -84,9 +85,25 @@ export async function POST(req: Request) {
     );
   }
 
+  // Uniqueness check: no two active players with the same name. Case-insensitive
+  // comparison so "Johan A" and "johan a" also conflict.
+  const existing = await prisma.player.findFirst({
+    where: {
+      name: { equals: cleanName, mode: "insensitive" },
+      status: { not: "voided" },
+    },
+    select: { id: true, name: true },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: `A player named "${existing.name}" already exists. Pick a different name or add a suffix (e.g. "${cleanName} 2").` },
+      { status: 409 },
+    );
+  }
+
   const player = await prisma.player.create({
     data: {
-      name: name.trim(),
+      name: cleanName,
       emoji: emoji || "🏓",
       ...(gender ? { gender } : {}),
       ...(phone ? { phone: phone.trim() } : {}),

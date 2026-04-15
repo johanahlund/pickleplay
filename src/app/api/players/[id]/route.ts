@@ -62,7 +62,24 @@ export async function PATCH(
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
     }
-    data.name = name.trim();
+    const cleanName = name.trim();
+    // Uniqueness check: no other active player with this name (case-insensitive).
+    // Skip the check if the name hasn't actually changed.
+    const existing = await prisma.player.findFirst({
+      where: {
+        name: { equals: cleanName, mode: "insensitive" },
+        status: { not: "voided" },
+        NOT: { id },
+      },
+      select: { id: true, name: true },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: `A player named "${existing.name}" already exists. Pick a different name.` },
+        { status: 409 },
+      );
+    }
+    data.name = cleanName;
   }
   if (emoji !== undefined) {
     data.emoji = emoji;
