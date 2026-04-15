@@ -216,12 +216,8 @@ function SwipeableMemberRow({
 
   const handleTouchEnd = () => {
     if (swipeOffset.current < -80 && canManage && member.role !== "owner" && !isSelf) {
-      if (confirm(`Remove ${member.player.name} from this club?`)) {
-        if (confirm(`Are you sure? This will remove ${member.player.name} permanently.`)) {
-          onRemove();
-          return;
-        }
-      }
+      // Parent's onRemove already handles the confirm dialog.
+      onRemove();
     }
     if (rowRef.current) rowRef.current.style.transform = "";
     swipeOffset.current = 0;
@@ -255,21 +251,18 @@ function SwipeableMemberRow({
       <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
       <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
-      {/* Desktop hover action */}
+      {/* Always-visible remove button (touch: also swipe-left works) */}
       {canManage && member.role !== "owner" && !isSelf && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (confirm(`Remove ${p.name} from this club?`)) {
-              if (confirm(`Are you sure? This will remove ${p.name} permanently.`)) {
-                onRemove();
-              }
-            }
+            onRemove();
           }}
-          className="hidden group-hover:block text-xs px-2 py-1 rounded bg-red-50 text-danger hover:bg-red-100 opacity-0 group-hover:opacity-100 transition-opacity"
-          title="Remove member"
+          className="w-7 h-7 rounded-full text-danger hover:bg-red-50 active:bg-red-100 flex items-center justify-center transition-colors shrink-0"
+          title={`Remove ${p.name}`}
+          aria-label={`Remove ${p.name}`}
         >
-          Remove
+          ✕
         </button>
       )}
     </div>
@@ -425,7 +418,14 @@ export default function ClubDetailPage() {
     fetchClub();
   };
 
-  const removeMember = async (playerId: string) => {
+  const removeMember = async (playerId: string, playerName?: string) => {
+    const ok = await confirmDialog({
+      title: "Remove member",
+      message: `Remove ${playerName || "this member"} from the club? They can always be added back later.`,
+      danger: true,
+      confirmText: "Remove",
+    });
+    if (!ok) return;
     await fetch(`/api/clubs/${id}/members`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
     fetchClub();
   };
@@ -1298,7 +1298,7 @@ export default function ClubDetailPage() {
                 isGlobalAdmin={isGlobalAdmin}
                 isSelf={m.playerId === userId}
                 showContact={isGlobalAdmin || m.playerId === userId}
-                onRemove={() => removeMember(m.playerId)}
+                onRemove={() => removeMember(m.playerId, m.player.name)}
                 onRoleChange={(role) => updateRole(m.playerId, role)}
               />
             ))}
