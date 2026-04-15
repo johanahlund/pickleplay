@@ -1259,7 +1259,12 @@ export default function ClubDetailPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted">{filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}{canManage ? " · swipe or hover to remove" : ""}</p>
+            <p className="text-xs text-muted">
+              {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
+              {canManage && filteredMembers.some((m) => m.role !== "owner" && m.playerId !== userId)
+                ? " · tap ✕ to remove"
+                : ""}
+            </p>
             {canManage && (
               <button onClick={async () => {
                 const r = await fetch(`/api/clubs/${club.id}/invite`, { method: "POST" });
