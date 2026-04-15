@@ -190,7 +190,8 @@ export default function NewEventPage() {
 
       {/* Step 2: Location selection */}
       {!needsClub && needsLocation && currentClub && (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          <h2 className="text-2xl font-bold text-foreground">{currentClub.name}</h2>
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-foreground">Choose a location</h3>
             {clubs.length > 1 && (
@@ -205,25 +206,27 @@ export default function NewEventPage() {
               </button>
             )}
           </div>
-          <div className="text-xs text-muted">{currentClub.emoji} {currentClub.name}</div>
           <div className="space-y-2">
-            {currentClub.locations.map((l) => (
+            {currentClub.locations.map((l) => {
+              const courts = typeof l.numCourts === "number" ? l.numCourts : 2;
+              return (
               <button
                 key={l.id}
                 onClick={() => {
                   setLocationId(l.id);
-                  setNumCourts(l.numCourts);
+                  setNumCourts(courts);
                 }}
                 className="w-full bg-card rounded-xl border border-border p-4 text-left hover:border-action transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-base font-bold">{l.name}</div>
-                    <div className="text-xs text-muted">{l.numCourts} court{l.numCourts === 1 ? "" : "s"}</div>
+                    <div className="text-xs text-muted">{courts} court{courts === 1 ? "" : "s"}</div>
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
