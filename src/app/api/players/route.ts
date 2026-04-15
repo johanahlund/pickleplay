@@ -35,16 +35,29 @@ export async function GET() {
       role: true,
       passwordHash: true, // only used to derive hasAccount below
       _count: { select: { matchPlayers: true } },
+      clubMembers: {
+        select: {
+          role: true,
+          club: { select: { id: true, name: true, emoji: true } },
+        },
+      },
     },
   });
 
   const allowEmail = await canSeeEmails(user.id, user.role);
 
-  // Strip passwordHash, add hasAccount flag, optionally strip email
-  const safe = players.map(({ passwordHash, email, ...rest }) => ({
+  // Strip passwordHash, add hasAccount flag, optionally strip email, flatten
+  // club memberships into a lightweight `clubs` array.
+  const safe = players.map(({ passwordHash, email, clubMembers, ...rest }) => ({
     ...rest,
     ...(allowEmail ? { email } : {}),
     hasAccount: !!passwordHash,
+    clubs: clubMembers.map((m) => ({
+      id: m.club.id,
+      name: m.club.name,
+      emoji: m.club.emoji,
+      role: m.role,
+    })),
   }));
 
   return NextResponse.json(safe);

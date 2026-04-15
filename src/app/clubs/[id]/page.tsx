@@ -100,7 +100,7 @@ interface EventInfo {
   _count: { matches: number };
 }
 
-interface ClubLocation { id: string; name: string; googleMapsUrl?: string | null }
+interface ClubLocation { id: string; name: string; googleMapsUrl?: string | null; numCourts?: number }
 
 interface Club {
   id: string;
@@ -347,7 +347,7 @@ export default function ClubDetailPage() {
   const [editCity, setEditCity] = useState("");
   const [editCountry, setEditCountry] = useState("");
   const [editStatus, setEditStatus] = useState<"draft" | "active" | "closed">("active");
-  const [editLocations, setEditLocations] = useState<{ name: string; googleMapsUrl: string }[]>([]);
+  const [editLocations, setEditLocations] = useState<{ name: string; googleMapsUrl: string; numCourts: number }[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostContent, setNewPostContent] = useState("");
   const [postingComment, setPostingComment] = useState<string | null>(null);
@@ -462,8 +462,12 @@ export default function ClubDetailPage() {
     setEditStatus((club.status as "draft" | "active" | "closed") || "active");
     setEditLocations(
       club.locations.length > 0
-        ? club.locations.map((l) => ({ name: l.name, googleMapsUrl: l.googleMapsUrl || "" }))
-        : [{ name: "", googleMapsUrl: "" }]
+        ? club.locations.map((l) => ({
+            name: l.name,
+            googleMapsUrl: l.googleMapsUrl || "",
+            numCourts: (l as unknown as { numCourts?: number }).numCourts ?? 2,
+          }))
+        : [{ name: "", googleMapsUrl: "", numCourts: 2 }]
     );
     setClubDirty(false);
     setEditing(true);
@@ -785,6 +789,7 @@ export default function ClubDetailPage() {
                             const next = [...editLocations];
                             next[i] = { ...next[i], name: e.target.value };
                             setEditLocations(next);
+                            setClubDirty(true);
                           }}
                           className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
@@ -794,18 +799,34 @@ export default function ClubDetailPage() {
                             const next = [...editLocations];
                             next[i] = { ...next[i], googleMapsUrl: e.target.value };
                             setEditLocations(next);
+                            setClubDirty(true);
                           }}
                           className="w-full border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
+                        <div className="flex items-center gap-2">
+                          <label className="text-[11px] text-muted">Courts:</label>
+                          <input
+                            type="number" min={1} max={20}
+                            value={loc.numCourts}
+                            onChange={(e) => {
+                              const n = parseInt(e.target.value) || 1;
+                              const next = [...editLocations];
+                              next[i] = { ...next[i], numCourts: Math.min(Math.max(1, n), 20) };
+                              setEditLocations(next);
+                              setClubDirty(true);
+                            }}
+                            className="w-20 border border-border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </div>
                       </div>
                       <button
-                        onClick={() => setEditLocations(editLocations.filter((_, j) => j !== i))}
+                        onClick={() => { setEditLocations(editLocations.filter((_, j) => j !== i)); setClubDirty(true); }}
                         className="text-xs text-danger px-2 py-2 rounded hover:bg-red-50 mt-1"
                       >✕</button>
                     </div>
                   ))}
                   <button
-                    onClick={() => setEditLocations([...editLocations, { name: "", googleMapsUrl: "" }])}
+                    onClick={() => { setEditLocations([...editLocations, { name: "", googleMapsUrl: "", numCourts: 2 }]); setClubDirty(true); }}
                     className="text-xs text-primary font-medium"
                   >+ Add Location</button>
                 </div>

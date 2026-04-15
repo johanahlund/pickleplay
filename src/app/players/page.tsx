@@ -7,6 +7,13 @@ import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 
+interface PlayerClub {
+  id: string;
+  name: string;
+  emoji: string;
+  role: string;
+}
+
 interface Player {
   id: string;
   name: string;
@@ -20,6 +27,7 @@ interface Player {
   gender?: string | null;
   phone?: string | null;
   role?: string;
+  clubs?: PlayerClub[];
   _count?: { matchPlayers: number };
 }
 
@@ -36,6 +44,7 @@ export default function PlayersPage() {
   const [editGender, setEditGender] = useState<string | null>(null);
   const [editPhone, setEditPhone] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
+  const [clubFilter, setClubFilter] = useState<string>("");
 
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -169,9 +178,17 @@ export default function PlayersPage() {
     return <div className="text-center py-12 text-muted">Loading...</div>;
   }
 
+  // All distinct clubs that appear in the loaded player list (for the filter dropdown).
+  const allClubs = Array.from(
+    new Map(
+      players.flatMap((p) => p.clubs || []).map((c) => [c.id, c]),
+    ).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
   const filteredPlayers = players
     .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .filter((p) => !genderFilter || p.gender === genderFilter)
+    .filter((p) => !clubFilter || (p.clubs || []).some((c) => c.id === clubFilter))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
@@ -189,6 +206,18 @@ export default function PlayersPage() {
       </div>
 
       <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search players..." className="text-base" />
+      {allClubs.length > 0 && (
+        <select
+          value={clubFilter}
+          onChange={(e) => setClubFilter(e.target.value)}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+        >
+          <option value="">All clubs</option>
+          {allClubs.map((c) => (
+            <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+          ))}
+        </select>
+      )}
       <div className="flex gap-2">
         {[
           { value: null, label: "All" },
@@ -278,7 +307,7 @@ export default function PlayersPage() {
                 </div>
               ) : (
                 <div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -316,6 +345,19 @@ export default function PlayersPage() {
                         {p.email && (isAdmin || session?.user?.id === p.id) && <span className="ml-1.5 text-xs">· {p.email}</span>}
                       </div>
                     </div>
+                    {(p.clubs || []).length > 0 && (
+                      <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[45%]">
+                        {(p.clubs || []).map((c) => (
+                          <span
+                            key={c.id}
+                            className="text-[10px] bg-gray-100 text-foreground px-2 py-0.5 rounded-full font-medium truncate"
+                            title={`${c.name} (${c.role})`}
+                          >
+                            {c.emoji} {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {isAdmin && (
                     <div className="flex items-center gap-1 mt-2 ml-12 flex-wrap">

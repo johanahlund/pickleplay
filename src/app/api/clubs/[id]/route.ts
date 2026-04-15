@@ -64,11 +64,13 @@ export async function PATCH(
     await prisma.clubLocation.deleteMany({ where: { clubId: id } });
     for (const loc of locations) {
       if (loc.name?.trim()) {
+        const courts = Number(loc.numCourts);
         await prisma.clubLocation.create({
           data: {
             clubId: id,
             name: loc.name.trim(),
             googleMapsUrl: loc.googleMapsUrl?.trim() || null,
+            numCourts: Number.isFinite(courts) && courts > 0 ? Math.min(courts, 20) : 2,
           },
         });
       }

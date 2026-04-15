@@ -114,8 +114,12 @@ model ClubLocation {
   googleMapsUrl String?
   city          String?
   country       String?
+  /// Number of courts available at this location. Used as the default (and
+  /// cap) for events created at this location.
+  numCourts     Int    @default(2)
 
-  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  club   Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  events Event[]
 }
 
 model ClubMember {
@@ -183,6 +187,8 @@ model Event {
 
   clubId       String?
   club         Club?    @relation(fields: [clubId], references: [id])
+  locationId   String?
+  location     ClubLocation? @relation(fields: [locationId], references: [id])
 
   // Multi-week competition: sessions link to parent
   parentEventId String?
