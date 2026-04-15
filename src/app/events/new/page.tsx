@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { setPreview } from "@/lib/entityPreview";
 
 /**
  * Streamlined event creation wizard.
@@ -174,6 +175,18 @@ export default function NewEventPage() {
     });
     if (r.ok) {
       const event = await r.json();
+      // Seed the preview cache so the detail page renders the header on
+      // first paint instead of the bare loading state. We have all the
+      // data right here — no need for the detail page to fetch before
+      // showing anything.
+      setPreview("event", event.id, {
+        ...event,
+        // The list-shape preview expects `club` nested — the POST response
+        // doesn't include it, so synthesize it from form state.
+        club: currentClub
+          ? { id: currentClub.id, name: currentClub.name, emoji: currentClub.emoji, locations: currentLocation ? [currentLocation] : [] }
+          : null,
+      });
       router.push(`/events/${event.id}`);
     } else {
       setSaving(false);
