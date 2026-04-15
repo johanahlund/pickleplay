@@ -89,8 +89,11 @@ export default function NewEventPage() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const [numCourts, setNumCourts] = useState(2);
-  const [duprMin, setDuprMin] = useState("");
-  const [duprMax, setDuprMax] = useState("");
+  const [courtsPickerOpen, setCourtsPickerOpen] = useState(false);
+  const [duprMin, setDuprMin] = useState<number | null>(null);
+  const [duprMax, setDuprMax] = useState<number | null>(null);
+  const [duprPhase, setDuprPhase] = useState<"closed" | "min" | "max">("closed");
+  const [competition, setCompetition] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Load clubs where the current user can create events (owner/admin/member).
@@ -162,8 +165,9 @@ export default function NewEventPage() {
         numCourts,
         date: startISO,
         endDate: endISO,
-        skillMin: duprMin ? parseFloat(duprMin) : undefined,
-        skillMax: duprMax ? parseFloat(duprMax) : undefined,
+        skillMin: duprMin ?? undefined,
+        skillMax: duprMax ?? undefined,
+        competitionMode: competition ? "groups_elimination" : undefined,
       }),
     });
     if (r.ok) {
@@ -369,49 +373,103 @@ export default function NewEventPage() {
                 Courts
                 {currentLocation && (
                   <span className="text-xs text-muted font-normal ml-1">
-                    (max {currentLocation.numCourts} at {currentLocation.name})
+                    (max {currentLocation.numCourts})
                   </span>
                 )}
               </label>
-              <input
-                type="number"
-                value={numCourts}
-                min={1}
-                max={currentLocation?.numCourts || 20}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value) || 1;
-                  const cap = currentLocation?.numCourts || 20;
-                  setNumCourts(Math.min(Math.max(1, v), cap));
-                }}
-                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
+              {(() => {
+                const max = currentLocation?.numCourts || 20;
+                if (max <= 6) {
+                  // Inline button row 1..max
+                  return (
+                    <div className="flex gap-2">
+                      {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setNumCourts(n)}
+                          className={`flex-1 h-12 rounded-xl text-lg font-bold transition-all ${
+                            numCourts === n
+                              ? "bg-action text-white"
+                              : "bg-gray-100 text-foreground hover:bg-gray-200"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                }
+                // Many courts: show a single button that opens a modal grid
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setCourtsPickerOpen(true)}
+                    className="w-full h-12 rounded-xl text-lg font-bold bg-action text-white"
+                  >
+                    {numCourts} court{numCourts === 1 ? "" : "s"}
+                  </button>
+                );
+              })()}
             </div>
 
+            {/* Competition toggle */}
+            <div>
+              <label className="block text-sm font-medium text-muted mb-1">Competition</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCompetition(false)}
+                  className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                    !competition ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}
+                >
+                  Social
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCompetition(true)}
+                  className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                    competition ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}
+                >
+                  🏆 Competition
+                </button>
+              </div>
+              <p className="text-[10px] text-muted mt-1">
+                {competition
+                  ? "Groups → elimination bracket. Configure on the event page after creating."
+                  : "Regular match play with ranking."}
+              </p>
+            </div>
+
+            {/* DUPR range */}
             <div>
               <label className="block text-sm font-medium text-muted mb-1">DUPR range (optional)</label>
-              <div className="flex gap-3 items-center">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="2"
-                  max="6"
-                  value={duprMin}
-                  onChange={(e) => setDuprMin(e.target.value)}
-                  placeholder="Min"
-                  className="flex-1 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-                <span className="text-muted text-sm">to</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="2"
-                  max="6"
-                  value={duprMax}
-                  onChange={(e) => setDuprMax(e.target.value)}
-                  placeholder="Max"
-                  className="flex-1 border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDuprPhase("min");
+                }}
+                className={`w-full h-12 rounded-xl text-base font-semibold border transition-all ${
+                  duprMin != null || duprMax != null
+                    ? "border-action bg-action/5 text-action"
+                    : "border-border text-muted"
+                }`}
+              >
+                {duprMin == null && duprMax == null
+                  ? "Tap to set range"
+                  : `${duprMin ?? "?"} – ${duprMax ?? "?"}`}
+              </button>
+              {(duprMin != null || duprMax != null) && (
+                <button
+                  type="button"
+                  onClick={() => { setDuprMin(null); setDuprMax(null); }}
+                  className="text-[11px] text-muted mt-1 hover:text-danger"
+                >
+                  Clear range
+                </button>
+              )}
               <p className="text-[10px] text-muted mt-1">
                 Players outside this range won&apos;t be allowed to join.
               </p>
@@ -430,6 +488,91 @@ export default function NewEventPage() {
           </div>
         </div>
       )}
+
+      {/* Courts picker modal (only shown when location has > 6 courts) */}
+      {courtsPickerOpen && (() => {
+        const max = currentLocation?.numCourts || 20;
+        const numbers = Array.from({ length: max }, (_, i) => i + 1);
+        return (
+          <div
+            className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
+            onClick={() => setCourtsPickerOpen(false)}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-4">
+                <span className="font-bold text-lg">How many courts?</span>
+                <p className="text-xs text-muted mt-1">Max {max} at this location</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2.5">
+                {numbers.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => { setNumCourts(n); setCourtsPickerOpen(false); }}
+                    className={`h-14 rounded-xl text-xl font-bold transition-all ${
+                      numCourts === n ? "bg-action text-white ring-2 ring-action/50 scale-110" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* DUPR range picker modal — two-phase: pick min, then max */}
+      {duprPhase !== "closed" && (() => {
+        const values = [2.0, 2.25, 2.5, 2.75, 3.0, 3.25, 3.5, 3.75, 4.0, 4.25, 4.5, 4.75, 5.0];
+        const phase = duprPhase;
+        const selectableMax = phase === "max" && duprMin != null ? values.filter((v) => v >= duprMin) : values;
+        const title = phase === "min" ? "Pick minimum DUPR" : "Pick maximum DUPR";
+        const currentValue = phase === "min" ? duprMin : duprMax;
+        return (
+          <div
+            className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
+            onClick={() => setDuprPhase("closed")}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-4">
+                <span className="font-bold text-lg">{title}</span>
+                {phase === "max" && duprMin != null && (
+                  <p className="text-xs text-muted mt-1">Min: {duprMin}</p>
+                )}
+              </div>
+              <div className="grid grid-cols-4 gap-2.5">
+                {(phase === "min" ? values : selectableMax).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      if (phase === "min") {
+                        setDuprMin(v);
+                        // If max is now less than new min, clear it
+                        if (duprMax != null && duprMax < v) setDuprMax(null);
+                        setDuprPhase("max");
+                      } else {
+                        setDuprMax(v);
+                        setDuprPhase("closed");
+                      }
+                    }}
+                    className={`h-14 rounded-xl text-base font-bold transition-all ${
+                      currentValue === v ? "bg-action text-white ring-2 ring-action/50 scale-110" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between mt-4 text-xs">
+                {phase === "max" && (
+                  <button onClick={() => setDuprPhase("min")} className="text-action font-medium">← Change min</button>
+                )}
+                <button onClick={() => setDuprPhase("closed")} className="text-muted ml-auto">Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
