@@ -305,6 +305,7 @@ export default function ClubDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
+  const [transferTargetId, setTransferTargetId] = useState<string>("");
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isGlobalAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -841,58 +842,76 @@ export default function ClubDetailPage() {
                 </div>
               )}
 
-              {isOwner && (
-                <div className="space-y-2 pt-2 border-t border-border">
-                  <div>
-                    <label className="block text-sm font-medium text-muted mb-1">Transfer ownership</label>
-                    <select
-                      onChange={async (e) => {
-                        const newOwnerId = e.target.value;
-                        if (!newOwnerId) return;
-                        const target = club.members.find((m) => m.playerId === newOwnerId);
-                        const ok = await confirmDialog({
-                          title: "Transfer ownership",
-                          message: `Transfer ownership of ${club.name} to ${target?.player.name || "this member"}? You will become an admin.`,
-                          danger: true,
-                          confirmText: "Transfer",
-                        });
-                        if (!ok) { e.target.value = ""; return; }
-                        const r = await fetch(`/api/clubs/${id}/members`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ playerId: newOwnerId, role: "owner" }),
-                        });
-                        if (r.ok) {
-                          await alertDialog("Ownership transferred.", "Done");
-                          fetchClub();
-                          setEditing(false);
-                        } else {
-                          const d = await r.json().catch(() => ({}));
-                          await alertDialog(d.error || "Failed to transfer ownership", "Error");
-                        }
-                        e.target.value = "";
-                      }}
-                      defaultValue=""
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
-                    >
-                      <option value="">Select new owner...</option>
-                      {club.members
-                        .filter((m) => m.playerId !== userId && m.role !== "owner")
-                        .map((m) => (
-                          <option key={m.playerId} value={m.playerId}>
-                            {m.player.name} ({m.role})
-                          </option>
-                        ))}
-                    </select>
-                    <p className="text-[11px] text-muted mt-1">
-                      You&apos;ll be demoted to admin. The new owner gets full control of the club.
-                    </p>
+              {isOwner && (() => {
+                const eligibleMembers = club.members.filter((m) => m.playerId !== userId && m.role !== "owner");
+                return (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <div>
+                      <label className="block text-sm font-medium text-muted mb-1">Transfer ownership</label>
+                      {eligibleMembers.length === 0 ? (
+                        <p className="text-xs text-muted italic">
+                          No other members to transfer to. Add members to the club first.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="flex gap-2">
+                            <select
+                              value={transferTargetId}
+                              onChange={(e) => setTransferTargetId(e.target.value)}
+                              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-white"
+                            >
+                              <option value="">Select new owner...</option>
+                              {eligibleMembers.map((m) => (
+                                <option key={m.playerId} value={m.playerId}>
+                                  {m.player.name} ({m.role})
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={!transferTargetId}
+                              onClick={async () => {
+                                if (!transferTargetId) return;
+                                const target = club.members.find((m) => m.playerId === transferTargetId);
+                                const ok = await confirmDialog({
+                                  title: "Transfer ownership",
+                                  message: `Transfer ownership of ${club.name} to ${target?.player.name || "this member"}? You will become an admin.`,
+                                  danger: true,
+                                  confirmText: "Transfer",
+                                });
+                                if (!ok) return;
+                                const r = await fetch(`/api/clubs/${id}/members`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ playerId: transferTargetId, role: "owner" }),
+                                });
+                                if (r.ok) {
+                                  setTransferTargetId("");
+                                  await alertDialog("Ownership transferred.", "Done");
+                                  fetchClub();
+                                  setEditing(false);
+                                } else {
+                                  const d = await r.json().catch(() => ({}));
+                                  await alertDialog(d.error || "Failed to transfer ownership", "Error");
+                                }
+                              }}
+                              className="bg-action text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Transfer
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-muted mt-1">
+                            You&apos;ll be demoted to admin. The new owner gets full control of the club.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
+                      Delete Club
+                    </button>
                   </div>
-                  <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
-                    Delete Club
-                  </button>
-                </div>
-              )}
+                );
+              })()}
             </div>
           ) : (
             <div className="bg-card rounded-xl border border-border overflow-hidden">
