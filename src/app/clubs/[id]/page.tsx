@@ -304,7 +304,7 @@ export default function ClubDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
-  const { confirm: confirmDialog } = useConfirm();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isGlobalAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -821,9 +821,56 @@ export default function ClubDetailPage() {
               )}
 
               {isOwner && (
-                <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
-                  Delete Club
-                </button>
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <div>
+                    <label className="block text-sm font-medium text-muted mb-1">Transfer ownership</label>
+                    <select
+                      onChange={async (e) => {
+                        const newOwnerId = e.target.value;
+                        if (!newOwnerId) return;
+                        const target = club.members.find((m) => m.playerId === newOwnerId);
+                        const ok = await confirmDialog({
+                          title: "Transfer ownership",
+                          message: `Transfer ownership of ${club.name} to ${target?.player.name || "this member"}? You will become an admin.`,
+                          danger: true,
+                          confirmText: "Transfer",
+                        });
+                        if (!ok) { e.target.value = ""; return; }
+                        const r = await fetch(`/api/clubs/${id}/members`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ playerId: newOwnerId, role: "owner" }),
+                        });
+                        if (r.ok) {
+                          await alertDialog("Ownership transferred.", "Done");
+                          fetchClub();
+                          setEditing(false);
+                        } else {
+                          const d = await r.json().catch(() => ({}));
+                          await alertDialog(d.error || "Failed to transfer ownership", "Error");
+                        }
+                        e.target.value = "";
+                      }}
+                      defaultValue=""
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">Select new owner...</option>
+                      {club.members
+                        .filter((m) => m.playerId !== userId && m.role !== "owner")
+                        .map((m) => (
+                          <option key={m.playerId} value={m.playerId}>
+                            {m.player.name} ({m.role})
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-[11px] text-muted mt-1">
+                      You&apos;ll be demoted to admin. The new owner gets full control of the club.
+                    </p>
+                  </div>
+                  <button onClick={deleteClub} className="w-full py-2 text-xs text-danger font-medium rounded-lg border border-red-200 hover:bg-red-50">
+                    Delete Club
+                  </button>
+                </div>
               )}
             </div>
           ) : (

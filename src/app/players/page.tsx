@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -25,17 +26,13 @@ interface Player {
 export default function PlayersPage() {
   const { data: session } = useSession();
   const [players, setPlayers] = useState<Player[]>([]);
-  const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [gender, setGender] = useState<string | null>(null);
-  const [phone, setPhone] = useState("");
   const [editGender, setEditGender] = useState<string | null>(null);
   const [editPhone, setEditPhone] = useState("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
@@ -54,20 +51,6 @@ export default function PlayersPage() {
     fetchPlayers();
   }, []);
 
-  const addPlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    await fetch("/api/players", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), ...(gender ? { gender } : {}), ...(phone.trim() ? { phone: phone.trim() } : {}) }),
-    });
-    setName("");
-    setGender(null);
-    setPhone("");
-    setShowForm(false);
-    fetchPlayers();
-  };
 
   const voidPlayer = async (id: string, playerName: string) => {
     if (!confirm(`Are you sure you want to remove ${playerName}? If they have match history, they'll be voided (hidden but data preserved).`)) return;
@@ -196,12 +179,12 @@ export default function PlayersPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Players ({searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})</h2>
         {isAdmin && (
-          <button
-            onClick={() => setShowForm(!showForm)}
+          <Link
+            href="/players/new"
             className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
           >
-            {showForm ? "Cancel" : "+ Add"}
-          </button>
+            + Add
+          </Link>
         )}
       </div>
 
@@ -223,61 +206,6 @@ export default function PlayersPage() {
           </button>
         ))}
       </div>
-
-      {showForm && isAdmin && (
-        <form onSubmit={addPlayer} className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Player name"
-              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">Gender (optional)</label>
-            <div className="flex gap-2">
-              {[
-                { value: null, label: "Skip" },
-                { value: "M", label: "♂ Male" },
-                { value: "F", label: "♀ Female" },
-              ].map((g) => (
-                <button
-                  key={g.label}
-                  type="button"
-                  onClick={() => setGender(g.value)}
-                  className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-                    gender === g.value
-                      ? "bg-selected text-white"
-                      : "bg-gray-100 text-foreground hover:bg-gray-200"
-                  }`}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-muted mb-1">WhatsApp (optional)</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+46 70 123 4567"
-              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-action text-white py-2.5 rounded-lg font-semibold active:bg-action-dark transition-colors"
-          >
-            Add Player
-          </button>
-        </form>
-      )}
 
       {players.length === 0 ? (
         <div className="text-center py-12">
