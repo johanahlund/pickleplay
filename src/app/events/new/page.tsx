@@ -89,7 +89,6 @@ export default function NewEventPage() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const [numCourts, setNumCourts] = useState(2);
-  const [courtsPickerOpen, setCourtsPickerOpen] = useState(false);
   const [duprMin, setDuprMin] = useState<number | null>(null);
   const [duprMax, setDuprMax] = useState<number | null>(null);
   const [duprPhase, setDuprPhase] = useState<"closed" | "min" | "max">("closed");
@@ -135,10 +134,13 @@ export default function NewEventPage() {
   const currentClub = clubs.find((c) => c.id === clubId);
   const currentLocation = currentClub?.locations.find((l) => l.id === locationId);
 
-  // When location changes, default the numCourts to the location's numCourts.
+  // When location changes, default numCourts to the location's configured
+  // maximum (or 2 if not configured). Also clamp if the current selection
+  // exceeds the new location's max.
   useEffect(() => {
     if (currentLocation) {
-      setNumCourts(currentLocation.numCourts);
+      const max = typeof currentLocation.numCourts === "number" ? currentLocation.numCourts : 2;
+      setNumCourts(max);
     }
   }, [currentLocation]);
 
@@ -373,44 +375,31 @@ export default function NewEventPage() {
                 Courts
                 {currentLocation && (
                   <span className="text-xs text-muted font-normal ml-1">
-                    (max {currentLocation.numCourts})
+                    (max {currentLocation.numCourts ?? 2} at {currentLocation.name})
                   </span>
                 )}
               </label>
-              {(() => {
-                const max = currentLocation?.numCourts || 20;
-                if (max <= 6) {
-                  // Inline button row 1..max
-                  return (
-                    <div className="flex gap-2">
-                      {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => setNumCourts(n)}
-                          className={`flex-1 h-12 rounded-xl text-lg font-bold transition-all ${
-                            numCourts === n
-                              ? "bg-action text-white"
-                              : "bg-gray-100 text-foreground hover:bg-gray-200"
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                }
-                // Many courts: show a single button that opens a modal grid
-                return (
+              {/* One button per court, wrapping to multiple rows if needed.
+                 Default max = 2 when the location has no numCourts configured. */}
+              <div className="flex flex-wrap gap-2">
+                {Array.from(
+                  { length: (typeof currentLocation?.numCourts === "number" ? currentLocation.numCourts : 2) },
+                  (_, i) => i + 1,
+                ).map((n) => (
                   <button
+                    key={n}
                     type="button"
-                    onClick={() => setCourtsPickerOpen(true)}
-                    className="w-full h-12 rounded-xl text-lg font-bold bg-action text-white"
+                    onClick={() => setNumCourts(n)}
+                    className={`min-w-[52px] h-12 px-3 rounded-xl text-lg font-bold transition-all ${
+                      numCourts === n
+                        ? "bg-action text-white"
+                        : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}
                   >
-                    {numCourts} court{numCourts === 1 ? "" : "s"}
+                    {n}
                   </button>
-                );
-              })()}
+                ))}
+              </div>
             </div>
 
             {/* Competition toggle */}
@@ -421,7 +410,7 @@ export default function NewEventPage() {
                   type="button"
                   onClick={() => setCompetition(false)}
                   className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                    !competition ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                    !competition ? "bg-action text-white" : "bg-gray-100 text-foreground"
                   }`}
                 >
                   Social
@@ -430,7 +419,7 @@ export default function NewEventPage() {
                   type="button"
                   onClick={() => setCompetition(true)}
                   className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                    competition ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                    competition ? "bg-action text-white" : "bg-gray-100 text-foreground"
                   }`}
                 >
                   🏆 Competition
@@ -488,38 +477,6 @@ export default function NewEventPage() {
           </div>
         </div>
       )}
-
-      {/* Courts picker modal (only shown when location has > 6 courts) */}
-      {courtsPickerOpen && (() => {
-        const max = currentLocation?.numCourts || 20;
-        const numbers = Array.from({ length: max }, (_, i) => i + 1);
-        return (
-          <div
-            className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
-            onClick={() => setCourtsPickerOpen(false)}
-          >
-            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-              <div className="text-center mb-4">
-                <span className="font-bold text-lg">How many courts?</span>
-                <p className="text-xs text-muted mt-1">Max {max} at this location</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2.5">
-                {numbers.map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => { setNumCourts(n); setCourtsPickerOpen(false); }}
-                    className={`h-14 rounded-xl text-xl font-bold transition-all ${
-                      numCourts === n ? "bg-action text-white ring-2 ring-action/50 scale-110" : "bg-gray-100 text-foreground hover:bg-gray-200"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* DUPR range picker modal — two-phase: pick min, then max */}
       {duprPhase !== "closed" && (() => {

@@ -101,7 +101,7 @@ export default function NewPlayerPage() {
                 type="button"
                 onClick={() => setGender(g.value)}
                 className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-                  gender === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  gender === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
                 }`}
               >
                 {g.label}

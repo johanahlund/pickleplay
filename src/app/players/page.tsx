@@ -228,7 +228,7 @@ export default function PlayersPage() {
             key={g.label}
             onClick={() => setGenderFilter(g.value)}
             className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-              genderFilter === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              genderFilter === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
             }`}
           >
             {g.label}
@@ -271,7 +271,7 @@ export default function PlayersPage() {
                           onClick={() => setEditGender(g.value)}
                           className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
                             editGender === g.value
-                              ? "bg-selected text-white"
+                              ? "bg-action text-white"
                               : "bg-gray-100 text-foreground hover:bg-gray-200"
                           }`}
                         >
