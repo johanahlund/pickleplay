@@ -39,10 +39,49 @@ export default function NewEventPage() {
   const router = useRouter();
   const { alert } = useConfirm();
 
-  const [clubs, setClubs] = useState<ClubOption[]>([]);
-  const [loadingClubs, setLoadingClubs] = useState(true);
-  const [clubId, setClubId] = useState<string>("");
-  const [locationId, setLocationId] = useState<string>("");
+  // Seed from sessionStorage so repeated visits to the wizard render
+  // the club list on first paint. Fresh data is still fetched below and
+  // replaces the cache on success.
+  const [clubs, setClubs] = useState<ClubOption[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = window.sessionStorage.getItem("new-event-clubs-cache");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingClubs, setLoadingClubs] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return !window.sessionStorage.getItem("new-event-clubs-cache");
+  });
+  const [clubId, setClubId] = useState<string>(() => {
+    // If we have exactly one cached club, pre-select it on first render.
+    if (typeof window === "undefined") return "";
+    try {
+      const cached = window.sessionStorage.getItem("new-event-clubs-cache");
+      if (!cached) return "";
+      const list = JSON.parse(cached) as ClubOption[];
+      return list.length === 1 ? list[0].id : "";
+    } catch {
+      return "";
+    }
+  });
+  const [locationId, setLocationId] = useState<string>(() => {
+    // Same for a pre-selected single location.
+    if (typeof window === "undefined") return "";
+    try {
+      const cached = window.sessionStorage.getItem("new-event-clubs-cache");
+      if (!cached) return "";
+      const list = JSON.parse(cached) as ClubOption[];
+      if (list.length === 1 && list[0].locations.length === 1) {
+        return list[0].locations[0].id;
+      }
+      return "";
+    } catch {
+      return "";
+    }
+  });
 
   // Step 3 form state
   const [name, setName] = useState("");
@@ -76,10 +115,17 @@ export default function NewEventPage() {
           // And if that one club has one location, auto-select it too.
           if (withLocations[0].locations.length === 1) {
             setLocationId(withLocations[0].locations[0].id);
-            setNumCourts(withLocations[0].locations[0].numCourts);
+            const c = withLocations[0].locations[0].numCourts;
+            if (typeof c === "number") setNumCourts(c);
           }
         }
         setLoadingClubs(false);
+        // Refresh the cache for the next visit.
+        try {
+          window.sessionStorage.setItem("new-event-clubs-cache", JSON.stringify(withLocations));
+        } catch {
+          // ignore
+        }
       });
   }, []);
 
@@ -130,9 +176,22 @@ export default function NewEventPage() {
     }
   };
 
-  if (loadingClubs) return <div className="p-4 text-sm text-muted">Loading...</div>;
+  // Loading state: render header immediately + skeleton for the list below.
+  if (loadingClubs && clubs.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Link href="/events" className="text-sm text-action">&larr; Events</Link>
+        <h2 className="text-xl font-bold">Create Event</h2>
+        <div className="bg-card rounded-xl border border-border p-4 animate-pulse space-y-3">
+          <div className="h-4 bg-gray-200 rounded w-1/3" />
+          <div className="h-3 bg-gray-200 rounded w-1/2" />
+          <div className="h-3 bg-gray-200 rounded w-2/5" />
+        </div>
+      </div>
+    );
+  }
 
-  // ── Step 1: No clubs at all
+  // No clubs at all
   if (clubs.length === 0) {
     return (
       <div className="space-y-4">
