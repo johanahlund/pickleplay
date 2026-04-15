@@ -116,7 +116,7 @@ export default function NewPlayerPage() {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+46 70 123 4567"
+            placeholder="+CC 123 456 789"
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>

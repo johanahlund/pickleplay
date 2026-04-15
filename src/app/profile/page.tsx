@@ -137,7 +137,7 @@ export default function ProfilePage() {
             <div>
               <label className="block text-xs text-muted mb-0.5">Phone (WhatsApp)</label>
               <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
-                placeholder="+351 912 345 678"
+                placeholder="+CC 123 456 789"
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className="flex gap-2 pt-1">
