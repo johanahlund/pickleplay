@@ -59,9 +59,24 @@ function EventsPage() {
   const { viewRole } = useViewRole();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && hasRole(viewRole, "admin");
 
-  const [events, setEvents] = useState<Event[]>([]);
+  // Cache the events list in sessionStorage so navigating back from a
+  // detail page renders the list instantly. The list is still refreshed
+  // in the background when fetchEvents runs on mount.
+  const [events, setEvents] = useState<Event[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = window.sessionStorage.getItem("events-list-cache");
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [userClubs, setUserClubs] = useState<UserClub[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    // Only show the loading spinner if we have nothing cached yet.
+    if (typeof window === "undefined") return true;
+    return !window.sessionStorage.getItem("events-list-cache");
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
@@ -89,6 +104,12 @@ function EventsPage() {
         });
         setEvents(enriched);
         setLoading(false);
+        // Refresh the cache so next navigation shows the latest data instantly.
+        try {
+          window.sessionStorage.setItem("events-list-cache", JSON.stringify(enriched));
+        } catch {
+          // ignore quota
+        }
       });
   }, []);
 
