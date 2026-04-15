@@ -387,6 +387,7 @@ export default function EventDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
+  const [addPlayerClubFilter, setAddPlayerClubFilter] = useState<"all" | "club">("club");
   const [editFormat, setEditFormat] = useState("doubles");
   const [editScoringFormat, setEditScoringFormat] = useState("1x11");
   const [editWinBy, setEditWinBy] = useState("2");
@@ -1773,10 +1774,16 @@ export default function EventDetailPage() {
 
   // ── Section: Players ──
   const renderAddPlayers = () => {
+    const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
     const available = allPlayers
       .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
       .filter((p) => p.name.toLowerCase().includes(addPlayerSearch.toLowerCase()))
       .filter((p) => !addPlayerGender || p.gender === addPlayerGender)
+      .filter((p) => {
+        if (addPlayerClubFilter !== "club" || !eventClubId) return true;
+        const clubs = (p as unknown as { clubs?: { id: string }[] }).clubs;
+        return clubs?.some((c) => c.id === eventClubId) ?? false;
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     return (
@@ -1786,7 +1793,33 @@ export default function EventDetailPage() {
           ← Players
         </button>
         <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
-        <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-base" />
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-base" />
+          </div>
+          {eventClubId && (
+            <div className="flex gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAddPlayerClubFilter("club")}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  addPlayerClubFilter === "club" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                }`}
+              >
+                {event.club?.emoji || "Club"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddPlayerClubFilter("all")}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  addPlayerClubFilter === "all" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                }`}
+              >
+                All
+              </button>
+            </div>
+          )}
+        </div>
         <div className="flex gap-2">
           {[
             { value: null, label: "All" },
@@ -1795,7 +1828,7 @@ export default function EventDetailPage() {
           ].map((g) => (
             <button key={g.label} onClick={() => setAddPlayerGender(g.value)}
               className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-                addPlayerGender === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                addPlayerGender === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
               }`}>{g.label}</button>
           ))}
         </div>
