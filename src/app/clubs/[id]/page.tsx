@@ -10,6 +10,7 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
+import { getPreview, setPreview } from "@/lib/entityPreview";
 
 // ── Long press to delete ──
 function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void; confirmMessage: string }) {
@@ -194,15 +195,17 @@ function SwipeableMemberRow({
   const touchStartY = useRef(0);
   const swipeOffset = useRef(0);
 
+  const canRemove = canManage && !isSelf && (member.role !== "owner" || isGlobalAdmin);
+
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!canManage || member.role === "owner" || isSelf) return;
+    if (!canRemove) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     swipeOffset.current = 0;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!canManage || member.role === "owner" || isSelf) return;
+    if (!canRemove) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
     if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return;
@@ -215,7 +218,7 @@ function SwipeableMemberRow({
   };
 
   const handleTouchEnd = () => {
-    if (swipeOffset.current < -80 && canManage && member.role !== "owner" && !isSelf) {
+    if (swipeOffset.current < -80 && canRemove) {
       // Parent's onRemove already handles the confirm dialog.
       onRemove();
     }
@@ -252,7 +255,7 @@ function SwipeableMemberRow({
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
       <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
       {/* Always-visible remove button (touch: also swipe-left works) */}
-      {canManage && member.role !== "owner" && !isSelf && (
+      {canRemove && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -365,11 +368,16 @@ export default function ClubDetailPage() {
 
   const EMOJIS = ["🏓", "🎾", "⚡", "🔥", "🌟", "💪", "🏆", "🎯", "🦅", "🐉"];
 
+  // Preview cache lookup for instant render-on-navigation.
+  const clubPreview = typeof id === "string" ? getPreview<{ id: string; name: string; emoji: string; logoUrl?: string | null; coverUrl?: string | null; description?: string | null; city?: string | null; country?: string | null; myRole?: string; _count?: { members?: number; events?: number } }>("club", id) : null;
+
   const fetchClub = useCallback(async () => {
     const r = await fetch(`/api/clubs/${id}`);
     if (!r.ok) { router.push("/clubs"); return; }
-    setClub(await r.json());
+    const data = await r.json();
+    setClub(data);
     setLoading(false);
+    if (typeof id === "string") setPreview("club", id, data);
   }, [id, router]);
 
   const fetchEvents = useCallback(async () => {
@@ -576,7 +584,56 @@ export default function ClubDetailPage() {
     };
   }, []);
 
-  if (loading || !club) return <div className="text-center py-12 text-muted">Loading...</div>;
+  if (loading || !club) {
+    // If we have a cached preview from the clubs list, render an instant
+    // header card (cover, logo, name, city, role) while the full club
+    // detail loads in the background.
+    if (clubPreview) {
+      return (
+        <div className="space-y-3 animate-in fade-in duration-200">
+          <Link href="/clubs" className="text-sm text-action">&larr; Clubs</Link>
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {clubPreview.coverUrl && (
+              <div className="h-32 w-full bg-gray-100">
+                <img src={clubPreview.coverUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <div className="p-4">
+              <div className="flex items-center gap-3">
+                {clubPreview.logoUrl ? (
+                  <img src={clubPreview.logoUrl} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                ) : (
+                  <span className="text-3xl">{clubPreview.emoji}</span>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">{clubPreview.name}</h2>
+                    {clubPreview.myRole && (
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{clubPreview.myRole}</span>
+                    )}
+                  </div>
+                  {(clubPreview.city || clubPreview.country) && (
+                    <p className="text-sm text-muted mt-0.5">
+                      {[clubPreview.city, clubPreview.country].filter(Boolean).join(", ")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {clubPreview.description && (
+                <p className="text-sm text-muted mt-3 line-clamp-2">{clubPreview.description}</p>
+              )}
+            </div>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-6 animate-pulse">
+            <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-1/2" />
+          </div>
+        </div>
+      );
+    }
+    return <div className="text-center py-12 text-muted">Loading...</div>;
+  }
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
 
@@ -1261,7 +1318,7 @@ export default function ClubDetailPage() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted">
               {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
-              {canManage && filteredMembers.some((m) => m.role !== "owner" && m.playerId !== userId)
+              {canManage && filteredMembers.some((m) => (m.role !== "owner" || isGlobalAdmin) && m.playerId !== userId)
                 ? " · tap ✕ to remove"
                 : ""}
             </p>

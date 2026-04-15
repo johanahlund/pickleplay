@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
+import { setPreview } from "@/lib/entityPreview";
 
 interface ClubLocation {
   id: string;
@@ -314,8 +315,11 @@ export default function ClubsPage() {
         <div className="space-y-2">
           {clubs.map((club) => (
             <div key={club.id} className="bg-card rounded-xl border border-border overflow-hidden">
-              <Link href={`/clubs/${club.id}`}
-                className="block p-4 active:bg-gray-50 transition-colors">
+              <Link
+                href={`/clubs/${club.id}`}
+                onClick={() => setPreview("club", club.id, club)}
+                className="block p-4 active:bg-gray-50 transition-colors"
+              >
                 <div className="flex items-center gap-3">
                   {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
                   <div className="flex-1 min-w-0">
