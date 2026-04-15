@@ -397,6 +397,7 @@ export default function EventDetailPage() {
   const [editPrioSkill, setEditPrioSkill] = useState(true);
   const [editPrioVariety, setEditPrioVariety] = useState(false);
   const [editRankingMode, setEditRankingMode] = useState("ranked");
+  const [editCompetitionMode, setEditCompetitionMode] = useState<boolean>(false);
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
@@ -714,6 +715,7 @@ export default function EventDetailPage() {
     setEditPrioSkill(cls?.prioSkill ?? false);
     setEditPrioVariety((cls as unknown as Record<string, boolean>)?.prioVariety ?? false);
     setEditRankingMode(event.rankingMode || "ranked");
+    setEditCompetitionMode(!!event.competitionMode);
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
     if (event.endDate) {
@@ -757,6 +759,15 @@ export default function EventDetailPage() {
         visibility: editVisibility,
       }),
     });
+    // If competition mode changed, persist via the dedicated competition endpoint
+    const currentCompetition = !!event?.competitionMode;
+    if (currentCompetition !== editCompetitionMode) {
+      await fetch(`/api/events/${id}/competition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: editCompetitionMode ? "enable" : "disable" }),
+      });
+    }
     setEditingEvent(false);
     await fetchEvent();
   };
@@ -1041,10 +1052,47 @@ export default function EventDetailPage() {
   );
 
   const eventHeader = (
-    <div className="bg-card rounded-xl border border-border p-4">
+    <div className="bg-card rounded-xl border border-border p-4 relative">
+      {/* Status pill — top right corner */}
+      {event.status !== "setup" && (
+        <span className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+          event.status === "active" ? "bg-green-100 text-green-700" :
+          event.status === "completed" ? "bg-gray-100 text-muted" :
+          "bg-blue-100 text-blue-700"
+        }`}>
+          {event.status}
+        </span>
+      )}
+
+      {/* Action column — pen (edit) and trash (delete), stacked on the right */}
+      {canManage && (
+        <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); startEditEvent(); setActiveSection("when"); }}
+            className="text-muted hover:text-foreground p-1"
+            aria-label="Edit event"
+            title="Edit event"
+          >
+            {penIcon}
+          </button>
+          {(isOwner || isAdmin) && (
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteEvent(); }}
+              className="text-muted hover:text-danger p-1"
+              aria-label="Delete event"
+              title="Delete event"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Club + location row (muted, compact) */}
       {(event.club || location) && (
-        <div className="flex items-center gap-1.5 mb-1 text-xs">
+        <div className="flex items-center gap-1.5 mb-1 text-xs pr-16">
           {event.club && (
             <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()} className="text-muted hover:text-action font-medium">
               📌 {event.club.emoji} {event.club.name}
@@ -1061,20 +1109,10 @@ export default function EventDetailPage() {
           )}
         </div>
       )}
-      {/* Title + status + pen — clickable for managers */}
+      {/* Title + date — clickable for managers (opens When editor) */}
       <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("when"); } }}
-        className={`${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold truncate">{event.name}</h2>
-          {event.status !== "setup" && (
-            <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-              event.status === "active" ? "bg-green-100 text-green-700" :
-              event.status === "completed" ? "bg-gray-100 text-muted" :
-              "bg-blue-100 text-blue-700"
-            }`}>{event.status}</span>
-          )}
-          {canManage && <span className="text-muted/50 ml-auto">{penIcon}</span>}
-        </div>
+        className={`pr-16 ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
+        <h2 className="text-xl font-bold truncate">{event.name}</h2>
         <p className="text-sm text-muted mt-0.5">
           {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
           {" at "}
@@ -1270,27 +1308,26 @@ export default function EventDetailPage() {
           <option value="completed">Done — event finished</option>
         </select>
       </div>
-      {/* Competition toggle */}
+      {/* Competition toggle — local state + Save/Cancel flow */}
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-3 cursor-pointer">
-          <div className={`w-11 h-6 rounded-full transition-colors relative ${event.competitionMode ? "bg-action" : "bg-gray-200"}`}
+          <div
+            className={`w-11 h-6 rounded-full transition-colors relative ${editCompetitionMode ? "bg-action" : "bg-gray-200"}`}
             onClick={() => {
-              const newMode = event.competitionMode ? null : "groups_elimination";
-              // Optimistic update
-              setEvent((prev) => prev ? { ...prev, competitionMode: newMode } : prev);
-              // Save in background
-              fetch(`/api/events/${id}/competition`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: event.competitionMode ? "disable" : "enable" }),
-              }).then(() => fetchEvent());
-            }}>
+              setEditCompetitionMode((v) => !v);
+              setHasEdits(true);
+            }}
+          >
             <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
-              style={{ transform: event.competitionMode ? "translateX(22px)" : "translateX(0)" }} />
+              style={{ transform: editCompetitionMode ? "translateX(22px)" : "translateX(0)" }} />
           </div>
           <div>
-            <span className="text-sm font-medium">Competition Mode</span>
-            <p className="text-xs text-muted">Groups → Elimination tournament</p>
+            <span className={`text-sm font-bold ${editCompetitionMode ? "text-foreground" : "text-muted/60"}`}>
+              {editCompetitionMode ? "🏆 Competition Mode" : "Competition Mode"}
+            </span>
+            <p className={`text-xs ${editCompetitionMode ? "text-muted" : "text-muted/50"}`}>
+              Groups → Elimination tournament
+            </p>
           </div>
         </label>
       </div>
@@ -2843,28 +2880,18 @@ export default function EventDetailPage() {
       {eventHeader}
       {managerCard}
 
-      {/* Speaker */}
-      <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
-
-      {/* Matches — first for quick access */}
+      {/* Format */}
       <div className={frameClass}>
-        <button onClick={() => setActiveSection("rounds")} className={rowClass}>
-          <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
-          <span className="text-sm font-medium">
-            {event.matches.length === 0
-              ? "None"
-              : (() => {
-                  const completed = event.matches.filter((m) => m.status === "completed").length;
-                  const pending = event.matches.filter((m) => m.status === "pending").length;
-                  const active = event.matches.filter((m) => m.status === "active").length;
-                  const parts = [];
-                  if (completed > 0) parts.push(`${completed} played`);
-                  if (active > 0) parts.push(`${active} active`);
-                  if (pending > 0) parts.push(`${pending} pending`);
-                  return parts.join(", ");
-                })()}
+        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("scoring"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
+          <span className="text-base font-bold text-foreground">Format</span>
+          <span className="flex-1 text-right">
+            <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
+            {event.rankingMode !== "none" && (
+              <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
+            )}
           </span>
-        </button>
+          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
+        </div>
       </div>
 
       {/* Players & Pairs */}
@@ -2887,20 +2914,6 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Format */}
-      <div className={frameClass}>
-        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("scoring"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
-          <span className="text-base font-bold text-foreground">Format</span>
-          <span className="flex-1 text-right">
-            <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
-            {event.rankingMode !== "none" && (
-              <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
-            )}
-          </span>
-          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
-        </div>
-      </div>
-
       {/* Pairing */}
       <div className={frameClass}>
         <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("pairing"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
@@ -2910,12 +2923,29 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {(isOwner || isAdmin) && (
-        <button onClick={deleteEvent}
-          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
-          Delete Event
+      {/* Speaker */}
+      <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
+
+      {/* Matches */}
+      <div className={frameClass}>
+        <button onClick={() => setActiveSection("rounds")} className={rowClass}>
+          <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
+          <span className="text-sm font-medium">
+            {event.matches.length === 0
+              ? "None"
+              : (() => {
+                  const completed = event.matches.filter((m) => m.status === "completed").length;
+                  const pending = event.matches.filter((m) => m.status === "pending").length;
+                  const active = event.matches.filter((m) => m.status === "active").length;
+                  const parts = [];
+                  if (completed > 0) parts.push(`${completed} played`);
+                  if (active > 0) parts.push(`${active} active`);
+                  if (pending > 0) parts.push(`${pending} pending`);
+                  return parts.join(", ");
+                })()}
+          </span>
         </button>
-      )}
+      </div>
 
       {renderRallyTracker()}
     </div>
