@@ -46,14 +46,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, numCourts, format, playerIds, date, endDate, scoringFormat, numSets, scoringType, timedMinutes, pairingMode, playMode, prioSpeed, prioFairness, prioSkill, rankingMode, minPlayers, maxPlayers, clubId, locationId, skillMin, skillMax } = await req.json();
+  try {
+  const { name, numCourts, format, playerIds, date, endDate, scoringFormat, numSets, scoringType, timedMinutes, pairingMode, playMode, prioSpeed, prioFairness, prioSkill, rankingMode, minPlayers, maxPlayers, clubId, locationId, skillMin, skillMax, competitionMode } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
 
   // If a locationId is provided, verify it belongs to the given club and
   // cap numCourts at the location's configured capacity.
-  let effectiveNumCourts = numCourts || 2;
+  let effectiveNumCourts = Number(numCourts) || 2;
   if (locationId) {
     const loc = await prisma.clubLocation.findUnique({
       where: { id: locationId },
@@ -65,8 +66,9 @@ export async function POST(req: Request) {
     if (clubId && loc.clubId !== clubId) {
       return NextResponse.json({ error: "Location does not belong to the selected club" }, { status: 400 });
     }
-    // Cap at the location's courts, default to the location's courts if caller didn't pass one.
-    effectiveNumCourts = Math.min(numCourts || loc.numCourts, loc.numCourts);
+    const locCourts = Number(loc.numCourts) || 2;
+    const reqCourts = Number(numCourts) || locCourts;
+    effectiveNumCourts = Math.min(reqCourts, locCourts);
   }
 
   // Create event
@@ -101,6 +103,7 @@ export async function POST(req: Request) {
       ...(maxPlayers !== undefined ? { maxPlayers: maxPlayers || null } : {}),
       ...(skillMin !== undefined && skillMin !== null && skillMin !== "" ? { skillMin: Number(skillMin) } : {}),
       ...(skillMax !== undefined && skillMax !== null && skillMax !== "" ? { skillMax: Number(skillMax) } : {}),
+      ...(competitionMode ? { competitionMode } : {}),
     },
   });
 
@@ -121,4 +124,11 @@ export async function POST(req: Request) {
     },
   });
   return NextResponse.json(result);
+  } catch (err) {
+    console.error("POST /api/events failed:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to create event" },
+      { status: 500 },
+    );
+  }
 }
