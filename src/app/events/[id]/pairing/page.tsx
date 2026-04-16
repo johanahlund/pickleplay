@@ -58,6 +58,8 @@ interface EventMatchDTO {
   courtNum: number;
   classId: string | null;
   status: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
   players: { playerId: string; team: number; score: number }[];
 }
 
@@ -355,7 +357,7 @@ export default function PairingConfigPage() {
   const startMatch = async (matchId: string) => {
     setEvent((prev) => prev ? {
       ...prev,
-      matches: prev.matches.map((m) => m.id === matchId ? { ...m, status: "active" } : m),
+      matches: prev.matches.map((m) => m.id === matchId ? { ...m, status: "active", startedAt: new Date().toISOString() } : m),
     } : prev);
     await fetch(`/api/matches/${matchId}`, {
       method: "PATCH",
@@ -1327,6 +1329,7 @@ export default function PairingConfigPage() {
             }`}>
               <div className="flex items-center gap-2 px-2 py-2" onClick={() => setActionMatchId(m.id)}>
                 <div className="flex flex-col items-center shrink-0 min-w-[2.5rem]">
+                  {m.startedAt && <span className="text-[8px] text-muted">{new Date(m.startedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
                   {isPending ? (
                     <button onClick={(e) => { e.stopPropagation(); startMatch(m.id); }}
                       className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shadow-sm active:bg-green-700 relative"
@@ -1338,9 +1341,13 @@ export default function PairingConfigPage() {
                   ) : (
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${courtColor}`}>{m.courtNum}</div>
                   )}
-                  <span className="text-[8px] text-muted">
-                    {isActive ? "In Play" : isPending ? "Ready" : `R${m.round}`}
-                  </span>
+                  {m.completedAt ? (
+                    <span className="text-[8px] text-muted">{new Date(m.completedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+                  ) : (
+                    <span className="text-[8px] text-muted">
+                      {isActive ? "In Play" : isPending ? "Ready" : `R${m.round}`}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   {renderTeamRow(t1, "team1", t1Won, t1Score)}
