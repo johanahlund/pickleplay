@@ -70,3 +70,29 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const user = await requireAuth();
+
+  const match = await prisma.match.findUnique({
+    where: { id },
+    include: { event: true, players: true },
+  });
+  if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+
+  const isAdmin = user.role === "admin";
+  const isOwner = match.event.createdById === user.id;
+  const isHelper = await prisma.eventHelper.findFirst({ where: { eventId: match.eventId, playerId: user.id } });
+  if (!isAdmin && !isOwner && !isHelper) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  }
+
+  await prisma.matchPlayer.deleteMany({ where: { matchId: id } });
+  await prisma.match.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
+}

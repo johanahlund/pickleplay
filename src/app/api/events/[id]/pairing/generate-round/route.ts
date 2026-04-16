@@ -52,6 +52,7 @@ export async function POST(
     locks?: { playerAId: string; playerBId: string }[];
     includeCourts?: number[];
     preview?: boolean;
+    commitRound?: { court: number; team1: { player1Id: string; player2Id: string }; team2: { player1Id: string; player2Id: string } }[];
   } | null;
   if (!body?.classId) {
     return NextResponse.json({ error: "classId required" }, { status: 400 });
@@ -65,7 +66,7 @@ export async function POST(
       pairingSettings: true,
       event: { select: { numCourts: true } },
       players: {
-        where: { status: { in: ["registered", "active", "confirmed"] } },
+        where: { status: { in: ["registered", "checked_in"] } },
         select: {
           id: true,
           playerId: true,
@@ -98,6 +99,38 @@ export async function POST(
       { error: `Unknown format "${eventClass.format}"` },
       { status: 400 },
     );
+  }
+
+  // ── Fast path: commit a preview directly (no solver re-run) ─────────
+  if (body.commitRound && body.commitRound.length > 0) {
+    const allMatches = await prisma.match.findMany({
+      where: { eventId: id },
+      select: { round: true },
+      orderBy: { round: "desc" },
+      take: 1,
+    });
+    const nextRound = (allMatches[0]?.round ?? 0) + 1;
+    const isSingles = eventClass.format === "singles";
+    const createdMatchIds: string[] = [];
+    for (const m of body.commitRound) {
+      const team1 = [{ playerId: m.team1.player1Id, team: 1, score: 0 }];
+      if (!isSingles) team1.push({ playerId: m.team1.player2Id, team: 1, score: 0 });
+      const team2 = [{ playerId: m.team2.player1Id, team: 2, score: 0 }];
+      if (!isSingles) team2.push({ playerId: m.team2.player2Id, team: 2, score: 0 });
+      const match = await prisma.match.create({
+        data: {
+          eventId: id,
+          classId: body.classId,
+          round: nextRound,
+          courtNum: m.court,
+          status: "pending",
+          players: { create: [...team1, ...team2] },
+        },
+        select: { id: true },
+      });
+      createdMatchIds.push(match.id);
+    }
+    return NextResponse.json({ round: nextRound, matches: createdMatchIds });
   }
 
   const settings = normalizeSettings(
@@ -151,8 +184,19 @@ export async function POST(
         counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
         lastPlayedRound.set(p.playerId, Math.max(lastPlayedRound.get(p.playerId) || 0, m.round));
       }
-    } else {
+    } else if (m.status === "active" || m.status === "paused") {
       activeMatches.push(m);
+    }
+    // Count pending matches for variety tracking (not yet played, but scheduled)
+    if (m.status === "pending") {
+      const t1 = m.players.filter((p) => p.team === 1).map((p) => p.playerId);
+      const t2 = m.players.filter((p) => p.team === 2).map((p) => p.playerId);
+      if (t1.length === 2 && t2.length === 2) {
+        history.push({ round: m.round, courtNum: m.courtNum, team1Ids: [t1[0], t1[1]], team2Ids: [t2[0], t2[1]], winningTeam: null });
+      }
+      for (const p of m.players) {
+        counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
+      }
     }
   }
 

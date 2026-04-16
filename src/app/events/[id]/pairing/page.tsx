@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { suggestWaitingAction } from "@/lib/solver/waitingSuggestion";
+import { ScorePicker } from "@/components/ScorePicker";
+import { useSession } from "next-auth/react";
 
 // ── Types mirroring src/lib/solver/types.ts ──────────────────────────────
 
@@ -145,12 +148,51 @@ export default function PairingConfigPage() {
   const [analysis, setAnalysis] = useState<PoolAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [locks, setLocks] = useState<PairLockDTO[]>([]);
+  const [editingLocks, setEditingLocks] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(["pool", "settings", "constraints", "players"]),
+  );
+  const toggleCollapsed = (k: string) =>
+    setCollapsed((prev) => {
+      const n = new Set(prev);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+
+  // Focused flow: hide the bottom nav on this page.
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (nav) nav.classList.add("hidden");
+    return () => {
+      if (nav) nav.classList.remove("hidden");
+    };
+  }, []);
+  const { data: session } = useSession();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
   const [generating, setGenerating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [includeCourts, setIncludeCourts] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<NextMatchPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
+  const [numRounds, setNumRounds] = useState(1);
+  const [actionMatchId, setActionMatchId] = useState<string | null>(null);
+
+  const refreshEvent = useCallback(async () => {
+    const r = await fetch(`/api/events/${id}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    setEvent({
+      id: data.id,
+      name: data.name,
+      numCourts: data.numCourts,
+      classes: data.classes || [],
+      players: data.players || [],
+      matches: data.matches || [],
+    });
+  }, [id]);
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -270,35 +312,110 @@ export default function PairingConfigPage() {
   // ── Commit the preview ──────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!classId) return;
-    const ok = await confirm({
-      title: "Generate match(es)",
-      message: preview && preview.round.length > 1
-        ? `This will create ${preview.round.length} new matches based on the current settings and selected courts. Continue?`
-        : "This will create a new match based on the current settings. Continue?",
-      confirmText: "Generate",
-    });
-    if (!ok) return;
     setGenerating(true);
     try {
-      const r = await fetch(`/api/events/${id}/pairing/generate-round`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      for (let i = 0; i < numRounds; i++) {
+        // First round: commit the preview if available (exact same matches shown)
+        const usePreview = i === 0 && preview && preview.round.length > 0;
+        const payload: Record<string, unknown> = {
           classId,
           settings,
           includeCourts: [...includeCourts],
-        }),
-      });
-      if (r.ok) {
-        await alert("Match(es) generated successfully", "Done");
-        router.push(`/events/${id}`);
-      } else {
-        const d = await r.json();
-        await alert(d.error || "Failed to generate", "Error");
+        };
+        if (usePreview) {
+          payload.commitRound = preview.round.map((m) => ({
+            court: m.court,
+            team1: m.team1,
+            team2: m.team2,
+          }));
+        }
+        const r = await fetch(`/api/events/${id}/pairing/generate-round`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const d = await r.json();
+          await alert(d.error || "Failed to generate", "Error");
+          break;
+        }
       }
+      await refreshEvent();
     } finally {
       setGenerating(false);
     }
+  };
+
+  const startMatch = async (matchId: string) => {
+    setEvent((prev) => prev ? {
+      ...prev,
+      matches: prev.matches.map((m) => m.id === matchId ? { ...m, status: "active" } : m),
+    } : prev);
+    await fetch(`/api/matches/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    });
+    await refreshEvent();
+  };
+
+  const submitScore = async (matchId: string) => {
+    const s = scores[matchId];
+    if (!s?.team1 || !s?.team2) return;
+    const t1 = parseInt(s.team1);
+    const t2 = parseInt(s.team2);
+    if (isNaN(t1) || isNaN(t2) || t1 === t2) return;
+    setEvent((prev) => prev ? {
+      ...prev,
+      matches: prev.matches.map((m) => m.id === matchId ? {
+        ...m,
+        status: "completed",
+        players: m.players.map((p) => ({ ...p, score: p.team === 1 ? t1 : t2 })),
+      } : m),
+    } : prev);
+    await fetch(`/api/matches/${matchId}/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
+    });
+    setScores((prev) => { const n = { ...prev }; delete n[matchId]; return n; });
+    await refreshEvent();
+  };
+
+  const pauseMatch = async (matchId: string) => {
+    setEvent((prev) => prev ? {
+      ...prev,
+      matches: prev.matches.map((m) => m.id === matchId ? { ...m, status: "paused" } : m),
+    } : prev);
+    await fetch(`/api/matches/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "paused" }),
+    });
+    await refreshEvent();
+  };
+
+  const deleteMatch = async (matchId: string) => {
+    const ok = await confirm({ title: "Delete match?", message: "This cannot be undone.", danger: true, confirmText: "Delete" });
+    if (!ok) return;
+    setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => m.id !== matchId) } : prev);
+    await fetch(`/api/matches/${matchId}`, { method: "DELETE" });
+    await refreshEvent();
+  };
+
+  const deleteAllPending = async () => {
+    if (!event) return;
+    const pendingIds = event.matches
+      .filter((m) => m.status === "pending" && (m.classId === classId || (m.classId === null && classId === event.classes[0]?.id)))
+      .map((m) => m.id);
+    if (pendingIds.length === 0) return;
+    const ok = await confirm({ title: `Delete ${pendingIds.length} pending match${pendingIds.length > 1 ? "es" : ""}?`, message: "This cannot be undone.", danger: true, confirmText: "Delete all" });
+    if (!ok) return;
+    setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => !pendingIds.includes(m.id)) } : prev);
+    for (const mid of pendingIds) {
+      await fetch(`/api/matches/${mid}`, { method: "DELETE" });
+    }
+    await refreshEvent();
   };
 
   const toggleCourt = (court: number) => {
@@ -334,6 +451,47 @@ export default function PairingConfigPage() {
 
   if (!event) return <div className="p-4 text-muted text-sm">Loading...</div>;
 
+  if (editingLocks) {
+    const lockClassPlayers = event.players.filter(
+      (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
+    );
+    return (
+      <div className="space-y-4 pb-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Manual pair locks</h2>
+          <button
+            onClick={() => setEditingLocks(false)}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"
+          >
+            Done
+          </button>
+        </div>
+        <p className="text-xs text-muted">Lock two players together so the solver always keeps them on the same team.</p>
+        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+          <div className="flex justify-end">
+            <LockAdder players={lockClassPlayers} existingLocks={locks} onAdd={handleAddLock} />
+          </div>
+          {locks.length === 0 ? (
+            <p className="text-xs text-muted">No locked pairs yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {locks.map((l) => (
+                <div key={l.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                  <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
+                  <span className="text-sm font-medium">{l.playerA.name}</span>
+                  <span className="text-xs text-muted">+</span>
+                  <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
+                  <span className="text-sm font-medium flex-1">{l.playerB.name}</span>
+                  <button onClick={() => handleRemoveLock(l.id)} className="text-xs text-danger">Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const currentClass = event.classes.find((c) => c.id === classId);
   // Event players are flat at the top level — filter by class here. Include
   // players with null classId (the default/auto-created class) when the
@@ -353,7 +511,7 @@ export default function PairingConfigPage() {
   }
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -378,52 +536,374 @@ export default function PairingConfigPage() {
         </div>
       )}
 
+      {/* Collapsed section buttons (inline row) */}
+      {(() => {
+        const items: { key: string; label: string }[] = [
+          { key: "pool", label: "Pool analysis" },
+          { key: "settings", label: "Pairing settings" },
+          { key: "constraints", label: "Constraints" },
+          { key: "players", label: `Players (${classPlayers.length})` },
+        ];
+        const collapsedItems = items.filter((i) => collapsed.has(i.key));
+        if (collapsedItems.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {collapsedItems.map((i) => (
+              <button
+                key={i.key}
+                onClick={() => toggleCollapsed(i.key)}
+                className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-foreground hover:bg-gray-200"
+              >
+                <span>›</span>
+                {i.label}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Pool analyzer (live) */}
-      {analysis && (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Pool analysis</h3>
-            {analyzing && <span className="text-xs text-muted">Updating...</span>}
+      {analysis && (() => {
+        const skillDist = analysis.pool.skillDistribution as Record<number, number>;
+        const levelsWithPlayers = [5, 4, 3, 2, 1].filter((l) => (skillDist[l] || 0) > 0);
+        const active = analysis.pool.active;
+        const max = analysis.feasibility.maxCleanRounds;
+        const simulated = analysis.feasibility.simulatedRounds;
+        const first = analysis.feasibility.firstViolation;
+
+        type Bullet = { tone: "ok" | "warn" | "bad"; text: string; indent?: boolean };
+        const bullets: Bullet[] = [];
+
+        if (active < 4) {
+          bullets.push({ tone: "bad", text: "Not enough active players — need at least 4 for doubles." });
+        } else if (max === 0) {
+          bullets.push({ tone: "bad", text: "Current settings conflict immediately — no clean round is possible." });
+          if (first.skill) bullets.push({ tone: "bad", text: "Widen the Skill window — players are too spread in level.", indent: true });
+          if (first.variety != null && first.variety <= 1) bullets.push({ tone: "bad", text: "Widen the Variety window — pairings would repeat from round 1.", indent: true });
+        } else if (max >= simulated) {
+          bullets.push({ tone: "ok", text: `Looks good — ${simulated} clean rounds possible with these settings.` });
+        } else {
+          bullets.push({ tone: "warn", text: `Clean for ${max} round${max === 1 ? "" : "s"}, then trade-offs start.` });
+          if (first.variety) bullets.push({ tone: "warn", text: `Opponent repeats forced at round ${first.variety}.`, indent: true });
+          if (first.skill) bullets.push({ tone: "warn", text: `Skill mismatches forced at round ${first.skill}.`, indent: true });
+        }
+
+        for (const w of analysis.warnings) bullets.push({ tone: "warn", text: w });
+
+        const dot = (tone: Bullet["tone"]) =>
+          tone === "ok" ? "text-green-600" : tone === "warn" ? "text-yellow-600" : "text-red-600";
+
+        if (collapsed.has("pool")) return null;
+        return (
+          <div className="relative bg-card rounded-xl border border-border px-4 pt-4 pb-4 space-y-3 mt-3">
+            <button
+              onClick={() => toggleCollapsed("pool")}
+              className="absolute -top-2.5 left-3 px-2 bg-background text-xs font-semibold flex items-center gap-1"
+            >
+              <span className="rotate-90">›</span>
+              Pool analysis
+            </button>
+            {analyzing && <span className="absolute -top-2.5 right-3 px-2 bg-background text-[10px] text-muted">Updating...</span>}
+            <>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Row 1: players + gender | skill levels */}
+              <div className="text-xs">
+                <div className="font-medium">{active} active</div>
+                <div className="text-muted">
+                  {analysis.pool.genderCounts.M}M · {analysis.pool.genderCounts.F}F
+                  {analysis.pool.genderCounts.unknown > 0 && ` · ${analysis.pool.genderCounts.unknown} ?`}
+                  {analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}
+                </div>
+              </div>
+              <div className="text-xs">
+                <div className="font-medium">Skill</div>
+                <div className="text-muted">
+                  {levelsWithPlayers.length === 0
+                    ? "—"
+                    : levelsWithPlayers.map((l) => `${skillDist[l]}×L${l}`).join(" · ")}
+                </div>
+              </div>
+
+              {/* Row 2: capacity | max clean rounds */}
+              <div className="text-xs">
+                <div className="font-medium">Capacity</div>
+                <div className="text-muted">
+                  {analysis.capacity.playersPerRound}/round
+                  {analysis.capacity.sitOutPerRound > 0 && ` · ${analysis.capacity.sitOutPerRound} sit out`}
+                </div>
+              </div>
+              <div className="text-xs" title="Rounds the solver can generate with zero constraint violations before it must start forcing repeats or skill mismatches.">
+                <div className="font-medium">Clean rounds</div>
+                <div className="text-muted">{max >= simulated ? `${simulated}+` : max}</div>
+              </div>
+            </div>
+
+            {bullets.length > 0 && (
+              <ul className="pt-2 border-t border-border space-y-1">
+                {bullets.map((b, i) => (
+                  <li key={i} className={`text-xs flex gap-1.5 ${b.indent ? "pl-4" : ""}`}>
+                    <span className={`${dot(b.tone)} shrink-0`}>•</span>
+                    <span className="text-foreground">{b.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            </>
           </div>
-          <div className="text-xs text-muted">
-            {analysis.pool.active} active
-            {analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}
-            {" · "}
-            {analysis.pool.genderCounts.M}M {analysis.pool.genderCounts.F}F
-            {analysis.pool.genderCounts.unknown > 0 && ` · ${analysis.pool.genderCounts.unknown} unspecified`}
-          </div>
-          <div className="text-xs text-muted">
-            Skill distribution:{" "}
-            {[1, 2, 3, 4, 5]
-              .map((l) => `${analysis.pool.skillDistribution[l] || 0}×L${l}`)
-              .join(" · ")}
-          </div>
-          <div className="text-xs">
-            <span className="font-medium">Capacity:</span>{" "}
-            {analysis.capacity.playersPerRound} players/round
-            {analysis.capacity.sitOutPerRound > 0 && ` · ${analysis.capacity.sitOutPerRound} sit out`}
-          </div>
-          <div className="text-xs">
-            <span className="font-medium">Max clean rounds:</span>{" "}
-            {analysis.feasibility.maxCleanRounds} of {analysis.feasibility.simulatedRounds} simulated
-          </div>
-          {analysis.warnings.length > 0 && (
-            <div className="pt-2 border-t border-border space-y-1">
-              {analysis.warnings.map((w, i) => (
-                <div key={i} className="text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-1">⚠ {w}</div>
-              ))}
+        );
+      })()}
+
+      {/* Settings */}
+      <div className="space-y-5">
+        {!collapsed.has("settings") && (
+        <div className="relative bg-card rounded-xl border border-border px-4 pt-4 pb-4 space-y-3 mt-3">
+          <button
+            onClick={() => toggleCollapsed("settings")}
+            className="absolute -top-2.5 left-3 px-2 bg-background text-xs font-semibold flex items-center gap-1"
+          >
+            <span className="rotate-90">›</span>
+            Pairing settings
+          </button>
+          {saveStatus === "saving" && <span className="absolute -top-2.5 right-3 px-2 bg-background text-[10px] text-muted">Saving...</span>}
+          {saveStatus === "saved" && <span className="absolute -top-2.5 right-3 px-2 bg-background text-[10px] text-green-600">Saved ✓</span>}
+
+          <>
+          <SegPicker
+            label="Base mode"
+            value={settings.base}
+            onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
+            options={[
+              { value: "random", label: "Random" },
+              { value: "swiss", label: "Swiss" },
+              { value: "king", label: "King" },
+              { value: "manual", label: "Manual" },
+            ]}
+          />
+
+          {settings.base !== "manual" && settings.base !== "king" && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs text-muted">Teams</label>
+                <button
+                  type="button"
+                  onClick={() => setEditingLocks(true)}
+                  title="Manual pair locks"
+                  className="flex items-center gap-1 text-[11px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0-1.657 1.343-3 3-3s3 1.343 3 3v4m-9 0h12a2 2 0 012 2v4a2 2 0 01-2 2H9a2 2 0 01-2-2v-4a2 2 0 012-2z" />
+                  </svg>
+                  Pair locks {locks.length > 0 && `(${locks.length})`}
+                </button>
+              </div>
+              <div className="flex gap-1">
+                {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setSettings((s) => ({ ...s, teams: v as Teams }))}
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      settings.teams === v ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {locks.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {locks.map((l) => (
+                    <div key={l.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 text-[11px]">
+                      <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
+                      <span className="font-medium">{l.playerA.name}</span>
+                      <span className="text-muted">+</span>
+                      <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
+                      <span className="font-medium flex-1">{l.playerB.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          {settings.base !== "manual" && (
+            <SegPicker
+              label="Gender"
+              value={settings.gender}
+              onChange={(v) => setSettings((s) => ({ ...s, gender: v as Gender }))}
+              options={[
+                { value: "random", label: "Any" },
+                { value: "mixed", label: "Mixed" },
+                { value: "same", label: "Same" },
+              ]}
+            />
+          )}
+          </>
         </div>
+        )}
+
+        {settings.base !== "manual" && !collapsed.has("constraints") && (
+          <div className="relative bg-card rounded-xl border border-border px-4 pt-4 pb-4 space-y-3 mt-3">
+            <button
+              onClick={() => toggleCollapsed("constraints")}
+              className="absolute -top-2.5 left-3 px-2 bg-background text-xs font-semibold flex items-center gap-1"
+            >
+              <span className="rotate-90">›</span>
+              Constraints
+            </button>
+            <>
+            {settings.base !== "swiss" && (
+              <WindowPicker
+                label="Skill window"
+                help="How close in skill level must players be?"
+                value={settings.skillWindow}
+                onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))}
+              />
+            )}
+
+            <WindowPicker
+              label="Variety window"
+              help="How many partner/opponent repeats allowed"
+              value={settings.varietyWindow}
+              onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))}
+            />
+
+            <details className="group">
+              <summary className="text-[11px] text-muted cursor-pointer list-none flex items-center gap-1 select-none">
+                <span className="group-open:rotate-90 transition-transform">›</span>
+                Advanced fairness
+              </summary>
+              <div className="mt-3 space-y-3">
+                <WindowPicker
+                  label="Match count window"
+                  help="Max gap from average matches played (global fairness)"
+                  value={settings.matchCountWindow}
+                  onChange={(v) => setSettings((s) => ({ ...s, matchCountWindow: v }))}
+                />
+                <WindowPicker
+                  label="Max consecutive sit-outs"
+                  help="Max rounds a player may sit out in a row"
+                  value={settings.maxWaitWindow}
+                  onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))}
+                />
+              </div>
+            </details>
+            </>
+          </div>
+        )}
+      </div>
+
+      {/* Players — grouped by level, highest first */}
+      {!collapsed.has("players") && (
+      <div className="relative bg-card rounded-xl border border-border px-4 pt-4 pb-4 space-y-2 mt-3">
+        <button
+          onClick={() => toggleCollapsed("players")}
+          className="absolute -top-2.5 left-3 px-2 bg-background text-xs font-semibold flex items-center gap-1"
+        >
+          <span className="rotate-90">›</span>
+          Players ({classPlayers.length})
+        </button>
+        <Link
+          href={`/events/${id}`}
+          className="absolute -top-2.5 right-3 px-2 bg-background text-[10px] text-action font-medium"
+        >
+          Edit levels →
+        </Link>
+        {classPlayers.length === 0 ? (
+          <p className="text-xs text-muted">No players registered in this class yet.</p>
+        ) : (
+          <>
+            {(() => {
+              const byLevel = new Map<string, EventPlayerDTO[]>();
+              for (const ep of classPlayers) {
+                const eff = ep.skillLevel ?? ep.autoSkillLevel;
+                const key = eff == null ? "unset" : String(eff);
+                const list = byLevel.get(key) || [];
+                list.push(ep);
+                byLevel.set(key, list);
+              }
+              const rows: { key: string; label: string }[] = [
+                { key: "5", label: "L5 — Expert" },
+                { key: "4", label: "L4" },
+                { key: "3", label: "L3" },
+                { key: "2", label: "L2" },
+                { key: "1", label: "L1 — Beginner" },
+                { key: "unset", label: "Unset" },
+              ];
+              return rows
+                .filter((row) => (byLevel.get(row.key) || []).length > 0)
+                .map((row) => {
+                  const players = byLevel.get(row.key) || [];
+                  return (
+                    <div key={row.key} className="bg-card rounded-xl border border-border p-3">
+                      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
+                        <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
+                          {row.label}
+                        </span>
+                        <span className="text-[10px] text-muted">{players.length} player{players.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {players
+                          .sort((a, b) => a.player.name.localeCompare(b.player.name))
+                          .map((ep) => {
+                            const count = playerMatchCounts.get(ep.playerId) || 0;
+                            const overridden =
+                              ep.skillLevel != null &&
+                              ep.autoSkillLevel != null &&
+                              ep.skillLevel !== ep.autoSkillLevel;
+                            return (
+                              <div
+                                key={ep.id}
+                                className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1.5 min-w-0"
+                                title={overridden ? `Auto: L${ep.autoSkillLevel}` : undefined}
+                              >
+                                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
+                                  {overridden && <div className="text-[9px] text-muted">auto L{ep.autoSkillLevel}</div>}
+                                </div>
+                                <span className="text-[10px] text-muted tabular-nums shrink-0" title={`${count} match${count === 1 ? "" : "es"}`}>
+                                  {count}m
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  );
+                });
+            })()}
+          </>
+        )}
+      </div>
       )}
 
       {/* Next match(es) — live preview with court selector */}
       {preview && (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Next match{preview.round.length !== 1 ? "es" : ""}</h3>
-            {previewing && <span className="text-[10px] text-muted">Updating...</span>}
-          </div>
+        <div className="relative bg-card rounded-xl border border-border px-4 pt-4 pb-4 space-y-3 mt-3">
+          <span className="absolute -top-2.5 left-3 px-2 bg-background text-xs font-semibold">
+            Next match{preview.round.length !== 1 ? "es" : ""}
+          </span>
+          {previewing && <span className="absolute -top-2.5 right-3 px-2 bg-background text-[10px] text-muted">Updating...</span>}
+
+          {/* Waiting suggestion: fires when another court is still running */}
+          {preview.busyCourts.length > 0 && analysis && (() => {
+            const s = suggestWaitingAction({
+              totalActivePlayers: analysis.pool.active,
+              numCourts: event.numCourts,
+              idleCount: preview.availablePlayerCount,
+            });
+            const tone =
+              s.type === "new_match" ? "bg-green-50 border-green-200 text-green-900"
+              : s.type === "filler" ? "bg-yellow-50 border-yellow-200 text-yellow-900"
+              : "bg-blue-50 border-blue-200 text-blue-900";
+            return (
+              <div className={`border rounded-lg px-3 py-2 ${tone}`}>
+                <div className="text-xs font-semibold">{s.headline}</div>
+                <div className="text-[11px] mt-0.5">{s.detail}</div>
+              </div>
+            );
+          })()}
 
           {/* Courts in progress */}
           {preview.busyCourts.length > 0 && (
@@ -469,16 +949,21 @@ export default function PairingConfigPage() {
                 {preview.round.length} match{preview.round.length > 1 ? "es" : ""} ready
                 {preview.cost > 0 && ` · cost ${preview.cost}`}
               </div>
-              {preview.round.map((m, i) => (
-                <div key={i} className="bg-gray-50 rounded-lg p-2 text-xs">
-                  <div className="text-[10px] text-muted mb-0.5">Court {m.court}</div>
-                  <div className="flex items-center gap-1 font-medium">
-                    <span>{m.team1Players[0].name} + {m.team1Players[1].name}</span>
-                    <span className="text-muted text-[10px] mx-1">vs</span>
-                    <span>{m.team2Players[0].name} + {m.team2Players[1].name}</span>
+              {(() => {
+                const mc = new Map<string, number>();
+                for (const m of event.matches) for (const p of m.players) mc.set(p.playerId, (mc.get(p.playerId) || 0) + 1);
+                const pn = (p: { id: string; name: string }) => `${p.name} (${mc.get(p.id) || 0}m)`;
+                return preview.round.map((m, i) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-2 text-xs">
+                    <div className="text-[10px] text-muted mb-0.5">Court {m.court}</div>
+                    <div className="flex items-center gap-1 font-medium flex-wrap">
+                      <span>{pn(m.team1Players[0])} + {pn(m.team1Players[1])}</span>
+                      <span className="text-muted text-[10px] mx-1">vs</span>
+                      <span>{pn(m.team2Players[0])} + {pn(m.team2Players[1])}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
               {preview.violations.length > 0 && (
                 <div className="text-[10px] text-yellow-700 bg-yellow-50 rounded px-2 py-1">
                   ⚠ {preview.violations.length} soft constraint{preview.violations.length > 1 ? "s" : ""} violated:
@@ -490,221 +975,268 @@ export default function PairingConfigPage() {
                   </ul>
                 </div>
               )}
-              {preview.sittingOut.length > 0 && (
-                <div className="text-[10px] text-muted">
-                  Sitting out: {preview.sittingOut.length} player{preview.sittingOut.length > 1 ? "s" : ""}
-                </div>
-              )}
+              {preview.sittingOut.length > 0 && (() => {
+                const nameById = new Map(classPlayers.map((ep) => [ep.playerId, ep.player.name]));
+                const mc2 = new Map<string, number>();
+                for (const m of event.matches) for (const p of m.players) mc2.set(p.playerId, (mc2.get(p.playerId) || 0) + 1);
+                const names = preview.sittingOut.map((pid) => `${nameById.get(pid) || "?"} (${mc2.get(pid) || 0}m)`);
+                return (
+                  <div className="text-[10px] text-muted">
+                    Sitting out ({names.length}): {names.join(", ")}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
       )}
 
-      {/* Settings */}
-      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Pairing settings</h3>
-          {saveStatus === "saving" && <span className="text-[10px] text-muted">Saving...</span>}
-          {saveStatus === "saved" && <span className="text-[10px] text-green-600">Saved ✓</span>}
+      {/* Actions row */}
+      <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-3">
+        <div className="flex items-center gap-0">
+          <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+          <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+          <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
         </div>
-
-        <SegPicker
-          label="Base mode"
-          value={settings.base}
-          onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
-          options={[
-            { value: "random", label: "Random" },
-            { value: "swiss", label: "Swiss" },
-            { value: "king", label: "King" },
-            { value: "manual", label: "Manual" },
-          ]}
-        />
-
-        <SegPicker
-          label="Teams"
-          value={settings.teams}
-          onChange={(v) => setSettings((s) => ({ ...s, teams: v as Teams }))}
-          options={[
-            { value: "rotating", label: "Rotating" },
-            { value: "fixed", label: "Fixed" },
-          ]}
-        />
-
-        <SegPicker
-          label="Gender"
-          value={settings.gender}
-          onChange={(v) => setSettings((s) => ({ ...s, gender: v as Gender }))}
-          options={[
-            { value: "random", label: "Any" },
-            { value: "mixed", label: "Mixed" },
-            { value: "same", label: "Same" },
-          ]}
-        />
-
-        <WindowPicker
-          label="Skill window"
-          help="How close in skill level must players be?"
-          value={settings.skillWindow}
-          onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))}
-        />
-
-        <WindowPicker
-          label="Match count window"
-          help="Fairness: max gap from average matches played"
-          value={settings.matchCountWindow}
-          onChange={(v) => setSettings((s) => ({ ...s, matchCountWindow: v }))}
-        />
-
-        <WindowPicker
-          label="Variety window"
-          help="How many partner/opponent repeats allowed"
-          value={settings.varietyWindow}
-          onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))}
-        />
-
-        <WindowPicker
-          label="Max wait"
-          help="Max rounds a player may sit out consecutively"
-          value={settings.maxWaitWindow}
-          onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))}
-        />
+        <button
+          onClick={handleGenerate}
+          disabled={generating || !classId}
+          className="bg-action text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+        >
+          {generating ? "..." : numRounds === 1 ? "Next Round" : `Generate ${numRounds}`}
+        </button>
+        <div className="flex-1" />
+        <Link
+          href={`/events/${id}`}
+          className="text-xs text-primary font-medium px-3 py-2 rounded-lg border border-primary/30 hover:bg-primary/5"
+        >
+          + Manual
+        </Link>
       </div>
 
-      {/* Pair locks */}
-      <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Manual pair locks</h3>
-          <LockAdder
-            players={classPlayers}
-            existingLocks={locks}
-            onAdd={handleAddLock}
-          />
-        </div>
-        {locks.length === 0 ? (
-          <p className="text-xs text-muted">No locked pairs. Add one if you have players who must partner together.</p>
-        ) : (
-          <div className="space-y-1">
-            {locks.map((l) => (
-              <div key={l.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
-                <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
-                <span className="text-sm font-medium">{l.playerA.name}</span>
-                <span className="text-xs text-muted">+</span>
-                <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
-                <span className="text-sm font-medium flex-1">{l.playerB.name}</span>
-                <button onClick={() => handleRemoveLock(l.id)} className="text-xs text-danger">Remove</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Matches — current, future, past */}
+      {(() => {
+        const allMatches = event.matches;
+        if (allMatches.length === 0) return null;
+        const active = allMatches.filter((m) => m.status === "active").sort((a, b) => a.courtNum - b.courtNum);
+        const paused = allMatches.filter((m) => m.status === "paused").sort((a, b) => a.courtNum - b.courtNum);
+        const pending = allMatches.filter((m) => m.status === "pending").sort((a, b) => a.round - b.round || a.courtNum - b.courtNum);
+        const completed = allMatches.filter((m) => m.status === "completed").sort((a, b) => b.round - a.round || a.courtNum - b.courtNum);
 
-      {/* Players — grouped by level, highest first */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-sm font-semibold">Players</h3>
-          <Link
-            href={`/events/${id}/pairing/skills`}
-            className="text-xs text-action font-medium"
-          >
-            Edit levels →
-          </Link>
-        </div>
-        {classPlayers.length === 0 ? (
-          <p className="text-xs text-muted px-1">No players registered in this class yet.</p>
-        ) : (
-          <>
-            {(() => {
-              // Group players by effective level (manual override falls back to auto).
-              const byLevel = new Map<string, EventPlayerDTO[]>();
-              for (const ep of classPlayers) {
-                const eff = ep.skillLevel ?? ep.autoSkillLevel;
-                const key = eff == null ? "unset" : String(eff);
-                const list = byLevel.get(key) || [];
-                list.push(ep);
-                byLevel.set(key, list);
-              }
+        const playerMap = new Map(classPlayers.map((ep) => [ep.playerId, ep.player]));
+        const matchCounts = new Map<string, number>();
+        for (const m of allMatches) {
+          for (const p of m.players) matchCounts.set(p.playerId, (matchCounts.get(p.playerId) || 0) + 1);
+        }
 
-              const rows: { key: string; label: string }[] = [
-                { key: "5", label: "L5 — Expert" },
-                { key: "4", label: "L4" },
-                { key: "3", label: "L3" },
-                { key: "2", label: "L2" },
-                { key: "1", label: "L1 — Beginner" },
-                { key: "unset", label: "Unset" },
-              ];
+        const renderMatchCard = (m: EventMatchDTO) => {
+          const t1 = m.players.filter((p) => p.team === 1);
+          const t2 = m.players.filter((p) => p.team === 2);
+          const isActive = m.status === "active";
+          const isPending = m.status === "pending";
+          const isCompleted = m.status === "completed";
+          const t1Score = isCompleted ? (t1[0]?.score ?? 0) : null;
+          const t2Score = isCompleted ? (t2[0]?.score ?? 0) : null;
+          const t1Won = t1Score !== null && t2Score !== null && t1Score > t2Score;
+          const t2Won = t1Score !== null && t2Score !== null && t2Score > t1Score;
+          const courtColor = isActive ? "bg-orange-500 text-white" : isPending ? "bg-green-500 text-white" : "bg-gray-300 text-white";
 
-              return rows
-                .filter((row) => (byLevel.get(row.key) || []).length > 0)
-                .map((row) => {
-                  const players = byLevel.get(row.key) || [];
+          const renderTeamRow = (players: typeof t1, team: "team1" | "team2", won: boolean, scoreVal: number | null) => (
+            <div className={`flex items-center gap-1 p-1.5 rounded-lg ${won ? "bg-green-50" : ""}`}>
+              <div className="flex-1 min-w-0 space-y-0.5">
+                {players.map((mp) => {
+                  const pl = playerMap.get(mp.playerId);
+                  const isMe = mp.playerId === userId;
                   return (
-                    <div key={row.key} className="bg-card rounded-xl border border-border p-3">
-                      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
-                        <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
-                          {row.label}
-                        </span>
-                        <span className="text-[10px] text-muted">{players.length} player{players.length === 1 ? "" : "s"}</span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                        {players
-                          .sort((a, b) => a.player.name.localeCompare(b.player.name))
-                          .map((ep) => {
-                            const count = playerMatchCounts.get(ep.playerId) || 0;
-                            const overridden =
-                              ep.skillLevel != null &&
-                              ep.autoSkillLevel != null &&
-                              ep.skillLevel !== ep.autoSkillLevel;
-                            return (
-                              <div
-                                key={ep.id}
-                                className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1.5 min-w-0"
-                                title={
-                                  overridden
-                                    ? `Auto: L${ep.autoSkillLevel}`
-                                    : undefined
-                                }
-                              >
-                                <PlayerAvatar
-                                  name={ep.player.name}
-                                  photoUrl={ep.player.photoUrl}
-                                  size="xs"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
-                                  {overridden && (
-                                    <div className="text-[9px] text-muted">auto L{ep.autoSkillLevel}</div>
-                                  )}
-                                </div>
-                                <span
-                                  className="text-[10px] text-muted tabular-nums shrink-0"
-                                  title={`${count} match${count === 1 ? "" : "es"}`}
-                                >
-                                  {count}m
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
+                    <div key={mp.playerId} className="flex items-center gap-1.5">
+                      <PlayerAvatar name={pl?.name || "?"} photoUrl={pl?.photoUrl} size="xs" />
+                      <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${won ? "text-green-700" : ""}`}>
+                        {pl?.name || "?"}
+                      </span>
+                      <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(mp.playerId) || 0}m</span>
                     </div>
                   );
-                });
-            })()}
-          </>
-        )}
-      </div>
+                })}
+              </div>
+              <div className="shrink-0 ml-1">
+                {isCompleted ? (
+                  <span className={`text-2xl font-bold min-w-[2.5rem] text-center block ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
+                ) : isActive ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ScorePicker
+                      value={scores[m.id]?.[team] ?? ""}
+                      targetScore={11}
+                      winBy={2}
+                      otherTeamScore={scores[m.id]?.[team === "team1" ? "team2" : "team1"] ?? ""}
+                      onChange={(v) => setScores((prev) => ({
+                        ...prev,
+                        [m.id]: { ...prev[m.id], [team]: v },
+                      }))}
+                      onClearBoth={() => setScores((prev) => { const n = { ...prev }; delete n[m.id]; return n; })}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-gray-400">-</span>
+                )}
+              </div>
+            </div>
+          );
 
-      {/* Generate button (sticky) */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-3 z-40">
-        <div className="max-w-3xl mx-auto">
-          <button
-            onClick={handleGenerate}
-            disabled={generating || !classId}
-            className="w-full bg-action-dark text-white py-3 rounded-xl font-semibold text-sm disabled:opacity-50"
-          >
-            {generating ? "Generating..." : "Generate Next Round"}
-          </button>
-        </div>
-      </div>
+          const hasScore = scores[m.id]?.team1 && scores[m.id]?.team2;
+
+          return (
+            <div key={m.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
+              isActive ? "border-orange-400 shadow-md shadow-orange-100"
+              : isPending ? "border-green-400 shadow-md shadow-green-100"
+              : "border-border"
+            }`}>
+              <div className="flex items-center gap-2 px-2 py-2" onClick={() => setActionMatchId(m.id)}>
+                <div className="flex flex-col items-center shrink-0 min-w-[2.5rem]">
+                  {isPending ? (
+                    <button onClick={(e) => { e.stopPropagation(); startMatch(m.id); }}
+                      className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shadow-sm active:bg-green-700 relative"
+                      title="Start match"
+                    >
+                      <span className="text-lg font-bold">▶</span>
+                      <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-gray-600 text-white text-[9px] font-bold flex items-center justify-center">{m.courtNum}</span>
+                    </button>
+                  ) : (
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${courtColor}`}>{m.courtNum}</div>
+                  )}
+                  <span className="text-[8px] text-muted">
+                    {isActive ? "In Play" : isPending ? "Ready" : `R${m.round}`}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {renderTeamRow(t1, "team1", t1Won, t1Score)}
+                  {renderTeamRow(t2, "team2", t2Won, t2Score)}
+                </div>
+              </div>
+              {isActive && hasScore && (
+                <button onClick={() => submitScore(m.id)}
+                  className="w-full bg-action text-white py-2 text-sm font-semibold active:bg-action-dark"
+                >
+                  Submit Score
+                </button>
+              )}
+            </div>
+          );
+        };
+
+        const playingIds = new Set<string>();
+        for (const m of active) for (const p of m.players) playingIds.add(p.playerId);
+        for (const m of paused) for (const p of m.players) playingIds.add(p.playerId);
+        for (const m of pending) for (const p of m.players) playingIds.add(p.playerId);
+        const sittingOutPlayers = classPlayers.filter((ep) => !playingIds.has(ep.playerId) && ep.status !== "paused");
+
+        return (
+          <div className="space-y-4">
+            {sittingOutPlayers.length > 0 && (active.length > 0 || pending.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <span className="text-xs font-bold text-muted uppercase tracking-wider">Sitting out ({sittingOutPlayers.length})</span>
+                {sittingOutPlayers.map((ep) => (
+                  <div key={ep.playerId} className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1">
+                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    <span className="text-[11px] font-medium">{ep.player.name}</span>
+                    <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {active.length > 0 && (
+              <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                  <span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span>
+                </div>
+                <div className="space-y-2">{active.map(renderMatchCard)}</div>
+              </div>
+            )}
+            {paused.length > 0 && (
+              <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span>
+                </div>
+                <div className="space-y-2">{paused.map(renderMatchCard)}</div>
+              </div>
+            )}
+            {pending.length > 0 && (
+              <div className="bg-green-50 -mx-4 px-4 py-3 border-y border-green-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Upcoming</span>
+                  <button onClick={deleteAllPending} className="text-[10px] text-danger font-medium">Delete all</button>
+                </div>
+                <div className="space-y-2 mt-2">{pending.map(renderMatchCard)}</div>
+              </div>
+            )}
+            {completed.length > 0 && (
+              <div className="space-y-2 mt-2">
+                <button
+                  onClick={() => toggleCollapsed("past")}
+                  className="flex items-center gap-1 text-xs font-bold text-muted uppercase tracking-wider"
+                >
+                  <span className={`transition-transform ${collapsed.has("past") ? "" : "rotate-90"}`}>›</span>
+                  Completed ({completed.length})
+                </button>
+                {!collapsed.has("past") && (
+                  <div className="space-y-2">{completed.slice(0, 20).map(renderMatchCard)}</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Action sheet */}
+      {actionMatchId && event && (() => {
+        const m = event.matches.find((x) => x.id === actionMatchId);
+        if (!m) return null;
+        const t1 = m.players.filter((p) => p.team === 1);
+        const t2 = m.players.filter((p) => p.team === 2);
+        const playerMap2 = new Map(classPlayers.map((ep) => [ep.playerId, ep.player]));
+        const t1Names = t1.map((p) => playerMap2.get(p.playerId)?.name || "?").join(" & ");
+        const t2Names = t2.map((p) => playerMap2.get(p.playerId)?.name || "?").join(" & ");
+        const close = () => setActionMatchId(null);
+        return (
+          <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
+            <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-0 mx-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
+              <div className="text-center px-4 pb-3 border-b border-border">
+                <span className="text-sm font-semibold">Court {m.courtNum}</span>
+                <span className="text-xs text-muted ml-2">{t1Names} vs {t2Names}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 p-4">
+                {m.status === "pending" && (
+                  <button onClick={() => { startMatch(m.id); close(); }}
+                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                    ▶ Start match
+                  </button>
+                )}
+                {m.status === "active" && (
+                  <button onClick={() => { pauseMatch(m.id); close(); }}
+                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                    ⏸️ Pause match
+                  </button>
+                )}
+                {m.status === "paused" && (
+                  <button onClick={() => { startMatch(m.id); close(); }}
+                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                    ▶ Resume match
+                  </button>
+                )}
+                <button onClick={() => { deleteMatch(m.id); close(); }}
+                  className="py-2.5 rounded-xl text-sm font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center gap-2">
+                  🗑️ Delete match
+                </button>
+              </div>
+              <div className="px-4 pb-4">
+                <button onClick={close} className="w-full py-3 rounded-xl bg-gray-100 text-sm font-medium">Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }

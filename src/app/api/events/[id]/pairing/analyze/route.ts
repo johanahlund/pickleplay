@@ -52,7 +52,7 @@ export async function POST(
       eventId: true,
       event: { select: { numCourts: true } },
       players: {
-        where: { status: { in: ["registered", "active", "confirmed"] } },
+        where: { status: { in: ["registered", "checked_in"] } },
         select: {
           id: true,
           playerId: true,

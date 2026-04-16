@@ -189,6 +189,7 @@ function SwipeablePlayerRow({
   onRemove,
   skillLevel,
   onSkillLevel,
+  isSelf,
 }: {
   ep: { player: Player; status: string; skillLevel?: number | null };
   canManage: boolean;
@@ -198,6 +199,7 @@ function SwipeablePlayerRow({
   onRemove: () => void;
   skillLevel?: number | null;
   onSkillLevel?: (level: number | null) => void;
+  isSelf?: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
@@ -274,9 +276,14 @@ function SwipeablePlayerRow({
       onTouchEnd={handleTouchEnd}
     >
       <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
-      <span className={`text-lg font-medium flex-1 ${localPaused ? "line-through text-muted" : ""}`}>
+      <span className={`text-lg flex-1 ${localPaused ? "line-through text-muted" : ""} ${isSelf ? "text-action font-bold" : "font-medium"}`}>
         {ep.player.name}
       </span>
+      {typeof ep.player.rating === "number" && (
+        <span className="text-xs text-muted tabular-nums">
+          {Math.round(ep.player.rating)}
+        </span>
+      )}
       {ep.player.role === "admin" && (
         <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
           Admin
@@ -400,6 +407,10 @@ export default function EventDetailPage() {
   const [editRankingMode, setEditRankingMode] = useState("ranked");
   const [editCompetitionMode, setEditCompetitionMode] = useState<boolean>(false);
   const [editSkillSource, setEditSkillSource] = useState<"rating" | "manual">("rating");
+  const [levelDragId, setLevelDragId] = useState<string | null>(null);
+  const [levelDragOver, setLevelDragOver] = useState<number | "unset" | null>(null);
+  const [levelSelectedIds, setLevelSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedEmptyLevels, setExpandedEmptyLevels] = useState<Set<number | "unset">>(new Set());
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -2013,18 +2024,192 @@ export default function EventDetailPage() {
         {event.players.length > 6 && (
           <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
         )}
-        <div className="space-y-0">
-          {[...event.players]
-            .sort((a, b) => a.player.name.localeCompare(b.player.name))
-            .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
-            .map((ep) => (
-            <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
-              showContact={isAdmin || ep.player.id === userId}
-              skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
-              onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
-              onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
-          ))}
-        </div>
+        {canManage ? (() => {
+          const filtered = event.players.filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()));
+          const groups = new Map<number | "unset", typeof filtered>();
+          for (const ep of filtered) {
+            const key = ep.skillLevel ?? "unset";
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(ep);
+          }
+          const rows: { key: number | "unset"; label: string }[] = [
+            { key: 5, label: "L5" },
+            { key: 4, label: "L4" },
+            { key: 3, label: "L3" },
+            { key: 2, label: "L2" },
+            { key: 1, label: "L1" },
+            { key: "unset", label: "Unset" },
+          ];
+          const assignLevel = (playerIds: string[], target: number | "unset") => {
+            const level = target === "unset" ? null : target;
+            for (const pid of playerIds) setSkillLevel(pid, level);
+            setLevelSelectedIds(new Set());
+            setLevelDragId(null);
+            setLevelDragOver(null);
+            setExpandedEmptyLevels(new Set());
+          };
+          const pickingTap = levelSelectedIds.size > 0;
+          const handleDrop = (target: number | "unset") => {
+            const pid = levelDragId;
+            if (!pid) return;
+            const ids = levelSelectedIds.has(pid) ? Array.from(levelSelectedIds) : [pid];
+            assignLevel(ids, target);
+          };
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <p className="text-[11px] text-muted flex-1">
+                  {pickingTap ? `${levelSelectedIds.size} selected — tap a card to move` : "Tap players to select, then tap a card. Or drag."}
+                </p>
+                {pickingTap && (
+                  <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear</button>
+                )}
+                <button
+                  onClick={async () => {
+                    const ok = await confirmDialog({
+                      title: "Recalculate from ratings?",
+                      message: "Every player's level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
+                      danger: true,
+                      confirmText: "Recalculate",
+                    });
+                    if (!ok) return;
+                    const classes = event.classes || [];
+                    for (const cls of classes) {
+                      await fetch(`/api/events/${id}/pairing/skill-levels`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "recalculate", classId: cls.id }),
+                      });
+                    }
+                    await fetchEvent();
+                  }}
+                  className="text-xs text-muted hover:text-foreground underline"
+                >
+                  Recalculate
+                </button>
+              </div>
+              {rows.map((row) => {
+                const eps = (groups.get(row.key) || []).sort((a, b) => {
+                  const ra = typeof a.player.rating === "number" ? a.player.rating : -Infinity;
+                  const rb = typeof b.player.rating === "number" ? b.player.rating : -Infinity;
+                  if (rb !== ra) return rb - ra;
+                  return a.player.name.localeCompare(b.player.name);
+                });
+                const isOver = levelDragOver === row.key;
+                const isEmpty = eps.length === 0;
+                const expanded = expandedEmptyLevels.has(row.key);
+                const collapsed = isEmpty && !expanded && !pickingTap && !levelDragId;
+
+                if (collapsed) {
+                  return (
+                    <div
+                      key={String(row.key)}
+                      onClick={() => setExpandedEmptyLevels((prev) => new Set(prev).add(row.key))}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (levelDragOver !== row.key) setLevelDragOver(row.key); }}
+                      onDragLeave={() => setLevelDragOver(null)}
+                      onDrop={(e) => { e.preventDefault(); handleDrop(row.key); }}
+                      className={`flex items-center justify-between bg-card rounded-lg border border-border px-3 py-1.5 cursor-pointer transition-colors ${isOver ? "border-action bg-action/10" : "hover:bg-gray-50"}`}
+                    >
+                      <span className={`text-xs font-semibold ${row.key === "unset" ? "text-muted" : "text-muted"}`}>
+                        {row.label} <span className="text-[10px] font-normal">(empty)</span>
+                      </span>
+                      <span className="text-[10px] text-muted">tap to open</span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={String(row.key)}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (levelDragOver !== row.key) setLevelDragOver(row.key); }}
+                    onDragLeave={() => setLevelDragOver(null)}
+                    onDrop={(e) => { e.preventDefault(); handleDrop(row.key); }}
+                    className={`bg-card rounded-xl border-2 p-3 transition-colors ${
+                      isOver ? "border-action bg-action/10"
+                        : pickingTap ? "border-action border-dashed"
+                        : "border-border"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
+                      <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
+                        {row.label}
+                      </span>
+                      {pickingTap ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); assignLevel(Array.from(levelSelectedIds), row.key); }}
+                          className="bg-action text-white text-[11px] font-semibold px-3 py-1 rounded-full active:bg-action-dark"
+                        >
+                          Move {levelSelectedIds.size} here
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-muted">{eps.length} player{eps.length === 1 ? "" : "s"}</span>
+                      )}
+                    </div>
+                    {isEmpty ? (
+                      <p className="text-[10px] text-muted italic">drop here</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {eps.map((ep) => {
+                          const isMe = ep.player.id === userId;
+                          const selected = levelSelectedIds.has(ep.player.id);
+                          const dragging = levelDragId === ep.player.id;
+                          return (
+                            <div
+                              key={ep.player.id}
+                              draggable
+                              onDragStart={(e) => { setLevelDragId(ep.player.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ep.player.id); }}
+                              onDragEnd={() => { setLevelDragId(null); setLevelDragOver(null); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLevelSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(ep.player.id)) next.delete(ep.player.id);
+                                  else next.add(ep.player.id);
+                                  return next;
+                                });
+                              }}
+                              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 cursor-move transition-all ${
+                                selected ? "bg-action text-white"
+                                  : dragging ? "opacity-50 bg-gray-100"
+                                  : "bg-gray-50 hover:bg-gray-100"
+                              }`}
+                            >
+                              <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                              <div className="min-w-0 flex-1">
+                                <div className={`text-[11px] truncate ${selected ? "font-bold" : isMe ? "text-action font-bold" : "font-medium"}`}>
+                                  {ep.player.name}
+                                </div>
+                              </div>
+                              {typeof ep.player.rating === "number" && (
+                                <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : "text-muted"}`}>
+                                  {Math.round(ep.player.rating)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })() : (
+          <div className="space-y-0">
+            {[...event.players]
+              .sort((a, b) => a.player.name.localeCompare(b.player.name))
+              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+              .map((ep) => (
+              <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
+                showContact={isAdmin || ep.player.id === userId}
+                isSelf={ep.player.id === userId}
+                skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
+                onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
+                onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -2971,10 +3156,10 @@ export default function EventDetailPage() {
 
       {/* Pairing */}
       <div className={frameClass}>
-        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("pairing"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
+        <div onClick={() => { if (canManage) router.push(`/events/${id}/pairing`); }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
           <span className="text-base font-bold text-foreground">Pairing</span>
           <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
-          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
+          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">›</span>}
         </div>
       </div>
 
