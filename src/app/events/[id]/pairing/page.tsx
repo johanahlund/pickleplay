@@ -1005,7 +1005,7 @@ export default function PairingConfigPage() {
                 { key: "unset", label: "Unset" },
               ];
               return rows
-                .filter((row) => (byLevel.get(row.key) || []).length > 0)
+                .filter((row) => levelEditMode || (byLevel.get(row.key) || []).length > 0)
                 .map((row) => {
                   const players = byLevel.get(row.key) || [];
                   return (
