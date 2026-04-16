@@ -41,6 +41,14 @@ export async function POST(
     }
   }
 
+  // If event is already underway (has matches), auto check-in the new player
+  if (status === "registered") {
+    const matchCount = await prisma.match.count({ where: { eventId: id } });
+    if (matchCount > 0) {
+      status = "checked_in";
+    }
+  }
+
   await prisma.eventPlayer.create({
     data: { eventId: id, classId: cls?.id, playerId, status },
   });

@@ -187,6 +187,7 @@ function SwipeablePlayerRow({
   showContact,
   onPause,
   onRemove,
+  onCheckIn,
   skillLevel,
   onSkillLevel,
   isSelf,
@@ -197,6 +198,7 @@ function SwipeablePlayerRow({
   showContact: boolean;
   onPause: () => void;
   onRemove: () => void;
+  onCheckIn?: () => void;
   skillLevel?: number | null;
   onSkillLevel?: (level: number | null) => void;
   isSelf?: boolean;
@@ -269,51 +271,46 @@ function SwipeablePlayerRow({
     <div
       ref={rowRef}
       className={`group flex items-center gap-2 rounded-lg px-3 py-1 transition-all select-none ${
-        localPaused ? "opacity-40 bg-gray-100" : ""
+        localPaused ? "opacity-40 bg-gray-100" : ep.status === "registered" ? "opacity-60" : ""
       }`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
-      <span className={`text-lg flex-1 ${localPaused ? "line-through text-muted" : ""} ${isSelf ? "text-action font-bold" : "font-medium"}`}>
+      {/* Name + role pill inline */}
+      <span className={`text-lg flex-1 flex items-center gap-1.5 ${localPaused ? "line-through text-muted" : ""} ${isSelf ? "text-action font-bold" : "font-medium"}`}>
         {ep.player.name}
+        {ep.player.role === "admin" && (
+          <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">Admin</span>
+        )}
       </span>
-      {typeof ep.player.rating === "number" && (
-        <span className="text-xs text-muted tabular-nums">
-          {Math.round(ep.player.rating)}
-        </span>
-      )}
-      {ep.player.role === "admin" && (
-        <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
-          Admin
-        </span>
-      )}
+      {/* Rating column */}
+      <span className="text-xs text-muted tabular-nums w-8 text-right shrink-0">
+        {typeof ep.player.rating === "number" ? Math.round(ep.player.rating) : ""}
+      </span>
+      {/* Status column */}
+      <span className="w-14 shrink-0 text-right">
+        {localPaused ? (
+          <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Paused</span>
+        ) : ep.status === "checked_in" ? (
+          <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">In</span>
+        ) : ep.status === "waitlisted" ? (
+          <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">Wait</span>
+        ) : ep.status === "registered" && canManage && onCheckIn ? (
+          <button onClick={(e) => { e.stopPropagation(); onCheckIn(); }} className="text-[10px] bg-green-50 text-green-700 border border-green-300 px-1.5 py-0.5 rounded-full font-medium active:bg-green-200">Check in</button>
+        ) : null}
+      </span>
       {ep.player.phone && showContact && (
         <a
           href={`https://wa.me/${ep.player.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-green-500 text-sm"
+          className="text-green-500 text-sm shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
           💬
         </a>
-      )}
-      {ep.status === "checked_in" && (
-        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
-          In
-        </span>
-      )}
-      {ep.status === "waitlisted" && (
-        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">
-          Waitlist
-        </span>
-      )}
-      {localPaused && (
-        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-          Paused
-        </span>
       )}
       {/* Skill level */}
       {canManage && onSkillLevel && (
@@ -1134,6 +1131,16 @@ export default function EventDetailPage() {
           {" · "}{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
         </p>
       </div>
+      {/* Inline info for normal users — Manager, Format, Pairing */}
+      {!canManage && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-border text-xs text-muted pr-16">
+          <span><span className="font-medium text-foreground">Manager:</span> {ownerName || "—"}{helperNames.length > 0 ? `, ${helperNames.join(", ")}` : ""}</span>
+          <span><span className="font-medium text-foreground">Format:</span> <span className="capitalize">{event.format}</span> · {event.scoringFormat || "1x11"}</span>
+          <span><span className="font-medium text-foreground">Pairing:</span> {
+            ({ random: "Random", skill_balanced: "Skill Balanced", mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed", king_of_court: "King of Court", swiss: "Swiss", manual: "Manual" } as Record<string, string>)[event.pairingMode] || event.pairingMode
+          }</span>
+        </div>
+      )}
     </div>
   );
 
@@ -2003,10 +2010,26 @@ export default function EventDetailPage() {
             Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </h3>
           {canManage && (
-            <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-              className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
-              Add
-            </button>
+            <div className="flex items-center gap-2">
+              {event.players.some((ep) => ep.status === "registered") && (
+                <button
+                  onClick={async () => {
+                    const registered = event.players.filter((ep) => ep.status === "registered");
+                    for (const ep of registered) {
+                      await fetch(`/api/events/${id}/players/${ep.player.id}/checkin`, { method: "POST" });
+                    }
+                    await fetchEvent();
+                  }}
+                  className="text-sm text-green-700 font-medium px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                >
+                  Check in all
+                </button>
+              )}
+              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+                className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
+                Add
+              </button>
+            </div>
           )}
         </div>
         {canManage && (
@@ -2171,6 +2194,7 @@ export default function EventDetailPage() {
                               className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 cursor-move transition-all ${
                                 selected ? "bg-action text-white"
                                   : dragging ? "opacity-50 bg-gray-100"
+                                  : ep.status === "registered" ? "bg-gray-50 hover:bg-gray-100 opacity-60"
                                   : "bg-gray-50 hover:bg-gray-100"
                               }`}
                             >
@@ -2180,6 +2204,14 @@ export default function EventDetailPage() {
                                   {ep.player.name}
                                 </div>
                               </div>
+                              {ep.status === "registered" && !selected && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); checkInPlayer(ep.player.id); }}
+                                  className="text-[9px] bg-green-50 text-green-700 border border-green-300 px-1 py-0.5 rounded-full font-medium shrink-0 active:bg-green-200"
+                                >
+                                  In
+                                </button>
+                              )}
                               {typeof ep.player.rating === "number" && (
                                 <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : "text-muted"}`}>
                                   {Math.round(ep.player.rating)}
@@ -2206,6 +2238,7 @@ export default function EventDetailPage() {
                 isSelf={ep.player.id === userId}
                 skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
                 onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
+                onCheckIn={ep.status === "registered" ? () => checkInPlayer(ep.player.id) : undefined}
                 onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
             ))}
           </div>
@@ -3118,21 +3151,23 @@ export default function EventDetailPage() {
     <div className="space-y-3">
       {eventBackLink}
       {eventHeader}
-      {managerCard}
+      {canManage && managerCard}
 
-      {/* Format */}
-      <div className={frameClass}>
-        <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("scoring"); } }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
-          <span className="text-base font-bold text-foreground">Format</span>
-          <span className="flex-1 text-right">
-            <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
-            {event.rankingMode !== "none" && (
-              <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
-            )}
-          </span>
-          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>}
+      {/* Format — managers only (normal users see it in the header card) */}
+      {canManage && (
+        <div className={frameClass}>
+          <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
+            <span className="text-base font-bold text-foreground">Format</span>
+            <span className="flex-1 text-right">
+              <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
+              {event.rankingMode !== "none" && (
+                <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
+              )}
+            </span>
+            <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Players & Pairs */}
       <div className={frameClass}>
@@ -3154,14 +3189,16 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Pairing */}
-      <div className={frameClass}>
-        <div onClick={() => { if (canManage) router.push(`/events/${id}/pairing`); }} className={rowClass} style={canManage ? { cursor: "pointer" } : undefined}>
-          <span className="text-base font-bold text-foreground">Pairing</span>
-          <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
-          {canManage && <span className="text-muted/50 self-start mt-0.5 ml-3">›</span>}
+      {/* Pairing — managers only (normal users see it in the header card) */}
+      {canManage && (
+        <div className={frameClass}>
+          <div onClick={() => router.push(`/events/${id}/pairing`)} className={rowClass} style={{ cursor: "pointer" }}>
+            <span className="text-base font-bold text-foreground">Pairing</span>
+            <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
+            <span className="text-muted/50 self-start mt-0.5 ml-3">›</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Speaker */}
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />

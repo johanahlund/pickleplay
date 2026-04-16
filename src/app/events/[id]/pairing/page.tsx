@@ -400,6 +400,38 @@ export default function PairingConfigPage() {
     await refreshEvent();
   };
 
+  const checkInPlayer = async (playerId: string) => {
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          ep.playerId === playerId ? { ...ep, status: "checked_in" } : ep,
+        ),
+      };
+    });
+    await fetch(`/api/events/${id}/players/${playerId}/checkin`, { method: "POST" });
+    await refreshEvent();
+  };
+
+  const checkInAll = async (players: EventPlayerDTO[]) => {
+    const registered = players.filter((ep) => ep.status === "registered");
+    setEvent((prev) => {
+      if (!prev) return prev;
+      const regIds = new Set(registered.map((ep) => ep.playerId));
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          regIds.has(ep.playerId) ? { ...ep, status: "checked_in" } : ep,
+        ),
+      };
+    });
+    for (const ep of registered) {
+      await fetch(`/api/events/${id}/players/${ep.playerId}/checkin`, { method: "POST" });
+    }
+    await refreshEvent();
+  };
+
   const pauseMatch = async (matchId: string) => {
     setEvent((prev) => prev ? {
       ...prev,
@@ -1253,7 +1285,8 @@ export default function PairingConfigPage() {
         for (const m of active) for (const p of m.players) playingIds.add(p.playerId);
         for (const m of paused) for (const p of m.players) playingIds.add(p.playerId);
         for (const m of pending) for (const p of m.players) playingIds.add(p.playerId);
-        const sittingOutPlayers = classPlayers.filter((ep) => !playingIds.has(ep.playerId) && ep.status !== "paused");
+        const sittingOutPlayers = classPlayers.filter((ep) => !playingIds.has(ep.playerId) && ep.status !== "paused" && ep.status !== "registered");
+        const notCheckedInPlayers = classPlayers.filter((ep) => ep.status === "registered");
         const pausedPlayers = classPlayers.filter((ep) => ep.status === "paused");
 
         return (
@@ -1267,6 +1300,24 @@ export default function PairingConfigPage() {
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                     <span className="text-[11px] font-medium">{ep.player.name}</span>
                     <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {notCheckedInPlayers.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Not checked in ({notCheckedInPlayers.length})</span>
+                <button
+                  onClick={() => checkInAll(classPlayers)}
+                  className="text-[10px] bg-green-50 text-green-700 border border-green-300 px-2 py-0.5 rounded-full font-medium active:bg-green-200"
+                >
+                  Check in all
+                </button>
+                {notCheckedInPlayers.map((ep) => (
+                  <button key={ep.playerId} onClick={() => checkInPlayer(ep.playerId)}
+                    className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1 opacity-60 active:opacity-100" title="Tap to check in">
+                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    <span className="text-[11px] font-medium">{ep.player.name}</span>
                   </button>
                 ))}
               </div>
