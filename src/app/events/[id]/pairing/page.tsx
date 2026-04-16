@@ -1048,6 +1048,7 @@ export default function PairingConfigPage() {
                                   : "bg-gray-50"
                                 }`}
                               >
+                                {/* Name area: tap = check-in toggle (default) or level select (edit mode) */}
                                 <button
                                   onClick={() => {
                                     if (levelEditMode) {
@@ -1058,18 +1059,11 @@ export default function PairingConfigPage() {
                                         return n;
                                       });
                                     } else {
-                                      // Default: toggle check-in
-                                      if (isCheckedIn) {
-                                        checkInPlayer(ep.playerId); // toggles back to registered
-                                      } else if (isPaused) {
-                                        togglePausePlayer(ep.playerId);
-                                      } else {
-                                        checkInPlayer(ep.playerId); // registered → checked_in
-                                      }
+                                      checkInPlayer(ep.playerId);
                                     }
                                   }}
                                   className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
-                                  title={levelEditMode ? "Tap to select" : isRegistered ? "Tap to check in" : isPaused ? "Tap to unpause" : ""}
+                                  title={levelEditMode ? "Tap to select" : isCheckedIn ? "Tap to un-check-in" : "Tap to check in"}
                                 >
                                   <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                                   <div className="min-w-0 flex-1">
@@ -1079,21 +1073,25 @@ export default function PairingConfigPage() {
                                       : ""
                                     }`}>{ep.player.name}</div>
                                   </div>
+                                </button>
+                                {/* Match count + pause icon: tap = toggle pause */}
+                                {!levelEditMode && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); togglePausePlayer(ep.playerId); }}
+                                    className={`flex items-center gap-0.5 shrink-0 px-1 py-0.5 rounded transition-colors ${
+                                      isPaused ? "text-amber-600" : "text-muted hover:text-amber-600"
+                                    }`}
+                                    title={isPaused ? "Tap to unpause" : "Tap to pause"}
+                                  >
+                                    <span className={`text-[10px] tabular-nums`}>{count}m</span>
+                                    <span className="text-[9px]">⏸</span>
+                                  </button>
+                                )}
+                                {levelEditMode && (
                                   <span className={`text-[10px] tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
                                     {count}m
                                   </span>
-                                </button>
-                                {/* Pause button — always visible for checked-in players, not in level edit mode */}
-                                {!levelEditMode && isCheckedIn && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); togglePausePlayer(ep.playerId); }}
-                                    className="text-[9px] text-muted hover:text-amber-600 shrink-0 p-0.5"
-                                    title="Pause player"
-                                  >
-                                    ⏸
-                                  </button>
                                 )}
-                                {isPaused && <span className="text-[9px] text-amber-600 font-medium shrink-0">⏸</span>}
                                 {isRegistered && !levelEditMode && (
                                   <span className="text-[9px] text-muted shrink-0">○</span>
                                 )}
