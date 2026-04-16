@@ -1044,7 +1044,7 @@ export default function PairingConfigPage() {
                                 className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 transition-all ${
                                   isSelected ? "bg-action text-white"
                                   : isPaused ? "bg-amber-100 opacity-60"
-                                  : isRegistered ? "bg-gray-50 opacity-50"
+                                  : isRegistered ? "bg-gray-50"
                                   : "bg-gray-50"
                                 }`}
                               >
@@ -1065,11 +1065,17 @@ export default function PairingConfigPage() {
                                   className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
                                   title={levelEditMode ? "Tap to select" : isCheckedIn ? "Tap to un-check-in" : "Tap to check in"}
                                 >
-                                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                                  <span className={`relative shrink-0 ${isRegistered ? "opacity-40" : ""}`}>
+                                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                                    {isCheckedIn && (
+                                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 text-white rounded-full flex items-center justify-center text-[7px] font-bold">✓</span>
+                                    )}
+                                  </span>
                                   <div className="min-w-0 flex-1">
                                     <div className={`text-[11px] font-medium truncate ${
                                       isSelected ? "font-bold"
                                       : isPaused ? "line-through text-muted"
+                                      : isRegistered ? "text-muted"
                                       : ""
                                     }`}>{ep.player.name}</div>
                                   </div>
@@ -1091,9 +1097,6 @@ export default function PairingConfigPage() {
                                   <span className={`text-[10px] tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
                                     {count}m
                                   </span>
-                                )}
-                                {isRegistered && !levelEditMode && (
-                                  <span className="text-[9px] text-muted shrink-0">○</span>
                                 )}
                               </div>
                             );
