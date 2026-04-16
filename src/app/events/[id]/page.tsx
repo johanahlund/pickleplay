@@ -2141,7 +2141,7 @@ export default function EventDetailPage() {
                 const isOver = levelDragOver === row.key;
                 const isEmpty = eps.length === 0;
                 const expanded = expandedEmptyLevels.has(row.key);
-                const collapsed = isEmpty && !expanded && !pickingTap && !levelDragId;
+                const collapsed = isEmpty && !expanded && !pickingTap && !levelDragId && !levelEditMode;
 
                 if (collapsed) {
                   return (
