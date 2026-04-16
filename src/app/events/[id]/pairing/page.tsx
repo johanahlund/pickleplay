@@ -1067,8 +1067,10 @@ export default function PairingConfigPage() {
                                 >
                                   <span className={`relative shrink-0 ${isRegistered ? "opacity-40" : ""}`}>
                                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                                    {isCheckedIn && (
-                                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 text-white rounded-full flex items-center justify-center text-[7px] font-bold">✓</span>
+                                    {(isCheckedIn || isPaused) && (
+                                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center text-[7px] font-bold ${
+                                        isPaused ? "bg-green-300 text-white" : "bg-green-500 text-white"
+                                      }`}>✓</span>
                                     )}
                                   </span>
                                   <div className="min-w-0 flex-1">
