@@ -179,6 +179,10 @@ export default function PairingConfigPage() {
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [numRounds, setNumRounds] = useState(1);
   const [actionMatchId, setActionMatchId] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(false);
+  const [manualCourt, setManualCourt] = useState(1);
+  const [manualTeam1, setManualTeam1] = useState<string[]>([]);
+  const [manualTeam2, setManualTeam2] = useState<string[]>([]);
 
   const refreshEvent = useCallback(async () => {
     const r = await fetch(`/api/events/${id}`);
@@ -417,6 +421,36 @@ export default function PairingConfigPage() {
     await refreshEvent();
   };
 
+  const toggleManualPlayer = (playerId: string, team: 1 | 2) => {
+    if (team === 1) {
+      setManualTeam1((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
+    } else {
+      setManualTeam2((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
+    }
+  };
+
+  const createManualMatch = async () => {
+    if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
+    const r = await fetch(`/api/events/${id}/matches`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        team1PlayerIds: manualTeam1,
+        team2PlayerIds: manualTeam2,
+        courtNum: manualCourt,
+      }),
+    });
+    if (r.ok) {
+      setManualTeam1([]);
+      setManualTeam2([]);
+      setShowManual(false);
+      await refreshEvent();
+    } else {
+      const d = await r.json();
+      await alert(d.error || "Failed to create match", "Error");
+    }
+  };
+
   const deleteAllPending = async () => {
     if (!event) return;
     const pendingIds = event.matches
@@ -464,6 +498,79 @@ export default function PairingConfigPage() {
   };
 
   if (!event) return <div className="p-4 text-muted text-sm">Loading...</div>;
+
+  if (showManual && event) {
+    const activePlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+    return (
+      <div className="space-y-4 pb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Manual Match</h2>
+          <button onClick={() => { setShowManual(false); setManualTeam1([]); setManualTeam2([]); }}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark">
+            Done
+          </button>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border p-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-muted">Court</span>
+            <div className="flex gap-1.5">
+              {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
+                <button key={c} onClick={() => setManualCourt(c)}
+                  className={`w-10 h-10 rounded-xl font-bold text-lg flex items-center justify-center transition-all ${
+                    manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                  }`}>{c}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-xl border border-border p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-foreground mb-1">Team 1</label>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {activePlayers.map((ep) => (
+                  <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 1)}
+                    className={`w-full text-left text-base py-2 px-2 rounded transition-all flex items-center gap-1.5 ${
+                      manualTeam1.includes(ep.playerId) ? "bg-blue-100 text-blue-800 font-medium"
+                      : manualTeam2.includes(ep.playerId) ? "opacity-30" : "hover:bg-gray-50"
+                    }`} disabled={manualTeam2.includes(ep.playerId)}>
+                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    {ep.player.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {activePlayers.map((ep) => (
+                  <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 2)}
+                    className={`w-full text-left text-base py-2 px-2 rounded transition-all flex items-center gap-1.5 ${
+                      manualTeam2.includes(ep.playerId) ? "bg-red-100 text-red-800 font-medium"
+                      : manualTeam1.includes(ep.playerId) ? "opacity-30" : "hover:bg-gray-50"
+                    }`} disabled={manualTeam1.includes(ep.playerId)}>
+                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    {ep.player.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={createManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
+            className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">
+            Create Match
+          </button>
+          <button onClick={() => { setShowManual(false); setManualTeam1([]); setManualTeam2([]); }}
+            className="px-4 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    );
+  }
 
   if (editingLocks) {
     const lockClassPlayers = event.players.filter(
@@ -1025,12 +1132,12 @@ export default function PairingConfigPage() {
           {generating ? "..." : numRounds === 1 ? "Next Round" : `Generate ${numRounds}`}
         </button>
         <div className="flex-1" />
-        <Link
-          href={`/events/${id}`}
+        <button
+          onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
           className="text-xs text-primary font-medium px-3 py-2 rounded-lg border border-primary/30 hover:bg-primary/5"
         >
           + Manual
-        </Link>
+        </button>
       </div>
 
       {/* Matches — current, future, past */}
