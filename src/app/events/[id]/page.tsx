@@ -277,9 +277,16 @@ function SwipeablePlayerRow({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
+      <span className={`relative shrink-0 ${ep.status === "registered" ? "opacity-40" : ""}`}>
+        <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
+        {(ep.status === "checked_in" || localPaused) && (
+          <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${
+            localPaused ? "bg-green-300 text-white" : "bg-green-500 text-white"
+          }`}>✓</span>
+        )}
+      </span>
       {/* Name + role pill inline */}
-      <span className={`text-lg flex-1 flex items-center gap-1.5 ${localPaused ? "line-through text-muted" : ""} ${isSelf ? "text-action font-bold" : "font-medium"}`}>
+      <span className={`text-lg flex-1 flex items-center gap-1.5 ${localPaused ? "line-through text-muted" : ep.status === "registered" ? "text-muted" : ""} ${isSelf ? "text-action font-bold" : "font-medium"}`}>
         {ep.player.name}
         {ep.player.role === "admin" && (
           <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">Admin</span>
@@ -408,6 +415,7 @@ export default function EventDetailPage() {
   const [levelDragOver, setLevelDragOver] = useState<number | "unset" | null>(null);
   const [levelSelectedIds, setLevelSelectedIds] = useState<Set<string>>(new Set());
   const [expandedEmptyLevels, setExpandedEmptyLevels] = useState<Set<number | "unset">>(new Set());
+  const [levelEditMode, setLevelEditMode] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -2081,34 +2089,46 @@ export default function EventDetailPage() {
           return (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 px-1">
-                <p className="text-[11px] text-muted flex-1">
-                  {pickingTap ? `${levelSelectedIds.size} selected — tap a card to move` : "Tap players to select, then tap a card. Or drag."}
-                </p>
-                {pickingTap && (
-                  <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear</button>
+                {levelEditMode ? (
+                  <>
+                    <p className="text-[11px] text-muted flex-1">
+                      {pickingTap ? `${levelSelectedIds.size} selected — tap a card to move` : "Tap players to select, then tap a card."}
+                    </p>
+                    {pickingTap && (
+                      <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear</button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        const ok = await confirmDialog({
+                          title: "Recalculate from ratings?",
+                          message: "Every player's level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
+                          danger: true,
+                          confirmText: "Recalculate",
+                        });
+                        if (!ok) return;
+                        const classes = event.classes || [];
+                        for (const cls of classes) {
+                          await fetch(`/api/events/${id}/pairing/skill-levels`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "recalculate", classId: cls.id }),
+                          });
+                        }
+                        await fetchEvent();
+                      }}
+                      className="text-xs text-muted hover:text-foreground underline"
+                    >
+                      Recalculate
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted flex-1">Tap name to check in/out · Tap matches/⏸ to pause</p>
                 )}
                 <button
-                  onClick={async () => {
-                    const ok = await confirmDialog({
-                      title: "Recalculate from ratings?",
-                      message: "Every player's level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
-                      danger: true,
-                      confirmText: "Recalculate",
-                    });
-                    if (!ok) return;
-                    const classes = event.classes || [];
-                    for (const cls of classes) {
-                      await fetch(`/api/events/${id}/pairing/skill-levels`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "recalculate", classId: cls.id }),
-                      });
-                    }
-                    await fetchEvent();
-                  }}
-                  className="text-xs text-muted hover:text-foreground underline"
+                  onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
+                  className={`text-xs font-medium ${levelEditMode ? "text-action" : "text-muted"}`}
                 >
-                  Recalculate
+                  {levelEditMode ? "Done" : "Edit levels"}
                 </button>
               </div>
               {rows.map((row) => {
@@ -2176,43 +2196,74 @@ export default function EventDetailPage() {
                           const isMe = ep.player.id === userId;
                           const selected = levelSelectedIds.has(ep.player.id);
                           const dragging = levelDragId === ep.player.id;
+                          const isPaused = ep.status === "paused";
+                          const isRegistered = ep.status === "registered";
+                          const isCheckedIn = ep.status === "checked_in";
                           return (
                             <div
                               key={ep.player.id}
-                              draggable
-                              onDragStart={(e) => { setLevelDragId(ep.player.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ep.player.id); }}
-                              onDragEnd={() => { setLevelDragId(null); setLevelDragOver(null); }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLevelSelectedIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(ep.player.id)) next.delete(ep.player.id);
-                                  else next.add(ep.player.id);
-                                  return next;
-                                });
-                              }}
-                              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 cursor-move transition-all ${
+                              draggable={levelEditMode}
+                              onDragStart={levelEditMode ? (e) => { setLevelDragId(ep.player.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ep.player.id); } : undefined}
+                              onDragEnd={levelEditMode ? () => { setLevelDragId(null); setLevelDragOver(null); } : undefined}
+                              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 transition-all ${
                                 selected ? "bg-action text-white"
                                   : dragging ? "opacity-50 bg-gray-100"
-                                  : ep.status === "registered" ? "bg-gray-50 hover:bg-gray-100 opacity-60"
+                                  : isPaused ? "bg-amber-100 opacity-60"
+                                  : isRegistered ? "bg-gray-50"
                                   : "bg-gray-50 hover:bg-gray-100"
                               }`}
                             >
-                              <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                              <div className="min-w-0 flex-1">
-                                <div className={`text-[11px] truncate ${selected ? "font-bold" : isMe ? "text-action font-bold" : "font-medium"}`}>
-                                  {ep.player.name}
+                              {/* Name area: tap = check-in toggle (default) or level select (edit mode) */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (levelEditMode) {
+                                    setLevelSelectedIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(ep.player.id)) next.delete(ep.player.id);
+                                      else next.add(ep.player.id);
+                                      return next;
+                                    });
+                                  } else {
+                                    checkInPlayer(ep.player.id);
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
+                              >
+                                <span className={`relative shrink-0 ${isRegistered ? "opacity-40" : ""}`}>
+                                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                                  {(isCheckedIn || isPaused) && (
+                                    <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center text-[7px] font-bold ${
+                                      isPaused ? "bg-green-300 text-white" : "bg-green-500 text-white"
+                                    }`}>✓</span>
+                                  )}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className={`text-[11px] font-medium truncate ${
+                                    selected ? "font-bold"
+                                    : isPaused ? "line-through text-muted"
+                                    : isRegistered ? "text-muted"
+                                    : isMe ? "text-action font-bold"
+                                    : ""
+                                  }`}>{ep.player.name}</div>
                                 </div>
-                              </div>
-                              {ep.status === "registered" && !selected && (
+                              </button>
+                              {/* Match count + pause: tap = toggle pause */}
+                              {!levelEditMode && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); checkInPlayer(ep.player.id); }}
-                                  className="text-[9px] bg-green-50 text-green-700 border border-green-300 px-1 py-0.5 rounded-full font-medium shrink-0 active:bg-green-200"
+                                  onClick={(e) => { e.stopPropagation(); togglePausePlayer(ep.player.id); }}
+                                  className={`flex items-center gap-0.5 shrink-0 px-1 py-0.5 rounded transition-colors ${
+                                    isPaused ? "text-amber-600" : "text-muted hover:text-amber-600"
+                                  }`}
+                                  title={isPaused ? "Tap to unpause" : "Tap to pause"}
                                 >
-                                  In
+                                  {typeof ep.player.rating === "number" && (
+                                    <span className="text-[10px] tabular-nums">{Math.round(ep.player.rating)}</span>
+                                  )}
+                                  <span className="text-[9px]">⏸</span>
                                 </button>
                               )}
-                              {typeof ep.player.rating === "number" && (
+                              {levelEditMode && typeof ep.player.rating === "number" && (
                                 <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : "text-muted"}`}>
                                   {Math.round(ep.player.rating)}
                                 </span>
