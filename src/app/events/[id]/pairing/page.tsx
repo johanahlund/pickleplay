@@ -382,6 +382,20 @@ export default function PairingConfigPage() {
     await refreshEvent();
   };
 
+  const togglePausePlayer = async (playerId: string) => {
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          ep.playerId === playerId ? { ...ep, status: ep.status === "paused" ? "registered" : "paused" } : ep,
+        ),
+      };
+    });
+    await fetch(`/api/events/${id}/players/${playerId}/pause`, { method: "POST" });
+    await refreshEvent();
+  };
+
   const pauseMatch = async (matchId: string) => {
     setEvent((prev) => prev ? {
       ...prev,
@@ -1128,6 +1142,7 @@ export default function PairingConfigPage() {
         for (const m of paused) for (const p of m.players) playingIds.add(p.playerId);
         for (const m of pending) for (const p of m.players) playingIds.add(p.playerId);
         const sittingOutPlayers = classPlayers.filter((ep) => !playingIds.has(ep.playerId) && ep.status !== "paused");
+        const pausedPlayers = classPlayers.filter((ep) => ep.status === "paused");
 
         return (
           <div className="space-y-4">
@@ -1135,11 +1150,25 @@ export default function PairingConfigPage() {
               <div className="flex flex-wrap items-center gap-2 px-1">
                 <span className="text-xs font-bold text-muted uppercase tracking-wider">Sitting out ({sittingOutPlayers.length})</span>
                 {sittingOutPlayers.map((ep) => (
-                  <div key={ep.playerId} className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1">
+                  <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
+                    className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1 active:bg-amber-100" title="Tap to pause">
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                     <span className="text-[11px] font-medium">{ep.player.name}</span>
                     <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
-                  </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {pausedPlayers.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Paused ({pausedPlayers.length})</span>
+                {pausedPlayers.map((ep) => (
+                  <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
+                    className="flex items-center gap-1 bg-amber-100 rounded-full px-2 py-1 opacity-60 active:opacity-100" title="Tap to unpause">
+                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                    <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
+                    <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                  </button>
                 ))}
               </div>
             )}
