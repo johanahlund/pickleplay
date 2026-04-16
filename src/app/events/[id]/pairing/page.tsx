@@ -865,21 +865,26 @@ export default function PairingConfigPage() {
                               ep.skillLevel != null &&
                               ep.autoSkillLevel != null &&
                               ep.skillLevel !== ep.autoSkillLevel;
+                            const isPaused = ep.status === "paused";
                             return (
-                              <div
+                              <button
                                 key={ep.id}
-                                className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1.5 min-w-0"
-                                title={overridden ? `Auto: L${ep.autoSkillLevel}` : undefined}
+                                onClick={() => togglePausePlayer(ep.playerId)}
+                                className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 text-left transition-all ${
+                                  isPaused ? "bg-amber-100 opacity-60" : "bg-gray-50 active:bg-amber-50"
+                                }`}
+                                title={isPaused ? "Tap to unpause" : "Tap to pause"}
                               >
                                 <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-[11px] font-medium truncate">{ep.player.name}</div>
+                                  <div className={`text-[11px] font-medium truncate ${isPaused ? "line-through text-muted" : ""}`}>{ep.player.name}</div>
                                   {overridden && <div className="text-[9px] text-muted">auto L{ep.autoSkillLevel}</div>}
                                 </div>
                                 <span className="text-[10px] text-muted tabular-nums shrink-0" title={`${count} match${count === 1 ? "" : "es"}`}>
                                   {count}m
                                 </span>
-                              </div>
+                                {isPaused && <span className="text-[9px] text-amber-600 font-medium">⏸</span>}
+                              </button>
                             );
                           })}
                       </div>
