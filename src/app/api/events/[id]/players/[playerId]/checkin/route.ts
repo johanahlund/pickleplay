@@ -26,9 +26,10 @@ export async function POST(
     return NextResponse.json({ error: "Player is on waitlist — promote them first" }, { status: 400 });
   }
 
+  const newStatus = ep.status === "checked_in" ? "registered" : "checked_in";
   const updated = await prisma.eventPlayer.update({
     where: { id: ep.id },
-    data: { status: "checked_in" },
+    data: { status: newStatus },
   });
 
   return NextResponse.json({ status: updated.status });

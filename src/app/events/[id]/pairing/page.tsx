@@ -408,7 +408,7 @@ export default function PairingConfigPage() {
       return {
         ...prev,
         players: prev.players.map((ep) =>
-          ep.playerId === playerId ? { ...ep, status: "checked_in" } : ep,
+          ep.playerId === playerId ? { ...ep, status: ep.status === "checked_in" ? "registered" : "checked_in" } : ep,
         ),
       };
     });
@@ -1059,10 +1059,12 @@ export default function PairingConfigPage() {
                                       });
                                     } else {
                                       // Default: toggle check-in
-                                      if (isCheckedIn || isPaused) {
+                                      if (isCheckedIn) {
+                                        checkInPlayer(ep.playerId); // toggles back to registered
+                                      } else if (isPaused) {
                                         togglePausePlayer(ep.playerId);
                                       } else {
-                                        checkInPlayer(ep.playerId);
+                                        checkInPlayer(ep.playerId); // registered → checked_in
                                       }
                                     }
                                   }}
