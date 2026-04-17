@@ -1350,48 +1350,57 @@ export default function PairingConfigPage() {
 
         return (
           <div className="space-y-4">
-            {sittingOutPlayers.length > 0 && (active.length > 0 || pending.length > 0) && (
-              <div className="flex flex-wrap items-center gap-2 px-1">
-                <span className="text-xs font-bold text-muted uppercase tracking-wider">Sitting out ({sittingOutPlayers.length})</span>
-                {sittingOutPlayers.map((ep) => (
-                  <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
-                    className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1 active:bg-amber-100" title="Tap to pause">
-                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    <span className="text-[11px] font-medium">{ep.player.name}</span>
-                    <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {notCheckedInPlayers.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-1">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Not checked in ({notCheckedInPlayers.length})</span>
-                <button
-                  onClick={() => checkInAll(classPlayers)}
-                  className="text-[10px] bg-green-50 text-green-700 border border-green-300 px-2 py-0.5 rounded-full font-medium active:bg-green-200"
-                >
-                  Check in all
-                </button>
-                {notCheckedInPlayers.map((ep) => (
-                  <button key={ep.playerId} onClick={() => checkInPlayer(ep.playerId)}
-                    className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-1 opacity-60 active:opacity-100" title="Tap to check in">
-                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    <span className="text-[11px] font-medium">{ep.player.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {pausedPlayers.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 px-1">
-                <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Paused ({pausedPlayers.length})</span>
-                {pausedPlayers.map((ep) => (
-                  <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
-                    className="flex items-center gap-1 bg-amber-100 rounded-full px-2 py-1 opacity-60 active:opacity-100" title="Tap to unpause">
-                    <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
-                    <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
-                  </button>
-                ))}
+            {/* Sitting out + Paused — yellow band */}
+            {(sittingOutPlayers.length > 0 || pausedPlayers.length > 0 || notCheckedInPlayers.length > 0) && (
+              <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200 space-y-3">
+                {sittingOutPlayers.length > 0 && (
+                  <div>
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Sitting out ({sittingOutPlayers.length})</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {sittingOutPlayers.map((ep) => (
+                        <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
+                          className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1 active:bg-amber-100" title="Tap to pause">
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className="text-[11px] font-medium">{ep.player.name}</span>
+                          <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pausedPlayers.length > 0 && (
+                  <div>
+                    <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Paused ({pausedPlayers.length})</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {pausedPlayers.map((ep) => (
+                        <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
+                          className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70 active:opacity-100" title="Tap to unpause">
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
+                          <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {notCheckedInPlayers.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Not checked in ({notCheckedInPlayers.length})</span>
+                      <button onClick={() => checkInAll(classPlayers)}
+                        className="text-[10px] text-action font-medium">Check in all</button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {notCheckedInPlayers.map((ep) => (
+                        <button key={ep.playerId} onClick={() => checkInPlayer(ep.playerId)}
+                          className="flex items-center gap-1 bg-white/50 rounded-full px-2 py-1 opacity-50 active:opacity-100" title="Tap to check in">
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className="text-[11px] font-medium">{ep.player.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {active.length > 0 && (
