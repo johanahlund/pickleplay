@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
@@ -53,6 +53,7 @@ export default function EventsPageWrapper() {
 
 function EventsPage() {
   const { data: session } = useSession();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const legacyClubFilter = searchParams.get("club"); // backwards compat
   const userId = (session?.user as { id?: string } | undefined)?.id;
@@ -359,6 +360,7 @@ function EventsPage() {
       )}
 
       {/* Events list — hidden when filter panel is open */}
+      <div suppressHydrationWarning>
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
       ) : !showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
@@ -403,16 +405,15 @@ function EventsPage() {
                     {event.club && (
                       <div className="flex items-center gap-1 mb-0.5 text-[10px]">
                         {event.club && (
-                          <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()}
-                            className="text-muted font-medium hover:text-action">{event.club.emoji} {event.club.name}</Link>
+                          <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/clubs/${event.club!.id}`); }}
+                            className="text-muted font-medium hover:text-action cursor-pointer">{event.club.emoji} {event.club.name}</span>
                         )}
                         {event.club?.locations?.[0] && (
                           <>
                             <span className="text-muted">·</span>
                             {event.club.locations[0].googleMapsUrl ? (
-                              <a href={event.club.locations[0].googleMapsUrl} target="_blank" rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-action hover:underline">📍 {event.club.locations[0].name}</a>
+                              <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(event.club!.locations![0].googleMapsUrl!, "_blank"); }}
+                                className="text-action hover:underline cursor-pointer">📍 {event.club.locations[0].name}</span>
                             ) : (
                               <span className="text-muted">📍 {event.club.locations[0].name}</span>
                             )}
@@ -523,6 +524,7 @@ function EventsPage() {
           );
         })()
       ))}
+      </div>
     </div>
   );
 }
