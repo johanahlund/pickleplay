@@ -569,7 +569,7 @@ export function RallyTracker({
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <button onClick={() => { setSetupServer(null); setSetupReceiver(null); setPhase("pick-sides"); }} className="text-sm text-white/60 hover:text-white transition-colors">← Back</button>
+          <button onClick={() => { setSetupServer(null); setSetupReceiver(null); setPhase("pick-sides"); }} className="text-sm text-white/60 hover:text-white transition-colors">← Matches</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
           <button onClick={onClose} className="text-white/60 hover:text-white text-lg">✕</button>
         </div>
@@ -713,7 +713,7 @@ export function RallyTracker({
     <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
       {/* Compact header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
-        <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Back</button>
+        <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Matches</button>
         <span className="text-[10px] text-white/30">{formatLabel} · to {targetScore} · {history.length} rallies · {elapsedDisplay}</span>
         <button onClick={() => {
           if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
