@@ -3046,7 +3046,10 @@ export default function EventDetailPage() {
   if (activeSection !== "overview") {
     return (
       <div className="space-y-2">
-        {activeSection !== "rounds" && activeSection !== "manual" && (
+        {activeSection !== "rounds" && activeSection !== "manual" && (bulkSelectMode || showAddPlayer) && (
+          <div className="text-xs text-foreground/70 -mx-4 px-4 py-2">{event.name}</div>
+        )}
+        {activeSection !== "rounds" && activeSection !== "manual" && !bulkSelectMode && !showAddPlayer && (
           <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
             <div className="flex items-center justify-between">
             <div>
