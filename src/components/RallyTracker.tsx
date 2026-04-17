@@ -474,28 +474,39 @@ export function RallyTracker({
 
   // ── RENDER: Pick Sides ──
   if (phase === "pick-sides") {
+    // Smart short names for all players in the match
+    const allPlayers = [...team1Players, ...team2Players];
+    const fnCounts = new Map<string, number>();
+    for (const p of allPlayers) {
+      const fn = p.name.split(" ")[0];
+      fnCounts.set(fn, (fnCounts.get(fn) || 0) + 1);
+    }
+    const sn = (p: RallyPlayer) => {
+      const fn = p.name.split(" ")[0];
+      return (fnCounts.get(fn) || 0) > 1 ? p.name : fn;
+    };
+    const team1Names = team1Players.map(sn).join(" and ");
+
     return (
       <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <button onClick={onClose} className="text-sm text-white/60 hover:text-white transition-colors">← Match Overview</button>
+          <button onClick={onClose} className="text-sm text-white/60 hover:text-white transition-colors">← Matches</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
           <div className="w-16" />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5">
-          {/* Team A with side arrows */}
-          <div className="text-sm text-white font-medium mb--1">Which side is Team A on?</div>
-          <div className="flex items-center gap-3 w-full max-w-sm" style={{ display: "grid", gridTemplateColumns: "60px 1fr 60px" }}>
+          <div className="text-base text-white font-medium">Which side is {team1Names} on?</div>
+          <div className="w-full max-w-sm" style={{ display: "grid", gridTemplateColumns: "60px 1fr 60px", gap: "0.75rem", alignItems: "center" }}>
             <button onClick={() => { setSwapped(false); setPhase("setup-court"); }}
               className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 border-2 border-blue-400 rounded-xl px-5 py-4 transition-colors shadow-lg shadow-blue-500/30">
               <span className="text-3xl">←</span>
               <span className="text-sm font-bold text-white">Left</span>
             </button>
-            <div className="flex-1 bg-blue-900/40 border border-blue-500/40 rounded-xl px-4 py-3 text-center">
-              <div className="text-xs text-blue-400 uppercase tracking-wider mb-1">Team A</div>
+            <div className="bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-center">
               {team1Players.map((p, i) => (
                 <div key={p.id} className="flex flex-col items-center">
                   <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
-                  <div className="text-lg font-bold text-white mt-1">{p.name}</div>
+                  <div className="text-lg font-bold text-white mt-1">{sn(p)}</div>
                   {i < team1Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
                 </div>
               ))}
@@ -507,14 +518,14 @@ export function RallyTracker({
             </button>
           </div>
 
-          {/* Team B */}
+          <div className="text-xs text-white/30">vs</div>
+
           <div className="w-full max-w-sm">
-            <div className="bg-red-900/40 border border-red-500/40 rounded-xl px-4 py-3 text-center">
-              <div className="text-xs text-red-400 uppercase tracking-wider mb-1">Team B</div>
+            <div className="bg-white/5 border border-white/20 rounded-xl px-4 py-3 text-center">
               {team2Players.map((p, i) => (
                 <div key={p.id} className="flex flex-col items-center">
                   <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
-                  <div className="text-lg font-bold text-white mt-1">{p.name}</div>
+                  <div className="text-lg font-bold text-white mt-1">{sn(p)}</div>
                   {i < team2Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
                 </div>
               ))}
