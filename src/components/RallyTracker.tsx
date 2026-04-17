@@ -737,9 +737,11 @@ export function RallyTracker({
               <span className="font-bold" style={{ color: "rgb(74, 222, 128)",
                 fontSize: "5rem",
                 lineHeight: 1,
-                transform: serverOnLeft
-                  ? `rotate(${serverIsTop ? "20deg" : "-20deg"})`
-                  : `rotate(${serverIsTop ? "-20deg" : "20deg"})`,
+                transform: `${serverOnLeft ? "translateX(5%)" : "translateX(-5%)"} rotate(${
+                  serverOnLeft
+                    ? (serverIsTop ? "20deg" : "-20deg")
+                    : (serverIsTop ? "-20deg" : "20deg")
+                })`,
               }}>
                 {serverOnLeft ? "→" : "←"}
               </span>
