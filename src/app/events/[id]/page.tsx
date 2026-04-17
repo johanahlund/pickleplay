@@ -720,8 +720,7 @@ export default function EventDetailPage() {
     fetch(`/api/matches/${matchId}/players`, { method: "DELETE" }).then(() => fetchEvent());
   };
 
-  const removePlayer = async (playerId: string, playerName: string) => {
-    if (!await confirmDialog({ message: `Remove ${playerName} from this event?`, danger: true })) return;
+  const removePlayer = async (playerId: string, _playerName?: string) => {
     const r = await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json().catch(() => ({ error: "Failed to remove" }));
