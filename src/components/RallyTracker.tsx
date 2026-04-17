@@ -674,38 +674,32 @@ export function RallyTracker({
   const serverPlayer = findPlayer(court, serverId);
   const receiverPlayer = findPlayer(court, receiverId);
 
-  // Derive "what just happened" from history
-  // We compare the last two states. For the first rally, the "before" state
-  // is the initial game state (score 0-0, initial server).
+  // Derive "what just happened" from history.
+  // history[N] = state BEFORE rally N+1.  gameState = state AFTER last rally.
+  // Compare last history entry (before) with gameState (after) to see what changed.
   const lastActionText = (() => {
     if (history.length === 0) return "Match Start";
 
-    const cur = history[history.length - 1];
-    const before = history.length >= 2 ? history[history.length - 2] : initialGameState;
-    const beforeScore = before ? before.score : [0, 0] as [number, number];
-    const beforeServingTeam = before ? before.servingTeam : cur.servingTeam;
-    const beforeServerNumber = before ? before.serverNumber : cur.serverNumber;
+    const before = history[history.length - 1]; // state before the last rally
+    const after = gameState; // state after the last rally
 
-    const team1Scored = cur.score[0] > beforeScore[0];
-    const team2Scored = cur.score[1] > beforeScore[1];
+    const team1Scored = after.score[0] > before.score[0];
+    const team2Scored = after.score[1] > before.score[1];
 
     if (team1Scored || team2Scored) {
-      // Find a player to name from the scoring team
-      const scoringTeam = team1Scored ? 1 : 2;
-      // The server of the scoring team is the one who earned the point
-      const curCourt = cur.court;
-      if (scoringTeam === cur.servingTeam) {
-        // Server scored — they're still serving (server didn't change)
-        const scorer = findPlayer(curCourt, cur.serverId);
-        return `Point to ${shortName(scorer)}`;
+      // Someone scored. In side-out scoring, only the server scores.
+      // Name the server from the BEFORE state (they won the rally).
+      const beforeServer = findPlayer(before.court, before.serverId);
+      if (isRally && (team1Scored ? 1 : 2) !== before.servingTeam) {
+        // Rally scoring: non-serving team scored = they won the rally + side out
+        return `Point — side out`;
       }
-      // In rally scoring: other team won the rally
-      return `Point — side out`;
+      return `Point to ${shortName(beforeServer)}`;
     }
 
-    // No score change = side out or server switch
-    if (cur.servingTeam !== beforeServingTeam) return "Side out";
-    if (isDoubles && !isRally && cur.serverNumber !== beforeServerNumber) return "2nd Server";
+    // No score change = serving team lost the rally
+    if (after.servingTeam !== before.servingTeam) return "Side out";
+    if (isDoubles && !isRally && after.serverNumber !== before.serverNumber) return "2nd Server";
     return "Side out";
   })();
 
