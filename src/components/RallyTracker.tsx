@@ -660,7 +660,9 @@ export function RallyTracker({
             ? "border-2 border-white/40 bg-white/5"
             : "border border-white/10 bg-white/5"
       }`}>
-        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
+        <span className={isServer || isReceiver ? "" : "opacity-30"}>
+          <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
+        </span>
         <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-white/80" : "text-base text-white/40"}`}>
           {shortName(player)}
         </span>
