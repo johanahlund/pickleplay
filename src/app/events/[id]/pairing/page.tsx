@@ -696,11 +696,9 @@ export default function PairingConfigPage() {
   return (
     <div className="space-y-4 pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview {event ? <span className="text-xs text-muted font-normal">({event.name})</span> : null}</Link>
-          <h2 className="text-xl font-bold mt-1">Pairing: {event.name}</h2>
-        </div>
+      <div>
+        <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
+        <h2 className="text-sm font-bold text-center mt-1">{event.name}</h2>
       </div>
 
       {/* Class picker */}

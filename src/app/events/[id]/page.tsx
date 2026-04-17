@@ -1203,12 +1203,7 @@ export default function EventDetailPage() {
   const sectionBar = (
     <div className="sticky z-30 bg-background pb-2 -mx-4 px-4 pt-1 shadow-sm" style={{ top: "var(--header-height, 0px)" }}>
       <div className="text-center pb-1">
-        <span className="text-xs font-semibold">{event.name}</span>
-        <span className="text-[10px] text-muted ml-1.5">
-          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-          {" "}
-          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-        </span>
+        <div className="text-sm font-bold">{event.name}</div>
       </div>
       <div className="flex gap-1">
         {sectionOrder
@@ -3064,7 +3059,7 @@ export default function EventDetailPage() {
                 startEditEvent();
               }
               setActiveSection("overview");
-            }} className="text-sm text-action font-medium">← Event Overview <span className="text-xs text-muted font-normal">({event.name})</span></button>
+            }} className="text-sm text-action font-medium">← Event Overview</button>
           </div>
         )}
 
