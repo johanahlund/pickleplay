@@ -1334,7 +1334,10 @@ export default function EventDetailPage() {
               <span className="font-medium">{event.club.locations[0].name}</span>
             </div>
           ) : (
-            <select className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <select
+              onChange={() => setHasEdits(true)}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
               {event.club.locations.map((loc: { id: string; name: string }) => (
                 <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
               ))}
@@ -3072,28 +3075,6 @@ export default function EventDetailPage() {
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
 
-        {/* Save / Cancel buttons for editable sections */}
-        {saveSections.has(activeSection) && (
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={async () => {
-                setSaving(true);
-                await saveEditEvent();
-                setTimeout(() => { setSaving(false); setActiveSection("overview"); }, 600);
-              }}
-              disabled={!hasEdits}
-              className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-base active:bg-action-dark disabled:opacity-40"
-            >
-              {saving ? "Saved ✓" : "Save"}
-            </button>
-            <button
-              onClick={() => { startEditEvent(); setActiveSection("overview"); }}
-              className="px-6 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
         {activeSection === "competition" && event && (
           <div className="space-y-3">
             {/* Ranking — always shown */}

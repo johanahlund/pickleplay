@@ -27,10 +27,6 @@ export default function LeaderboardPage() {
       });
   }, []);
 
-  if (loading) {
-    return <div className="text-center py-12 text-muted">Loading...</div>;
-  }
-
   const ranked = players
     .filter((p) => p.wins + p.losses > 0)
     .sort((a, b) => b.rating - a.rating);
@@ -48,7 +44,11 @@ export default function LeaderboardPage() {
     <div className="space-y-4">
       <h2 className="text-xl font-bold">🏆 Leaderboard</h2>
 
-      {ranked.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : ranked.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">🏆</div>
           <p className="text-muted">No ranked players yet.</p>

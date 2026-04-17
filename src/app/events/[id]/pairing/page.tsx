@@ -550,7 +550,14 @@ export default function PairingConfigPage() {
     setLocks((prev) => prev.filter((l) => l.id !== lockId));
   };
 
-  if (!event) return <div className="p-4 text-muted text-sm">Loading...</div>;
+  if (!event) return (
+    <div className="space-y-4">
+      <Link href={`/events/${id}`} className="text-sm text-action">&larr; Back to event</Link>
+      <div className="flex justify-center py-8">
+        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+      </div>
+    </div>
+  );
 
   if (showManual && event) {
     const activePlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");

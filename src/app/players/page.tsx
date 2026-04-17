@@ -174,10 +174,6 @@ export default function PlayersPage() {
 
   const isUnclaimed = (p: Player) => !p.hasAccount;
 
-  if (loading) {
-    return <div className="text-center py-12 text-muted">Loading...</div>;
-  }
-
   // All distinct clubs that appear in the loaded player list (for the filter dropdown).
   const allClubs = Array.from(
     new Map(
@@ -194,7 +190,7 @@ export default function PlayersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Players ({searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})</h2>
+        <h2 className="text-2xl font-bold">Players {!loading && `(${searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})`}</h2>
         {isAdmin && (
           <Link
             href="/players/new"
@@ -236,7 +232,11 @@ export default function PlayersPage() {
         ))}
       </div>
 
-      {players.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : players.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">👥</div>
           <p className="text-muted">No players yet. Add some!</p>

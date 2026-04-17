@@ -43,7 +43,16 @@ export default function JoinClubPage() {
   };
 
   if (loading) {
-    return <div className="text-center py-20 text-muted">Loading...</div>;
+    return (
+      <div className="max-w-sm mx-auto py-12 space-y-6">
+        <div className="text-center space-y-3">
+          <h1 className="text-2xl font-bold">Join Club</h1>
+        </div>
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
   }
 
   if (error) {

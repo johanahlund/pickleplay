@@ -178,7 +178,14 @@ export default function LeagueDetailPage() {
   const fetchPlayers = async () => { if (allPlayers.length) return; const r = await fetch("/api/players"); if (r.ok) setAllPlayers(await r.json()); };
   const fetchClubs = async () => { if (allClubs.length) return; const r = await fetch("/api/clubs"); if (r.ok) setAllClubs(await r.json()); };
 
-  if (loading || !league) return <div className="text-center py-12 text-muted">Loading...</div>;
+  if (loading || !league) return (
+    <div className="space-y-4">
+      <Link href="/leagues" className="text-sm text-action">&larr; Leagues</Link>
+      <div className="flex justify-center py-8">
+        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+      </div>
+    </div>
+  );
 
   const isAppAdmin = userRole === "admin" && hasRole(viewRole, "admin");
   const isDirector = league.createdBy?.id === userId;

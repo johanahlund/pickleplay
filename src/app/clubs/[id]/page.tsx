@@ -656,7 +656,11 @@ export default function ClubDetailPage() {
         </div>
       );
     }
-    return <div className="text-center py-12 text-muted">Loading...</div>;
+    return (
+      <div className="flex justify-center py-8">
+        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;

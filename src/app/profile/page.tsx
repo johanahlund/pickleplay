@@ -77,7 +77,15 @@ export default function ProfilePage() {
   }, [userId]);
 
   if (!session?.user) return <p className="text-center py-12 text-muted">Please sign in</p>;
-  if (loading) return <p className="text-center py-12 text-muted">Loading...</p>;
+
+  if (loading) return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-bold text-center">My Profile</h2>
+      <div className="flex justify-center py-8">
+        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+      </div>
+    </div>
+  );
 
   const totalWins = ratings?.legacy.wins || 0;
   const totalLosses = ratings?.legacy.losses || 0;

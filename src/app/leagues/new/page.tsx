@@ -70,7 +70,14 @@ export default function NewLeaguePage() {
   };
 
   if (loadingClubs) {
-    return <div className="p-4 text-sm text-muted">Loading...</div>;
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold">Create League</h2>
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
   }
 
   if (ownedClubs.length === 0) {

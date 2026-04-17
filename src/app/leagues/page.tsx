@@ -37,8 +37,6 @@ export default function LeaguesPage() {
     });
   }, [session, userRole]);
 
-  if (loading) return <div className="text-center py-12 text-muted">Loading...</div>;
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -48,7 +46,11 @@ export default function LeaguesPage() {
         )}
       </div>
 
-      {leagues.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : leagues.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted text-sm">No leagues yet</p>
         </div>
