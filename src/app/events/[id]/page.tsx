@@ -2063,6 +2063,8 @@ export default function EventDetailPage() {
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key)!.push(ep);
           }
+          const playerMatchCounts = new Map<string, number>();
+          for (const m of event.matches) for (const p of m.players) playerMatchCounts.set(p.playerId, (playerMatchCounts.get(p.playerId) || 0) + 1);
           const rows: { key: number | "unset"; label: string }[] = [
             { key: 5, label: "L5" },
             { key: 4, label: "L4" },
@@ -2141,35 +2143,18 @@ export default function EventDetailPage() {
                 const isOver = levelDragOver === row.key;
                 const isEmpty = eps.length === 0;
                 const expanded = expandedEmptyLevels.has(row.key);
-                const collapsed = isEmpty && !expanded && !pickingTap && !levelDragId && !levelEditMode;
-
-                if (collapsed) {
-                  return (
-                    <div
-                      key={String(row.key)}
-                      onClick={() => setExpandedEmptyLevels((prev) => new Set(prev).add(row.key))}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (levelDragOver !== row.key) setLevelDragOver(row.key); }}
-                      onDragLeave={() => setLevelDragOver(null)}
-                      onDrop={(e) => { e.preventDefault(); handleDrop(row.key); }}
-                      className={`flex items-center justify-between bg-card rounded-lg border border-border px-3 py-1.5 cursor-pointer transition-colors ${isOver ? "border-action bg-action/10" : "hover:bg-gray-50"}`}
-                    >
-                      <span className={`text-xs font-semibold ${row.key === "unset" ? "text-muted" : "text-muted"}`}>
-                        {row.label} <span className="text-[10px] font-normal">(empty)</span>
-                      </span>
-                      <span className="text-[10px] text-muted">tap to open</span>
-                    </div>
-                  );
-                }
+                if (isEmpty && !levelEditMode) return null;
 
                 return (
                   <div
                     key={String(row.key)}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (levelDragOver !== row.key) setLevelDragOver(row.key); }}
-                    onDragLeave={() => setLevelDragOver(null)}
-                    onDrop={(e) => { e.preventDefault(); handleDrop(row.key); }}
-                    className={`bg-card rounded-xl border-2 p-3 transition-colors ${
-                      isOver ? "border-action bg-action/10"
-                        : pickingTap ? "border-action border-dashed"
+                    onDragOver={levelEditMode ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (levelDragOver !== row.key) setLevelDragOver(row.key); } : undefined}
+                    onDragLeave={levelEditMode ? () => setLevelDragOver(null) : undefined}
+                    onDrop={levelEditMode ? (e) => { e.preventDefault(); handleDrop(row.key); } : undefined}
+                    onClick={levelEditMode && pickingTap ? () => assignLevel(Array.from(levelSelectedIds), row.key) : undefined}
+                    className={`bg-card rounded-xl border p-3 transition-colors ${
+                      isOver ? "border-action border-2 bg-action/10"
+                        : levelEditMode && pickingTap ? "border-action border-dashed border-2"
                         : "border-border"
                     }`}
                   >
@@ -2177,7 +2162,7 @@ export default function EventDetailPage() {
                       <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>
                         {row.label}
                       </span>
-                      {pickingTap ? (
+                      {levelEditMode && pickingTap ? (
                         <button
                           onClick={(e) => { e.stopPropagation(); assignLevel(Array.from(levelSelectedIds), row.key); }}
                           className="bg-action text-white text-[11px] font-semibold px-3 py-1 rounded-full active:bg-action-dark"
@@ -2257,15 +2242,13 @@ export default function EventDetailPage() {
                                   }`}
                                   title={isPaused ? "Tap to unpause" : "Tap to pause"}
                                 >
-                                  {typeof ep.player.rating === "number" && (
-                                    <span className="text-[10px] tabular-nums">{Math.round(ep.player.rating)}</span>
-                                  )}
+                                  <span className="text-[10px] tabular-nums">{playerMatchCounts.get(ep.player.id) || 0}m</span>
                                   <span className="text-[9px]">⏸</span>
                                 </button>
                               )}
-                              {levelEditMode && typeof ep.player.rating === "number" && (
+                              {levelEditMode && (
                                 <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : "text-muted"}`}>
-                                  {Math.round(ep.player.rating)}
+                                  {playerMatchCounts.get(ep.player.id) || 0}m
                                 </span>
                               )}
                             </div>
