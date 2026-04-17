@@ -151,7 +151,7 @@ export default function PairingConfigPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [locks, setLocks] = useState<PairLockDTO[]>([]);
   const [editingLocks, setEditingLocks] = useState(false);
-  const [subPage, setSubPage] = useState<null | "pool" | "settings">(null);
+  const [subPage, setSubPage] = useState<null | "settings">(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [levelEditMode, setLevelEditMode] = useState(false);
   const [levelSelectedIds, setLevelSelectedIds] = useState<Set<string>>(new Set());
@@ -693,84 +693,12 @@ export default function PairingConfigPage() {
     );
   }
 
-  // ── Sub-page: Pool Analysis ──
-  if (subPage === "pool" && analysis) {
-    const skillDist = analysis.pool.skillDistribution as Record<number, number>;
-    const levelsWithPlayers = [5, 4, 3, 2, 1].filter((l) => (skillDist[l] || 0) > 0);
-    const max = analysis.feasibility.maxCleanRounds;
-    const simulated = analysis.feasibility.simulatedRounds;
-    const first = analysis.feasibility.firstViolation;
-    type Bullet = { tone: "ok" | "warn" | "bad"; text: string; indent?: boolean };
-    const bullets: Bullet[] = [];
-    const active = analysis.pool.active;
-    if (active < 4) {
-      bullets.push({ tone: "bad", text: "Not enough active players — need at least 4 for doubles." });
-    } else if (max === 0) {
-      bullets.push({ tone: "bad", text: "Current settings conflict immediately — no clean round is possible." });
-      if (first.skill) bullets.push({ tone: "bad", text: "Widen the Skill window.", indent: true });
-      if (first.variety != null && first.variety <= 1) bullets.push({ tone: "bad", text: "Widen the Variety window.", indent: true });
-    } else if (max >= simulated) {
-      bullets.push({ tone: "ok", text: `Looks good — ${simulated}+ clean rounds possible.` });
-    } else {
-      bullets.push({ tone: "warn", text: `Clean for ${max} round${max === 1 ? "" : "s"}, then trade-offs start.` });
-      if (first.variety) bullets.push({ tone: "warn", text: `Opponent repeats forced at round ${first.variety}.`, indent: true });
-      if (first.skill) bullets.push({ tone: "warn", text: `Skill mismatches forced at round ${first.skill}.`, indent: true });
-    }
-    for (const w of analysis.warnings) bullets.push({ tone: "warn", text: w });
-    const dot = (tone: Bullet["tone"]) => tone === "ok" ? "text-green-600" : tone === "warn" ? "text-yellow-600" : "text-red-600";
-    return (
-      <div className="space-y-4 pb-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Pool Analysis</h2>
-          <button onClick={() => setSubPage(null)} className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
-        </div>
-        <div className="text-xs text-foreground/70">{event.name}</div>
-        {analyzing && <p className="text-xs text-muted">Updating...</p>}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="text-xs">
-              <div className="font-medium">{active} active</div>
-              <div className="text-muted">
-                {analysis.pool.genderCounts.M}M · {analysis.pool.genderCounts.F}F
-                {analysis.pool.genderCounts.unknown > 0 && ` · ${analysis.pool.genderCounts.unknown} ?`}
-                {analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}
-              </div>
-            </div>
-            <div className="text-xs">
-              <div className="font-medium">Skill</div>
-              <div className="text-muted">
-                {levelsWithPlayers.length === 0 ? "—" : levelsWithPlayers.map((l) => `${skillDist[l]}×L${l}`).join(" · ")}
-              </div>
-            </div>
-            <div className="text-xs">
-              <div className="font-medium">Capacity</div>
-              <div className="text-muted">
-                {analysis.capacity.playersPerRound}/round
-                {analysis.capacity.sitOutPerRound > 0 && ` · ${analysis.capacity.sitOutPerRound} sit out`}
-              </div>
-            </div>
-            <div className="text-xs">
-              <div className="font-medium">Clean rounds</div>
-              <div className="text-muted">{max >= simulated ? `${simulated}+` : max}</div>
-            </div>
-          </div>
-          {bullets.length > 0 && (
-            <ul className="pt-2 border-t border-border space-y-1">
-              {bullets.map((b, i) => (
-                <li key={i} className={`text-xs flex gap-1.5 ${b.indent ? "pl-4" : ""}`}>
-                  <span className={`${dot(b.tone)} shrink-0`}>•</span>
-                  <span className="text-foreground">{b.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    );
-  }
 
-  // ── Sub-page: Pairing Settings + Constraints ──
-  if (subPage === "settings") {
+
+  // ── Sub-page: Pairing Settings + Constraints + Pool Analysis ──
+  if (subPage === "settings" || subPage === "pool") {
+    const modeLabel = `${settings.base.charAt(0).toUpperCase() + settings.base.slice(1)}${settings.base !== "manual" ? ` · ${settings.teams === "fixed" ? "Fixed" : "Rotating"} · ${settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}` : ""}`;
+    const constraintLabel = `Skill ±${settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety ±${settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}`;
     return (
       <div className="space-y-4 pb-6">
         <div className="flex items-center justify-between">
@@ -779,78 +707,135 @@ export default function PairingConfigPage() {
         </div>
         <div className="text-xs text-foreground/70">{event.name}</div>
 
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Mode & Teams</h3>
-          <SegPicker label="Base mode" value={settings.base}
-            onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
-            options={[
-              { value: "random", label: "Random" }, { value: "swiss", label: "Swiss" },
-              { value: "king", label: "King" }, { value: "manual", label: "Manual" },
-            ]}
-          />
-          {settings.base !== "manual" && settings.base !== "king" && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs text-muted">Teams</label>
-                <button type="button" onClick={() => setEditingLocks(true)}
-                  className="flex items-center gap-1 text-[11px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10">
-                  Pair locks {locks.length > 0 && `(${locks.length})`}
-                </button>
-              </div>
-              <div className="flex gap-1">
-                {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
-                  <button key={v} type="button" onClick={() => setSettings((s) => ({ ...s, teams: v as Teams }))}
-                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                      settings.teams === v ? "bg-action text-white" : "bg-gray-100 text-foreground"
-                    }`}>{label}</button>
-                ))}
-              </div>
-              {locks.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {locks.map((l) => (
-                    <div key={l.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 text-[11px]">
-                      <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
-                      <span className="font-medium">{l.playerA.name}</span>
-                      <span className="text-muted">+</span>
-                      <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
-                      <span className="font-medium flex-1">{l.playerB.name}</span>
+        {/* Mode & Teams — collapsible */}
+        <div>
+          <button onClick={() => toggleCollapsed("s-mode")}
+            className="flex items-center justify-between w-full text-left py-1">
+            <span className="flex items-center gap-1 text-sm font-bold">
+              <span className={`transition-transform ${collapsed.has("s-mode") ? "" : "rotate-90"}`}>›</span>
+              Mode & Teams
+            </span>
+            {collapsed.has("s-mode") && <span className="text-[10px] text-muted">{modeLabel}</span>}
+          </button>
+          {!collapsed.has("s-mode") && (
+            <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+              <SegPicker label="Base mode" value={settings.base}
+                onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
+                options={[
+                  { value: "random", label: "Random" }, { value: "swiss", label: "Swiss" },
+                  { value: "king", label: "King" }, { value: "manual", label: "Manual" },
+                ]}
+              />
+              {settings.base !== "manual" && settings.base !== "king" && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs text-muted">Teams</label>
+                    <button type="button" onClick={() => setEditingLocks(true)}
+                      className="flex items-center gap-1 text-[11px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10">
+                      Pair locks {locks.length > 0 && `(${locks.length})`}
+                    </button>
+                  </div>
+                  <div className="flex gap-1">
+                    {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
+                      <button key={v} type="button" onClick={() => setSettings((s) => ({ ...s, teams: v as Teams }))}
+                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                          settings.teams === v ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                        }`}>{label}</button>
+                    ))}
+                  </div>
+                  {locks.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {locks.map((l) => (
+                        <div key={l.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 text-[11px]">
+                          <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
+                          <span className="font-medium">{l.playerA.name}</span>
+                          <span className="text-muted">+</span>
+                          <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
+                          <span className="font-medium flex-1">{l.playerB.name}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
+              )}
+              {settings.base !== "manual" && (
+                <SegPicker label="Gender" value={settings.gender}
+                  onChange={(v) => setSettings((s) => ({ ...s, gender: v as Gender }))}
+                  options={[
+                    { value: "random", label: "Any" }, { value: "mixed", label: "Mixed" }, { value: "same", label: "Same" },
+                  ]}
+                />
               )}
             </div>
           )}
-          {settings.base !== "manual" && (
-            <SegPicker label="Gender" value={settings.gender}
-              onChange={(v) => setSettings((s) => ({ ...s, gender: v as Gender }))}
-              options={[
-                { value: "random", label: "Any" }, { value: "mixed", label: "Mixed" }, { value: "same", label: "Same" },
-              ]}
-            />
-          )}
         </div>
 
+        {/* Constraints — collapsible */}
         {settings.base !== "manual" && (
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Constraints</h3>
-            {settings.base !== "swiss" && (
-              <WindowPicker label="Skill window" help="How close in skill level must players be?"
-                value={settings.skillWindow} onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))} />
-            )}
-            <WindowPicker label="Variety window" help="How many partner/opponent repeats allowed"
-              value={settings.varietyWindow} onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))} />
-            <details className="group">
-              <summary className="text-[11px] text-muted cursor-pointer list-none flex items-center gap-1 select-none">
-                <span className="group-open:rotate-90 transition-transform">›</span>
-                Advanced fairness
-              </summary>
-              <div className="mt-3 space-y-3">
-                <WindowPicker label="Match count window" help="Max gap from average matches played (global fairness)"
-                  value={settings.matchCountWindow} onChange={(v) => setSettings((s) => ({ ...s, matchCountWindow: v }))} />
-                <WindowPicker label="Max consecutive sit-outs" help="Max rounds a player may sit out in a row"
-                  value={settings.maxWaitWindow} onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))} />
+          <div>
+            <button onClick={() => toggleCollapsed("s-constraints")}
+              className="flex items-center justify-between w-full text-left py-1">
+              <span className="flex items-center gap-1 text-sm font-bold">
+                <span className={`transition-transform ${collapsed.has("s-constraints") ? "" : "rotate-90"}`}>›</span>
+                Constraints
+              </span>
+              {collapsed.has("s-constraints") && <span className="text-[10px] text-muted">{constraintLabel}</span>}
+            </button>
+            {!collapsed.has("s-constraints") && (
+              <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+                {settings.base !== "swiss" && (
+                  <WindowPicker label="Skill window" help="How close in skill level must players be?"
+                    value={settings.skillWindow} onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))} />
+                )}
+                <WindowPicker label="Variety window" help="How many partner/opponent repeats allowed"
+                  value={settings.varietyWindow} onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))} />
+                <details className="group">
+                  <summary className="text-[11px] text-muted cursor-pointer list-none flex items-center gap-1 select-none">
+                    <span className="group-open:rotate-90 transition-transform">›</span>
+                    Advanced fairness
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <WindowPicker label="Match count window" help="Max gap from average matches played (global fairness)"
+                      value={settings.matchCountWindow} onChange={(v) => setSettings((s) => ({ ...s, matchCountWindow: v }))} />
+                    <WindowPicker label="Max consecutive sit-outs" help="Max rounds a player may sit out in a row"
+                      value={settings.maxWaitWindow} onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))} />
+                  </div>
+                </details>
               </div>
-            </details>
+            )}
+          </div>
+        )}
+
+        {/* Pool Analysis — below constraints */}
+        {analysis && (
+          <div>
+            <button onClick={() => toggleCollapsed("s-pool")}
+              className="flex items-center gap-1 text-sm font-bold w-full text-left py-1">
+              <span className={`transition-transform ${collapsed.has("s-pool") ? "" : "rotate-90"}`}>›</span>
+              Pool Analysis
+              {analyzing && <span className="text-[10px] text-muted font-normal ml-2">Updating...</span>}
+            </button>
+            {!collapsed.has("s-pool") && (() => {
+              const skillDist = analysis.pool.skillDistribution as Record<number, number>;
+              const levelsWithPlayers = [5, 4, 3, 2, 1].filter((l) => (skillDist[l] || 0) > 0);
+              const active = analysis.pool.active;
+              const max = analysis.feasibility.maxCleanRounds;
+              const simulated = analysis.feasibility.simulatedRounds;
+              return (
+                <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="text-xs"><div className="font-medium">{active} active</div>
+                      <div className="text-muted">{analysis.pool.genderCounts.M}M · {analysis.pool.genderCounts.F}F{analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}</div></div>
+                    <div className="text-xs"><div className="font-medium">Skill</div>
+                      <div className="text-muted">{levelsWithPlayers.length === 0 ? "—" : levelsWithPlayers.map((l) => `${skillDist[l]}×L${l}`).join(" · ")}</div></div>
+                    <div className="text-xs"><div className="font-medium">Capacity</div>
+                      <div className="text-muted">{analysis.capacity.playersPerRound}/round{analysis.capacity.sitOutPerRound > 0 && ` · ${analysis.capacity.sitOutPerRound} sit out`}</div></div>
+                    <div className="text-xs"><div className="font-medium">Clean rounds</div>
+                      <div className="text-muted">{max >= simulated ? `${simulated}+` : max}</div></div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -913,19 +898,12 @@ export default function PairingConfigPage() {
         </div>
       )}
 
-      {/* Action buttons: Pool Analysis + Pairing Settings */}
-      <div className="flex gap-2">
-        <button onClick={() => setSubPage("pool")}
-          className="flex-1 text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
-          Pool Analysis
-          {analysis && <span className="block text-[9px] text-muted font-normal mt-0.5">{analysis.pool.active} active · {analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean</span>}
-        </button>
-        <button onClick={() => setSubPage("settings")}
-          className="flex-1 text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
-          Pairing Settings
-          <span className="block text-[9px] text-muted font-normal mt-0.5 capitalize">{settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}</span>
-        </button>
-      </div>
+      {/* Pairing Settings button */}
+      <button onClick={() => setSubPage("settings")}
+        className="w-full text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
+        Pairing Settings
+        <span className="block text-[9px] text-muted font-normal mt-0.5 capitalize">{settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}</span>
+      </button>
 
 
 
@@ -937,12 +915,21 @@ export default function PairingConfigPage() {
           Players ({classPlayers.length})
         </button>
         {!collapsed.has("players") && (
-          <button
-            onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
-            className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
-          >
-            {levelEditMode ? "Done" : "Edit levels"}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {event.players.some((ep) => ep.status === "registered") && !levelEditMode && (
+              <button onClick={() => checkInAll(classPlayers)}
+                className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg">
+                <span className="w-2.5 h-2.5 bg-green-500 text-white rounded-full inline-flex items-center justify-center text-[6px] font-bold mr-0.5">✓</span>
+                Check in all
+              </button>
+            )}
+            <button
+              onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
+              className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
+            >
+              {levelEditMode ? "Done" : "Edit levels"}
+            </button>
+          </div>
         )}
       </div>
       {!collapsed.has("players") && (
