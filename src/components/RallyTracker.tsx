@@ -865,9 +865,8 @@ export function RallyTracker({
         )}
       </div>
 
-      {/* Score + undo/redo + status messages */}
-      <div className="px-4 py-2 space-y-2">
-        {/* Score aligned under court halves */}
+      {/* Score — closer to court */}
+      <div className="px-4 pt-1 pb-0">
         {(() => {
           const leftTeamNum = swapped ? 2 : 1;
           const rightTeamNum = swapped ? 1 : 2;
@@ -901,16 +900,17 @@ export function RallyTracker({
           );
         })()}
 
-        {/* Status: what happened + what's next */}
-        {phase === "playing" && (
-          <div className="text-center space-y-1">
-            <div className="text-base font-bold text-white">{lastActionText}</div>
-            <div className="text-base text-white/80">
-              {shortName(serverPlayer)} serves from the {serverSide} to {shortName(receiverPlayer)}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Status: what happened + what's next — pushed down */}
+      {phase === "playing" && (
+        <div className="text-center space-y-1 px-4 mt-4">
+          <div className="text-base font-bold text-white">{lastActionText}</div>
+          <div className="text-base text-white/80">
+            {shortName(serverPlayer)} serves from the {serverSide} to {shortName(receiverPlayer)}
+          </div>
+        </div>
+      )}
 
       {/* Action buttons */}
       {phase === "playing" && (
