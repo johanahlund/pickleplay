@@ -3066,7 +3066,7 @@ export default function EventDetailPage() {
             {activeSection === "players" && canManage && !bulkSelectMode && !showAddPlayer && (
               <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
                 className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
-                + Player
+                +/- Player
               </button>
             )}
             </div>
