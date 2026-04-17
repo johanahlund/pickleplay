@@ -150,37 +150,22 @@ function SwipeRow({ player, direction, onAction, needsConfirm }: {
 type FilterMode = "all" | "recent" | "club";
 
 function InEventGrid({ players, onRemove }: { players: Player[]; onRemove: (id: string) => void }) {
-  const [confirmId, setConfirmId] = useState<string | null>(null);
   const lastTapRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
-  useEffect(() => {
-    if (!confirmId) return;
-    const t = setTimeout(() => setConfirmId(null), 3000);
-    return () => clearTimeout(t);
-  }, [confirmId]);
   return (
     <div className="grid grid-cols-2 gap-px">
       {players.map((p) => (
         <button key={p.id} onClick={() => {
-          if (confirmId === p.id) {
-            setConfirmId(null);
-            onRemove(p.id);
-            return;
-          }
           const now = Date.now();
           if (lastTapRef.current.id === p.id && now - lastTapRef.current.time < 400) {
-            setConfirmId(p.id);
             lastTapRef.current = { id: "", time: 0 };
+            if (confirm(`Remove ${p.name} from event?`)) onRemove(p.id);
           } else {
             lastTapRef.current = { id: p.id, time: now };
           }
         }}
-          className={`flex items-center gap-1 py-1 px-1 rounded transition-colors min-w-0 ${
-            confirmId === p.id ? "bg-red-100" : ""
-          }`}>
+          className="flex items-center gap-1 py-1 px-1 rounded min-w-0">
           <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
-          <span className={`text-[9px] font-medium truncate ${confirmId === p.id ? "text-danger" : ""}`}>
-            {confirmId === p.id ? "Remove?" : p.name}
-          </span>
+          <span className="text-[9px] font-medium truncate">{p.name}</span>
         </button>
       ))}
     </div>
