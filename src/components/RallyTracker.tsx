@@ -854,6 +854,17 @@ export function RallyTracker({
         );
       })()}
 
+      {/* Rally counter — between court and score */}
+      <div className="text-center">
+        {gamePointActive && !winner ? (
+          <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
+        ) : (
+          <span className="text-base text-white/60 font-medium">
+            {redoStack.length === 0 ? `Rally ${history.length + 1}` : `Rally ${history.length}`}
+          </span>
+        )}
+      </div>
+
       {/* Score + undo/redo + status messages */}
       <div className="px-4 py-2 space-y-2">
         {/* Score aligned under court halves */}
@@ -889,17 +900,6 @@ export function RallyTracker({
             </div>
           );
         })()}
-
-        {/* Rally counter — same font color as player names */}
-        <div className="text-center">
-          {gamePointActive && !winner ? (
-            <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
-          ) : (
-            <span className="text-base text-white/60 font-medium">
-              {redoStack.length === 0 ? `Rally ${history.length + 1}` : `Rally ${history.length}`}
-            </span>
-          )}
-        </div>
 
         {/* Status: what happened + what's next */}
         {phase === "playing" && (
