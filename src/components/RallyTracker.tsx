@@ -732,18 +732,12 @@ export function RallyTracker({
 
         return (
           <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
-            {/* Serve arrow — centered on net, angled from server to receiver */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <span className="font-bold" style={{
-                color: "rgb(74, 222, 128)",
-                fontSize: "3rem",
-                lineHeight: 1,
-                transform: `translateY(${serverIsTop ? "-20%" : "20%"}) rotate(${
-                  serverOnLeft
-                    ? (serverIsTop ? "20deg" : "-20deg")
-                    : (serverIsTop ? "-20deg" : "20deg")
-                })`,
-              }}>
+            {/* Serve direction — small arrow on the net line */}
+            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-20" style={{
+              top: serverIsTop ? "15%" : undefined,
+              bottom: serverIsTop ? undefined : "15%",
+            }}>
+              <span style={{ color: "rgb(74, 222, 128)", fontSize: "1.5rem" }}>
                 {serverOnLeft ? "→" : "←"}
               </span>
             </div>
