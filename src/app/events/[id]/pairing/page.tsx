@@ -554,6 +554,8 @@ export default function PairingConfigPage() {
 
   if (showManual && event) {
     const activePlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+    const manualMatchCounts = new Map<string, number>();
+    for (const m of event.matches) for (const p of m.players) manualMatchCounts.set(p.playerId, (manualMatchCounts.get(p.playerId) || 0) + 1);
     return (
       <div className="space-y-4 pb-6">
         <div className="flex items-center justify-between">
@@ -583,14 +585,14 @@ export default function PairingConfigPage() {
             <div>
               <label className="block text-sm font-semibold text-foreground mb-1">Team 1</label>
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {activePlayers.map((ep) => (
+                {activePlayers.filter((ep) => !manualTeam2.includes(ep.playerId)).map((ep) => (
                   <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 1)}
-                    className={`w-full text-left text-base py-2 px-2 rounded transition-all flex items-center gap-1.5 ${
-                      manualTeam1.includes(ep.playerId) ? "bg-blue-100 text-blue-800 font-medium"
-                      : manualTeam2.includes(ep.playerId) ? "opacity-30" : "hover:bg-gray-50"
-                    }`} disabled={manualTeam2.includes(ep.playerId)}>
+                    className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
+                      manualTeam1.includes(ep.playerId) ? "bg-blue-100 text-blue-800 font-medium" : "hover:bg-gray-50"
+                    }`}>
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    {ep.player.name}
+                    <span className="truncate flex-1">{ep.player.name}</span>
+                    <span className="text-[10px] text-muted tabular-nums shrink-0">{manualMatchCounts.get(ep.playerId) || 0}m</span>
                   </button>
                 ))}
               </div>
@@ -598,14 +600,14 @@ export default function PairingConfigPage() {
             <div>
               <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {activePlayers.map((ep) => (
+                {activePlayers.filter((ep) => !manualTeam1.includes(ep.playerId)).map((ep) => (
                   <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 2)}
-                    className={`w-full text-left text-base py-2 px-2 rounded transition-all flex items-center gap-1.5 ${
-                      manualTeam2.includes(ep.playerId) ? "bg-red-100 text-red-800 font-medium"
-                      : manualTeam1.includes(ep.playerId) ? "opacity-30" : "hover:bg-gray-50"
-                    }`} disabled={manualTeam1.includes(ep.playerId)}>
+                    className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
+                      manualTeam2.includes(ep.playerId) ? "bg-red-100 text-red-800 font-medium" : "hover:bg-gray-50"
+                    }`}>
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                    {ep.player.name}
+                    <span className="truncate flex-1">{ep.player.name}</span>
+                    <span className="text-[10px] text-muted tabular-nums shrink-0">{manualMatchCounts.get(ep.playerId) || 0}m</span>
                   </button>
                 ))}
               </div>

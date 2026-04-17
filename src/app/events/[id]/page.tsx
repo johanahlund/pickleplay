@@ -2705,34 +2705,43 @@ export default function EventDetailPage() {
       {/* Players card */}
       <div className="bg-card rounded-xl border border-border p-3">
         <div className="grid grid-cols-2 gap-3">
+          {(() => {
+            const manualMC = new Map<string, number>();
+            for (const m of event.matches) for (const p of m.players) manualMC.set(p.playerId, (manualMC.get(p.playerId) || 0) + 1);
+            const pool = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+            return (<>
           <div>
             <label className="block text-sm font-semibold text-foreground mb-1">Team 1</label>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
-              <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 1)}
-                className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
-                  manualTeam1.includes(ep.player.id) ? "bg-blue-100 text-blue-800 font-medium"
-                  : manualTeam2.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
-                }`} disabled={manualTeam2.includes(ep.player.id)}>
-                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" /> {ep.player.name}
-              </button>
-            ))}
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {pool.filter((ep) => !manualTeam2.includes(ep.player.id)).map((ep) => (
+                <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 1)}
+                  className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
+                    manualTeam1.includes(ep.player.id) ? "bg-blue-100 text-blue-800 font-medium" : "hover:bg-gray-50"
+                  }`}>
+                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                  <span className="truncate flex-1">{ep.player.name}</span>
+                  <span className="text-[10px] text-muted tabular-nums shrink-0">{manualMC.get(ep.player.id) || 0}m</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            {event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in").map((ep) => (
-              <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 2)}
-                className={`w-full text-left text-base py-2 px-2 rounded transition-all ${
-                  manualTeam2.includes(ep.player.id) ? "bg-red-100 text-red-800 font-medium"
-                  : manualTeam1.includes(ep.player.id) ? "opacity-30" : "hover:bg-gray-50"
-                }`} disabled={manualTeam1.includes(ep.player.id)}>
-                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" /> {ep.player.name}
-              </button>
-            ))}
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {pool.filter((ep) => !manualTeam1.includes(ep.player.id)).map((ep) => (
+                <button key={ep.player.id} type="button" onClick={() => toggleManualPlayer(ep.player.id, 2)}
+                  className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
+                    manualTeam2.includes(ep.player.id) ? "bg-red-100 text-red-800 font-medium" : "hover:bg-gray-50"
+                  }`}>
+                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                  <span className="truncate flex-1">{ep.player.name}</span>
+                  <span className="text-[10px] text-muted tabular-nums shrink-0">{manualMC.get(ep.player.id) || 0}m</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+            </>);
+          })()}
         </div>
       </div>
       {/* Match settings card */}
