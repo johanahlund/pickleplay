@@ -732,17 +732,24 @@ export function RallyTracker({
 
         return (
           <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
-            {/* Serve arrow overlay — centered on court */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <div className="text-green-400/80 font-bold" style={{
-                fontSize: "4rem",
-                transform: serverOnLeft
-                  ? (serverIsTop ? "rotate(30deg)" : "rotate(-30deg)")
-                  : (serverIsTop ? "rotate(-30deg)" : "rotate(30deg)")
-              }}>
-                {serverOnLeft ? "→" : "←"}
-              </div>
-            </div>
+            {/* Serve arrow overlay — SVG diagonal from server to receiver */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-20" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <defs>
+                <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                  <polygon points="0 0, 8 3, 0 6" fill="rgba(74, 222, 128, 0.7)" />
+                </marker>
+              </defs>
+              <line
+                x1={serverOnLeft ? "25" : "75"}
+                y1={serverIsTop ? "30" : "70"}
+                x2={serverOnLeft ? "75" : "25"}
+                y2={serverIsTop ? "70" : "30"}
+                stroke="rgba(74, 222, 128, 0.5)"
+                strokeWidth="2.5"
+                strokeDasharray="4 3"
+                markerEnd="url(#arrowhead)"
+              />
+            </svg>
             {/* Left team */}
             <div className="flex-1 flex flex-col gap-2">
               <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5" style={{ color: swapped ? "#fca5a5" : "#93c5fd" }}>
