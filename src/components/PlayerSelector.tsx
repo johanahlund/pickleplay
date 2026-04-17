@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ClearInput } from "./ClearInput";
 import { PlayerAvatar } from "./PlayerAvatar";
+import { useConfirm } from "./ConfirmDialog";
 
 interface Player {
   id: string;
@@ -150,15 +151,17 @@ function SwipeRow({ player, direction, onAction, needsConfirm }: {
 type FilterMode = "all" | "recent" | "club";
 
 function InEventGrid({ players, onRemove }: { players: Player[]; onRemove: (id: string) => void }) {
+  const { confirm: confirmDialog } = useConfirm();
   const lastTapRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
   return (
     <div className="grid grid-cols-2 gap-px">
       {players.map((p) => (
-        <button key={p.id} onClick={() => {
+        <button key={p.id} onClick={async () => {
           const now = Date.now();
           if (lastTapRef.current.id === p.id && now - lastTapRef.current.time < 400) {
             lastTapRef.current = { id: "", time: 0 };
-            if (confirm(`Remove ${p.name} from event?`)) onRemove(p.id);
+            const ok = await confirmDialog({ title: "Remove player?", message: `Remove ${p.name} from event?`, danger: true, confirmText: "Remove" });
+            if (ok) onRemove(p.id);
           } else {
             lastTapRef.current = { id: p.id, time: now };
           }
