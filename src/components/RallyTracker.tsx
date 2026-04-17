@@ -165,7 +165,8 @@ export function RallyTracker({
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedDisplay, setElapsedDisplay] = useState("0:00");
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [history, setHistory] = useState<GameState[]>([]); // all states, index 0 = initial
+  const [initialGameState, setInitialGameState] = useState<GameState | null>(null);
+  const [history, setHistory] = useState<GameState[]>([]); // all states, index 0 = after first rally
   const [redoStack, setRedoStack] = useState<{ state: GameState; winner: 1 | 2 | null }[]>([]);
   const [winner, setWinner] = useState<1 | 2 | null>(null);
 
@@ -303,6 +304,7 @@ export function RallyTracker({
     };
 
     setGameState(state);
+    setInitialGameState(state);
     setHistory([]);
     setRedoStack([]);
     setPhase("playing");
@@ -673,32 +675,37 @@ export function RallyTracker({
   const receiverPlayer = findPlayer(court, receiverId);
 
   // Derive "what just happened" from history
+  // We compare the last two states. For the first rally, the "before" state
+  // is the initial game state (score 0-0, initial server).
   const lastActionText = (() => {
     if (history.length === 0) return `${shortName(serverPlayer)} serves first`;
-    const last = history[history.length - 1];
-    const prev = history.length >= 2 ? history[history.length - 2] : null;
-    const prevScore = prev ? prev.score : [0, 0];
-    const curScore = last.score;
-    const team1Scored = curScore[0] > prevScore[0];
-    const team2Scored = curScore[1] > prevScore[1];
+
+    const cur = history[history.length - 1];
+    const before = history.length >= 2 ? history[history.length - 2] : initialGameState;
+    const beforeScore = before ? before.score : [0, 0] as [number, number];
+    const beforeServingTeam = before ? before.servingTeam : cur.servingTeam;
+    const beforeServerNumber = before ? before.serverNumber : cur.serverNumber;
+
+    const team1Scored = cur.score[0] > beforeScore[0];
+    const team2Scored = cur.score[1] > beforeScore[1];
+
     if (team1Scored || team2Scored) {
-      // The serving player from the PREVIOUS state scored (only server can score in traditional)
-      // In rally scoring, the winning team scores. Use the server from last state for naming.
-      const prevServerId = prev ? prev.serverId : serverId;
-      const prevCourt = prev ? prev.court : court;
-      const scoringServer = findPlayer(prevCourt, prevServerId);
+      // Find a player to name from the scoring team
       const scoringTeam = team1Scored ? 1 : 2;
-      const serverTeam = [prevCourt.team1Left.id, prevCourt.team1Right.id].includes(prevServerId) ? 1 : 2;
-      if (scoringTeam === serverTeam) {
-        return `Point to ${shortName(scoringServer)}`;
+      // The server of the scoring team is the one who earned the point
+      const curCourt = cur.court;
+      if (scoringTeam === cur.servingTeam) {
+        // Server scored — they're still serving (server didn't change)
+        const scorer = findPlayer(curCourt, cur.serverId);
+        return `Point to ${shortName(scorer)}`;
       }
-      // Rally scoring: non-serving team scored = side out + point
+      // In rally scoring: other team won the rally
       return `Point — side out`;
     }
-    if (last.servingTeam !== (prev?.servingTeam ?? servingTeam)) return "Side out";
-    if (isDoubles && !isRally && last.serverNumber !== (prev?.serverNumber ?? gameState.serverNumber)) {
-      return `2nd Server`;
-    }
+
+    // No score change = side out or server switch
+    if (cur.servingTeam !== beforeServingTeam) return "Side out";
+    if (isDoubles && !isRally && cur.serverNumber !== beforeServerNumber) return "2nd Server";
     return "Side out";
   })();
 
@@ -710,7 +717,7 @@ export function RallyTracker({
         <span className="text-[10px] text-white/30">{formatLabel} · to {targetScore} · {history.length} rallies · {elapsedDisplay}</span>
         <button onClick={() => {
           if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
-            setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
+            setPhase("pick-sides"); setGameState(null); setInitialGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
           }
         }} className="text-[10px] text-red-400 hover:text-red-300 font-bold" title="Reset">Reset</button>
       </div>
