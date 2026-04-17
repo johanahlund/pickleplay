@@ -865,7 +865,7 @@ export function RallyTracker({
         {gamePointActive && !winner ? (
           <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
         ) : (
-          <span className="text-base text-white/60 font-medium">
+          <span className="text-xs text-white/40 font-medium">
             {redoStack.length === 0 ? `Rally ${history.length + 1}` : `Rally ${history.length}`}
           </span>
         )}
