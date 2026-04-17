@@ -190,7 +190,7 @@ export function PlayerSelector({
           <button key={g} type="button"
             onClick={() => setGenderFilter(genderFilter === g ? null : g)}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-              genderFilter === g ? "bg-action text-white" : "bg-gray-100 text-foreground"
+              genderFilter === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             {g === "M" ? "♂" : "♀"}
           </button>
@@ -199,7 +199,7 @@ export function PlayerSelector({
         {hasRecent && (
           <button type="button" onClick={() => setFilterMode("recent")}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-              filterMode === "recent" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+              filterMode === "recent" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             Recent
           </button>
@@ -207,14 +207,14 @@ export function PlayerSelector({
         {hasClub && (
           <button type="button" onClick={() => setFilterMode("club")}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-              filterMode === "club" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+              filterMode === "club" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             {clubLabel}
           </button>
         )}
         <button type="button" onClick={() => setFilterMode("all")}
           className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
-            filterMode === "all" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+            filterMode === "all" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
           }`}>
           All
         </button>
@@ -227,14 +227,14 @@ export function PlayerSelector({
       </div>
       <ClearInput value={search} onChange={setSearch} placeholder="Search..." className="text-xs" />
 
-      {/* Two columns: Available | Added */}
-      <div className="flex gap-2">
-        {/* Left: Available */}
-        <div className="flex-1 min-w-0">
+      {/* Two columns: Players | In Event */}
+      <div className="flex gap-2" style={{ height: "calc(100vh - 220px)", minHeight: "300px" }}>
+        {/* Left: Players */}
+        <div className="flex-1 min-w-0 flex flex-col">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
-            Available ({available.length})
+            Players ({available.length})
           </div>
-          <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
+          <div className="flex-1 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
             {available.map((p) => (
               <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} />
             ))}
@@ -242,15 +242,21 @@ export function PlayerSelector({
           </div>
         </div>
 
-        {/* Right: Added */}
-        <div className="flex-1 min-w-0">
+        {/* Right: In Event */}
+        <div className="w-[40%] min-w-0 flex flex-col shrink-0">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
-            Added (<span className={flashCount ? "text-green-600 text-xs font-bold" : ""}>{selected.length}</span>)
+            In Event (<span className={flashCount ? "text-green-600 text-xs font-bold" : ""}>{selected.length}</span>)
           </div>
-          <div className="max-h-80 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
-            {selected.map((p) => (
-              <SwipeRow key={p.id} player={p} direction="left" onAction={() => handleToggle(p.id)} />
-            ))}
+          <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-gray-50 p-1">
+            <div className="grid grid-cols-2 gap-px">
+              {selected.map((p) => (
+                <button key={p.id} onClick={() => handleToggle(p.id)}
+                  className="flex items-center gap-1 py-1 px-1 rounded hover:bg-red-50 active:bg-red-100 transition-colors min-w-0">
+                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                  <span className="text-[9px] font-medium truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
             {selected.length === 0 && <p className="text-[10px] text-muted py-4 text-center">None yet</p>}
           </div>
         </div>
