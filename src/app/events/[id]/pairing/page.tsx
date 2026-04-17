@@ -175,6 +175,8 @@ export default function PairingConfigPage() {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [generating, setGenerating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [savedSettings, setSavedSettings] = useState<PairingSettings>(DEFAULT_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [includeCourts, setIncludeCourts] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<NextMatchPreview | null>(null);
@@ -217,7 +219,9 @@ export default function PairingConfigPage() {
         if (data.classes?.[0]) {
           setClassId(data.classes[0].id);
           if (data.classes[0].pairingSettings) {
-            setSettings({ ...DEFAULT_SETTINGS, ...data.classes[0].pairingSettings });
+            const loaded = { ...DEFAULT_SETTINGS, ...data.classes[0].pairingSettings };
+            setSettings(loaded);
+            setSavedSettings(loaded);
           }
         }
         setSettingsLoaded(true);
@@ -229,10 +233,14 @@ export default function PairingConfigPage() {
     if (!event || !classId) return;
     const cls = event.classes.find((c) => c.id === classId);
     if (cls?.pairingSettings) {
-      setSettings({ ...DEFAULT_SETTINGS, ...cls.pairingSettings });
+      const loaded = { ...DEFAULT_SETTINGS, ...cls.pairingSettings };
+      setSettings(loaded);
+      setSavedSettings(loaded);
     } else {
       setSettings(DEFAULT_SETTINGS);
+      setSavedSettings(DEFAULT_SETTINGS);
     }
+    setSettingsDirty(false);
   }, [classId, event]);
 
   // Load locks whenever class changes
@@ -264,25 +272,36 @@ export default function PairingConfigPage() {
     return () => clearTimeout(timer);
   }, [runAnalyze]);
 
-  // ── Auto-save settings to EventClass.pairingSettings (debounced) ────────
+  // ── Track dirty settings ────────
   useEffect(() => {
-    if (!classId || !settingsLoaded) return;
+    if (!settingsLoaded) return;
+    setSettingsDirty(JSON.stringify(settings) !== JSON.stringify(savedSettings));
+  }, [settings, savedSettings, settingsLoaded]);
+
+  const saveSettings = async () => {
+    if (!classId) return;
     setSaveStatus("saving");
-    const timer = setTimeout(async () => {
-      try {
-        const r = await fetch(`/api/events/${id}/pairing/settings`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ classId, settings }),
-        });
-        if (r.ok) setSaveStatus("saved");
-        else setSaveStatus("");
-      } catch {
-        setSaveStatus("");
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [id, classId, settings, settingsLoaded]);
+    try {
+      const r = await fetch(`/api/events/${id}/pairing/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ classId, settings }),
+      });
+      if (r.ok) {
+        setSavedSettings(settings);
+        setSettingsDirty(false);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus(""), 1500);
+      } else setSaveStatus("");
+    } catch {
+      setSaveStatus("");
+    }
+  };
+
+  const cancelSettings = () => {
+    setSettings(savedSettings);
+    setSettingsDirty(false);
+  };
 
   // ── Live preview (debounced) ────────────────────────────────────────────
   // Fetches the "what would happen if I generate now" state whenever
@@ -756,11 +775,9 @@ export default function PairingConfigPage() {
       <div className="space-y-4 pb-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Pairing Settings</h2>
-          <button onClick={() => setSubPage(null)} className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
+          <button onClick={() => { if (settingsDirty) cancelSettings(); setSubPage(null); }} className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
         </div>
         <div className="text-xs text-foreground/70">{event.name}</div>
-        {saveStatus === "saving" && <p className="text-[10px] text-muted">Saving...</p>}
-        {saveStatus === "saved" && <p className="text-[10px] text-green-600">Saved ✓</p>}
 
         <div className="bg-card rounded-xl border border-border p-4 space-y-3">
           <h3 className="text-sm font-semibold">Mode & Teams</h3>
@@ -834,6 +851,19 @@ export default function PairingConfigPage() {
                   value={settings.maxWaitWindow} onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))} />
               </div>
             </details>
+          </div>
+        )}
+
+        {settingsDirty && (
+          <div className="flex gap-2">
+            <button onClick={async () => { await saveSettings(); }}
+              className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-base active:bg-action-dark">
+              {saveStatus === "saving" ? "Saving..." : "Save"}
+            </button>
+            <button onClick={cancelSettings}
+              className="px-6 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">
+              Cancel
+            </button>
           </div>
         )}
       </div>
