@@ -473,7 +473,7 @@ export function RallyTracker({
   // ── RENDER: Pick Sides ──
   if (phase === "pick-sides") {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <button onClick={onClose} className="text-sm text-white/60 hover:text-white transition-colors">← Match Overview</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
@@ -484,9 +484,9 @@ export function RallyTracker({
           <div className="text-sm text-white font-medium mb--1">Which side is Team A on?</div>
           <div className="flex items-center gap-3 w-full max-w-sm">
             <button onClick={() => { setSwapped(false); setPhase("setup-court"); }}
-              className="flex flex-col items-center gap-1 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-xl px-4 py-3 transition-colors animate-pulse">
+              className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 border-2 border-blue-400 rounded-xl px-5 py-4 transition-colors shadow-lg shadow-blue-500/30">
               <span className="text-3xl">←</span>
-              <span className="text-xs font-bold text-blue-300">Left</span>
+              <span className="text-sm font-bold text-white">Left</span>
             </button>
             <div className="flex-1 bg-blue-900/40 border border-blue-500/40 rounded-xl px-4 py-3 text-center">
               <div className="text-xs text-blue-400 uppercase tracking-wider mb-1">Team A</div>
@@ -499,9 +499,9 @@ export function RallyTracker({
               ))}
             </div>
             <button onClick={() => { setSwapped(true); setPhase("setup-court"); }}
-              className="flex flex-col items-center gap-1 bg-blue-900/40 hover:bg-blue-800/50 border-2 border-blue-500/50 rounded-xl px-4 py-3 transition-colors animate-pulse">
+              className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 border-2 border-blue-400 rounded-xl px-5 py-4 transition-colors shadow-lg shadow-blue-500/30">
               <span className="text-3xl">→</span>
-              <span className="text-xs font-bold text-blue-300">Right</span>
+              <span className="text-sm font-bold text-white">Right</span>
             </button>
           </div>
 
@@ -565,7 +565,7 @@ export function RallyTracker({
     };
 
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <button onClick={() => { setSetupServer(null); setSetupReceiver(null); setPhase("pick-sides"); }} className="text-sm text-white/60 hover:text-white transition-colors">← Back</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
@@ -703,7 +703,7 @@ export function RallyTracker({
   })();
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
       {/* Compact header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
         <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Back</button>
