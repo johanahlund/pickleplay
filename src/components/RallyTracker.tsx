@@ -482,7 +482,7 @@ export function RallyTracker({
         <div className="flex-1 flex flex-col items-center justify-center p-6 gap-5">
           {/* Team A with side arrows */}
           <div className="text-sm text-white font-medium mb--1">Which side is Team A on?</div>
-          <div className="flex items-center gap-3 w-full max-w-sm">
+          <div className="flex items-center gap-3 w-full max-w-sm" style={{ display: "grid", gridTemplateColumns: "60px 1fr 60px" }}>
             <button onClick={() => { setSwapped(false); setPhase("setup-court"); }}
               className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 border-2 border-blue-400 rounded-xl px-5 py-4 transition-colors shadow-lg shadow-blue-500/30">
               <span className="text-3xl">←</span>
