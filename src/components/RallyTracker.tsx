@@ -743,9 +743,6 @@ export function RallyTracker({
             </div>
             {/* Left team */}
             <div className="flex-1 flex flex-col gap-2">
-              <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5" style={{ color: swapped ? "#fca5a5" : "#93c5fd" }}>
-                {swapped ? "Team B" : "Team A"}
-              </div>
               {isDoubles ? (
                 <>{renderCourtPlayer(leftTop, leftTPos)}{renderCourtPlayer(leftBot, leftBPos)}</>
               ) : (
@@ -799,9 +796,6 @@ export function RallyTracker({
 
             {/* Right team */}
             <div className="flex-1 flex flex-col gap-2">
-              <div className="text-[10px] text-center uppercase tracking-wider font-medium mb-0.5" style={{ color: swapped ? "#93c5fd" : "#fca5a5" }}>
-                {swapped ? "Team A" : "Team B"}
-              </div>
               {isDoubles ? (
                 <>{renderCourtPlayer(rightTop, rightTPos)}{renderCourtPlayer(rightBot, rightBPos)}</>
               ) : (
