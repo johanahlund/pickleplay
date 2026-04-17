@@ -3038,7 +3038,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {activeSection !== "rounds" && activeSection !== "manual" && (
-          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm flex items-center justify-between">
             <button onClick={async () => {
               if (hasEdits) {
                 const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
