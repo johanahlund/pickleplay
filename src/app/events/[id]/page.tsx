@@ -721,6 +721,11 @@ export default function EventDetailPage() {
   };
 
   const removePlayer = async (playerId: string, _playerName?: string) => {
+    // Optimistic: remove immediately from UI
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return { ...prev, players: prev.players.filter((ep) => ep.player.id !== playerId) };
+    });
     const r = await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json().catch(() => ({ error: "Failed to remove" }));
