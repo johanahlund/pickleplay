@@ -645,36 +645,60 @@ export function RallyTracker({
             ? "border-2 border-yellow-400/60 bg-yellow-500/10"
             : "border border-white/10 bg-white/5"
       }`}>
-        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="sm" />
-        <span className={`font-bold mt-0.5 ${isServer ? "text-lg text-green-300" : isReceiver ? "text-lg text-yellow-200" : "text-lg text-white/60"}`}>
-          {player.name}
+        <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
+        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-yellow-200" : "text-base text-white/60"}`}>
+          {shortName(player)}
         </span>
-        {isServer && <span className="text-[10px] text-green-300 font-bold mt-0.5 animate-pulse">● SERVER {gameState?.serverNumber}</span>}
-        {isReceiver && <span className="text-[9px] text-yellow-300/70 font-medium mt-0.5">RECEIVING</span>}
+        {isServer && <span className="text-[9px] text-green-300 font-bold animate-pulse">● SRV{isDoubles && !isRally ? ` ${gameState?.serverNumber}` : ""}</span>}
+        {isReceiver && <span className="text-[8px] text-yellow-300/70 font-medium">RCV</span>}
       </div>
     );
   };
 
-  // Derive "what just happened" from history
-  const lastActionText = (() => {
-    if (history.length === 0) return "First serve";
-    const last = history[history.length - 1];
-    const prev = history.length >= 2 ? history[history.length - 2] : null;
-    if (!prev) return "Match started";
-    const prevScore = prev.score;
-    const curScore = last.score;
-    const team1Scored = curScore[0] > prevScore[0];
-    const team2Scored = curScore[1] > prevScore[1];
-    if (team1Scored) return "Point to Team A";
-    if (team2Scored) return "Point to Team B";
-    // No score change = side out or server switch
-    if (last.servingTeam !== prev.servingTeam) return "Side out";
-    if (isDoubles && !isRally && last.serverNumber !== prev.serverNumber) return `2nd Server Team ${last.servingTeam === 1 ? "A" : "B"}`;
-    return "Side out";
-  })();
+  // Smart name: use first name only unless duplicates exist on court
+  const allCourtPlayers = [court.team1Left, court.team1Right, court.team2Left, court.team2Right];
+  const firstNameCounts = new Map<string, number>();
+  for (const p of allCourtPlayers) {
+    const first = p.name.split(" ")[0];
+    firstNameCounts.set(first, (firstNameCounts.get(first) || 0) + 1);
+  }
+  const shortName = (p: RallyPlayer) => {
+    const first = p.name.split(" ")[0];
+    return (firstNameCounts.get(first) || 0) > 1 ? p.name : first;
+  };
 
   const serverPlayer = findPlayer(court, serverId);
   const receiverPlayer = findPlayer(court, receiverId);
+
+  // Derive "what just happened" from history
+  const lastActionText = (() => {
+    if (history.length === 0) return `${shortName(serverPlayer)} serves first`;
+    const last = history[history.length - 1];
+    const prev = history.length >= 2 ? history[history.length - 2] : null;
+    const prevScore = prev ? prev.score : [0, 0];
+    const curScore = last.score;
+    const team1Scored = curScore[0] > prevScore[0];
+    const team2Scored = curScore[1] > prevScore[1];
+    if (team1Scored || team2Scored) {
+      // The serving player from the PREVIOUS state scored (only server can score in traditional)
+      // In rally scoring, the winning team scores. Use the server from last state for naming.
+      const prevServerId = prev ? prev.serverId : serverId;
+      const prevCourt = prev ? prev.court : court;
+      const scoringServer = findPlayer(prevCourt, prevServerId);
+      const scoringTeam = team1Scored ? 1 : 2;
+      const serverTeam = [prevCourt.team1Left.id, prevCourt.team1Right.id].includes(prevServerId) ? 1 : 2;
+      if (scoringTeam === serverTeam) {
+        return `Point to ${shortName(scoringServer)}`;
+      }
+      // Rally scoring: non-serving team scored = side out + point
+      return `Point — side out`;
+    }
+    if (last.servingTeam !== (prev?.servingTeam ?? servingTeam)) return "Side out";
+    if (isDoubles && !isRally && last.serverNumber !== (prev?.serverNumber ?? gameState.serverNumber)) {
+      return `2nd Server`;
+    }
+    return "Side out";
+  })();
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none">
@@ -704,7 +728,7 @@ export function RallyTracker({
         const serverIsTop = serverId === leftTop.id || serverId === rightTop.id;
 
         return (
-          <div className="flex p-2 gap-1 relative border border-white/20 rounded-xl mx-2 mt-1" style={{ height: "28vh" }}>
+          <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
             {/* Serve arrow overlay — centered on court */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
               <div className="text-green-400/80 font-bold" style={{
@@ -764,9 +788,9 @@ export function RallyTracker({
             </div>
 
             {/* Net (vertical) */}
-            <div className="flex flex-col items-center justify-center w-6 relative">
-              <div className="absolute inset-y-6 w-0.5 bg-white/30 left-1/2 -translate-x-1/2" />
-              <button onClick={() => setSwapped(!swapped)} className="text-[8px] text-white/40 uppercase tracking-widest font-bold hover:text-white/70 transition-colors z-10 py-1" title="Swap sides"
+            <div className="flex flex-col items-center justify-center w-8 relative">
+              <div className="absolute inset-y-2 w-0.5 bg-white/60 left-1/2 -translate-x-1/2" />
+              <button onClick={() => setSwapped(!swapped)} className="text-[8px] text-white/50 uppercase tracking-widest font-bold hover:text-white/80 transition-colors z-10 py-1 bg-black px-0.5" title="Swap sides"
                 style={{ writingMode: "vertical-lr" }}>
                 ⇄ NET
               </button>
@@ -867,7 +891,7 @@ export function RallyTracker({
           <div className="text-center space-y-1">
             <div className="text-base font-bold text-white">{lastActionText}</div>
             <div className="text-base text-white/80">
-              {serverPlayer.name} serves from the {serverSide} to {receiverPlayer.name}
+              {shortName(serverPlayer)} serves from the {serverSide} to {shortName(receiverPlayer)}
             </div>
           </div>
         )}
@@ -879,30 +903,21 @@ export function RallyTracker({
           {(() => {
             const leftTeamNum = swapped ? 2 : 1;
             const rightTeamNum = swapped ? 1 : 2;
-            const leftIsServing = servingTeam === leftTeamNum;
-            const rightIsServing = servingTeam === rightTeamNum;
-            const serverNum = gameState.serverNumber;
-            const isSideOut = isRally || !isDoubles || serverNum === 2 || gameState.isFirstServe;
-            const lossLabel = isSideOut ? "Side Out" : "2nd Server";
+            const leftColor = swapped ? "bg-red-600 active:bg-red-700" : "bg-blue-600 active:bg-blue-700";
+            const rightColor = swapped ? "bg-blue-600 active:bg-blue-700" : "bg-red-600 active:bg-red-700";
             return (
               <div className="flex gap-3">
                 <button
                   onClick={() => handleRally(leftTeamNum)}
-                  className={`flex-1 ${leftIsServing
-                    ? (swapped ? "bg-red-500 hover:bg-red-400 active:bg-red-600" : "bg-blue-500 hover:bg-blue-400 active:bg-blue-600")
-                    : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
-                  } text-white py-8 rounded-xl text-lg font-bold transition-colors`}
+                  className={`flex-1 ${leftColor} text-white py-6 rounded-xl text-xl font-black transition-colors`}
                 >
-                  ◄ {leftIsServing ? "Point" : lossLabel}
+                  ◄ Won
                 </button>
                 <button
                   onClick={() => handleRally(rightTeamNum)}
-                  className={`flex-1 ${rightIsServing
-                    ? (swapped ? "bg-blue-500 hover:bg-blue-400 active:bg-blue-600" : "bg-red-500 hover:bg-red-400 active:bg-red-600")
-                    : "bg-gray-600 hover:bg-gray-500 active:bg-gray-700"
-                  } text-white py-8 rounded-xl text-lg font-bold transition-colors`}
+                  className={`flex-1 ${rightColor} text-white py-6 rounded-xl text-xl font-black transition-colors`}
                 >
-                  {rightIsServing ? "Point" : lossLabel} ►
+                  Won ►
                 </button>
               </div>
             );
