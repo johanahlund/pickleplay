@@ -430,10 +430,10 @@ export default function EventDetailPage() {
   const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
 
-  // Hide bottom nav when in manual match edit OR the add-player flows
+  // Hide bottom nav on ALL edit/add pages — clean focused view
   useEffect(() => {
     const nav = document.querySelector("nav.fixed.bottom-0");
-    const hide = activeSection === "manual" || showAddPlayer || bulkSelectMode;
+    const hide = activeSection !== "overview" || showAddPlayer || bulkSelectMode;
     if (hide) nav?.classList.add("hidden");
     else nav?.classList.remove("hidden");
     return () => { nav?.classList.remove("hidden"); };
@@ -3071,6 +3071,29 @@ export default function EventDetailPage() {
         {activeSection === "admins" && renderAdmins()}
         {activeSection === "players" && renderPlayers()}
         {activeSection === "pairs" && renderPairs()}
+
+        {/* Save / Cancel buttons for editable sections */}
+        {saveSections.has(activeSection) && (
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={async () => {
+                setSaving(true);
+                await saveEditEvent();
+                setTimeout(() => { setSaving(false); setActiveSection("overview"); }, 600);
+              }}
+              disabled={!hasEdits}
+              className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-base active:bg-action-dark disabled:opacity-40"
+            >
+              {saving ? "Saved ✓" : "Save"}
+            </button>
+            <button
+              onClick={() => { startEditEvent(); setActiveSection("overview"); }}
+              className="px-6 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {activeSection === "competition" && event && (
           <div className="space-y-3">
             {/* Ranking — always shown */}
