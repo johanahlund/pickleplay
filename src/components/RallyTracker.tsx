@@ -473,7 +473,7 @@ export function RallyTracker({
   // ── RENDER: Pick Sides ──
   if (phase === "pick-sides") {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <button onClick={onClose} className="text-sm text-white/60 hover:text-white transition-colors">← Match Overview</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
@@ -565,7 +565,7 @@ export function RallyTracker({
     };
 
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white">
+      <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <button onClick={() => { setSetupServer(null); setSetupReceiver(null); setPhase("pick-sides"); }} className="text-sm text-white/60 hover:text-white transition-colors">← Back</button>
           <span className="text-sm opacity-60">{formatLabel} · to {targetScore} · {winByLabel}</span>
@@ -703,7 +703,7 @@ export function RallyTracker({
   })();
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none">
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none" style={{ paddingTop: "env(safe-area-inset-top, 12px)" }}>
       {/* Compact header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
         <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Back</button>
