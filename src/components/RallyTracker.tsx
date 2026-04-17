@@ -743,15 +743,24 @@ export function RallyTracker({
 
         return (
           <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
-            {/* Serve direction — small arrow on the net line */}
-            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-20" style={{
-              top: serverIsTop ? "15%" : undefined,
-              bottom: serverIsTop ? undefined : "15%",
-            }}>
-              <span style={{ color: "rgb(74, 222, 128)", fontSize: "1.5rem" }}>
-                {serverOnLeft ? "→" : "←"}
-              </span>
-            </div>
+            {/* Serve arrow — centered on court, angled from server to receiver */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
+              <defs>
+                <marker id="serve-arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                  <polygon points="0 0, 10 4, 0 8" fill="rgb(74, 222, 128)" opacity="0.8" />
+                </marker>
+              </defs>
+              <line
+                x1={serverOnLeft ? "30%" : "70%"}
+                y1={serverIsTop ? "30%" : "70%"}
+                x2={serverOnLeft ? "70%" : "30%"}
+                y2={serverIsTop ? "70%" : "30%"}
+                stroke="rgb(74, 222, 128)"
+                strokeOpacity="0.6"
+                strokeWidth="3"
+                markerEnd="url(#serve-arrow)"
+              />
+            </svg>
             {/* Left team */}
             <div className="flex-1 flex flex-col gap-2">
               {isDoubles ? (
