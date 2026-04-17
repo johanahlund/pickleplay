@@ -26,11 +26,12 @@ interface PlayerSelectorProps {
   clubLabel?: string;
 }
 
-function SwipeRow({ player, direction, onAction, needsConfirm }: {
+function SwipeRow({ player, direction, onAction, needsConfirm, pending }: {
   player: Player;
   direction: "right" | "left";
   onAction: () => void;
   needsConfirm?: boolean;
+  pending?: boolean;
 }) {
   const startX = useRef<number | null>(null);
   const startY = useRef<number | null>(null);
@@ -98,7 +99,7 @@ function SwipeRow({ player, direction, onAction, needsConfirm }: {
   const active = direction === "right" ? offsetX > THRESHOLD : offsetX < -THRESHOLD;
 
   return (
-    <div className={`relative overflow-hidden rounded-lg ${swiped ? "max-h-0 opacity-0 transition-all duration-200" : "max-h-20"}`}>
+    <div className={`relative overflow-hidden rounded-lg ${swiped ? "max-h-0 opacity-0 transition-all duration-200" : "max-h-20"} ${pending ? "ring-2 ring-action/50 opacity-60 pointer-events-none" : ""}`}>
       {offsetX !== 0 && (
         <div className={`absolute inset-y-0 flex items-center text-[10px] font-semibold ${
           direction === "right" ? "left-2 text-green-600" : "right-2 text-danger"
@@ -206,18 +207,28 @@ export function PlayerSelector({
     if (recentlyRemoved.size > 0) setRecentlyRemoved(new Set());
   }
 
+  const inFlight = useRef(new Set<string>());
+
   const handleToggle = (id: string) => {
+    if (inFlight.current.has(id)) return; // block until DB confirms
+    inFlight.current.add(id);
     if (selectedIds.has(id) && !recentlyRemoved.has(id)) {
-      // Removing
       setRecentlyRemoved((prev) => new Set([...prev, id]));
     } else if (!selectedIds.has(id) && !recentlyAdded.has(id)) {
-      // Adding
       setRecentlyAdded((prev) => new Set([...prev, id]));
       setFlashCount(true);
       setTimeout(() => setFlashCount(false), 600);
     }
-    onToggle(id);
+    const result = onToggle(id);
+    if (result && typeof (result as Promise<void>).then === "function") {
+      (result as Promise<void>).finally(() => inFlight.current.delete(id));
+    } else {
+      // If not async, clear after a short delay to allow state to settle
+      setTimeout(() => inFlight.current.delete(id), 500);
+    }
   };
+
+  const isInFlight = (id: string) => recentlyAdded.has(id) || recentlyRemoved.has(id);
 
   // Effective selected = (selectedIds + recentlyAdded) - recentlyRemoved
   const effectiveSelected = new Set([...selectedIds, ...recentlyAdded]);
@@ -310,7 +321,7 @@ export function PlayerSelector({
           </div>
           <div className="flex-1 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
             {available.map((p) => (
-              <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} needsConfirm={false} />
+              <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} needsConfirm={false} pending={isInFlight(p.id)} />
             ))}
             {available.length === 0 && <p className="text-[10px] text-muted py-4 text-center">No players</p>}
           </div>
