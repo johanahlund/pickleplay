@@ -721,6 +721,13 @@ export default function EventDetailPage() {
   };
 
   const removePlayer = async (playerId: string, _playerName?: string) => {
+    // Check if player is in any match — block removal with clear message
+    const inMatch = event?.matches.some((m) => m.players.some((p) => p.playerId === playerId));
+    if (inMatch) {
+      const playerName = event?.players.find((ep) => ep.player.id === playerId)?.player.name || "This player";
+      await alertDialog(`${playerName} is in a match. Delete the match first before removing.`, "Cannot remove");
+      return;
+    }
     // Optimistic: remove immediately from UI
     setEvent((prev) => {
       if (!prev) return prev;
@@ -729,7 +736,7 @@ export default function EventDetailPage() {
     const r = await fetch(`/api/events/${id}/players/${playerId}`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json().catch(() => ({ error: "Failed to remove" }));
-      alert(data.error || "Cannot remove player");
+      await alertDialog(data.error || "Cannot remove player", "Error");
     }
     await fetchEvent();
   };
