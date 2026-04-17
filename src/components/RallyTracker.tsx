@@ -223,20 +223,25 @@ export function RallyTracker({
       // Tap same player = deselect
       setSetupServer(null);
       setSetupReceiver(null);
-    } else {
-      // Second tap
+    } else if (!setupReceiver) {
+      // Server picked but no receiver yet
       const serverIsTeam1 = team1Players.some((p) => p.id === setupServer.id);
       const sameTeam = (serverIsTeam1 && isTeam1) || (!serverIsTeam1 && !isTeam1);
-      if (!sameTeam) {
+      if (!sameTeam && isDoubles) {
         // Other team = receiver — move to top (diagonal from server at bottom)
         setSetupReceiver(player);
         moveToTop(player);
       } else {
-        // Same team = switch server
+        // Same team or singles = switch server to this player
         setSetupServer(player);
         setSetupReceiver(null);
         moveToBottom(player);
       }
+    } else {
+      // Both server and receiver picked — tap anyone to re-pick as server
+      setSetupServer(player);
+      setSetupReceiver(null);
+      moveToBottom(player);
     }
   };
 
@@ -530,10 +535,10 @@ export function RallyTracker({
     const instruction = !setupServer
       ? "Tap the player who serves first"
       : !isDoubles
-        ? "Ready! Press Start"
+        ? "Ready! Press Start — or tap another player to change server"
         : !setupReceiver
-          ? "Tap the receiver (other team)"
-          : "Ready! Press Start";
+          ? "Tap receiver (other team) — or tap another to change server"
+          : "Ready! Press Start — or tap any player to re-pick";
 
     const renderSetupPlayer = (player: RallyPlayer, color: string) => {
       const isServer = setupServer?.id === player.id;
