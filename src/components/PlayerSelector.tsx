@@ -35,6 +35,7 @@ function SwipeRow({ player, direction, onAction }: {
   const [offsetX, setOffsetX] = useState(0);
   const [swiped, setSwiped] = useState(false);
   const locked = useRef(false);
+  const lastTap = useRef(0);
   const THRESHOLD = 50;
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -88,6 +89,15 @@ function SwipeRow({ player, direction, onAction }: {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          const now = Date.now();
+          if (now - lastTap.current < 350) {
+            onAction();
+            lastTap.current = 0;
+          } else {
+            lastTap.current = now;
+          }
+        }}
       >
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
         <span className="text-xs font-medium flex-1 truncate">{player.name}</span>
