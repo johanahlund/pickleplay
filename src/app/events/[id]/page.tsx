@@ -2096,7 +2096,16 @@ export default function EventDetailPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 px-1">
                 <span className="text-xs text-muted">
-                  {activePlayers.length} active{pausedPlayers.length > 0 ? ` · ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` · ${waitlistedPlayers.length} waitlist` : ""}
+                  {(() => {
+                    const checkedIn = event.players.filter((ep) => ep.status === "checked_in").length;
+                    const paused = event.players.filter((ep) => ep.status === "paused").length;
+                    const notArrived = event.players.filter((ep) => ep.status === "registered").length;
+                    const parts = [];
+                    parts.push(`${checkedIn} active`);
+                    if (paused > 0) parts.push(`${paused} paused`);
+                    if (notArrived > 0) parts.push(`${notArrived} not arrived`);
+                    return parts.join(" · ");
+                  })()}
                 </span>
                 {levelEditMode && pickingTap && (
                   <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear ({levelSelectedIds.size})</button>
