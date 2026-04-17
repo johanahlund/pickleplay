@@ -2031,9 +2031,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-foreground">
-            Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
-          </h3>
+          <h3 className="text-xl font-bold text-foreground">Players</h3>
           <div className="flex items-center gap-2">
           {session?.user && !canManage && event.openSignup && (
             event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
@@ -2044,14 +2042,6 @@ export default function EventDetailPage() {
           )}
           </div>
         </div>
-        {canManage && (
-          <div className="flex justify-end">
-            <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-              className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
-              + Player
-            </button>
-          </div>
-        )}
         <div className="flex items-center gap-2">
           {event.players.length > 6 && (
             <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base flex-1" />
@@ -2104,7 +2094,10 @@ export default function EventDetailPage() {
           };
           return (
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs text-muted">
+                  {activePlayers.length} active{pausedPlayers.length > 0 ? ` · ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` · ${waitlistedPlayers.length} waitlist` : ""}
+                </span>
                 {levelEditMode && pickingTap && (
                   <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear ({levelSelectedIds.size})</button>
                 )}
@@ -2128,7 +2121,7 @@ export default function EventDetailPage() {
                       }
                       await fetchEvent();
                     }}
-                    className="text-xs text-action font-medium"
+                    className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                   >
                     Recalculate
                   </button>
@@ -2143,14 +2136,14 @@ export default function EventDetailPage() {
                       }
                       await fetchEvent();
                     }}
-                    className="text-xs text-action font-medium"
+                    className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                   >
                     Check in all
                   </button>
                 )}
                 <button
                   onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
-                  className="text-xs text-action font-medium"
+                  className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                 >
                   {levelEditMode ? "Done" : "Edit levels"}
                 </button>
@@ -3054,6 +3047,12 @@ export default function EventDetailPage() {
               }
               setActiveSection("overview");
             }} className="text-sm text-action font-medium">← Event Overview</button>
+            {activeSection === "players" && canManage && (
+              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+                className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
+                + Player
+              </button>
+            )}
           </div>
         )}
 
