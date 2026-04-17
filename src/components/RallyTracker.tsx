@@ -734,7 +734,7 @@ export function RallyTracker({
           <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
             {/* Serve arrow overlay — centered on court */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <span className="text-green-400/70 font-bold" style={{
+              <span className="font-bold" style={{ color: "rgb(74, 222, 128)",
                 fontSize: "5rem",
                 lineHeight: 1,
                 transform: serverOnLeft
