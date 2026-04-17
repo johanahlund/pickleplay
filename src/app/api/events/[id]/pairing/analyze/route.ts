@@ -45,6 +45,11 @@ export async function POST(
   // Coerce Infinity sentinels (JSON → number/null).
   const settings = normalizeSettings(body.settings);
 
+  // Before event starts (no matches), include registered players too (assumes they'll show up).
+  // Once matches exist, only checked_in players are relevant.
+  const matchCount = await prisma.match.count({ where: { eventId: id } });
+  const statusFilter = matchCount === 0 ? ["registered", "checked_in"] : ["checked_in"];
+
   // Pull class + players + ratings + history.
   const eventClass = await prisma.eventClass.findUnique({
     where: { id: body.classId },
@@ -52,7 +57,7 @@ export async function POST(
       eventId: true,
       event: { select: { numCourts: true } },
       players: {
-        where: { status: { in: ["checked_in"] } },
+        where: { status: { in: statusFilter } },
         select: {
           id: true,
           playerId: true,
