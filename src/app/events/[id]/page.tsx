@@ -2151,10 +2151,17 @@ export default function EventDetailPage() {
                   <button
                     onClick={async () => {
                       const registered = event.players.filter((ep) => ep.status === "registered");
+                      // Optimistic: flip all to checked_in immediately
+                      setEvent((prev) => {
+                        if (!prev) return prev;
+                        return { ...prev, players: prev.players.map((ep) => ep.status === "registered" ? { ...ep, status: "checked_in" } : ep) };
+                      });
+                      // API calls in background
                       for (const ep of registered) {
-                        await fetch(`/api/events/${id}/players/${ep.player.id}/checkin`, { method: "POST" });
+                        fetch(`/api/events/${id}/players/${ep.player.id}/checkin`, { method: "POST" });
                       }
-                      await fetchEvent();
+                      // Sync after all calls
+                      setTimeout(() => fetchEvent(), 1000);
                     }}
                     className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                   >
