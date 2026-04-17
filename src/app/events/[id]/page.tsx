@@ -3047,21 +3047,26 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         {activeSection !== "rounds" && activeSection !== "manual" && (
-          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm flex items-center justify-between">
-            <button onClick={async () => {
-              if (hasEdits) {
-                const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-                if (!ok) return;
-                startEditEvent();
-              }
-              setActiveSection("overview");
-            }} className="text-sm text-action font-medium">← Event Overview</button>
+          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+            <div className="flex items-center justify-between">
+            <div>
+              <button onClick={async () => {
+                if (hasEdits) {
+                  const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+                  if (!ok) return;
+                  startEditEvent();
+                }
+                setActiveSection("overview");
+              }} className="text-sm text-action font-medium">← Event Overview</button>
+              <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
+            </div>
             {activeSection === "players" && canManage && (
               <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
                 className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
                 + Player
               </button>
             )}
+            </div>
           </div>
         )}
 
