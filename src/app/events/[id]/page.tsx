@@ -3060,7 +3060,7 @@ export default function EventDetailPage() {
               }} className="text-sm text-action font-medium">← Event Overview</button>
               <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
             </div>
-            {activeSection === "players" && canManage && (
+            {activeSection === "players" && canManage && !bulkSelectMode && !showAddPlayer && (
               <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
                 className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
                 + Player
