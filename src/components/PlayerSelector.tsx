@@ -250,20 +250,21 @@ export function PlayerSelector({
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-1 flex-wrap items-center">
+      <div className="flex items-center gap-1.5">
+        <ClearInput value={search} onChange={setSearch} placeholder="Search..." className="text-xs flex-1" />
         {(["M", "F"] as const).map((g) => (
           <button key={g} type="button"
             onClick={() => setGenderFilter(genderFilter === g ? null : g)}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+            className={`px-2 py-1 rounded text-[10px] font-medium transition-all shrink-0 ${
               genderFilter === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             {g === "M" ? "♂" : "♀"}
           </button>
         ))}
-        <span className="w-3" aria-hidden />
+        <span className="w-px h-4 bg-border shrink-0" />
         {hasRecent && (
           <button type="button" onClick={() => setFilterMode("recent")}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+            className={`px-2 py-1 rounded text-[10px] font-medium transition-all shrink-0 ${
               filterMode === "recent" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             Recent
@@ -271,26 +272,27 @@ export function PlayerSelector({
         )}
         {hasClub && (
           <button type="button" onClick={() => setFilterMode("club")}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+            className={`px-2 py-1 rounded text-[10px] font-medium transition-all shrink-0 ${
               filterMode === "club" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}>
             {clubLabel}
           </button>
         )}
         <button type="button" onClick={() => setFilterMode("all")}
-          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+          className={`px-2 py-1 rounded text-[10px] font-medium transition-all shrink-0 ${
             filterMode === "all" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
           }`}>
           All
         </button>
-        {filterMode === "recent" && onSelectAll && (
+      </div>
+      {filterMode === "recent" && onSelectAll && (
+        <div className="flex justify-end">
           <button type="button" onClick={onSelectAll}
-            className="text-action text-[10px] font-medium ml-auto whitespace-nowrap">
+            className="text-action text-[10px] font-medium whitespace-nowrap">
             Select all
           </button>
-        )}
-      </div>
-      <ClearInput value={search} onChange={setSearch} placeholder="Search..." className="text-xs" />
+        </div>
+      )}
 
       {/* Two columns: Players | In Event */}
       <div className="flex gap-2" style={{ height: "calc(100vh - 220px)", minHeight: "300px" }}>
