@@ -25,18 +25,32 @@ interface PlayerSelectorProps {
   clubLabel?: string;
 }
 
-function SwipeRow({ player, direction, onAction }: {
+function SwipeRow({ player, direction, onAction, needsConfirm }: {
   player: Player;
-  direction: "right" | "left"; // right = add (swipe →), left = remove (swipe ←)
+  direction: "right" | "left";
   onAction: () => void;
+  needsConfirm?: boolean;
 }) {
   const startX = useRef<number | null>(null);
   const startY = useRef<number | null>(null);
   const [offsetX, setOffsetX] = useState(0);
   const [swiped, setSwiped] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const locked = useRef(false);
   const lastTap = useRef(0);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const THRESHOLD = 50;
+
+  const doAction = useCallback(() => {
+    if (needsConfirm && !confirming) {
+      setConfirming(true);
+      confirmTimer.current = setTimeout(() => setConfirming(false), 3000);
+      return;
+    }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirming(false);
+    onAction();
+  }, [needsConfirm, confirming, onAction]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     startX.current = e.touches[0].clientX;
@@ -62,15 +76,23 @@ function SwipeRow({ player, direction, onAction }: {
 
   const handleTouchEnd = useCallback(() => {
     if (Math.abs(offsetX) > THRESHOLD) {
-      setSwiped(true);
-      setOffsetX(direction === "right" ? 150 : -150);
-      setTimeout(() => { onAction(); setOffsetX(0); setSwiped(false); }, 200);
+      if (needsConfirm && !confirming) {
+        setConfirming(true);
+        confirmTimer.current = setTimeout(() => setConfirming(false), 3000);
+        setOffsetX(0);
+      } else {
+        setSwiped(true);
+        setOffsetX(direction === "right" ? 150 : -150);
+        if (confirmTimer.current) clearTimeout(confirmTimer.current);
+        setConfirming(false);
+        setTimeout(() => { onAction(); setOffsetX(0); setSwiped(false); }, 200);
+      }
     } else {
       setOffsetX(0);
     }
     startX.current = null;
     locked.current = false;
-  }, [offsetX, direction, onAction]);
+  }, [offsetX, direction, onAction, needsConfirm, confirming]);
 
   const active = direction === "right" ? offsetX > THRESHOLD : offsetX < -THRESHOLD;
 
@@ -84,15 +106,21 @@ function SwipeRow({ player, direction, onAction }: {
         </div>
       )}
       <div
-        className={`flex items-center gap-1.5 py-1.5 px-2 transition-transform ${active ? (direction === "right" ? "bg-green-50" : "bg-red-50") : "bg-card"}`}
+        className={`flex items-center gap-1.5 py-1.5 px-2 transition-transform ${
+          confirming ? "bg-red-100" : active ? (direction === "right" ? "bg-green-50" : "bg-red-50") : "bg-card"
+        }`}
         style={{ transform: `translateX(${offsetX}px)`, transitionDuration: startX.current ? "0ms" : "200ms" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={() => {
+          if (confirming) {
+            doAction();
+            return;
+          }
           const now = Date.now();
           if (now - lastTap.current < 350) {
-            onAction();
+            doAction();
             lastTap.current = 0;
           } else {
             lastTap.current = now;
@@ -100,7 +128,8 @@ function SwipeRow({ player, direction, onAction }: {
         }}
       >
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
-        <span className="text-xs font-medium flex-1 truncate">{player.name}</span>
+        <span className="text-xs font-medium flex-1 truncate">{confirming ? `Remove ${player.name}?` : player.name}</span>
+        {confirming && <span className="text-[9px] text-danger font-bold shrink-0 animate-pulse">Tap to confirm</span>}
         {player.gender && (
           <span className={`text-[9px] ${player.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
             {player.gender === "M" ? "♂" : "♀"}
@@ -119,6 +148,33 @@ function SwipeRow({ player, direction, onAction }: {
 }
 
 type FilterMode = "all" | "recent" | "club";
+
+function InEventGrid({ players, onRemove }: { players: Player[]; onRemove: (id: string) => void }) {
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!confirmId) return;
+    const t = setTimeout(() => setConfirmId(null), 3000);
+    return () => clearTimeout(t);
+  }, [confirmId]);
+  return (
+    <div className="grid grid-cols-2 gap-px">
+      {players.map((p) => (
+        <button key={p.id} onClick={() => {
+          if (confirmId === p.id) { setConfirmId(null); onRemove(p.id); }
+          else setConfirmId(p.id);
+        }}
+          className={`flex items-center gap-1 py-1 px-1 rounded transition-colors min-w-0 ${
+            confirmId === p.id ? "bg-red-100" : "hover:bg-red-50 active:bg-red-100"
+          }`}>
+          <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+          <span className="text-[9px] font-medium truncate">
+            {confirmId === p.id ? "Remove?" : p.name}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function PlayerSelector({
   players,
@@ -246,7 +302,7 @@ export function PlayerSelector({
           </div>
           <div className="flex-1 overflow-y-auto space-y-px rounded-lg border border-border bg-gray-50 p-1">
             {available.map((p) => (
-              <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} />
+              <SwipeRow key={p.id} player={p} direction="right" onAction={() => handleToggle(p.id)} needsConfirm={false} />
             ))}
             {available.length === 0 && <p className="text-[10px] text-muted py-4 text-center">No players</p>}
           </div>
@@ -258,15 +314,7 @@ export function PlayerSelector({
             In Event (<span className={flashCount ? "text-green-600 text-xs font-bold" : ""}>{selected.length}</span>)
           </div>
           <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-gray-50 p-1">
-            <div className="grid grid-cols-2 gap-px">
-              {selected.map((p) => (
-                <button key={p.id} onClick={() => handleToggle(p.id)}
-                  className="flex items-center gap-1 py-1 px-1 rounded hover:bg-red-50 active:bg-red-100 transition-colors min-w-0">
-                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
-                  <span className="text-[9px] font-medium truncate">{p.name}</span>
-                </button>
-              ))}
-            </div>
+            <InEventGrid players={selected} onRemove={handleToggle} />
             {selected.length === 0 && <p className="text-[10px] text-muted py-4 text-center">None yet</p>}
           </div>
         </div>
