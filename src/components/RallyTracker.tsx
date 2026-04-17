@@ -491,8 +491,9 @@ export function RallyTracker({
             <div className="flex-1 bg-blue-900/40 border border-blue-500/40 rounded-xl px-4 py-3 text-center">
               <div className="text-xs text-blue-400 uppercase tracking-wider mb-1">Team A</div>
               {team1Players.map((p, i) => (
-                <div key={p.id}>
-                  <div className="text-xl font-bold text-white">{p.name}</div>
+                <div key={p.id} className="flex flex-col items-center">
+                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
+                  <div className="text-lg font-bold text-white mt-1">{p.name}</div>
                   {i < team1Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
                 </div>
               ))}
@@ -509,8 +510,9 @@ export function RallyTracker({
             <div className="bg-red-900/40 border border-red-500/40 rounded-xl px-4 py-3 text-center">
               <div className="text-xs text-red-400 uppercase tracking-wider mb-1">Team B</div>
               {team2Players.map((p, i) => (
-                <div key={p.id}>
-                  <div className="text-xl font-bold text-white">{p.name}</div>
+                <div key={p.id} className="flex flex-col items-center">
+                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
+                  <div className="text-lg font-bold text-white mt-1">{p.name}</div>
                   {i < team2Players.length - 1 && <div className="text-sm text-white/40 my-0.5">&</div>}
                 </div>
               ))}
