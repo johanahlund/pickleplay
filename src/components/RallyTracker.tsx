@@ -646,15 +646,15 @@ export function RallyTracker({
         isServer
           ? "border-4 border-green-400 bg-green-500/30 shadow-lg shadow-green-500/20 ring-2 ring-green-400/50"
           : isReceiver
-            ? "border-2 border-yellow-400/60 bg-yellow-500/10"
+            ? "border-2 border-white/40 bg-white/5"
             : "border border-white/10 bg-white/5"
       }`}>
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
-        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-yellow-200" : "text-base text-white/60"}`}>
+        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-white/50" : "text-base text-white/60"}`}>
           {shortName(player)}
         </span>
-        {isServer && <span className="text-[9px] text-green-300 font-bold animate-pulse">● SRV{isDoubles && !isRally ? ` ${gameState?.serverNumber}` : ""}</span>}
-        {isReceiver && <span className="text-[8px] text-yellow-300/70 font-medium">RCV</span>}
+        {isServer && <span className="text-[9px] text-green-300 font-bold animate-pulse">● Server</span>}
+        {isReceiver && <span className="text-[8px] text-white/40 font-medium">Receiver</span>}
       </div>
     );
   };
@@ -856,33 +856,39 @@ export function RallyTracker({
 
       {/* Score + undo/redo + status messages */}
       <div className="px-4 py-2 space-y-2">
-        {/* Score row with undo/redo arrows */}
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={handleUndo} disabled={history.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-2 transition-colors">←</button>
-          <div className="flex items-center gap-3">
-            <div className="text-center">
-              <div className={`text-[10px] uppercase tracking-wider font-bold ${swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? "Team B" : "Team A"}</div>
-              <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? score[1] : score[0]}</span>
+        {/* Score aligned under court halves */}
+        {(() => {
+          const leftTeamNum = swapped ? 2 : 1;
+          const rightTeamNum = swapped ? 1 : 2;
+          const leftScore = swapped ? score[1] : score[0];
+          const rightScore = swapped ? score[0] : score[1];
+          const leftWon = (swapped ? winner === 2 : winner === 1);
+          const rightWon = (swapped ? winner === 1 : winner === 2);
+          const leftColor = swapped ? "text-red-500" : "text-blue-500";
+          const rightColor = swapped ? "text-blue-500" : "text-red-500";
+          const servingLeft = servingTeam === leftTeamNum;
+          return (
+            <div className="flex items-start mx-3">
+              <button onClick={handleUndo} disabled={history.length === 0}
+                className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-1 pt-2 transition-colors shrink-0">←</button>
+              <div className="flex-1 text-center">
+                <span className={`text-5xl font-black tabular-nums ${leftWon ? "text-green-400" : leftColor}`}>{leftScore}</span>
+                {!isRally && isDoubles && servingLeft && (
+                  <div className="text-base text-green-400 font-bold mt-0.5">Server {gameState.serverNumber}</div>
+                )}
+              </div>
+              <span className="text-3xl text-white/20 pt-1 px-1">—</span>
+              <div className="flex-1 text-center">
+                <span className={`text-5xl font-black tabular-nums ${rightWon ? "text-green-400" : rightColor}`}>{rightScore}</span>
+                {!isRally && isDoubles && !servingLeft && (
+                  <div className="text-base text-green-400 font-bold mt-0.5">Server {gameState.serverNumber}</div>
+                )}
+              </div>
+              <button onClick={handleRedo} disabled={redoStack.length === 0}
+                className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-1 pt-2 transition-colors shrink-0">→</button>
             </div>
-            <span className="text-3xl text-white/20">—</span>
-            <div className="text-center">
-              <div className={`text-[10px] uppercase tracking-wider font-bold ${swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? "Team A" : "Team B"}</div>
-              <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? score[0] : score[1]}</span>
-            </div>
-            {!isRally && isDoubles && (
-              <>
-                <span className="text-3xl text-white/20">—</span>
-                <div className="text-center">
-                  <div className="text-[10px] text-green-400 uppercase font-medium">Srv</div>
-                  <span className="text-4xl font-black tabular-nums text-green-400">{gameState.serverNumber}</span>
-                </div>
-              </>
-            )}
-          </div>
-          <button onClick={handleRedo} disabled={redoStack.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-2 transition-colors">→</button>
-        </div>
+          );
+        })()}
 
         {/* Rally counter */}
         <div className="text-center">
