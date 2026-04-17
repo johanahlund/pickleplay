@@ -678,7 +678,7 @@ export function RallyTracker({
   // We compare the last two states. For the first rally, the "before" state
   // is the initial game state (score 0-0, initial server).
   const lastActionText = (() => {
-    if (history.length === 0) return `${shortName(serverPlayer)} serves first`;
+    if (history.length === 0) return "Match Start";
 
     const cur = history[history.length - 1];
     const before = history.length >= 2 ? history[history.length - 2] : initialGameState;
