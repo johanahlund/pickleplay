@@ -669,11 +669,29 @@ export default function EventDetailPage() {
   };
 
   const togglePausePlayer = async (playerId: string) => {
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          ep.player.id === playerId ? { ...ep, status: ep.status === "paused" ? "checked_in" : "paused" } : ep,
+        ),
+      };
+    });
     await fetch(`/api/events/${id}/players/${playerId}/pause`, { method: "POST" });
     await fetchEvent();
   };
 
   const checkInPlayer = async (playerId: string) => {
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) =>
+          ep.player.id === playerId ? { ...ep, status: ep.status === "checked_in" ? "registered" : "checked_in" } : ep,
+        ),
+      };
+    });
     await fetch(`/api/events/${id}/players/${playerId}/checkin`, { method: "POST" });
     await fetchEvent();
   };
