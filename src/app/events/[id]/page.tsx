@@ -391,6 +391,7 @@ export default function EventDetailPage() {
   const [editEndDate, setEditEndDate] = useState("");
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
+  const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   const [bulkGenderFilter, setBulkGenderFilter] = useState<string | null>(null);
@@ -2035,6 +2036,14 @@ export default function EventDetailPage() {
           <h3 className="text-xl font-bold text-foreground">
             Players ({activePlayers.length}{pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}{waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""})
           </h3>
+          <div className="flex items-center gap-2">
+          {session?.user && !canManage && event.openSignup && (
+            event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
+              <button onClick={unsignFromEvent} className="text-xs text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave</button>
+            ) : (
+              <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join</button>
+            )
+          )}
           {canManage && (
             <div className="flex items-center gap-2">
               {event.players.some((ep) => ep.status === "registered") && (
@@ -2057,24 +2066,30 @@ export default function EventDetailPage() {
               </button>
             </div>
           )}
+          </div>
         </div>
         {canManage && (
-          <p className="text-xs text-muted">Long-press to pause{!hasMatches ? " · Swipe left to remove" : ""} · Hover for actions on desktop</p>
+          <p className="text-xs text-muted">Tap name to check in/out · Tap matches/⏸ to pause</p>
         )}
-        {session?.user && !canManage && event.openSignup && (
-          <div>
-            {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
-              <button onClick={unsignFromEvent} className="text-sm text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave Event</button>
-            ) : (
-              <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join Event</button>
-            )}
+        <div className="flex items-center gap-2">
+          {event.players.length > 6 && (
+            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base flex-1" />
+          )}
+          <div className="flex gap-1 shrink-0">
+            {[
+              { value: null, label: "All" },
+              { value: "M", label: "♂" },
+              { value: "F", label: "♀" },
+            ].map((g) => (
+              <button key={g.label} onClick={() => setPlayerGenderFilter(g.value)}
+                className={`px-2 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  playerGenderFilter === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                }`}>{g.label}</button>
+            ))}
           </div>
-        )}
-        {event.players.length > 6 && (
-          <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
-        )}
+        </div>
         {canManage ? (() => {
-          const filtered = event.players.filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()));
+          const filtered = event.players.filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter));
           const groups = new Map<number | "unset", typeof filtered>();
           for (const ep of filtered) {
             const key = ep.skillLevel ?? "unset";
@@ -2283,7 +2298,7 @@ export default function EventDetailPage() {
           <div className="space-y-0">
             {[...event.players]
               .sort((a, b) => a.player.name.localeCompare(b.player.name))
-              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()))
+              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
               .map((ep) => (
               <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
                 showContact={isAdmin || ep.player.id === userId}
