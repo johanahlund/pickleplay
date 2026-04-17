@@ -38,6 +38,14 @@ export default function PlayersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
+
+  // Hide bottom nav during edit
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (editingId) nav?.classList.add("hidden");
+    else nav?.classList.remove("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, [editingId]);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");

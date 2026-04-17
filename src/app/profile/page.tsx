@@ -50,6 +50,14 @@ export default function ProfilePage() {
   const [matches, setMatches] = useState<RecentMatch[]>([]);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
+
+  // Hide bottom nav during edit
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (editing) nav?.classList.add("hidden");
+    else nav?.classList.remove("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, [editing]);
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);

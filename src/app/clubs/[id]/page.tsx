@@ -345,6 +345,14 @@ export default function ClubDetailPage() {
   const [showInfo, setShowInfo] = useState(false);
   const [editing, setEditing] = useState(false);
   const [clubDirty, setClubDirty] = useState(false);
+
+  // Hide bottom nav during edit
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    if (editing) nav?.classList.add("hidden");
+    else nav?.classList.remove("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, [editing]);
   const [editName, setEditName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");

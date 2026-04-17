@@ -18,6 +18,12 @@ export default function NewPlayerPage() {
   const { data: session } = useSession();
   const { alert } = useConfirm();
 
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    nav?.classList.add("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, []);
+
   const [name, setName] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [phone, setPhone] = useState("");

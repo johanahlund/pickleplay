@@ -40,6 +40,12 @@ export default function NewEventPage() {
   const router = useRouter();
   const { alert } = useConfirm();
 
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    nav?.classList.add("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, []);
+
   // Seed from sessionStorage so repeated visits to the wizard render
   // the club list on first paint. Fresh data is still fetched below and
   // replaces the cache on success.

@@ -14,6 +14,13 @@ interface MyClub { id: string; name: string; emoji: string; myRole: string }
 
 export default function NewLeaguePage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const nav = document.querySelector("nav.fixed.bottom-0");
+    nav?.classList.add("hidden");
+    return () => { nav?.classList.remove("hidden"); };
+  }, []);
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [season, setSeason] = useState("");
