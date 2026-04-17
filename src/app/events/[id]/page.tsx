@@ -2165,7 +2165,7 @@ export default function EventDetailPage() {
                     }}
                     className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                   >
-                    Check in all
+                    <span className="w-3 h-3 bg-green-500 text-white rounded-full flex items-center justify-center text-[7px] font-bold inline-flex">✓</span> Check in all
                   </button>
                 )}
                 <button
