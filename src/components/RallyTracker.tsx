@@ -891,14 +891,14 @@ export function RallyTracker({
               <div className="flex-1 text-center">
                 <span className={`text-5xl font-black tabular-nums ${leftWon ? "text-green-400" : leftColor}`}>{leftScore}</span>
                 {!isRally && isDoubles && servingLeft && (
-                  <div className="text-base text-green-400 font-bold mt-0.5">Server {gameState.serverNumber}</div>
+                  <div className="text-green-400 font-bold mt-0.5"><span className="text-xs">Server</span> <span className="text-2xl">{gameState.serverNumber}</span></div>
                 )}
               </div>
               <span className="text-3xl text-white/20 pt-1 px-1">—</span>
               <div className="flex-1 text-center">
                 <span className={`text-5xl font-black tabular-nums ${rightWon ? "text-green-400" : rightColor}`}>{rightScore}</span>
                 {!isRally && isDoubles && !servingLeft && (
-                  <div className="text-base text-green-400 font-bold mt-0.5">Server {gameState.serverNumber}</div>
+                  <div className="text-green-400 font-bold mt-0.5"><span className="text-xs">Server</span> <span className="text-2xl">{gameState.serverNumber}</span></div>
                 )}
               </div>
               <button onClick={handleRedo} disabled={redoStack.length === 0}
