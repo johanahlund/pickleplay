@@ -2519,8 +2519,8 @@ export default function EventDetailPage() {
       {/* Sticky header: back + courts + actions */}
       <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-2 space-y-2 shadow-sm">
       <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event?.name})</span></button>
-      {/* Court availability */}
-      {freeCourts.length > 0 && (
+      {/* Court availability — managers only */}
+      {canManage && freeCourts.length > 0 && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-2 text-sm text-green-700 flex items-center gap-2">
           <span className="font-medium">Courts available:</span>
           <div className="flex gap-1.5">
@@ -2618,8 +2618,8 @@ export default function EventDetailPage() {
         </button>
       </div>
 
-      {/* Court availability alert */}
-      {freeCourts.length > 0 && matchTab !== "previous" && (
+      {/* Court availability alert — managers only */}
+      {canManage && freeCourts.length > 0 && matchTab !== "previous" && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2">
           <span className="text-lg">🟢</span>
           <span className="text-sm font-medium text-green-800">
