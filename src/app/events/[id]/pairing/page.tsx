@@ -893,8 +893,9 @@ export default function PairingConfigPage() {
       {/* Header */}
       <div>
         <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
-        <h2 className="text-sm font-bold text-center mt-1">{event.name}</h2>
+        <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
       </div>
+      <h2 className="text-xl font-bold text-center">Pairing</h2>
 
       {/* Class picker */}
       {event.classes.length > 1 && (
@@ -1226,6 +1227,7 @@ export default function PairingConfigPage() {
       </div>
       </>)}
 
+      <h2 className="text-xl font-bold text-center">Matches</h2>
       {/* Matches — current, future, past */}
       {(() => {
         const allMatches = event.matches;

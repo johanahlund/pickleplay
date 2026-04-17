@@ -2046,7 +2046,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-foreground">Players</h3>
+          <h3 className="text-xl font-bold text-center text-foreground">Players</h3>
           <div className="flex items-center gap-2">
           {session?.user && !canManage && event.openSignup && (
             event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
@@ -2523,40 +2523,12 @@ export default function EventDetailPage() {
       {/* Sticky header: back + courts + actions */}
       <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-2 space-y-2 shadow-sm">
       <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event?.name})</span></button>
-      {/* Court availability — managers only */}
-      {canManage && freeCourts.length > 0 && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-2 text-sm text-green-700 flex items-center gap-2">
-          <span className="font-medium">Courts available:</span>
-          <div className="flex gap-1.5">
-            {freeCourts.map((c) => (
-              <span key={c} className="w-7 h-7 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">{c}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
+      {/* Open Pairing page — managers only */}
       {canManage && (
-        <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-3">
-          {event.pairingMode !== "manual" && (
-            <>
-              {!isIncremental && (
-                <div className="flex items-center gap-0">
-                  <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
-                  <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
-                  <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
-                </div>
-              )}
-              <span className="text-xs text-muted">{isIncremental ? "" : numRounds === 1 ? "Round" : "Rounds"}</span>
-              <button onClick={generateMatches} disabled={generating || activePlayers.length < minPlayers}
-                className="bg-action text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50">
-                {generating ? "..." : isIncremental ? "Next Round" : "Generate"}
-              </button>
-            </>
-          )}
-          <div className="flex-1" />
-          <button onClick={() => setActiveSection("manual")} className="text-xs text-primary font-medium px-3 py-2 rounded-lg border border-primary/30 hover:bg-primary/5">+ Manual</button>
-        </div>
+        <button onClick={() => router.push(`/events/${id}/pairing`)}
+          className="w-full bg-action text-white py-2 rounded-lg text-sm font-semibold">
+          Open Pairing →
+        </button>
       )}
       </div>{/* end sticky */}
 
@@ -2622,17 +2594,6 @@ export default function EventDetailPage() {
         </button>
       </div>
 
-      {/* Court availability alert — managers only */}
-      {canManage && freeCourts.length > 0 && matchTab !== "previous" && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2">
-          <span className="text-lg">🟢</span>
-          <span className="text-sm font-medium text-green-800">
-            {freeCourts.length === 1
-              ? `Court ${freeCourts[0]} is available!`
-              : `Courts ${freeCourts.join(", ")} are available!`}
-          </span>
-        </div>
-      )}
 
       {/* Current tab — active matches */}
       {matchTab === "current" && (
