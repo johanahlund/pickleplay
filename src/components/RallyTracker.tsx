@@ -747,16 +747,15 @@ export function RallyTracker({
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
               <defs>
                 <marker id="serve-arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                  <polygon points="0 0, 10 4, 0 8" fill="rgb(74, 222, 128)" opacity="0.8" />
+                  <polygon points="0 0, 10 4, 0 8" fill="rgb(74, 222, 128)" />
                 </marker>
               </defs>
               <line
-                x1={serverOnLeft ? "30%" : "70%"}
-                y1={serverIsTop ? "30%" : "70%"}
-                x2={serverOnLeft ? "70%" : "30%"}
-                y2={serverIsTop ? "70%" : "30%"}
+                x1={serverOnLeft ? "38%" : "62%"}
+                y1={serverIsTop ? "38%" : "62%"}
+                x2={serverOnLeft ? "62%" : "38%"}
+                y2={serverIsTop ? "62%" : "38%"}
                 stroke="rgb(74, 222, 128)"
-                strokeOpacity="0.6"
                 strokeWidth="3"
                 markerEnd="url(#serve-arrow)"
               />
