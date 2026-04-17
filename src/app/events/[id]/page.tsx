@@ -2853,7 +2853,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium">← Event</button>
+          <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium">← Event Overview <span className="text-[10px] text-muted font-normal">({event?.name})</span></button>
           <span className="text-[10px] text-muted">
             {event.name} · {new Date(event.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
           </span>
@@ -3064,7 +3064,7 @@ export default function EventDetailPage() {
                 startEditEvent();
               }
               setActiveSection("overview");
-            }} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event.name})</span></button>
+            }} className="text-sm text-action font-medium">← Event Overview <span className="text-xs text-muted font-normal">({event.name})</span></button>
           </div>
         )}
 

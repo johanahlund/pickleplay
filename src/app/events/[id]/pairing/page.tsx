@@ -552,7 +552,7 @@ export default function PairingConfigPage() {
 
   if (!event) return (
     <div className="space-y-4">
-      <Link href={`/events/${id}`} className="text-sm text-action">&larr; Back to event</Link>
+      <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
       <div className="flex justify-center py-8">
         <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
       </div>
@@ -698,7 +698,7 @@ export default function PairingConfigPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Link href={`/events/${id}`} className="text-sm text-action">&larr; Back to event</Link>
+          <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview {event ? <span className="text-xs text-muted font-normal">({event.name})</span> : null}</Link>
           <h2 className="text-xl font-bold mt-1">Pairing: {event.name}</h2>
         </div>
       </div>
