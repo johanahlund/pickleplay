@@ -230,7 +230,7 @@ export function PlayerSelector({
       {/* Two columns: Players | In Event */}
       <div className="flex gap-2" style={{ height: "calc(100vh - 220px)", minHeight: "300px" }}>
         {/* Left: Players */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="w-[45%] min-w-0 flex flex-col shrink-0">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
             Players ({available.length})
           </div>
@@ -243,7 +243,7 @@ export function PlayerSelector({
         </div>
 
         {/* Right: In Event */}
-        <div className="w-[40%] min-w-0 flex flex-col shrink-0">
+        <div className="flex-1 min-w-0 flex flex-col">
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium px-1 pb-1">
             In Event (<span className={flashCount ? "text-green-600 text-xs font-bold" : ""}>{selected.length}</span>)
           </div>
