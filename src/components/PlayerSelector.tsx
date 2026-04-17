@@ -189,7 +189,7 @@ export function PlayerSelector({
   // Three-state filter: Recent / Club / All. Default priority:
   // Club (if provided) > Recent (if provided) > All.
   const [filterMode, setFilterMode] = useState<FilterMode>(() => {
-    if (clubMemberIds && clubMemberIds.size > 0) return "club";
+    if (clubMemberIds) return "club";
     if (recentIds && recentIds.size > 0) return "recent";
     return "all";
   });
