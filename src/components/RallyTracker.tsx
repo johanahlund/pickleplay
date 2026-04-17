@@ -655,74 +655,42 @@ export function RallyTracker({
     );
   };
 
+  // Derive "what just happened" from history
+  const lastActionText = (() => {
+    if (history.length === 0) return "First serve";
+    const last = history[history.length - 1];
+    const prev = history.length >= 2 ? history[history.length - 2] : null;
+    if (!prev) return "Match started";
+    const prevScore = prev.score;
+    const curScore = last.score;
+    const team1Scored = curScore[0] > prevScore[0];
+    const team2Scored = curScore[1] > prevScore[1];
+    if (team1Scored) return "Point to Team A";
+    if (team2Scored) return "Point to Team B";
+    // No score change = side out or server switch
+    if (last.servingTeam !== prev.servingTeam) return "Side out";
+    if (isDoubles && !isRally && last.serverNumber !== prev.serverNumber) return `2nd Server Team ${last.servingTeam === 1 ? "A" : "B"}`;
+    return "Side out";
+  })();
+
+  const serverPlayer = findPlayer(court, serverId);
+  const receiverPlayer = findPlayer(court, receiverId);
+
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none">
-      {/* Header: score + info */}
-      <div className="px-4 py-2 border-b border-white/10">
-        <div className="flex items-center justify-between">
-          <button onClick={onClose} className="text-sm text-white/50 hover:text-white transition-colors">← Match Overview</button>
-          <span className="text-xs opacity-40">{formatLabel} · to {targetScore} · {winByLabel}</span>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-white font-medium tabular-nums">{history.length} rallies · {elapsedDisplay}</span>
-            <button onClick={() => {
-              if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
-                setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
-              }
-            }} className="text-sm text-red-400 hover:text-red-300 font-bold px-1" title="Reset match">Reset</button>
-          </div>
-        </div>
-
-        {/* Score display */}
-        <div className="flex items-center justify-center gap-3 py-2">
-          <div className="text-center">
-            <div className={`text-sm uppercase tracking-wider font-bold mb-0.5 ${swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? "Team B" : "Team A"}</div>
-            <span className={`text-7xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? score[1] : score[0]}</span>
-          </div>
-          <span className="text-4xl text-white/20 self-end mb-2">—</span>
-          <div className="text-center">
-            <div className={`text-sm uppercase tracking-wider font-bold mb-0.5 ${swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? "Team A" : "Team B"}</div>
-            <span className={`text-7xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? score[0] : score[1]}</span>
-          </div>
-          {!isRally && isDoubles && (
-            <>
-              <span className="text-4xl text-white/20 self-end mb-2">—</span>
-              <div className="text-center self-end mb-2">
-                <div className="text-[10px] text-green-400 uppercase font-medium">Server</div>
-                <span className="text-5xl font-black tabular-nums text-green-400">{gameState.serverNumber}</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Back / Forward through rallies */}
-        <div className="flex items-center justify-center gap-4 py-1">
-          <button onClick={handleUndo} disabled={history.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-3 transition-colors">←</button>
-          {gamePointActive && !winner ? (
-            <span className="text-sm font-bold text-yellow-400 animate-pulse min-w-[5rem] text-center">🏆 Game Point!</span>
-          ) : (
-            <span className="text-sm text-white/40 min-w-[5rem] text-center font-medium">
-              {redoStack.length === 0 ? "Current" : `Rally ${history.length}`}
-            </span>
-          )}
-          <button onClick={handleRedo} disabled={redoStack.length === 0}
-            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-3 transition-colors">→</button>
-        </div>
+      {/* Compact header */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
+        <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Back</button>
+        <span className="text-[10px] text-white/30">{formatLabel} · to {targetScore} · {history.length} rallies · {elapsedDisplay}</span>
+        <button onClick={() => {
+          if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
+            setPhase("pick-sides"); setGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
+          }
+        }} className="text-[10px] text-red-400 hover:text-red-300 font-bold" title="Reset">Reset</button>
       </div>
 
-      {/* Serve info — above court */}
-      {phase === "playing" && (
-        <div className="text-center text-sm text-white/50 py-1">
-          {findPlayer(court, serverId).name} serves from the {serverSide} to {findPlayer(court, receiverId).name}
-        </div>
-      )}
-
-      {/* Court view — horizontal: left team | NET | right team */}
+      {/* Court view — compact, at top */}
       {(() => {
-        // Horizontal court as seen by judge at net:
-        // Left team: top = left court, bottom = right court
-        // Right team: top = left court, bottom = right court (mirrored across net)
-        // Serve from right court (bottom) goes diagonally to left court (top) on other side
         const leftTop = swapped ? court.team2Left : court.team1Left;
         const leftBot = swapped ? court.team2Right : court.team1Right;
         const leftTPos = swapped ? "t2l" as const : "t1l" as const;
@@ -732,12 +700,11 @@ export function RallyTracker({
         const rightTPos = swapped ? "t1l" as const : "t2l" as const;
         const rightBPos = swapped ? "t1r" as const : "t2r" as const;
 
-        // Determine serve arrow: always diagonal (cross-court)
         const serverOnLeft = [leftTop.id, leftBot.id].includes(serverId);
         const serverIsTop = serverId === leftTop.id || serverId === rightTop.id;
 
         return (
-          <div className="flex p-2 gap-1 min-h-0 relative border border-white/20 rounded-xl mx-2" style={{ flex: "2 1 0%" }}>
+          <div className="flex p-2 gap-1 relative border border-white/20 rounded-xl mx-2 mt-1" style={{ height: "28vh" }}>
             {/* Serve arrow overlay — centered on court */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
               <div className="text-green-400/80 font-bold" style={{
@@ -854,9 +821,61 @@ export function RallyTracker({
         );
       })()}
 
+      {/* Score + undo/redo + status messages */}
+      <div className="px-4 py-2 space-y-2">
+        {/* Score row with undo/redo arrows */}
+        <div className="flex items-center justify-center gap-2">
+          <button onClick={handleUndo} disabled={history.length === 0}
+            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-2 transition-colors">←</button>
+          <div className="flex items-center gap-3">
+            <div className="text-center">
+              <div className={`text-[10px] uppercase tracking-wider font-bold ${swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? "Team B" : "Team A"}</div>
+              <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 2 : winner === 1) ? "text-green-400" : swapped ? "text-red-500" : "text-blue-500"}`}>{swapped ? score[1] : score[0]}</span>
+            </div>
+            <span className="text-3xl text-white/20">—</span>
+            <div className="text-center">
+              <div className={`text-[10px] uppercase tracking-wider font-bold ${swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? "Team A" : "Team B"}</div>
+              <span className={`text-5xl font-black tabular-nums ${(swapped ? winner === 1 : winner === 2) ? "text-green-400" : swapped ? "text-blue-500" : "text-red-500"}`}>{swapped ? score[0] : score[1]}</span>
+            </div>
+            {!isRally && isDoubles && (
+              <>
+                <span className="text-3xl text-white/20">—</span>
+                <div className="text-center">
+                  <div className="text-[10px] text-green-400 uppercase font-medium">Srv</div>
+                  <span className="text-4xl font-black tabular-nums text-green-400">{gameState.serverNumber}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={handleRedo} disabled={redoStack.length === 0}
+            className="text-white/40 hover:text-white disabled:opacity-10 text-3xl px-2 transition-colors">→</button>
+        </div>
+
+        {/* Rally counter */}
+        <div className="text-center">
+          {gamePointActive && !winner ? (
+            <span className="text-sm font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
+          ) : (
+            <span className="text-[10px] text-white/30">
+              {redoStack.length === 0 ? "Current" : `Rally ${history.length}`}
+            </span>
+          )}
+        </div>
+
+        {/* Status: what happened + what's next */}
+        {phase === "playing" && (
+          <div className="text-center space-y-1">
+            <div className="text-base font-bold text-white">{lastActionText}</div>
+            <div className="text-base text-white/80">
+              {serverPlayer.name} serves from the {serverSide} to {receiverPlayer.name}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Action buttons */}
       {phase === "playing" && (
-        <div className="p-3 space-y-2 border-t border-white/10">
+        <div className="p-3 space-y-2 border-t border-white/10 mt-auto">
           {(() => {
             const leftTeamNum = swapped ? 2 : 1;
             const rightTeamNum = swapped ? 1 : 2;
