@@ -2042,32 +2042,15 @@ export default function EventDetailPage() {
               <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join</button>
             )
           )}
-          {canManage && (
-            <div className="flex items-center gap-2">
-              {event.players.some((ep) => ep.status === "registered") && (
-                <button
-                  onClick={async () => {
-                    const registered = event.players.filter((ep) => ep.status === "registered");
-                    for (const ep of registered) {
-                      await fetch(`/api/events/${id}/players/${ep.player.id}/checkin`, { method: "POST" });
-                    }
-                    await fetchEvent();
-                  }}
-                  className="text-sm text-green-700 font-medium px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
-                >
-                  Check in all
-                </button>
-              )}
-              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-                className="text-sm text-primary font-medium px-3 py-1.5 rounded-lg hover:bg-primary/10 transition-colors">
-                Add
-              </button>
-            </div>
-          )}
           </div>
         </div>
         {canManage && (
-          <p className="text-xs text-muted">Tap name to check in/out · Tap matches/⏸ to pause</p>
+          <div className="flex justify-end">
+            <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+              className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
+              + Player
+            </button>
+          </div>
         )}
         <div className="flex items-center gap-2">
           {event.players.length > 6 && (
@@ -2081,7 +2064,7 @@ export default function EventDetailPage() {
             ].map((g) => (
               <button key={g.label} onClick={() => setPlayerGenderFilter(g.value)}
                 className={`px-2 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  playerGenderFilter === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                  playerGenderFilter === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"
                 }`}>{g.label}</button>
             ))}
           </div>
@@ -2122,44 +2105,52 @@ export default function EventDetailPage() {
           return (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 px-1">
-                {levelEditMode ? (
-                  <>
-                    <p className="text-[11px] text-muted flex-1">
-                      {pickingTap ? `${levelSelectedIds.size} selected — tap a card to move` : "Tap players to select, then tap a card."}
-                    </p>
-                    {pickingTap && (
-                      <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear</button>
-                    )}
-                    <button
-                      onClick={async () => {
-                        const ok = await confirmDialog({
-                          title: "Recalculate from ratings?",
-                          message: "Every player's level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
-                          danger: true,
-                          confirmText: "Recalculate",
+                {levelEditMode && pickingTap && (
+                  <button onClick={() => setLevelSelectedIds(new Set())} className="text-[11px] text-muted underline">Clear ({levelSelectedIds.size})</button>
+                )}
+                {levelEditMode && (
+                  <button
+                    onClick={async () => {
+                      const ok = await confirmDialog({
+                        title: "Recalculate from ratings?",
+                        message: "Every player's level will be reset to the value computed from their DUPR or app rating. Manual overrides will be lost.",
+                        danger: true,
+                        confirmText: "Recalculate",
+                      });
+                      if (!ok) return;
+                      const classes = event.classes || [];
+                      for (const cls of classes) {
+                        await fetch(`/api/events/${id}/pairing/skill-levels`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "recalculate", classId: cls.id }),
                         });
-                        if (!ok) return;
-                        const classes = event.classes || [];
-                        for (const cls of classes) {
-                          await fetch(`/api/events/${id}/pairing/skill-levels`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "recalculate", classId: cls.id }),
-                          });
-                        }
-                        await fetchEvent();
-                      }}
-                      className="text-xs text-muted hover:text-foreground underline"
-                    >
-                      Recalculate
-                    </button>
-                  </>
-                ) : (
-                  <p className="text-[11px] text-muted flex-1">Tap name to check in/out · Tap matches/⏸ to pause</p>
+                      }
+                      await fetchEvent();
+                    }}
+                    className="text-xs text-action font-medium"
+                  >
+                    Recalculate
+                  </button>
+                )}
+                <div className="flex-1" />
+                {event.players.some((ep) => ep.status === "registered") && !levelEditMode && (
+                  <button
+                    onClick={async () => {
+                      const registered = event.players.filter((ep) => ep.status === "registered");
+                      for (const ep of registered) {
+                        await fetch(`/api/events/${id}/players/${ep.player.id}/checkin`, { method: "POST" });
+                      }
+                      await fetchEvent();
+                    }}
+                    className="text-xs text-action font-medium"
+                  >
+                    Check in all
+                  </button>
                 )}
                 <button
                   onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
-                  className={`text-xs font-medium ${levelEditMode ? "text-action" : "text-muted"}`}
+                  className="text-xs text-action font-medium"
                 >
                   {levelEditMode ? "Done" : "Edit levels"}
                 </button>
@@ -2307,6 +2298,9 @@ export default function EventDetailPage() {
                 onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
             ))}
           </div>
+        )}
+        {canManage && (
+          <p className="text-[11px] text-muted italic text-center mt-2">Tap name to check in/out · Tap matches/⏸ to pause</p>
         )}
       </div>
     );
