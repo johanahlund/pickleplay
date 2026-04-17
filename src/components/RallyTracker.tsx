@@ -650,7 +650,7 @@ export function RallyTracker({
             : "border border-white/10 bg-white/5"
       }`}>
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
-        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-white/50" : "text-base text-white/60"}`}>
+        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-white/80" : "text-base text-white/40"}`}>
           {shortName(player)}
         </span>
         {isServer && <span className="text-[9px] text-green-300 font-bold animate-pulse">● Server</span>}
@@ -890,13 +890,13 @@ export function RallyTracker({
           );
         })()}
 
-        {/* Rally counter */}
+        {/* Rally counter — same font color as player names */}
         <div className="text-center">
           {gamePointActive && !winner ? (
-            <span className="text-sm font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
+            <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
           ) : (
-            <span className="text-[10px] text-white/30">
-              {redoStack.length === 0 ? "Current" : `Rally ${history.length}`}
+            <span className="text-base text-white/60 font-medium">
+              {redoStack.length === 0 ? `Rally ${history.length + 1}` : `Rally ${history.length}`}
             </span>
           )}
         </div>
