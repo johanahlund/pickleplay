@@ -751,8 +751,8 @@ export function RallyTracker({
                 </marker>
               </defs>
               <line
-                x1={serverOnLeft ? "38%" : "62%"}
-                y1={serverIsTop ? "38%" : "62%"}
+                x1={serverOnLeft ? "28%" : "72%"}
+                y1={serverIsTop ? "35%" : "65%"}
                 x2={serverOnLeft ? "62%" : "38%"}
                 y2={serverIsTop ? "62%" : "38%"}
                 stroke="rgb(74, 222, 128)"
