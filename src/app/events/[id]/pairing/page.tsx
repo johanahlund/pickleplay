@@ -188,6 +188,8 @@ export default function PairingConfigPage() {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [manualCourt, setManualCourt] = useState(1);
+  const [manualFilterMode, setManualFilterMode] = useState<"available" | "all">("available");
+  const [manualGenderFilter, setManualGenderFilter] = useState<string | null>(null);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
 
@@ -526,9 +528,9 @@ export default function PairingConfigPage() {
 
   const toggleManualPlayer = (playerId: string, team: 1 | 2) => {
     if (team === 1) {
-      setManualTeam1((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
+      setManualTeam1((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : prev.length >= 2 ? prev : [...prev, playerId]);
     } else {
-      setManualTeam2((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]);
+      setManualTeam2((prev) => prev.includes(playerId) ? prev.filter((id) => id !== playerId) : prev.length >= 2 ? prev : [...prev, playerId]);
     }
   };
 
@@ -610,42 +612,83 @@ export default function PairingConfigPage() {
   );
 
   if (showManual && event) {
-    const activePlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
     const manualMatchCounts = new Map<string, number>();
     for (const m of event.matches) for (const p of m.players) manualMatchCounts.set(p.playerId, (manualMatchCounts.get(p.playerId) || 0) + 1);
+    // "Available" = checked in, not in any active/pending match
+    const playingIds = new Set<string>();
+    for (const m of event.matches.filter((m) => m.status === "active" || m.status === "pending" || m.status === "paused")) {
+      for (const p of m.players) playingIds.add(p.playerId);
+    }
+    const allPlayers = event.players.filter((ep) => ep.status === "registered" || ep.status === "checked_in");
+    const availablePlayers = allPlayers.filter((ep) => !playingIds.has(ep.playerId));
+
+    // Match type label
+    const t1 = manualTeam1.length;
+    const t2 = manualTeam2.length;
+    const matchType = t1 === 0 && t2 === 0 ? "" : t1 === 1 && t2 === 1 ? "Singles" : t1 === 2 && t2 === 2 ? "Doubles" : t1 + t2 > 0 ? `${t1}v${t2}` : "";
+
+    // Filter state for manual match
+    const [manualFilter, setManualFilter] = [manualFilterMode, setManualFilterMode];
+    const [manualGender, setManualGender] = [manualGenderFilter, setManualGenderFilter];
+    const filteredPlayers = (manualFilter === "available" ? availablePlayers : allPlayers)
+      .filter((ep) => !manualGender || ep.player.gender === manualGender);
+
     return (
       <div className="space-y-4 pb-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Manual Match</h2>
+          <div>
+            <h2 className="text-xl font-bold">Manual Match</h2>
+            {matchType && <span className="text-xs text-muted">{matchType}</span>}
+          </div>
           <button onClick={() => { setShowManual(false); setManualTeam1([]); setManualTeam2([]); }}
             className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark">
             Done
           </button>
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 flex-1">
             <span className="text-sm font-semibold text-muted">Court</span>
             <div className="flex gap-1.5">
               {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((c) => (
                 <button key={c} onClick={() => setManualCourt(c)}
-                  className={`w-10 h-10 rounded-xl font-bold text-lg flex items-center justify-center transition-all ${
+                  className={`w-9 h-9 rounded-xl font-bold text-base flex items-center justify-center transition-all ${
                     manualCourt === c ? "bg-selected text-white shadow-sm" : "bg-gray-100 text-foreground hover:bg-gray-200"
                   }`}>{c}</button>
               ))}
             </div>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {(["M", "F"] as const).map((g) => (
+              <button key={g} onClick={() => setManualGender(manualGender === g ? null : g)}
+                className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                  manualGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                }`}>{g === "M" ? "♂" : "♀"}</button>
+            ))}
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <button onClick={() => setManualFilter("available")}
+              className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                manualFilter === "available" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+              }`}>Available</button>
+            <button onClick={() => setManualFilter("all")}
+              className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                manualFilter === "all" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+              }`}>All</button>
           </div>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Team 1</label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Team 1 {t1 > 0 && `(${t1})`}</label>
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {activePlayers.filter((ep) => !manualTeam2.includes(ep.playerId)).map((ep) => (
+                {filteredPlayers.filter((ep) => !manualTeam2.includes(ep.playerId)).map((ep) => (
                   <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 1)}
+                    disabled={!manualTeam1.includes(ep.playerId) && manualTeam1.length >= 2}
                     className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
-                      manualTeam1.includes(ep.playerId) ? "bg-blue-100 text-blue-800 font-medium" : "hover:bg-gray-50"
+                      manualTeam1.includes(ep.playerId) ? "bg-blue-100 text-blue-800 font-medium"
+                      : manualTeam1.length >= 2 ? "opacity-30" : "hover:bg-gray-50"
                     }`}>
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                     <span className="truncate flex-1">{ep.player.name}</span>
@@ -655,12 +698,14 @@ export default function PairingConfigPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-1">Team 2</label>
+              <label className="block text-sm font-semibold text-foreground mb-1">Team 2 {t2 > 0 && `(${t2})`}</label>
               <div className="space-y-1 max-h-64 overflow-y-auto">
-                {activePlayers.filter((ep) => !manualTeam1.includes(ep.playerId)).map((ep) => (
+                {filteredPlayers.filter((ep) => !manualTeam1.includes(ep.playerId)).map((ep) => (
                   <button key={ep.playerId} onClick={() => toggleManualPlayer(ep.playerId, 2)}
+                    disabled={!manualTeam2.includes(ep.playerId) && manualTeam2.length >= 2}
                     className={`w-full text-left text-sm py-1.5 px-2 rounded transition-all flex items-center gap-1.5 ${
-                      manualTeam2.includes(ep.playerId) ? "bg-red-100 text-red-800 font-medium" : "hover:bg-gray-50"
+                      manualTeam2.includes(ep.playerId) ? "bg-red-100 text-red-800 font-medium"
+                      : manualTeam2.length >= 2 ? "opacity-30" : "hover:bg-gray-50"
                     }`}>
                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                     <span className="truncate flex-1">{ep.player.name}</span>
@@ -675,7 +720,7 @@ export default function PairingConfigPage() {
         <div className="flex gap-2">
           <button onClick={createManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
             className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">
-            Create Match
+            Create {matchType || "Match"}
           </button>
           <button onClick={() => { setShowManual(false); setManualTeam1([]); setManualTeam2([]); }}
             className="px-4 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">Cancel</button>
