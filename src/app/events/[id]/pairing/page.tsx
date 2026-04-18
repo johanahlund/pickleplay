@@ -1666,7 +1666,7 @@ export default function PairingConfigPage() {
                                   : "text-foreground"
                                 }`}>{ep.player.name}</span>
                               </span>
-                              <span className="text-base text-muted tabular-nums shrink-0">{count}m</span>
+                              <span className="text-lg text-muted tabular-nums shrink-0">{count} <span className="text-sm">m</span></span>
                             </button>
                           );
                         })}
@@ -1696,7 +1696,7 @@ export default function PairingConfigPage() {
             className={`flex items-center gap-3 py-2.5 px-3 rounded-lg active:bg-gray-100 w-full text-left ${dimmed ? "opacity-50" : ""}`}>
             <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="md" />
             <span className={`text-lg font-bold flex-1 ${strike ? "line-through text-muted" : ""}`}>{ep.player.name}</span>
-            <span className="text-base text-muted tabular-nums">{mc.get(ep.playerId) || 0}m</span>
+            <span className="text-lg text-muted tabular-nums">{mc.get(ep.playerId) || 0} <span className="text-sm">m</span></span>
           </button>
         );
         return (
