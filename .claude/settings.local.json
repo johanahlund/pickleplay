@@ -70,7 +70,10 @@
       "Bash(grep -n \"href=\\\\`/clubs/\\\\|Link.*clubs/\" src/app/clubs/page.tsx)",
       "Bash(grep -rn \"bg-selected\\\\|--selected\\\\|bg-action\\\\b\\\\|--action\" src/app/globals.css tailwind.config.*)",
       "Bash(rm /Users/johanahlund/PROGRAMMING/pickleplay/src/app/events/\\\\[id\\\\]/pairing/skills/page.tsx)",
-      "Bash(rmdir /Users/johanahlund/PROGRAMMING/pickleplay/src/app/events/\\\\[id\\\\]/pairing/skills)"
+      "Bash(rmdir /Users/johanahlund/PROGRAMMING/pickleplay/src/app/events/\\\\[id\\\\]/pairing/skills)",
+      "Bash(ipconfig getifaddr:*)",
+      "Bash(code tunnel:*)",
+      "Bash(jobs -l)"
     ]
   }
 }

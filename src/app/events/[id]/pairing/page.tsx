@@ -1392,6 +1392,15 @@ export default function PairingConfigPage() {
                 )}
               </div>
             )}
+            {pending.length > 0 && (
+              <div className="bg-green-50 -mx-4 px-4 py-3 border-y border-green-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Upcoming</span>
+                  <button onClick={deleteAllPending} className="text-[10px] text-danger font-medium">Delete all</button>
+                </div>
+                <div className="space-y-2 mt-2">{pending.map(renderMatchCard)}</div>
+              </div>
+            )}
             {active.length > 0 && (
               <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
                 <div className="flex items-center gap-2 mb-2">
@@ -1407,15 +1416,6 @@ export default function PairingConfigPage() {
                   <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span>
                 </div>
                 <div className="space-y-2">{paused.map(renderMatchCard)}</div>
-              </div>
-            )}
-            {pending.length > 0 && (
-              <div className="bg-green-50 -mx-4 px-4 py-3 border-y border-green-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Upcoming</span>
-                  <button onClick={deleteAllPending} className="text-[10px] text-danger font-medium">Delete all</button>
-                </div>
-                <div className="space-y-2 mt-2">{pending.map(renderMatchCard)}</div>
               </div>
             )}
             {completed.length > 0 && (
@@ -1436,7 +1436,7 @@ export default function PairingConfigPage() {
         );
       })()}
 
-      {/* Action sheet */}
+      {/* Action sheet — same options as event page */}
       {actionMatchId && event && (() => {
         const m = event.matches.find((x) => x.id === actionMatchId);
         if (!m) return null;
@@ -1445,6 +1445,8 @@ export default function PairingConfigPage() {
         const playerMap2 = new Map(classPlayers.map((ep) => [ep.playerId, ep.player]));
         const t1Names = t1.map((p) => playerMap2.get(p.playerId)?.name || "?").join(" & ");
         const t2Names = t2.map((p) => playerMap2.get(p.playerId)?.name || "?").join(" & ");
+        const isCompleted = m.status === "completed";
+        const isActive = m.status === "active";
         const close = () => setActionMatchId(null);
         return (
           <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
@@ -1454,31 +1456,39 @@ export default function PairingConfigPage() {
                 <span className="text-sm font-semibold">Court {m.courtNum}</span>
                 <span className="text-xs text-muted ml-2">{t1Names} vs {t2Names}</span>
               </div>
-              <div className="flex flex-col gap-1.5 p-4">
-                {m.status === "pending" && (
-                  <button onClick={() => { startMatch(m.id); close(); }}
-                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
-                    ▶ Start match
-                  </button>
-                )}
-                {m.status === "active" && (
-                  <button onClick={() => { pauseMatch(m.id); close(); }}
-                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
-                    ⏸️ Pause match
-                  </button>
-                )}
-                {m.status === "paused" && (
-                  <button onClick={() => { startMatch(m.id); close(); }}
-                    className="py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
-                    ▶ Resume match
-                  </button>
-                )}
-                <button onClick={() => { deleteMatch(m.id); close(); }}
-                  className="py-2.5 rounded-xl text-sm font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center gap-2">
-                  🗑️ Delete match
-                </button>
+              <div className="flex p-3 gap-3">
+                {/* Left: Edit + Delete */}
+                <div className="flex flex-col gap-1.5 w-24">
+                  {!isCompleted && (
+                    <button onClick={() => { close(); setShowManual(true); setManualCourt(m.courtNum); }}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
+                  )}
+                  <button onClick={() => { close(); deleteMatch(m.id); }}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
+                </div>
+                {/* Right: Actions */}
+                <div className="flex-1 flex flex-col gap-1.5">
+                  {m.status === "pending" && (
+                    <button onClick={() => { startMatch(m.id); close(); }}
+                      className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">▶ Start match</button>
+                  )}
+                  {isActive && (
+                    <button onClick={() => { pauseMatch(m.id); close(); }}
+                      className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⏸️ Pause</button>
+                  )}
+                  {m.status === "paused" && (
+                    <button onClick={() => { startMatch(m.id); close(); }}
+                      className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">▶ Resume</button>
+                  )}
+                  {!isCompleted && (
+                    <button onClick={() => { close(); window.open(`/events/${id}`, "_self"); }}
+                      className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📺 Focus view</button>
+                  )}
+                  <button onClick={() => { close(); }}
+                    className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">🔊 Announce</button>
+                </div>
               </div>
-              <div className="px-4 pb-4">
+              <div className="px-4 pb-4 pt-2">
                 <button onClick={close} className="w-full py-3 rounded-xl bg-gray-100 text-sm font-medium">Cancel</button>
               </div>
             </div>
