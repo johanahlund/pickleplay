@@ -1230,19 +1230,17 @@ export default function PairingConfigPage() {
             {generating ? "..." : numRounds === 1 ? "Next Match" : `Next ${numRounds} Matches`}
           </button>
           <button
+            onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
+            className="text-xs text-primary font-medium px-3 py-2.5 rounded-lg border border-primary/30 hover:bg-primary/5"
+          >
+            + Manual Match
+          </button>
+          <button
             onClick={handleGenerateRound}
             disabled={generating || !classId}
             className="flex-1 bg-action-dark text-white px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
           >
             {generating ? "..." : numRounds === 1 ? "Next Round" : `Next ${numRounds} Rounds`}
-          </button>
-        </div>
-        <div className="flex justify-end">
-          <button
-            onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
-            className="text-xs text-primary font-medium px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5"
-          >
-            + Manual
           </button>
         </div>
       </div>
