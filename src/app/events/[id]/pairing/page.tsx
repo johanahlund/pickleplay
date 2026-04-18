@@ -184,6 +184,8 @@ export default function PairingConfigPage() {
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [numRounds, setNumRounds] = useState(1);
   const [actionMatchId, setActionMatchId] = useState<string | null>(null);
+  const [playerActionId, setPlayerActionId] = useState<string | null>(null);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [manualCourt, setManualCourt] = useState(1);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
@@ -929,6 +931,15 @@ export default function PairingConfigPage() {
             >
               {levelEditMode ? "Done" : "Edit levels"}
             </button>
+            <button
+              onClick={() => setExpandedSection("players")}
+              className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
+              title="Expand players view"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M3 8V4h4M17 8V4h-4M3 12v4h4M17 12v4h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </svg>
+            </button>
           </div>
         )}
       </div>
@@ -1000,24 +1011,20 @@ export default function PairingConfigPage() {
                                   : isRegistered ? "bg-gray-50"
                                   : "bg-gray-50"
                                 }`}
+                                onClick={() => {
+                                  if (levelEditMode) {
+                                    setLevelSelectedIds((prev) => {
+                                      const n = new Set(prev);
+                                      if (n.has(ep.playerId)) n.delete(ep.playerId);
+                                      else n.add(ep.playerId);
+                                      return n;
+                                    });
+                                  } else {
+                                    setPlayerActionId(ep.playerId);
+                                  }
+                                }}
                               >
-                                {/* Name area: tap = check-in toggle (default) or level select (edit mode) */}
-                                <button
-                                  onClick={() => {
-                                    if (levelEditMode) {
-                                      setLevelSelectedIds((prev) => {
-                                        const n = new Set(prev);
-                                        if (n.has(ep.playerId)) n.delete(ep.playerId);
-                                        else n.add(ep.playerId);
-                                        return n;
-                                      });
-                                    } else {
-                                      checkInPlayer(ep.playerId);
-                                    }
-                                  }}
-                                  className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
-                                  title={levelEditMode ? "Tap to select" : isCheckedIn ? "Tap to un-check-in" : "Tap to check in"}
-                                >
+                                <span className="flex items-center gap-1.5 min-w-0 flex-1">
                                   <span className={`relative shrink-0 ${isRegistered ? "opacity-40" : ""}`}>
                                     <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                                     {(isCheckedIn || isPaused) && (
@@ -1026,33 +1033,18 @@ export default function PairingConfigPage() {
                                       }`}>✓</span>
                                     )}
                                   </span>
-                                  <div className="min-w-0 flex-1">
-                                    <div className={`text-[11px] font-medium truncate ${
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`text-[11px] font-medium truncate block ${
                                       isSelected ? "font-bold"
                                       : isPaused ? "line-through text-muted"
                                       : isRegistered ? "text-muted"
                                       : ""
-                                    }`}>{ep.player.name}</div>
-                                  </div>
-                                </button>
-                                {/* Match count + pause icon: tap = toggle pause */}
-                                {!levelEditMode && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); togglePausePlayer(ep.playerId); }}
-                                    className={`flex items-center gap-0.5 shrink-0 px-1 py-0.5 rounded transition-colors ${
-                                      isPaused ? "text-amber-600" : "text-muted hover:text-amber-600"
-                                    }`}
-                                    title={isPaused ? "Tap to unpause" : "Tap to pause"}
-                                  >
-                                    <span className={`text-[10px] tabular-nums`}>{count}m</span>
-                                    <span className="text-[9px]">⏸</span>
-                                  </button>
-                                )}
-                                {levelEditMode && (
-                                  <span className={`text-[10px] tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
-                                    {count}m
+                                    }`}>{ep.player.name}</span>
                                   </span>
-                                )}
+                                </span>
+                                <span className={`text-[10px] tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
+                                  {count}m
+                                </span>
                               </div>
                             );
                           })}
@@ -1491,6 +1483,150 @@ export default function PairingConfigPage() {
               <div className="px-4 pb-4 pt-2">
                 <button onClick={close} className="w-full py-3 rounded-xl bg-gray-100 text-sm font-medium">Cancel</button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Player action sheet */}
+      {playerActionId && event && (() => {
+        const ep = event.players.find((p) => p.playerId === playerActionId);
+        if (!ep) return null;
+        const count = playerMatchCounts.get(ep.playerId) || 0;
+        const close = () => setPlayerActionId(null);
+        return (
+          <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
+            <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-0 mx-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
+              <div className="flex items-center gap-3 px-4 pb-3 border-b border-border">
+                <span className="relative shrink-0">
+                  <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
+                  {(ep.status === "checked_in" || ep.status === "paused") && (
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${
+                      ep.status === "paused" ? "bg-green-300 text-white" : "bg-green-500 text-white"
+                    }`}>✓</span>
+                  )}
+                </span>
+                <div>
+                  <div className="text-sm font-semibold">{ep.player.name}</div>
+                  <div className="text-xs text-muted">{count} match{count !== 1 ? "es" : ""} · {ep.status === "checked_in" ? "Checked in" : ep.status === "paused" ? "Paused" : "Registered"}</div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5 p-4">
+                {ep.status === "registered" && (
+                  <button onClick={() => { checkInPlayer(ep.playerId); close(); }}
+                    className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                    <span className="w-5 h-5 bg-green-500 text-white rounded-full inline-flex items-center justify-center text-[10px] font-bold">✓</span>
+                    Check in
+                  </button>
+                )}
+                {ep.status === "checked_in" && (
+                  <>
+                    <button onClick={() => { checkInPlayer(ep.playerId); close(); }}
+                      className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                      <span className="text-base">✕</span>
+                      Check out
+                    </button>
+                    <button onClick={() => { togglePausePlayer(ep.playerId); close(); }}
+                      className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                      <span className="text-base">⏸</span>
+                      Pause
+                    </button>
+                  </>
+                )}
+                {ep.status === "paused" && (
+                  <button onClick={() => { togglePausePlayer(ep.playerId); close(); }}
+                    className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                    <span className="text-base">▶</span>
+                    Unpause
+                  </button>
+                )}
+              </div>
+              <div className="px-4 pb-4">
+                <button onClick={close} className="w-full py-3 rounded-xl bg-gray-100 text-sm font-medium">Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Expanded players overlay */}
+      {expandedSection === "players" && (() => {
+        const byLevel = new Map<string, EventPlayerDTO[]>();
+        for (const ep of classPlayers) {
+          const eff = ep.skillLevel ?? ep.autoSkillLevel;
+          const key = eff == null ? "unset" : String(eff);
+          const list = byLevel.get(key) || [];
+          list.push(ep);
+          byLevel.set(key, list);
+        }
+        const rows: { key: string; label: string }[] = [
+          { key: "5", label: "L5 — Expert" },
+          { key: "4", label: "L4" },
+          { key: "3", label: "L3" },
+          { key: "2", label: "L2" },
+          { key: "1", label: "L1 — Beginner" },
+          { key: "unset", label: "Unset" },
+        ];
+        return (
+          <div className="fixed inset-0 bg-white z-50 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <h2 className="text-lg font-bold">Players ({classPlayers.length})</h2>
+              <button onClick={() => setExpandedSection(null)}
+                className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-foreground active:bg-gray-200">
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+              {rows
+                .filter((row) => (byLevel.get(row.key) || []).length > 0)
+                .map((row) => {
+                  const players = (byLevel.get(row.key) || []).sort((a, b) => a.player.name.localeCompare(b.player.name));
+                  return (
+                    <div key={row.key}>
+                      <div className="text-sm font-bold mb-2 pb-1 border-b border-border">
+                        {row.label}
+                        <span className="text-muted font-normal ml-2">({players.length})</span>
+                      </div>
+                      <div className="space-y-1">
+                        {players.map((ep) => {
+                          const count = playerMatchCounts.get(ep.playerId) || 0;
+                          const isPaused = ep.status === "paused";
+                          const isRegistered = ep.status === "registered";
+                          const isCheckedIn = ep.status === "checked_in";
+                          return (
+                            <button
+                              key={ep.id}
+                              onClick={() => setPlayerActionId(ep.playerId)}
+                              className={`flex items-center gap-3 w-full text-left rounded-xl px-3 py-2.5 transition-all active:bg-gray-100 ${
+                                isPaused ? "bg-amber-50 opacity-70"
+                                : isRegistered ? "bg-gray-50 opacity-60"
+                                : "bg-gray-50"
+                              }`}
+                            >
+                              <span className={`relative shrink-0 ${isRegistered ? "opacity-50" : ""}`}>
+                                <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="md" />
+                                {(isCheckedIn || isPaused) && (
+                                  <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                                    isPaused ? "bg-green-300 text-white" : "bg-green-500 text-white"
+                                  }`}>✓</span>
+                                )}
+                              </span>
+                              <span className="flex-1 min-w-0">
+                                <span className={`text-lg font-bold truncate block ${
+                                  isPaused ? "line-through text-muted"
+                                  : isRegistered ? "text-muted"
+                                  : "text-foreground"
+                                }`}>{ep.player.name}</span>
+                              </span>
+                              <span className="text-base text-muted tabular-nums shrink-0">{count}m</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         );
