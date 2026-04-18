@@ -1209,7 +1209,7 @@ export default function PairingConfigPage() {
       <button onClick={() => toggleCollapsed("actions")}
         className="flex items-center gap-1 text-sm font-bold text-foreground w-full text-left py-1">
         <span className={`transition-transform ${collapsed.has("actions") ? "" : "rotate-90"}`}>›</span>
-        Generate round
+        Generate Matches
       </button>
       {!collapsed.has("actions") && (<>
       {/* Actions row */}
