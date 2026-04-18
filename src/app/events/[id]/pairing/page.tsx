@@ -1713,7 +1713,7 @@ export default function PairingConfigPage() {
                 </div>
               )}
               {paused2.length > 0 && (
-                <div>
+                <div className="bg-amber-50 -mx-4 px-4 py-3 rounded-lg">
                   <span className="text-sm font-bold text-amber-600 uppercase tracking-wider">Paused ({paused2.length})</span>
                   <div className="mt-1">{paused2.map((ep) => renderRow(ep, false, true))}</div>
                 </div>
