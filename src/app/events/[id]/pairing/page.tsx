@@ -1523,12 +1523,12 @@ export default function PairingConfigPage() {
                 {ep.status === "checked_in" && (
                   <>
                     <button onClick={() => { checkInPlayer(ep.playerId); close(); }}
-                      className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                      className="py-3 rounded-xl text-sm font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center gap-2">
                       <span className="text-base">✕</span>
                       Check out
                     </button>
                     <button onClick={() => { togglePausePlayer(ep.playerId); close(); }}
-                      className="py-3 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">
+                      className="py-3 rounded-xl text-sm font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2">
                       <span className="text-base">⏸</span>
                       Pause
                     </button>
