@@ -338,12 +338,41 @@ export default function PairingConfigPage() {
   }, [runPreview]);
 
   // ── Commit the preview ──────────────────────────────────────────────────
+  // Next Round: ALL checked-in players, ALL courts (includes busy courts)
+  const handleGenerateRound = async () => {
+    if (!classId || !event) return;
+    setGenerating(true);
+    try {
+      const allCourtNums = Array.from({ length: event.numCourts }, (_, i) => i + 1);
+      for (let i = 0; i < numRounds; i++) {
+        const payload: Record<string, unknown> = {
+          classId,
+          settings,
+          includeCourts: allCourtNums,
+        };
+        const r = await fetch(`/api/events/${id}/pairing/generate-round`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const d = await r.json();
+          await alert(d.error || "Failed to generate", "Error");
+          break;
+        }
+      }
+      await refreshEvent();
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Next Match: only IDLE players + IDLE courts (sitting out players only)
   const handleGenerate = async () => {
     if (!classId) return;
     setGenerating(true);
     try {
       for (let i = 0; i < numRounds; i++) {
-        // First round: commit the preview if available (exact same matches shown)
         const usePreview = i === 0 && preview && preview.round.length > 0;
         const payload: Record<string, unknown> = {
           classId,
@@ -1183,26 +1212,36 @@ export default function PairingConfigPage() {
       </button>
       {!collapsed.has("actions") && (<>
       {/* Actions row */}
-      <div className="bg-card rounded-xl border border-border p-2.5 flex items-center gap-3">
-        <div className="flex items-center gap-0">
-          <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
-          <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
-          <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+      <div className="bg-card rounded-xl border border-border p-2.5 space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={generating || !classId}
+            className="flex-1 bg-action text-white px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          >
+            {generating ? "..." : "Next Match"}
+          </button>
+          <div className="flex items-center gap-0">
+            <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+            <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+            <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+          </div>
+          <button
+            onClick={handleGenerateRound}
+            disabled={generating || !classId}
+            className="bg-action-dark text-white px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          >
+            {generating ? "..." : numRounds === 1 ? "Next Round" : `${numRounds} Rounds`}
+          </button>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating || !classId}
-          className="bg-action text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-        >
-          {generating ? "..." : numRounds === 1 ? "Next Round" : `Generate ${numRounds}`}
-        </button>
-        <div className="flex-1" />
-        <button
-          onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
-          className="text-xs text-primary font-medium px-3 py-2 rounded-lg border border-primary/30 hover:bg-primary/5"
-        >
-          + Manual
-        </button>
+        <div className="flex justify-end">
+          <button
+            onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
+            className="text-xs text-primary font-medium px-3 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5"
+          >
+            + Manual
+          </button>
+        </div>
       </div>
       </>)}
 
@@ -1334,19 +1373,24 @@ export default function PairingConfigPage() {
             {/* Sitting out + Paused — yellow band */}
             {(sittingOutPlayers.length > 0 || pausedPlayers.length > 0 || notCheckedInPlayers.length > 0) && (
               <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                    Sitting out ({sittingOutPlayers.length}){pausedPlayers.length > 0 && ` · Paused (${pausedPlayers.length})`}
+                  </span>
+                  <button onClick={() => setExpandedSection("status")} className="text-muted hover:text-foreground p-1" title="Expand">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
+                  </button>
+                </div>
                 {sittingOutPlayers.length > 0 && (
-                  <div>
-                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Sitting out ({sittingOutPlayers.length})</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1.5">
-                      {sittingOutPlayers.map((ep) => (
-                        <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
-                          className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1 active:bg-amber-100" title="Tap to pause">
-                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className="text-[11px] font-medium">{ep.player.name}</span>
-                          <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sittingOutPlayers.map((ep) => (
+                      <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
+                        className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1">
+                        <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                        <span className="text-[11px] font-medium">{ep.player.name}</span>
+                        <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                      </button>
+                    ))}
                   </div>
                 )}
                 {pausedPlayers.length > 0 && (
@@ -1354,8 +1398,8 @@ export default function PairingConfigPage() {
                     <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Paused ({pausedPlayers.length})</span>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {pausedPlayers.map((ep) => (
-                        <button key={ep.playerId} onClick={() => togglePausePlayer(ep.playerId)}
-                          className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70 active:opacity-100" title="Tap to unpause">
+                        <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
+                          className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                           <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
                           <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
@@ -1373,8 +1417,8 @@ export default function PairingConfigPage() {
                     </div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {notCheckedInPlayers.map((ep) => (
-                        <button key={ep.playerId} onClick={() => checkInPlayer(ep.playerId)}
-                          className="flex items-center gap-1 bg-white/50 rounded-full px-2 py-1 opacity-50 active:opacity-100" title="Tap to check in">
+                        <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
+                          className="flex items-center gap-1 bg-white/50 rounded-full px-2 py-1 opacity-50">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                           <span className="text-[11px] font-medium">{ep.player.name}</span>
                         </button>
@@ -1627,6 +1671,56 @@ export default function PairingConfigPage() {
                     </div>
                   );
                 })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Expanded status overlay */}
+      {expandedSection === "status" && (() => {
+        const allMatches2 = event.matches;
+        const mc = new Map<string, number>();
+        for (const m of allMatches2) for (const p of m.players) mc.set(p.playerId, (mc.get(p.playerId) || 0) + 1);
+        const playingIds2 = new Set<string>();
+        for (const m of allMatches2.filter((m) => m.status === "active" || m.status === "paused" || m.status === "pending")) {
+          for (const p of m.players) playingIds2.add(p.playerId);
+        }
+        const sitting = classPlayers.filter((ep) => !playingIds2.has(ep.playerId) && ep.status === "checked_in");
+        const paused2 = classPlayers.filter((ep) => ep.status === "paused");
+        const notIn = classPlayers.filter((ep) => ep.status === "registered");
+        const renderRow = (ep: typeof classPlayers[number], dimmed = false, strike = false) => (
+          <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
+            className={`flex items-center gap-3 py-2.5 px-3 rounded-lg active:bg-gray-100 w-full text-left ${dimmed ? "opacity-50" : ""}`}>
+            <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="md" />
+            <span className={`text-lg font-bold flex-1 ${strike ? "line-through text-muted" : ""}`}>{ep.player.name}</span>
+            <span className="text-base text-muted tabular-nums">{mc.get(ep.playerId) || 0}m</span>
+          </button>
+        );
+        return (
+          <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
+            <div className="max-w-[600px] mx-auto px-4 py-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold">Player Status</h2>
+                <button onClick={() => setExpandedSection(null)} className="text-2xl text-muted hover:text-foreground px-2">✕</button>
+              </div>
+              {sitting.length > 0 && (
+                <div>
+                  <span className="text-sm font-bold text-amber-800 uppercase tracking-wider">Sitting out ({sitting.length})</span>
+                  <div className="mt-1">{sitting.map((ep) => renderRow(ep))}</div>
+                </div>
+              )}
+              {paused2.length > 0 && (
+                <div>
+                  <span className="text-sm font-bold text-amber-600 uppercase tracking-wider">Paused ({paused2.length})</span>
+                  <div className="mt-1">{paused2.map((ep) => renderRow(ep, false, true))}</div>
+                </div>
+              )}
+              {notIn.length > 0 && (
+                <div>
+                  <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Not checked in ({notIn.length})</span>
+                  <div className="mt-1">{notIn.map((ep) => renderRow(ep, true))}</div>
+                </div>
+              )}
             </div>
           </div>
         );
