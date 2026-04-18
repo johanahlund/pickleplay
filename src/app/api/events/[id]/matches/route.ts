@@ -34,11 +34,8 @@ export async function POST(
     return NextResponse.json({ error: "No class found" }, { status: 404 });
   }
 
-  // Find the current max round, place manual matches in it (or round 1)
-  const maxRound = event.matches.length > 0
-    ? Math.max(...event.matches.map((m) => m.round))
-    : 0;
-  const round = Math.max(maxRound, 1);
+  // Manual matches are not part of any round (round = 0 = "Individual")
+  const round = 0;
 
   const match = await prisma.match.create({
     data: {

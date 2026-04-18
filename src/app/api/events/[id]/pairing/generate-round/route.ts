@@ -53,6 +53,7 @@ export async function POST(
     includeCourts?: number[];
     preview?: boolean;
     commitRound?: { court: number; team1: { player1Id: string; player2Id: string }; team2: { player1Id: string; player2Id: string } }[];
+    individual?: boolean; // true = "Next Match" (round 0, not part of a round)
   } | null;
   if (!body?.classId) {
     return NextResponse.json({ error: "classId required" }, { status: 400 });
@@ -109,7 +110,7 @@ export async function POST(
       orderBy: { round: "desc" },
       take: 1,
     });
-    const nextRound = (allMatches[0]?.round ?? 0) + 1;
+    const nextRound = body.individual ? 0 : (allMatches[0]?.round ?? 0) + 1;
     const isSingles = eventClass.format === "singles";
     const createdMatchIds: string[] = [];
     for (const m of body.commitRound) {
@@ -340,7 +341,7 @@ export async function POST(
   const idleCourtNums = allCourtNums.filter((n) => !busyCourts.has(n));
   const targetCourtNums = [...idleCourtNums, ...includeCourts.filter((n) => !idleCourtNums.includes(n))];
 
-  const nextRound = maxRound + 1;
+  const nextRound = body.individual ? 0 : maxRound + 1;
   const createdMatchIds: string[] = [];
 
   // For included courts we need to remove the OLD in-progress match first

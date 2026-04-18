@@ -378,6 +378,7 @@ export default function PairingConfigPage() {
           classId,
           settings,
           includeCourts: [...includeCourts],
+          individual: true,
         };
         if (usePreview) {
           payload.commitRound = preview.round.map((m) => ({
@@ -1340,7 +1341,7 @@ export default function PairingConfigPage() {
                     <span className="text-[8px] text-muted">{new Date(m.completedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
                   ) : (
                     <span className="text-[8px] text-muted">
-                      {isActive ? "In Play" : isPending ? "Ready" : `R${m.round}`}
+                      {isActive ? "In Play" : isPending ? "Ready" : m.round === 0 ? "Individual" : `R${m.round}`}
                     </span>
                   )}
                 </div>
