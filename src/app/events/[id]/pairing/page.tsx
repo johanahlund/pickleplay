@@ -1214,14 +1214,7 @@ export default function PairingConfigPage() {
       {!collapsed.has("actions") && (<>
       {/* Actions row */}
       <div className="bg-card rounded-xl border border-border p-2.5 space-y-2">
-        <div className="flex justify-center">
-          <div className="flex items-center gap-0">
-            <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-8 h-8 rounded-l-lg bg-gray-200 text-foreground font-bold text-base flex items-center justify-center">−</button>
-            <div className="w-8 h-8 bg-selected text-white font-bold text-base flex items-center justify-center">{numRounds}</div>
-            <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-8 h-8 rounded-r-lg bg-gray-200 text-foreground font-bold text-base flex items-center justify-center">+</button>
-          </div>
-        </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={handleGenerate}
             disabled={generating || !classId}
@@ -1229,18 +1222,25 @@ export default function PairingConfigPage() {
           >
             {generating ? "..." : numRounds === 1 ? "Next Match" : `Next ${numRounds} Matches`}
           </button>
-          <button
-            onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
-            className="text-xs text-primary font-medium px-3 py-2.5 rounded-lg border border-primary/30 hover:bg-primary/5"
-          >
-            + Manual Match
-          </button>
+          <div className="flex items-center gap-0 shrink-0">
+            <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
+            <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
+            <button onClick={() => setNumRounds(Math.min(20, numRounds + 1))} className="w-7 h-7 rounded-r-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">+</button>
+          </div>
           <button
             onClick={handleGenerateRound}
             disabled={generating || !classId}
             className="flex-1 bg-action-dark text-white px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
           >
             {generating ? "..." : numRounds === 1 ? "Next Round" : `Next ${numRounds} Rounds`}
+          </button>
+        </div>
+        <div className="flex justify-center">
+          <button
+            onClick={() => { setManualTeam1([]); setManualTeam2([]); setManualCourt(1); setShowManual(true); }}
+            className="text-xs text-primary font-medium px-4 py-1.5 rounded-lg border border-primary/30 hover:bg-primary/5"
+          >
+            + Manual Match
           </button>
         </div>
       </div>
