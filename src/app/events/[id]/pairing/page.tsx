@@ -1343,7 +1343,7 @@ export default function PairingConfigPage() {
                       <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${won ? "text-green-700" : ""}`}>
                         {pl?.name || "?"}
                       </span>
-                      <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(mp.playerId) || 0}m</span>
+                      <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(mp.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
                     </div>
                   );
                 })}
@@ -1434,7 +1434,7 @@ export default function PairingConfigPage() {
               <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
-                    Sitting out ({sittingOutPlayers.length}){pausedPlayers.length > 0 && ` · Paused (${pausedPlayers.length})`}
+                    Sitting out ({sittingOutPlayers.length})
                   </span>
                   <button onClick={() => setExpandedSection("status")} className="text-muted hover:text-foreground p-1" title="Expand">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
@@ -1447,7 +1447,7 @@ export default function PairingConfigPage() {
                         className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1">
                         <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                         <span className="text-[11px] font-medium">{ep.player.name}</span>
-                        <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                        <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(ep.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
                       </button>
                     ))}
                   </div>
@@ -1461,7 +1461,7 @@ export default function PairingConfigPage() {
                           className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
                           <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
-                          <span className="text-[10px] text-muted tabular-nums">{matchCounts.get(ep.playerId) || 0}m</span>
+                          <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(ep.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
                         </button>
                       ))}
                     </div>
