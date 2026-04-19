@@ -971,6 +971,96 @@ export default function PairingConfigPage() {
     );
   }
 
+  // ── Sub-page: Edit Levels ──
+  if (levelEditMode) {
+    const lvlPlayers = event.players.filter(
+      (p) => p.classId === classId || (p.classId === null && classId === event.classes[0]?.id),
+    );
+    const lvlMatchCounts = new Map<string, number>();
+    for (const m of event.matches) for (const p of m.players) lvlMatchCounts.set(p.playerId, (lvlMatchCounts.get(p.playerId) || 0) + 1);
+    const byLevel = new Map<string, typeof lvlPlayers>();
+    for (const ep of lvlPlayers) {
+      const eff = ep.skillLevel ?? ep.autoSkillLevel;
+      const key = eff == null ? "unset" : String(eff);
+      const list = byLevel.get(key) || [];
+      list.push(ep);
+      byLevel.set(key, list);
+    }
+    const rows: { key: string; label: string }[] = [
+      { key: "5", label: "L5 — Expert" }, { key: "4", label: "L4" }, { key: "3", label: "L3" },
+      { key: "2", label: "L2" }, { key: "1", label: "L1 — Beginner" }, { key: "unset", label: "Unset" },
+    ];
+    const picking = levelSelectedIds.size > 0;
+    return (
+      <div className="space-y-4 pb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Edit Levels</h2>
+          <button onClick={() => { setLevelEditMode(false); setLevelSelectedIds(new Set()); }}
+            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
+        </div>
+        <div className="text-xs text-foreground/70">{event.name}</div>
+        {picking && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">{levelSelectedIds.size} selected</span>
+            <button onClick={() => setLevelSelectedIds(new Set())} className="text-xs text-action underline">Clear</button>
+          </div>
+        )}
+        <div className="space-y-2">
+          {rows.map((row) => {
+            const players = (byLevel.get(row.key) || []).sort((a, b) => a.player.name.localeCompare(b.player.name));
+            if (players.length === 0 && !picking) return null;
+            return (
+              <div key={row.key}
+                onClick={picking ? () => {
+                  const lvl = row.key === "unset" ? null : Number(row.key);
+                  for (const pid of levelSelectedIds) setSkillLevel(pid, lvl);
+                  setLevelSelectedIds(new Set());
+                } : undefined}
+                className={`bg-card rounded-xl border p-3 transition-colors ${
+                  picking ? "border-action border-dashed cursor-pointer" : "border-border"
+                }`}>
+                <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
+                  <span className={`text-sm font-bold ${row.key === "unset" ? "text-muted" : ""}`}>{row.label}</span>
+                  {picking ? (
+                    <button onClick={(e) => { e.stopPropagation(); const lvl = row.key === "unset" ? null : Number(row.key); for (const pid of levelSelectedIds) setSkillLevel(pid, lvl); setLevelSelectedIds(new Set()); }}
+                      className="bg-action text-white text-[11px] font-semibold px-3 py-1 rounded-full">
+                      Move {levelSelectedIds.size} here
+                    </button>
+                  ) : (
+                    <span className="text-[10px] text-muted">{players.length} player{players.length === 1 ? "" : "s"}</span>
+                  )}
+                </div>
+                {players.length === 0 ? (
+                  <p className="text-[10px] text-muted italic">drop here</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {players.map((ep) => {
+                      const count = lvlMatchCounts.get(ep.playerId) || 0;
+                      const isSelected = levelSelectedIds.has(ep.playerId);
+                      return (
+                        <div key={ep.id}
+                          onClick={(e) => { e.stopPropagation(); setLevelSelectedIds((prev) => { const n = new Set(prev); if (n.has(ep.playerId)) n.delete(ep.playerId); else n.add(ep.playerId); return n; }); }}
+                          className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 cursor-pointer transition-all ${
+                            isSelected ? "bg-action text-white" : "bg-gray-50"
+                          }`}>
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className={`text-[11px] font-medium truncate flex-1 ${isSelected ? "font-bold" : ""}`}>{ep.player.name}</span>
+                          <span className={`tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
+                            <span className="text-xs font-medium">{count}</span><span className="text-[9px]"> m</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   const currentClass = event.classes.find((c) => c.id === classId);
   // Event players are flat at the top level — filter by class here. Include
   // players with null classId (the default/auto-created class) when the
