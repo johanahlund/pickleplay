@@ -191,6 +191,7 @@ export default function PairingConfigPage() {
   const [manualFilterMode, setManualFilterMode] = useState<"available" | "all">("available");
   const [manualGenderFilter, setManualGenderFilter] = useState<string | null>(null);
   const [newMatchId, setNewMatchId] = useState<string | null>(null);
+  const [creatingMatch, setCreatingMatch] = useState(false);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
 
@@ -546,13 +547,14 @@ export default function PairingConfigPage() {
 
   const createManualMatch = async () => {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
-    // Close immediately — don't wait for API
+    // Close immediately — show spinner while API runs
     const t1 = [...manualTeam1];
     const t2 = [...manualTeam2];
     const court = manualCourt;
     setManualTeam1([]);
     setManualTeam2([]);
     setShowManual(false);
+    setCreatingMatch(true);
 
     const r = await fetch(`/api/events/${id}/matches`, {
       method: "POST",
@@ -577,6 +579,7 @@ export default function PairingConfigPage() {
       const d = await r.json();
       await alert(d.error || "Failed to create match", "Error");
     }
+    setCreatingMatch(false);
   };
 
   const deleteAllPending = async () => {
@@ -1315,6 +1318,12 @@ export default function PairingConfigPage() {
       </>)}
 
       <h2 className="text-xl font-bold text-center">Matches</h2>
+      {(creatingMatch || generating) && (
+        <div className="flex items-center justify-center gap-2 py-3">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-muted">{creatingMatch ? "Creating match..." : "Generating..."}</span>
+        </div>
+      )}
       {/* Matches — current, future, past */}
       {(() => {
         const allMatches = event.matches;
