@@ -73,11 +73,7 @@ function EventsPage() {
     }
   });
   const [userClubs, setUserClubs] = useState<UserClub[]>([]);
-  const [loading, setLoading] = useState(() => {
-    // Only show the loading spinner if we have nothing cached yet.
-    if (typeof window === "undefined") return true;
-    return !window.sessionStorage.getItem("events-list-cache");
-  });
+  const [loading, setLoading] = useState(true); // always true on first render to avoid hydration mismatch
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
@@ -360,7 +356,6 @@ function EventsPage() {
       )}
 
       {/* Events list — hidden when filter panel is open */}
-      <div suppressHydrationWarning>
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
       ) : !showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
@@ -524,7 +519,6 @@ function EventsPage() {
           );
         })()
       ))}
-      </div>
     </div>
   );
 }

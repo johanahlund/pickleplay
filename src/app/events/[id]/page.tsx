@@ -1028,13 +1028,16 @@ export default function EventDetailPage() {
     }
   };
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   if (loading || !event) {
-    // Use a single consistent wrapper to avoid hydration mismatch.
-    // Preview comes from sessionStorage (client-only), so we render
-    // a skeleton that works with or without it.
+    // Show preview skeleton only after mount (sessionStorage is client-only).
+    // Before mount, show spinner to match server render and avoid hydration mismatch.
+    const showPreview = mounted && preview;
     return (
-      <div className="space-y-3" suppressHydrationWarning>
-        {preview ? (
+      <div className="space-y-3">
+        {showPreview ? (
           <>
             <Link href="/events" className="text-sm text-action">&larr; Events</Link>
             <div className="bg-card rounded-xl border border-border p-4">
