@@ -1174,8 +1174,8 @@ export default function PairingConfigPage() {
       </div>
       )}
 
-      {/* Next match(es) — hidden for now, will revisit later */}
-      {false && preview && (<>
+      {/* Next match(es) — hidden for now, will revisit later
+      {preview && (<>
       <button onClick={() => toggleCollapsed("nextmatch")}
         className="flex items-center gap-1 text-sm font-bold text-foreground w-full text-left py-1">
         <span className={`transition-transform ${collapsed.has("nextmatch") ? "" : "rotate-90"}`}>›</span>
@@ -1290,6 +1290,7 @@ export default function PairingConfigPage() {
         </div>
       )}
       </>)}
+      */}
 
       {/* Actions + Sitting out — collapsible, managers only */}
       {canManage && (<>
