@@ -2045,18 +2045,15 @@ export default function EventDetailPage() {
 
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-center text-foreground">Players</h3>
-          <div className="flex items-center gap-2">
-          {session?.user && !canManage && event.openSignup && (
-            event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
+        {session?.user && !canManage && event.openSignup && (
+          <div className="flex justify-end">
+            {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
               <button onClick={unsignFromEvent} className="text-xs text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave</button>
             ) : (
               <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join</button>
-            )
-          )}
+            )}
           </div>
-        </div>
+        )}
         <div className="flex items-center gap-2">
           {event.players.length > 6 && (
             <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base flex-1" />
@@ -3037,7 +3034,7 @@ export default function EventDetailPage() {
           <div className="text-xs text-foreground/70 -mx-4 px-4 py-2">{event.name}</div>
         )}
         {activeSection !== "rounds" && activeSection !== "manual" && !bulkSelectMode && !showAddPlayer && (
-          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
             <div className="flex items-center justify-between">
             <div>
               <button onClick={async () => {
@@ -3057,6 +3054,11 @@ export default function EventDetailPage() {
               </button>
             )}
             </div>
+            {activeSection !== "competition" && (
+              <h2 className="text-xl font-bold text-center">{
+                ({ when: "When", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches" } as Record<string, string>)[activeSection] || activeSection
+              }</h2>
+            )}
           </div>
         )}
 

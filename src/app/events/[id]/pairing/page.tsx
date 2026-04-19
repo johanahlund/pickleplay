@@ -1081,12 +1081,14 @@ export default function PairingConfigPage() {
 
   return (
     <div className="space-y-4 pb-6">
-      {/* Header */}
-      <div>
-        <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
-        <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
+      {/* Sticky header */}
+      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
+        <div>
+          <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
+          <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
+        </div>
+        <h2 className="text-xl font-bold text-center">Pairing</h2>
       </div>
-      <h2 className="text-xl font-bold text-center">Pairing</h2>
 
       {/* Class picker */}
       {event.classes.length > 1 && (
