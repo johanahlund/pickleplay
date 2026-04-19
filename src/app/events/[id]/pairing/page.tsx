@@ -546,23 +546,27 @@ export default function PairingConfigPage() {
 
   const createManualMatch = async () => {
     if (manualTeam1.length === 0 || manualTeam2.length === 0) return;
+    // Close immediately — don't wait for API
+    const t1 = [...manualTeam1];
+    const t2 = [...manualTeam2];
+    const court = manualCourt;
+    setManualTeam1([]);
+    setManualTeam2([]);
+    setShowManual(false);
+
     const r = await fetch(`/api/events/${id}/matches`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        team1PlayerIds: manualTeam1,
-        team2PlayerIds: manualTeam2,
-        courtNum: manualCourt,
+        team1PlayerIds: t1,
+        team2PlayerIds: t2,
+        courtNum: court,
       }),
     });
     if (r.ok) {
       const data = await r.json();
-      setManualTeam1([]);
-      setManualTeam2([]);
-      setShowManual(false);
       setNewMatchId(data.id || null);
       await refreshEvent();
-      // Scroll to + highlight the new match, clear after animation
       if (data.id) {
         setTimeout(() => {
           document.getElementById(`match-${data.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
