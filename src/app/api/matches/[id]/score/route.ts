@@ -439,6 +439,43 @@ export async function PUT(
   });
 }
 
+// DELETE: Clear scores — revert match to active, reverse ELO
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAdmin();
+  } catch {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const match = await prisma.match.findUnique({
+    where: { id },
+    include: { players: true },
+  });
+  if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+
+  // Reverse ELO if applied
+  if (match.eloChange > 0) {
+    await reverseElo(id);
+  }
+
+  // Reset all player scores to 0
+  for (const mp of match.players) {
+    await prisma.matchPlayer.update({ where: { id: mp.id }, data: { score: 0 } });
+  }
+
+  // Set match back to active
+  await prisma.match.update({
+    where: { id },
+    data: { status: "active", eloChange: 0, scoreConfirmed: false, completedAt: null },
+  });
+
+  return NextResponse.json({ ok: true, cleared: true });
+}
+
 // PATCH: Confirm score (for approval mode) — applies ELO
 export async function PATCH(
   req: Request,

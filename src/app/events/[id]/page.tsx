@@ -2861,10 +2861,12 @@ export default function EventDetailPage() {
             {/* Left column: Edit + Delete */}
             {canManage && (
               <div className="flex flex-col gap-1.5 w-24">
-                {isMatchCompleted && (isOwner || isAdmin) ? (
+                {isMatchCompleted && (isOwner || isAdmin) ? (<>
                   <button onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
                     className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit score</span></button>
-                ) : !isMatchCompleted ? (
+                  <button onClick={async () => { close(); if (!await confirmDialog({ message: "Clear scores and revert match to active? Rankings will be reversed.", confirmText: "Clear", danger: true })) return; await fetch(`/api/matches/${match.id}/score`, { method: "DELETE" }); await fetchEvent(); }}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex flex-col items-center gap-1">🔄 <span>Clear scores</span></button>
+                </>) : !isMatchCompleted ? (
                   <button onClick={() => { close(); openEditMatch(match.id); }}
                     className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
                 ) : null}
