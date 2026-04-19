@@ -1106,12 +1106,11 @@ export default function PairingConfigPage() {
         </div>
       )}
 
-      {/* Pairing Settings button — managers only */}
+      {/* Pairing Settings — managers only */}
       {canManage && (
         <button onClick={() => setSubPage("settings")}
-          className="w-full text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
-          Pairing Settings
-          <span className="block text-[9px] text-muted font-normal mt-0.5 capitalize">{settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}</span>
+          className="w-full text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
+          {settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}
         </button>
       )}
 
