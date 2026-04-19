@@ -819,7 +819,14 @@ export default function PairingConfigPage() {
       <div className="space-y-4 pb-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Pairing Settings</h2>
-          <button onClick={() => { if (settingsDirty) cancelSettings(); setSubPage(null); }} className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
+          <button onClick={async () => {
+            if (settingsDirty) {
+              const ok = await confirm({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+              if (!ok) return;
+              cancelSettings();
+            }
+            setSubPage(null);
+          }} className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
         </div>
         <div className="text-xs text-foreground/70">{event.name}</div>
 
@@ -855,7 +862,7 @@ export default function PairingConfigPage() {
                     {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
                       <button key={v} type="button" onClick={() => setSettings((s) => ({ ...s, teams: v as Teams }))}
                         className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                          settings.teams === v ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                          settings.teams === v ? "bg-selected text-white" : "bg-gray-100 text-foreground"
                         }`}>{label}</button>
                     ))}
                   </div>
@@ -1823,7 +1830,7 @@ function SegPicker<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
-              value === opt.value ? "bg-action text-white" : "bg-gray-100 text-foreground"
+              value === opt.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}
           >
             {opt.label}
@@ -1861,7 +1868,7 @@ function WindowPicker({
             type="button"
             onClick={() => onChange(opt.value)}
             className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
-              value === opt.value ? "bg-action text-white" : "bg-gray-100 text-foreground"
+              value === opt.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"
             }`}
           >
             {opt.label}
