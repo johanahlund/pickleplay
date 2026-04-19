@@ -111,13 +111,13 @@ export default function PlayersPage() {
       }
 
       const claimUrl = `${window.location.origin}/claim/${data.token}`;
-      const shareText = `Hey ${player.name}! You've been added to PickleJ 🏓 Claim your account to track your stats: ${claimUrl}`;
+      const shareText = `Hey ${player.name}! You've been added to Rally 🏓 Claim your account to track your stats: ${claimUrl}`;
 
       // Try Web Share API first (mobile native share sheet)
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "Join PickleJ",
+            title: "Join Rally",
             text: shareText,
           });
           return;
@@ -148,12 +148,12 @@ export default function PlayersPage() {
       }
 
       const resetUrl = `${window.location.origin}/reset/${data.token}`;
-      const shareText = `Reset your PickleJ password here: ${resetUrl}`;
+      const shareText = `Reset your Rally password here: ${resetUrl}`;
 
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "PickleJ Password Reset",
+            title: "Rally Password Reset",
             text: shareText,
           });
           return;

@@ -1,11 +1,11 @@
 {
-  "name": "PickleJ",
-  "short_name": "PickleJ",
-  "description": "Pickleball matchmaking & scoring app",
+  "name": "Rally",
+  "short_name": "Rally",
+  "description": "Organized play for racquet sports",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
-  "theme_color": "#16a34a",
+  "theme_color": "#15803d",
   "orientation": "portrait",
   "icons": [
     {

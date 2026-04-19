@@ -9,8 +9,8 @@ import { RoleProvider, RoleTogglePill } from "@/components/RoleToggle";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 
 export const metadata: Metadata = {
-  title: "PickleJ",
-  description: "Pickleball matchmaking & scoring app",
+  title: "Rally",
+  description: "Organized play for racquet sports",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.png",
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "PickleJ",
+    title: "Rally",
   },
 };
 
@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#000000",
+  themeColor: "#15803d",
   viewportFit: "cover",
 };
 

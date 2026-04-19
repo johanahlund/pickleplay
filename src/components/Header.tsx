@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
+import { AppHeader } from "./AppHeader";
 
 const APP_VERSION = "5.3.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -118,19 +119,11 @@ export function Header() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<{ id: string; title: string; body?: string | null; linkUrl?: string | null; read: boolean; createdAt: string }[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    if (!showNotifications) return;
-    const handler = (e: MouseEvent) => { if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifications(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showNotifications]);
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
-  const headerRef = useRef<HTMLElement>(null);
 
   // Dynamically set main content padding based on header height
   const updateMainPadding = useCallback(() => {
@@ -212,87 +205,28 @@ export function Header() {
 
   const activeClubId = urlClubId || (typeof window !== "undefined" ? sessionStorage.getItem("activeClubId") : null);
 
+  // Determine if the user is an admin
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+
+  // Build user summary for the avatar
+  const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
+
+  if (isAuthPage) {
+    return null;
+  }
+
   return (
     <>
-      <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-black text-white px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-md">
-        <div className="max-w-[600px] mx-auto">
-          {/* Top row: app name + user */}
-          <div className="flex items-center justify-between">
-            <button onClick={() => router.push("/events")} className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
-              <h1 className="text-lg font-bold tracking-tight">PickleJ</h1>
-              <span className="text-[10px] opacity-60 font-mono">v{APP_VERSION}</span>
-            </button>
-            {!isAuthPage && session?.user && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => router.push("/profile")}
-                  className="text-sm opacity-90 hover:opacity-100 transition-opacity"
-                  title="My profile"
-                  aria-label={`Profile for ${session.user.name}`}
-                >
-                  {session.user.name}
-                </button>
-                <div className="relative" ref={notifRef}>
-                  <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="relative text-lg opacity-90 hover:opacity-100"
-                    title="Notifications"
-                    aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
-                  >
-                    🔔
-                    {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                        {unreadCount > 9 ? "9+" : unreadCount}
-                      </span>
-                    )}
-                  </button>
-                  {showNotifications && (
-                    <div className="absolute right-0 top-8 w-72 bg-white rounded-xl shadow-xl border border-border z-50 max-h-80 overflow-y-auto">
-                      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-                        <span className="text-xs font-semibold text-foreground">Notifications</span>
-                        {unreadCount > 0 && (
-                          <button onClick={async () => {
-                            await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "read_all" }) });
-                            setUnreadCount(0);
-                            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-                          }} className="text-[10px] text-action font-medium">Mark all read</button>
-                        )}
-                      </div>
-                      {notifications.length === 0 ? (
-                        <p className="text-xs text-muted text-center py-4">No notifications</p>
-                      ) : (
-                        notifications.slice(0, 20).map((n) => (
-                          <button key={n.id} onClick={() => {
-                            if (n.linkUrl) router.push(n.linkUrl);
-                            setShowNotifications(false);
-                            if (!n.read) {
-                              fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "read", notificationId: n.id }) });
-                              setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x));
-                              setUnreadCount((c) => Math.max(0, c - 1));
-                            }
-                          }} className={`w-full text-left px-3 py-2 border-b border-border last:border-b-0 hover:bg-gray-50 ${!n.read ? "bg-blue-50" : ""}`}>
-                            <div className="text-xs font-medium text-foreground">{n.title}</div>
-                            {n.body && <div className="text-[10px] text-muted mt-0.5">{n.body}</div>}
-                            <div className="text-[9px] text-muted mt-0.5">{new Date(n.createdAt).toLocaleDateString()}</div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/signin" })}
-                  className="text-[10px] bg-white/15 px-2 py-0.5 rounded-md hover:bg-white/25 transition-colors"
-                >
-                  Sign Out
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Club context row + tab bar */}
-        </div>
-      </header>
+      <div ref={headerRef as React.RefObject<HTMLDivElement>}>
+        <AppHeader
+          isAdmin={isAdmin}
+          notifications={unreadCount}
+          user={{
+            initial: userInitial,
+            href: "/profile",
+          }}
+        />
+      </div>
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
