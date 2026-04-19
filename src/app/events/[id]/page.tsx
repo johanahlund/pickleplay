@@ -1036,36 +1036,48 @@ export default function EventDetailPage() {
     // Before mount, show spinner to match server render and avoid hydration mismatch.
     const showPreview = mounted && preview;
     return (
-      <div className="space-y-3">
-        {showPreview ? (
-          <>
-            <Link href="/events" className="text-sm text-action">&larr; Events</Link>
-            <div className="bg-card rounded-xl border border-border p-4">
-              {preview.club && (
-                <div className="flex items-center gap-1.5 mb-1 text-xs text-muted">
-                  <span>📌 {preview.club.emoji} {preview.club.name}</span>
-                </div>
-              )}
-              <h2 className="text-xl font-bold">{preview.name}</h2>
-              <p className="text-sm text-muted mt-0.5">
-                {new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-                {" at "}
-                {new Date(preview.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                {" · "}
-                {preview.numCourts} court{preview.numCourts !== 1 ? "s" : ""}
-              </p>
-            </div>
-            <div className="bg-card rounded-xl border border-border p-6 animate-pulse">
-              <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
-              <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
-              <div className="h-3 bg-gray-200 rounded w-1/2" />
-            </div>
-          </>
-        ) : (
-          <div className="flex justify-center py-12">
-            <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+      <div className="-mx-4 -mt-2">
+        {/* Hero header skeleton — green background */}
+        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18 }}>
+          <div className="flex items-center justify-between px-4 pt-3 pb-2">
+            <Link href="/events" className="text-sm text-white/70 font-medium flex items-center gap-1">
+              <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Events
+            </Link>
           </div>
-        )}
+          <div className="px-4 pt-1 pb-2">
+            {showPreview ? (
+              <>
+                <h2 className="text-2xl font-extrabold" style={{ letterSpacing: "-0.02em" }}>{preview.name}</h2>
+                <p className="text-sm text-white/80 mt-2">
+                  {preview.club && `${preview.club.emoji} ${preview.club.name} · `}
+                  {new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                  {" · "}
+                  {new Date(preview.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  {" · "}
+                  {preview.numCourts} court{preview.numCourts !== 1 ? "s" : ""}
+                </p>
+              </>
+            ) : (
+              <div className="animate-pulse space-y-2 py-1">
+                <div className="h-6 bg-white/20 rounded w-2/3" />
+                <div className="h-4 bg-white/10 rounded w-1/2" />
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Content skeleton */}
+        <div className="px-4 pt-4 space-y-3">
+          <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
+            <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-1/2" />
+          </div>
+          <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
+            <div className="h-3 bg-gray-200 rounded w-1/4 mb-3" />
+            <div className="h-3 bg-gray-200 rounded w-3/4" />
+          </div>
+        </div>
       </div>
     );
   }
