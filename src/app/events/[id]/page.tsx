@@ -2019,7 +2019,7 @@ export default function EventDetailPage() {
     if (showAddPlayer && canManage) return renderAddPlayers();
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-3 pt-2">
         {session?.user && !canManage && event.openSignup && (
           <div className="flex justify-end">
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (

@@ -76,7 +76,7 @@ export function RoleTogglePill() {
   const isViewingAsNonAdmin = viewRole !== "admin";
 
   return (
-    <div className="fixed top-[max(env(safe-area-inset-top,0px),12px)] right-3 z-[60]" style={{ marginTop: 52 }} ref={ref}>
+    <div className="fixed right-[14px] z-[60]" style={{ top: "calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)" }} ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className={`w-7 h-7 rounded-full text-[10px] font-bold shadow-md flex items-center justify-center transition-all ${
