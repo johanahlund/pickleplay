@@ -199,6 +199,7 @@ export default function PairingConfigPage() {
   const [manualFilterMode, setManualFilterMode] = useState<"available" | "all">("available");
   const [manualGenderFilter, setManualGenderFilter] = useState<string | null>(null);
   const [newMatchId, setNewMatchId] = useState<string | null>(null);
+  const [showPairingHelp, setShowPairingHelp] = useState(false);
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
@@ -1121,11 +1122,17 @@ export default function PairingConfigPage() {
 
       {/* Pairing Settings — managers only */}
       {canManage && (
-        <button onClick={() => setSubPage("settings")}
-          className="w-full text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
-          <span>{settings.base} · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"} · {settings.gender === "mixed" ? "Mixed Gender" : settings.gender === "same" ? "Same Gender" : "Any Gender"}</span>
-          <span className="block text-xs mt-0.5">Skill window ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety window ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}</span>
-        </button>
+        <div className="flex gap-1.5">
+          <button onClick={() => setSubPage("settings")}
+            className="flex-1 text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
+            <span>{settings.base} · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"} · {settings.gender === "mixed" ? "Mixed Gender" : settings.gender === "same" ? "Same Gender" : "Any Gender"}</span>
+            <span className="block text-xs mt-0.5">Skill window ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety window ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}</span>
+          </button>
+          <button onClick={() => setShowPairingHelp(true)}
+            className="w-9 h-9 rounded-lg border border-action/30 text-action flex items-center justify-center text-sm font-bold shrink-0 self-center">
+            ?
+          </button>
+        </div>
       )}
 
 
@@ -1760,6 +1767,95 @@ export default function PairingConfigPage() {
           </div>
         );
       })()}
+
+      {/* Pairing Help overlay */}
+      {showPairingHelp && (
+        <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
+          <div className="max-w-[600px] mx-auto px-4 py-4 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">How Pairing Works</h2>
+              <button onClick={() => setShowPairingHelp(false)}
+                className="text-action border border-action/30 p-1.5 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 3v4H3M13 3v4h4M7 17v-4H3M13 17v-4h4" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-foreground/80">
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Base Mode</h3>
+                <p><strong>Random</strong> — the solver tries all possible team combinations and picks the best one based on your settings below.</p>
+                <p className="mt-1"><strong>Swiss</strong> — pairs players by ranking (closest scores play each other).</p>
+                <p className="mt-1"><strong>King</strong> — winners stay on court, losers rotate off.</p>
+                <p className="mt-1"><strong>Manual</strong> — you pick teams yourself.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Teams</h3>
+                <p><strong>Rotating</strong> — new team combinations each round. Partners change every match.</p>
+                <p className="mt-1"><strong>Fixed</strong> — locked teams stay together for the whole event.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Gender</h3>
+                <p><strong>Any</strong> — no gender preference.</p>
+                <p className="mt-1"><strong>Mixed</strong> — each team must have one male + one female player.</p>
+                <p className="mt-1"><strong>Same</strong> — each team must be same gender (2M or 2F).</p>
+              </div>
+
+              <hr className="border-border" />
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">How the Solver Picks Matches</h3>
+                <p>The solver tries all possible team combinations and scores each one. The combination with the lowest total cost wins.</p>
+                <p className="mt-2">There are two types of constraints:</p>
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <h3 className="font-bold text-red-800 mb-1">Hard Limits (must be respected)</h3>
+                <p className="text-red-800">These are absolute — the solver will <strong>never</strong> pick an arrangement that violates them, unless it&apos;s impossible to satisfy.</p>
+                <ul className="mt-2 space-y-2">
+                  <li><strong>Match count window</strong> — how unequal the total matches played can be across players. Set to ±1 = no player can be more than 1 match ahead/behind. Set to ±∞ = no limit.</li>
+                  <li><strong>Max consecutive sit-outs</strong> — how many rounds in a row a player can sit out. Prevents anyone from being forgotten on the bench.</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <h3 className="font-bold text-blue-800 mb-1">Soft Goals (best effort)</h3>
+                <p className="text-blue-800">Within the hard limits, the solver tries to optimize these. When they conflict, it picks the best trade-off.</p>
+                <ul className="mt-2 space-y-2">
+                  <li><strong>Skill window</strong> — max skill level difference between the 4 players in a match. ±0 = same level only. ±1 = one level spread OK. ±∞ = any mix. <em>Priority: medium.</em></li>
+                  <li><strong>Variety window</strong> — how many partner/opponent repeats are allowed. ±0 = never repeat. ±1 = one repeat OK. ±∞ = don&apos;t care. <em>Priority: lower than skill.</em></li>
+                  <li><strong>Gender rule</strong> — mixed or same-gender teams. <em>Priority: higher than skill.</em></li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Priority Order</h3>
+                <p>When constraints conflict, the solver follows this priority (highest first):</p>
+                <ol className="mt-1 list-decimal list-inside space-y-0.5">
+                  <li><strong>Match count</strong> — everyone plays equally (hard limit)</li>
+                  <li><strong>Sit-out limit</strong> — nobody waits too long (hard limit)</li>
+                  <li><strong>Gender rule</strong> — mixed/same enforced</li>
+                  <li><strong>Skill balance</strong> — similar levels together</li>
+                  <li><strong>Variety</strong> — avoid repeat partners/opponents</li>
+                </ol>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Late Joiners</h3>
+                <p>When a player checks in mid-event, the system records the current average match count. The solver treats them as if they&apos;ve played that many matches, so they won&apos;t be unfairly prioritized or penalized. Their match count is shown in <span className="text-blue-500 font-medium">blue</span>.</p>
+              </div>
+
+              <div>
+                <h3 className="font-bold text-foreground mb-1">Pool Analysis</h3>
+                <p><strong>Clean rounds</strong> = how many rounds the solver can generate with zero violations. When this drops, you may need to widen your Skill or Variety window.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Expanded status overlay */}
       {expandedSection === "status" && (() => {
