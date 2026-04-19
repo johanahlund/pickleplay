@@ -169,6 +169,8 @@ export function RallyTracker({
   const [history, setHistory] = useState<GameState[]>([]);
   const [redoStack, setRedoStack] = useState<{ state: GameState; winner: 1 | 2 | null }[]>([]);
   const [winner, setWinner] = useState<1 | 2 | null>(null);
+  const [lastWonSide, setLastWonSide] = useState<"left" | "right" | null>(null);
+  const lastWonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset all state when match changes
   useEffect(() => {
@@ -958,19 +960,39 @@ export function RallyTracker({
           {(() => {
             const leftTeamNum = swapped ? 2 : 1;
             const rightTeamNum = swapped ? 1 : 2;
-            const leftColor = swapped ? "bg-red-600 active:bg-red-700" : "bg-blue-600 active:bg-blue-700";
-            const rightColor = swapped ? "bg-blue-600 active:bg-blue-700" : "bg-red-600 active:bg-red-700";
+            const leftBase = swapped ? "bg-red-600" : "bg-blue-600";
+            const rightBase = swapped ? "bg-blue-600" : "bg-red-600";
+            const wonLeft = lastWonSide === "left";
+            const wonRight = lastWonSide === "right";
             return (
               <div className="flex gap-3">
                 <button
-                  onClick={() => handleRally(leftTeamNum)}
-                  className={`flex-1 ${leftColor} text-white py-6 rounded-xl text-xl font-black transition-colors`}
+                  onClick={() => {
+                    handleRally(leftTeamNum);
+                    setLastWonSide("left");
+                    if (lastWonTimer.current) clearTimeout(lastWonTimer.current);
+                    lastWonTimer.current = setTimeout(() => setLastWonSide(null), 10000);
+                  }}
+                  className={`flex-1 text-white py-6 rounded-xl text-xl font-black transition-all ${
+                    wonLeft ? `${leftBase} ring-4 ring-white/50 scale-105`
+                    : wonRight ? `${leftBase} opacity-30`
+                    : leftBase
+                  }`}
                 >
                   ◄ Won
                 </button>
                 <button
-                  onClick={() => handleRally(rightTeamNum)}
-                  className={`flex-1 ${rightColor} text-white py-6 rounded-xl text-xl font-black transition-colors`}
+                  onClick={() => {
+                    handleRally(rightTeamNum);
+                    setLastWonSide("right");
+                    if (lastWonTimer.current) clearTimeout(lastWonTimer.current);
+                    lastWonTimer.current = setTimeout(() => setLastWonSide(null), 10000);
+                  }}
+                  className={`flex-1 text-white py-6 rounded-xl text-xl font-black transition-all ${
+                    wonRight ? `${rightBase} ring-4 ring-white/50 scale-105`
+                    : wonLeft ? `${rightBase} opacity-30`
+                    : rightBase
+                  }`}
                 >
                   Won ►
                 </button>
