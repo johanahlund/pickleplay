@@ -1098,7 +1098,9 @@ export default function EventDetailPage() {
   };
 
   const penIcon = <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>;
-  const location = event.club?.locations?.[0];
+  const location = event.locationId
+    ? event.club?.locations?.find((l) => l.id === event.locationId) || event.club?.locations?.[0]
+    : event.club?.locations?.[0];
 
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
