@@ -76,7 +76,7 @@ export function RoleTogglePill() {
   const isViewingAsNonAdmin = viewRole !== "admin";
 
   return (
-    <div className="fixed right-[14px] z-[60]" style={{ top: "calc(max(env(safe-area-inset-top, 0px), 12px) + 44px)" }} ref={ref}>
+    <div className="fixed left-[100px] z-[60]" style={{ top: "calc(max(env(safe-area-inset-top, 0px), 12px) + 13px)" }} ref={ref}>
       <button
         onClick={() => setOpen(!open)}
         className={`w-7 h-7 rounded-full text-[10px] font-bold shadow-md flex items-center justify-center transition-all ${
@@ -87,7 +87,7 @@ export function RoleTogglePill() {
         {current.icon}
       </button>
       {open && (
-        <div className="absolute top-8 right-0 bg-white rounded-xl shadow-xl border border-border overflow-hidden min-w-[130px]">
+        <div className="absolute top-8 left-0 bg-white rounded-xl shadow-xl border border-border overflow-hidden min-w-[130px]">
           <div className="px-3 py-1.5 text-[9px] text-muted uppercase tracking-wider border-b border-border">View as</div>
           {ROLES.map((r) => (
             <button
