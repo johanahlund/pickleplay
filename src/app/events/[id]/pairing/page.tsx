@@ -1110,7 +1110,7 @@ export default function PairingConfigPage() {
       {canManage && (
         <button onClick={() => setSubPage("settings")}
           className="w-full text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
-          {settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}
+          {settings.base} · {settings.teams === "fixed" ? "Fixed" : "Rotating"} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"} · Skill ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}
         </button>
       )}
 
