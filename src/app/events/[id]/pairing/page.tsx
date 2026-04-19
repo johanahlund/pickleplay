@@ -555,6 +555,10 @@ export default function PairingConfigPage() {
     setManualTeam2([]);
     setShowManual(false);
     setCreatingMatch(true);
+    // Scroll to the matches area immediately so user sees the spinner
+    setTimeout(() => {
+      document.getElementById("matches-header")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
 
     const r = await fetch(`/api/events/${id}/matches`, {
       method: "POST",
@@ -1317,7 +1321,7 @@ export default function PairingConfigPage() {
       </div>
       </>)}
 
-      <h2 className="text-xl font-bold text-center">Matches</h2>
+      <h2 id="matches-header" className="text-xl font-bold text-center">Matches</h2>
       {(creatingMatch || generating) && (
         <div className="flex items-center justify-center gap-2 py-3">
           <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
