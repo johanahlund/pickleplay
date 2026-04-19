@@ -1106,7 +1106,7 @@ export default function EventDetailPage() {
   const helperNames = event.helpers.map((h) => h.player.name);
 
   const eventBackLink = (
-    <button onClick={() => router.back()} className="text-sm text-action font-medium">← Events</button>
+    <Link href="/events" className="text-sm text-action font-medium">← Events</Link>
   );
 
   const eventHeader = (
