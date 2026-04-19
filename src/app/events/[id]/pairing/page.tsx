@@ -1596,9 +1596,10 @@ export default function PairingConfigPage() {
           <div className="fixed inset-0 bg-white z-50 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <h2 className="text-lg font-bold">Players ({classPlayers.length})</h2>
-              <button onClick={() => setExpandedSection(null)}
-                className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-foreground active:bg-gray-200">
-                ✕
+              <button onClick={() => setExpandedSection(null)} className="text-action border border-action/30 p-1.5 rounded-lg" title="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 3v4H3M13 3v4h4M7 17v-4H3M13 17v-4h4" />
+                </svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
@@ -1681,7 +1682,11 @@ export default function PairingConfigPage() {
             <div className="max-w-[600px] mx-auto px-4 py-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold">Player Status</h2>
-                <button onClick={() => setExpandedSection(null)} className="text-2xl text-muted hover:text-foreground px-2">✕</button>
+                <button onClick={() => setExpandedSection(null)} className="text-action border border-action/30 p-1.5 rounded-lg" title="Close">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M7 3v4H3M13 3v4h4M7 17v-4H3M13 17v-4h4" />
+                  </svg>
+                </button>
               </div>
               {sitting.length > 0 && (
                 <div>
