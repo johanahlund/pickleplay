@@ -256,6 +256,7 @@ function LightHeader({
         position: "sticky",
         top: 0,
         zIndex: 40,
+        paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
       <div
@@ -338,6 +339,7 @@ function HeroHeader({
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",
         paddingBottom: 18,
+        paddingTop: "env(safe-area-inset-top, 0px)",
         position: "sticky",
         top: 0,
         zIndex: 40,
@@ -492,6 +494,7 @@ function HeroSubHeader({
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",
         paddingBottom: 14,
+        paddingTop: "env(safe-area-inset-top, 0px)",
         position: "sticky",
         top: 0,
         zIndex: 40,

@@ -1038,7 +1038,7 @@ export default function EventDetailPage() {
     return (
       <div className="-mx-4 -mt-2">
         {/* Hero header skeleton — green background */}
-        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18 }}>
+        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18, paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <div className="flex items-center justify-between px-4 pt-3 pb-2">
             <Link href="/events" className="text-sm text-white/70 font-medium flex items-center gap-1">
               <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
