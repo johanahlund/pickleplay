@@ -1009,7 +1009,11 @@ export default function PairingConfigPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Edit Levels</h2>
           <button onClick={() => { setLevelEditMode(false); setLevelSelectedIds(new Set()); }}
-            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">Done</button>
+            className="text-action border border-action/30 p-1.5 rounded-lg" title="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 3v4H3M13 3v4h4M7 17v-4H3M13 17v-4h4" />
+            </svg>
+          </button>
         </div>
         <div className="text-xs text-foreground/70">{event.name}</div>
         {picking && (
