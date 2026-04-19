@@ -1241,16 +1241,13 @@ export default function PairingConfigPage() {
                                     )}
                                   </span>
                                   <span className="min-w-0 flex-1">
-                                    <span className={`text-[11px] font-medium truncate block ${
+                                    <span className={`text-xs font-medium truncate block ${
                                       isSelected ? "font-bold"
                                       : isPaused ? "line-through text-muted"
                                       : isRegistered ? "text-muted"
                                       : ""
-                                    }`}>{ep.player.name}</span>
+                                    }`}>{ep.player.name} <span className={`font-normal ${isSelected ? "text-white/70" : "text-muted"}`}>({count})</span></span>
                                   </span>
-                                </span>
-                                <span className={`tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
-                                  <span className="text-xs font-medium">{count}</span><span className="text-[9px]"> m</span>
                                 </span>
                               </div>
                             );
@@ -1732,7 +1729,7 @@ export default function PairingConfigPage() {
                                   : "text-foreground"
                                 }`}>{ep.player.name}</span>
                               </span>
-                              <span className="text-lg text-muted tabular-nums shrink-0">{count} <span className="text-sm">m</span></span>
+                              <span className="text-lg text-muted tabular-nums shrink-0">{count} <span className="text-sm">matches</span></span>
                             </button>
                           );
                         })}
@@ -1762,7 +1759,7 @@ export default function PairingConfigPage() {
             className={`flex items-center gap-3 py-2.5 px-3 rounded-lg active:bg-gray-100 w-full text-left ${dimmed ? "opacity-50" : ""}`}>
             <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="md" />
             <span className={`text-lg font-bold flex-1 ${strike ? "line-through text-muted" : ""}`}>{ep.player.name}</span>
-            <span className="text-lg text-muted tabular-nums">{mc.get(ep.playerId) || 0} <span className="text-sm">m</span></span>
+            <span className="text-lg text-muted tabular-nums">{mc.get(ep.playerId) || 0} <span className="text-sm">matches</span></span>
           </button>
         );
         return (
