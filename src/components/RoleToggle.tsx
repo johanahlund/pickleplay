@@ -48,14 +48,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ROLES: { value: ViewRole; label: string; icon: string; color: string }[] = [
-  { value: "admin", label: "App Admin", icon: "🛡", color: "bg-red-600" },
-  { value: "club", label: "Club Admin", icon: "🏠", color: "bg-purple-600" },
-  { value: "event", label: "Event Admin", icon: "📋", color: "bg-blue-600" },
-  { value: "user", label: "User", icon: "👤", color: "bg-green-600" },
+const ROLES: { value: ViewRole; label: string; icon: string }[] = [
+  { value: "admin", label: "Admin", icon: "★" },
+  { value: "club", label: "Club", icon: "🏠" },
+  { value: "event", label: "Event", icon: "📋" },
+  { value: "user", label: "User", icon: "👤" },
 ];
 
-/** Floating pill toggle — only visible to admins */
+/** Small role toggle — fixed top-right, only visible to admins */
 export function RoleTogglePill() {
   const { data: session } = useSession();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
@@ -73,28 +73,33 @@ export function RoleTogglePill() {
   if (!isAdmin) return null;
 
   const current = ROLES.find((r) => r.value === viewRole) || ROLES[0];
+  const isViewingAsNonAdmin = viewRole !== "admin";
 
   return (
-    <div className="fixed top-1 left-1/2 -translate-x-1/2 z-[60]" ref={ref}>
+    <div className="fixed top-[max(env(safe-area-inset-top,0px),12px)] right-3 z-[60]" style={{ marginTop: 52 }} ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className={`px-3 py-1 rounded-full text-[10px] font-semibold shadow-lg transition-all ${current.color} text-white`}
+        className={`w-7 h-7 rounded-full text-[10px] font-bold shadow-md flex items-center justify-center transition-all ${
+          isViewingAsNonAdmin ? "bg-amber-500 text-white ring-2 ring-amber-300" : "bg-green-600 text-white"
+        }`}
+        title={`Viewing as: ${current.label}`}
       >
-        {current.icon} {current.label}
+        {current.icon}
       </button>
       {open && (
-        <div className="absolute top-8 right-0 bg-white rounded-xl shadow-xl border border-border overflow-hidden min-w-[140px]">
+        <div className="absolute top-8 right-0 bg-white rounded-xl shadow-xl border border-border overflow-hidden min-w-[130px]">
+          <div className="px-3 py-1.5 text-[9px] text-muted uppercase tracking-wider border-b border-border">View as</div>
           {ROLES.map((r) => (
             <button
               key={r.value}
               onClick={() => { setViewRole(r.value); setOpen(false); }}
               className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 hover:bg-gray-50 transition-colors ${
-                viewRole === r.value ? "bg-gray-100" : ""
+                viewRole === r.value ? "bg-green-50" : ""
               }`}
             >
               <span>{r.icon}</span>
               <span>{r.label}</span>
-              {viewRole === r.value && <span className="ml-auto text-action">✓</span>}
+              {viewRole === r.value && <span className="ml-auto text-green-600">✓</span>}
             </button>
           ))}
         </div>

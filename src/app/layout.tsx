@@ -5,7 +5,7 @@ import { Providers } from "@/components/Providers";
 import { Header } from "@/components/Header";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ToastProvider } from "@/components/Toast";
-import { RoleProvider } from "@/components/RoleToggle";
+import { RoleProvider, RoleTogglePill } from "@/components/RoleToggle";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 
 export const metadata: Metadata = {
@@ -45,6 +45,7 @@ export default function RootLayout({
             <ToastProvider>
               <ConfirmProvider>
                 <Header />
+                <RoleTogglePill />
                 <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
                 <BottomNav />
               </ConfirmProvider>

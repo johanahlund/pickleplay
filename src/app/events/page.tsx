@@ -240,7 +240,7 @@ function EventsPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-1">
         <h2 className="text-xl font-bold">
           {showFilters ? "Filter Events" : legacyClubFilter ? "Club Events" : "Events"}
         </h2>
