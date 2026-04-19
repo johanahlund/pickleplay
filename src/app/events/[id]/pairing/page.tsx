@@ -372,8 +372,8 @@ export default function PairingConfigPage() {
           body: JSON.stringify(payload),
         });
         if (!r.ok) {
-          const d = await r.json();
-          await alert(d.error || "Failed to generate", "Error");
+          const d = await r.json().catch(() => ({}));
+          await alert(d.error || "Failed to generate round", "Error");
           break;
         }
       }
@@ -409,11 +409,11 @@ export default function PairingConfigPage() {
           body: JSON.stringify(payload),
         });
         if (!r.ok) {
-          const d = await r.json();
-          await alert(d.error || "Failed to generate", "Error");
+          const d = await r.json().catch(() => ({}));
+          await alert(d.error || "Failed to generate match", "Error");
           break;
         } else {
-          const data = await r.json();
+          const data = await r.json().catch(() => ({}));
           if (data.matches?.[0]) setNewMatchId(data.matches[0]);
         }
       }

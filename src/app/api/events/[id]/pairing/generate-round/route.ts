@@ -46,6 +46,7 @@ export async function POST(
   const { id } = await params;
   try { await requireEventManager(id); } catch (e) { return authErrorResponse(e); }
 
+  try {
   const body = await req.json().catch(() => null) as {
     classId?: string;
     settings?: Partial<PairingSettings>;
@@ -404,6 +405,10 @@ export async function POST(
     violations: result.violations,
     sittingOut: result.sittingOut,
   });
+  } catch (error) {
+    console.error("generate-round error:", error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
 }
 
 function normalizeGender(g: string | null | undefined): "M" | "F" | null {
