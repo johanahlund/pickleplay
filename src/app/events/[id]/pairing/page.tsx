@@ -1174,8 +1174,8 @@ export default function PairingConfigPage() {
       </div>
       )}
 
-      {/* Next match(es) — collapsible */}
-      {preview && (<>
+      {/* Next match(es) — hidden for now, will revisit later */}
+      {false && preview && (<>
       <button onClick={() => toggleCollapsed("nextmatch")}
         className="flex items-center gap-1 text-sm font-bold text-foreground w-full text-left py-1">
         <span className={`transition-transform ${collapsed.has("nextmatch") ? "" : "rotate-90"}`}>›</span>
@@ -1302,13 +1302,6 @@ export default function PairingConfigPage() {
       {/* Actions row */}
       <div className="bg-card rounded-xl border border-border p-2.5 space-y-2">
         <div className="flex gap-2 items-center">
-          <button
-            onClick={handleGenerate}
-            disabled={generating || !classId}
-            className="flex-1 bg-action text-white px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-          >
-            {generating ? "..." : numRounds === 1 ? "Next Match" : `Next ${numRounds} Matches`}
-          </button>
           <div className="flex items-center gap-0 shrink-0">
             <button onClick={() => setNumRounds(Math.max(1, numRounds - 1))} className="w-7 h-7 rounded-l-lg bg-gray-200 text-foreground font-bold text-sm flex items-center justify-center">−</button>
             <div className="w-7 h-7 bg-selected text-white font-bold text-sm flex items-center justify-center">{numRounds}</div>
@@ -1317,7 +1310,7 @@ export default function PairingConfigPage() {
           <button
             onClick={handleGenerateRound}
             disabled={generating || !classId}
-            className="flex-1 bg-action-dark text-white px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
+            className="flex-1 bg-action text-white px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
           >
             {generating ? "..." : numRounds === 1 ? "Next Round" : `Next ${numRounds} Rounds`}
           </button>
