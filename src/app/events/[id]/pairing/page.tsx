@@ -1341,9 +1341,8 @@ export default function PairingConfigPage() {
                     <div key={mp.playerId} className="flex items-center gap-1.5">
                       <PlayerAvatar name={pl?.name || "?"} photoUrl={pl?.photoUrl} size="xs" />
                       <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${won ? "text-green-700" : ""}`}>
-                        {pl?.name || "?"}
+                        {pl?.name || "?"} <span className="text-[10px] text-muted font-normal">({matchCounts.get(mp.playerId) || 0})</span>
                       </span>
-                      <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(mp.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
                     </div>
                   );
                 })}
@@ -1446,8 +1445,7 @@ export default function PairingConfigPage() {
                       <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
                         className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1">
                         <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                        <span className="text-[11px] font-medium">{ep.player.name}</span>
-                        <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(ep.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
+                        <span className="text-[11px] font-medium">{ep.player.name} <span className="text-[9px] text-muted font-normal">({matchCounts.get(ep.playerId) || 0})</span></span>
                       </button>
                     ))}
                   </div>
@@ -1460,8 +1458,7 @@ export default function PairingConfigPage() {
                         <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
                           className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className="text-[11px] font-medium line-through">{ep.player.name}</span>
-                          <span className="text-muted tabular-nums"><span className="text-xs font-medium">{matchCounts.get(ep.playerId) || 0}</span><span className="text-[9px]"> m</span></span>
+                          <span className="text-[11px] font-medium line-through">{ep.player.name} <span className="text-[9px] text-muted font-normal no-underline">({matchCounts.get(ep.playerId) || 0})</span></span>
                         </button>
                       ))}
                     </div>
