@@ -7,6 +7,7 @@ import { AppHeader } from "./AppHeader";
 
 const APP_VERSION = "5.3.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
+const EVENT_DETAIL_RE = /^\/events\/[^/]+$/;
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -211,7 +212,7 @@ export function Header() {
   // Build user summary for the avatar
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
-  if (isAuthPage) {
+  if (isAuthPage || EVENT_DETAIL_RE.test(pathname)) {
     return null;
   }
 

@@ -19,6 +19,7 @@ import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
 import { RallyTracker } from "@/components/RallyTracker";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
+import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 
 interface Player {
   id: string;
@@ -358,6 +359,20 @@ export default function EventDetailPage() {
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
+
+  // Notification count for the hero header (mirrors Header.tsx polling)
+  const [heroUnread, setHeroUnread] = useState(0);
+  useEffect(() => {
+    if (!session?.user) return;
+    const check = () => {
+      fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
+        if (Array.isArray(data)) setHeroUnread(data.filter((n: { read: boolean }) => !n.read).length);
+      }).catch(() => {});
+    };
+    check();
+    const iv = setInterval(check, 30000);
+    return () => clearInterval(iv);
+  }, [session?.user]);
 
   // Remember last visited page + read referrer
   useEffect(() => {
@@ -1105,90 +1120,28 @@ export default function EventDetailPage() {
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
 
-  const eventBackLink = (
-    <Link href="/events" className="text-sm text-action font-medium">← Events</Link>
-  );
+  const heroMeta = [
+    event.club?.name,
+    new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }),
+    new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+      + (event.endDate ? ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""),
+    `${event.numCourts} court${event.numCourts !== 1 ? "s" : ""}`,
+  ].filter(Boolean).join(" · ");
 
-  const eventHeader = (
-    <div className="bg-card rounded-xl border border-border p-4 relative">
-      {/* Status pill — top right corner */}
-      {event.status !== "setup" && (
-        <span className={`absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-          event.status === "active" ? "bg-green-100 text-green-700" :
-          event.status === "completed" ? "bg-gray-100 text-muted" :
-          "bg-blue-100 text-blue-700"
-        }`}>
-          {event.status}
-        </span>
-      )}
+  const heroStatus = (event.status !== "setup" ? event.status : undefined) as HeaderStatus | undefined;
+  const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
-      {/* Action column — pen (edit) and trash (delete), stacked on the right */}
-      {canManage && (
-        <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); startEditEvent(); setActiveSection("when"); }}
-            className="text-muted hover:text-foreground p-1"
-            aria-label="Edit event"
-            title="Edit event"
-          >
-            {penIcon}
-          </button>
-          {(isOwner || isAdmin) && (
-            <button
-              onClick={(e) => { e.stopPropagation(); deleteEvent(); }}
-              className="text-muted hover:text-danger p-1"
-              aria-label="Delete event"
-              title="Delete event"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Club + location row (muted, compact) */}
-      {(event.club || location) && (
-        <div className="flex items-center gap-1.5 mb-1 text-xs pr-16">
-          {event.club && (
-            <Link href={`/clubs/${event.club.id}`} onClick={(e) => e.stopPropagation()} className="text-muted hover:text-action font-medium">
-              📌 {event.club.emoji} {event.club.name}
-            </Link>
-          )}
-          {event.club && location && <span className="text-muted">·</span>}
-          {location && (
-            location.googleMapsUrl ? (
-              <a href={location.googleMapsUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                className="text-action hover:underline">📍 {location.name}</a>
-            ) : (
-              <span className="text-muted">📍 {location.name}</span>
-            )
-          )}
-        </div>
-      )}
-      {/* Title + date — clickable for managers (opens When editor) */}
-      <div onClick={() => { if (canManage) { startEditEvent(); setActiveSection("when"); } }}
-        className={`pr-16 ${canManage ? "active:opacity-70 cursor-pointer" : ""} transition-opacity`}>
-        <h2 className="text-xl font-bold truncate">{event.name}</h2>
-        <p className="text-sm text-muted mt-0.5">
-          {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-          {" at "}
-          {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-          {event.endDate && ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
-          {" · "}{event.numCourts} court{event.numCourts !== 1 ? "s" : ""}
-        </p>
-      </div>
-      {/* Inline info for normal users — Manager, Format, Pairing */}
-      {!canManage && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 pt-2 border-t border-border text-xs text-muted pr-16">
-          <span><span className="font-medium text-foreground">Manager:</span> {ownerName || "—"}{helperNames.length > 0 ? `, ${helperNames.join(", ")}` : ""}</span>
-          <span><span className="font-medium text-foreground">Format:</span> <span className="capitalize">{event.format}</span> · {event.scoringFormat || "1x11"}</span>
-          <span><span className="font-medium text-foreground">Pairing:</span> {
-            ({ random: "Random", skill_balanced: "Skill Balanced", mixed_gender: "Mixed Gender", skill_mixed_gender: "Skill + Mixed", king_of_court: "King of Court", swiss: "Swiss", manual: "Manual" } as Record<string, string>)[event.pairingMode] || event.pairingMode
-          }</span>
-        </div>
-      )}
+  const eventHeroHeader = (
+    <div className="-mx-4" style={{ marginTop: "calc(-1 * var(--header-height, 0px) - 8px)" }}>
+      <AppHeader
+        variant="hero"
+        back={{ label: "Events", href: "/events" }}
+        title={event.name}
+        meta={heroMeta}
+        status={heroStatus}
+        notifications={heroUnread}
+        user={{ initial: userInitial, href: "/profile" }}
+      />
     </div>
   );
 
@@ -3161,8 +3114,7 @@ export default function EventDetailPage() {
     const uniquePlayerIds = new Set(event.players.map((ep) => ep.player.id));
     return (
       <div className="space-y-3">
-        {eventBackLink}
-        {eventHeader}
+        {eventHeroHeader}
         {managerCard}
         <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
@@ -3233,8 +3185,7 @@ export default function EventDetailPage() {
   // Non-competition overview
   return (
     <div className="space-y-3">
-      {eventBackLink}
-      {eventHeader}
+      {eventHeroHeader}
       {canManage && managerCard}
 
       {/* Format — managers only (normal users see it in the header card) */}
