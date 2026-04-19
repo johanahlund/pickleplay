@@ -644,9 +644,27 @@ export default function PairingConfigPage() {
   };
 
   if (!event) return (
-    <div className="space-y-4">
-      <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
-      <div className="flex justify-center py-8">
+    <div className="space-y-4 pb-6" suppressHydrationWarning>
+      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
+        <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
+        <h2 className="text-xl font-bold text-center">Pairing</h2>
+      </div>
+      <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
+        <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
+        <div className="h-3 bg-gray-200 rounded w-1/2" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 bg-gray-100 rounded w-24" />
+        <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="h-8 bg-gray-200 rounded" />
+            <div className="h-8 bg-gray-200 rounded" />
+            <div className="h-8 bg-gray-200 rounded" />
+          </div>
+        </div>
+      </div>
+      <div className="h-4 bg-gray-100 rounded w-20" />
+      <div className="flex justify-center py-4">
         <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
       </div>
     </div>
