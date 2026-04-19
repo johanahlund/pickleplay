@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { PlayerAvatar } from "./PlayerAvatar";
 
 interface RallyPlayer {
