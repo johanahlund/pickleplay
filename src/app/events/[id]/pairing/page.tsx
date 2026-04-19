@@ -1117,7 +1117,8 @@ export default function PairingConfigPage() {
       {canManage && (
         <button onClick={() => setSubPage("settings")}
           className="w-full text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
-          {settings.base} · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"} · {settings.gender === "mixed" ? "Mixed Gender" : settings.gender === "same" ? "Same Gender" : "Any Gender"} · Skill window ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety window ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}
+          <span>{settings.base} · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"} · {settings.gender === "mixed" ? "Mixed Gender" : settings.gender === "same" ? "Same Gender" : "Any Gender"}</span>
+          <span className="block text-xs mt-0.5">Skill window ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety window ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}</span>
         </button>
       )}
 
