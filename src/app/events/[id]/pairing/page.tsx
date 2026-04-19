@@ -190,6 +190,7 @@ export default function PairingConfigPage() {
   const [manualCourt, setManualCourt] = useState(1);
   const [manualFilterMode, setManualFilterMode] = useState<"available" | "all">("available");
   const [manualGenderFilter, setManualGenderFilter] = useState<string | null>(null);
+  const [newMatchId, setNewMatchId] = useState<string | null>(null);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
 
@@ -398,9 +399,18 @@ export default function PairingConfigPage() {
           const d = await r.json();
           await alert(d.error || "Failed to generate", "Error");
           break;
+        } else {
+          const data = await r.json();
+          if (data.matches?.[0]) setNewMatchId(data.matches[0]);
         }
       }
       await refreshEvent();
+      if (newMatchId) {
+        setTimeout(() => {
+          document.getElementById(`match-${newMatchId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+        setTimeout(() => setNewMatchId(null), 4000);
+      }
     } finally {
       setGenerating(false);
     }
@@ -546,10 +556,19 @@ export default function PairingConfigPage() {
       }),
     });
     if (r.ok) {
+      const data = await r.json();
       setManualTeam1([]);
       setManualTeam2([]);
       setShowManual(false);
+      setNewMatchId(data.id || null);
       await refreshEvent();
+      // Scroll to + highlight the new match, clear after animation
+      if (data.id) {
+        setTimeout(() => {
+          document.getElementById(`match-${data.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+        setTimeout(() => setNewMatchId(null), 4000);
+      }
     } else {
       const d = await r.json();
       await alert(d.error || "Failed to create match", "Error");
@@ -658,21 +677,21 @@ export default function PairingConfigPage() {
               ))}
             </div>
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1.5 shrink-0">
             {(["M", "F"] as const).map((g) => (
               <button key={g} onClick={() => setManualGender(manualGender === g ? null : g)}
-                className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                   manualGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
                 }`}>{g === "M" ? "♂" : "♀"}</button>
             ))}
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1.5 shrink-0">
             <button onClick={() => setManualFilter("available")}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                 manualFilter === "available" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
               }`}>Available</button>
             <button onClick={() => setManualFilter("all")}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition-all ${
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                 manualFilter === "all" ? "bg-selected text-white" : "bg-gray-100 text-foreground"
               }`}>All</button>
           </div>
@@ -1363,8 +1382,9 @@ export default function PairingConfigPage() {
           const hasScore = scores[m.id]?.team1 && scores[m.id]?.team2;
 
           return (
-            <div key={m.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
-              isActive ? "border-orange-400 shadow-md shadow-orange-100"
+            <div key={m.id} id={`match-${m.id}`} className={`bg-card rounded-xl border overflow-hidden transition-all ${
+              newMatchId === m.id ? "border-action border-2 shadow-lg shadow-action/20 animate-pulse"
+              : isActive ? "border-orange-400 shadow-md shadow-orange-100"
               : isPending ? "border-green-400 shadow-md shadow-green-100"
               : "border-border"
             }`}>
