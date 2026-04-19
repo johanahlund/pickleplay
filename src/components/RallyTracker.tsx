@@ -757,8 +757,24 @@ export function RallyTracker({
         const rightTPos = swapped ? "t1l" as const : "t2l" as const;
         const rightBPos = swapped ? "t1r" as const : "t2r" as const;
 
+        // For doubles: server position is determined by which player square they're in
+        // For singles: each player has two squares; the "active" one depends on score parity
         const serverOnLeft = [leftTop.id, leftBot.id].includes(serverId);
-        const serverIsTop = serverId === leftTop.id || serverId === rightTop.id;
+        let serverIsTop: boolean;
+        let receiverIsTop: boolean;
+        if (isDoubles) {
+          serverIsTop = serverId === leftTop.id || serverId === rightTop.id;
+          receiverIsTop = !serverIsTop; // diagonal
+        } else {
+          // Singles: server position = top if serving from left (odd score), bottom if from right (even)
+          // The active square is where the player appears
+          const svrTeamOnLeft = serverOnLeft;
+          const svrScore = svrTeamOnLeft ? (swapped ? score[1] : score[0]) : (swapped ? score[0] : score[1]);
+          const servingFromRight = svrScore % 2 === 0;
+          serverIsTop = !servingFromRight; // top = left court, bottom = right court
+          // Receiver is diagonal: if server is top-left, receiver is bottom-right
+          receiverIsTop = !serverIsTop;
+        }
 
         return (
           <div className="flex p-2 gap-1 relative border-2 border-white/30 rounded-xl mx-3 mt-3 mb-4" style={{ height: "26vh" }}>
@@ -773,7 +789,7 @@ export function RallyTracker({
                 x1={serverOnLeft ? "42%" : "58%"}
                 y1={serverIsTop ? "38%" : "62%"}
                 x2={serverOnLeft ? "62%" : "38%"}
-                y2={serverIsTop ? "62%" : "38%"}
+                y2={receiverIsTop ? "38%" : "62%"}
                 stroke="rgb(74, 222, 128)"
                 strokeWidth="3"
                 markerEnd="url(#serve-arrow)"
