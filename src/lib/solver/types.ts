@@ -153,16 +153,14 @@ export interface SolverResult {
  * match count window outweighs any combination of other violations.
  */
 export const WEIGHTS = {
-  /** Per step beyond the match count window. Huge — effectively hard. */
-  matchCount: 10_000,
+  /** Beyond the match count window = HARD BLOCK. Within window = 0 cost. */
+  matchCount: Infinity,
   /**
-   * Per step beyond the wait window. Lower than matchCount because wait is
-   * already correlated with match count; this is a tiebreaker that only
-   * fires when a player is stuck on the bench while totals are otherwise
-   * balanced. Still dominates skill/variety because "nobody should wait
-   * forever" is a fairness concern.
+   * Beyond the wait window = HARD BLOCK. Within window = 0 cost.
+   * These are absolute limits — the solver will never pick an arrangement
+   * that violates them, unless ALL arrangements do (then picks least-bad).
    */
-  wait: 5_000,
+  wait: Infinity,
   /** Per step beyond the skill window. */
   skill: 100,
   /** Per non-compliant team when gender = "mixed" or "same" (require). */
