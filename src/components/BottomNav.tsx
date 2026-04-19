@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
+import Icon from "./Icon";
 
 const defaultTabs = [
-  { href: "/clubs", label: "Clubs", icon: "🏟️" },
-  { href: "/leagues", label: "Leagues", icon: "🏆" },
-  { href: "/events", label: "Events", icon: "📅" },
-  { href: "/matches", label: "My Matches", icon: "🏓" },
+  { href: "/clubs", label: "Clubs", iconName: "clubs" },
+  { href: "/leagues", label: "Leagues", iconName: "trophy" },
+  { href: "/events", label: "Events", iconName: "calendar" },
+  { href: "/matches", label: "My Matches", iconName: "paddle" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -102,7 +103,7 @@ export function BottomNav() {
   const tabs = defaultTabs;
 
   const allTabs = isAdmin && !clubId
-    ? [{ href: "/players", label: "Players", icon: "👤" }, ...tabs]
+    ? [{ href: "/players", label: "Players", iconName: "players" }, ...tabs]
     : tabs;
 
   const isOnActiveEvent = activeEvent && pathname === `/events/${activeEvent.id}`;
@@ -126,7 +127,7 @@ export function BottomNav() {
                   : "text-muted hover:text-foreground"
               }`}
             >
-              <span className="text-xl" aria-hidden="true">{tab.icon}</span>
+              <Icon name={tab.iconName} size={24} color={isActive ? "#2563EB" : "#6B7280"} />
               <span className="text-[11px]">{tab.label}</span>
             </Link>
           );
@@ -140,7 +141,7 @@ export function BottomNav() {
             }`}
             aria-label={`Active event: ${activeEvent.name}`}
           >
-            <span className="text-lg" aria-hidden="true">{activeEvent.status === "draft" ? "📝" : "⚡"}</span>
+            <Icon name={activeEvent.status === "draft" ? "edit" : "pickleball"} size={20} color="white" />
             <span className="text-[9px] font-bold truncate max-w-[50px]">{activeEvent.status === "draft" ? "Draft" : "Live"}</span>
           </Link>
         )}
