@@ -1201,7 +1201,7 @@ export default function EventDetailPage() {
   );
 
   const sectionLabels: Record<string, string> = {
-    when: "When",
+    when: "Event Data",
     admins: "Organizer",
     scoring: "Format",
     pairing: "Pairing",
@@ -3057,7 +3057,7 @@ export default function EventDetailPage() {
             </div>
             {activeSection !== "competition" && (
               <h2 className="text-xl font-bold text-center">{
-                ({ when: "When", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches" } as Record<string, string>)[activeSection] || activeSection
+                ({ when: "Event Data", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches" } as Record<string, string>)[activeSection] || activeSection
               }</h2>
             )}
           </div>
