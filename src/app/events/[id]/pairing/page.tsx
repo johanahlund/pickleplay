@@ -1158,8 +1158,8 @@ export default function PairingConfigPage() {
                                     }`}>{ep.player.name}</span>
                                   </span>
                                 </span>
-                                <span className={`text-[10px] tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
-                                  {count}m
+                                <span className={`tabular-nums shrink-0 ${isSelected ? "text-white/80" : "text-muted"}`}>
+                                  <span className="text-xs font-medium">{count}</span><span className="text-[9px]"> m</span>
                                 </span>
                               </div>
                             );
