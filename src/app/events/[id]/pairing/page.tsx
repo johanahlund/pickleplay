@@ -652,7 +652,6 @@ export default function PairingConfigPage() {
       <AppHeader
         variant="hero-sub"
         back={{ label: "Event", href: `/events/${id}` }}
-        title="Event"
         meta="Pairing"
       />
       <div className="px-4 space-y-4">
@@ -1132,7 +1131,6 @@ export default function PairingConfigPage() {
       <AppHeader
         variant="hero-sub"
         back={{ label: event.name, href: `/events/${id}` }}
-        title={event.name}
         meta="Pairing"
       />
 

@@ -522,11 +522,17 @@ function HeroSubHeader({
         </div>
       </div>
       {back && (
-        <div style={{ padding: "2px 16px 0" }}>
+        <div style={{ padding: "2px 16px 0", display: "flex", alignItems: "center", gap: 8 }}>
           <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="rgba(255,255,255,0.85)" />
+          {meta && (
+            <>
+              <span style={{ color: "rgba(255,255,255,0.4)" }}>·</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)" }}>{meta}</span>
+            </>
+          )}
         </div>
       )}
-      {title && (
+      {!back && title && (
         <div style={{ padding: "6px 16px 0" }}>
           <div
             style={{
@@ -538,19 +544,6 @@ function HeroSubHeader({
           >
             {title}
           </div>
-          {meta && (
-            <div
-              style={{
-                fontSize: 13,
-                color: "rgba(255,255,255,0.75)",
-                fontWeight: 500,
-                marginTop: 4,
-                lineHeight: 1.35,
-              }}
-            >
-              {meta}
-            </div>
-          )}
         </div>
       )}
     </header>

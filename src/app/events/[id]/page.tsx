@@ -2495,7 +2495,6 @@ export default function EventDetailPage() {
       <AppHeader
         variant="hero-sub"
         back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
-        title={event.name}
         meta="Matches"
         action={canManage ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
       />
@@ -2797,7 +2796,6 @@ export default function EventDetailPage() {
         <AppHeader
           variant="hero-sub"
           back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
-          title={event.name}
           meta="Players"
           action={canManage ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } } : undefined}
         />
@@ -3017,7 +3015,6 @@ export default function EventDetailPage() {
           <AppHeader
             variant="hero-sub"
             back={{ label: event.name, href: `/events/${id}`, onClick: handleBackToOverview }}
-            title={event.name}
             meta={sectionMeta}
             action={sectionAction}
           />
