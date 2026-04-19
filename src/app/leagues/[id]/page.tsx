@@ -83,6 +83,7 @@ export default function LeagueDetailPage() {
 
   // Team edit state (used for both add and edit)
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null); // null = creating new
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
   const [editTeamName, setEditTeamName] = useState("");
   const [editTeamSlogan, setEditTeamSlogan] = useState("");
   const [editTeamClubId, setEditTeamClubId] = useState("");
@@ -951,7 +952,7 @@ export default function LeagueDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["overview", "standings", "rounds", "matches", "teams"] as const).map((t) => (
+        {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
               tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
@@ -1359,8 +1360,12 @@ export default function LeagueDetailPage() {
               {team.photoUrl && (
                 <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
               )}
-              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2">
+              <button
+                onClick={() => setCollapsedTeams((prev) => { const n = new Set(prev); if (n.has(team.id)) n.delete(team.id); else n.add(team.id); return n; })}
+                className="w-full px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2 text-left"
+              >
                 <div className="flex items-center gap-2 min-w-0">
+                  <span className={`transition-transform text-[10px] ${collapsedTeams.has(team.id) ? "" : "rotate-90"}`}>›</span>
                   {team.logoUrl ? <img src={team.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
                     : team.club?.logoUrl ? <img src={team.club.logoUrl} alt="" className="w-7 h-7 rounded object-cover" />
                     : <span className="text-lg">{team.club?.emoji || "🏟️"}</span>}
@@ -1373,11 +1378,12 @@ export default function LeagueDetailPage() {
                   </div>
                 </div>
                 {canEdit && (
-                  <button onClick={() => openTeamEdit(team)} className="text-muted hover:text-foreground p-1 shrink-0" aria-label="Edit team">
+                  <span onClick={(e) => { e.stopPropagation(); openTeamEdit(team); }} className="text-muted hover:text-foreground p-1 shrink-0">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  </button>
+                  </span>
                 )}
-              </div>
+              </button>
+              {!collapsedTeams.has(team.id) && (<>
               {/* Leader / Deputy */}
               {(team.captain || team.viceCaptain) && (
                 <div className="px-3 py-1.5 text-xs text-muted flex gap-3 border-b border-border">
@@ -1385,15 +1391,25 @@ export default function LeagueDetailPage() {
                   {team.viceCaptain && <span>Deputy: <span className="font-medium text-foreground">{team.viceCaptain.name}</span></span>}
                 </div>
               )}
-              {/* Player roster */}
+              {/* Player roster — sorted: females first, then males */}
               <div className="px-3 py-2 space-y-1">
-                {team.players.map((tp) => (
+                {[...team.players]
+                  .sort((a, b) => {
+                    const ga = a.player.gender === "F" ? 0 : a.player.gender === "M" ? 1 : 2;
+                    const gb = b.player.gender === "F" ? 0 : b.player.gender === "M" ? 1 : 2;
+                    return ga !== gb ? ga - gb : a.player.name.localeCompare(b.player.name);
+                  })
+                  .map((tp) => (
                   <div key={tp.id} className="flex items-center gap-2 py-1">
                     <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{tp.player.name}</div>
-                      {tp.player.email && <div className="text-[10px] text-muted truncate">{tp.player.email}</div>}
                     </div>
+                    {tp.player.gender && (
+                      <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {tp.player.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
                     <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
                     {canEdit && <button onClick={() => removePlayerFromTeam(team.id, tp.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>}
                   </div>
@@ -1403,6 +1419,7 @@ export default function LeagueDetailPage() {
                     className="text-xs text-primary font-medium mt-1">+ Add Player</button>
                 )}
               </div>
+              </>)}
             </div>
           ))}
 
