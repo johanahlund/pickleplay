@@ -256,7 +256,7 @@ function LightHeader({
         position: "sticky",
         top: 0,
         zIndex: 40,
-        paddingTop: "max(env(safe-area-inset-top, 0px), 8px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
       }}
     >
       <div
@@ -339,7 +339,7 @@ function HeroHeader({
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",
         paddingBottom: 18,
-        paddingTop: "max(env(safe-area-inset-top, 0px), 8px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
         position: "sticky",
         top: 0,
         zIndex: 40,
@@ -494,7 +494,7 @@ function HeroSubHeader({
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",
         paddingBottom: 14,
-        paddingTop: "max(env(safe-area-inset-top, 0px), 8px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
         position: "sticky",
         top: 0,
         zIndex: 40,
