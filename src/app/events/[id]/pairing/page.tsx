@@ -201,6 +201,7 @@ export default function PairingConfigPage() {
   const [newMatchId, setNewMatchId] = useState<string | null>(null);
   const [showPairingHelp, setShowPairingHelp] = useState(false);
   const [creatingMatch, setCreatingMatch] = useState(false);
+  const [deletedToast, setDeletedToast] = useState(false);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
 
@@ -527,6 +528,8 @@ export default function PairingConfigPage() {
     const ok = await confirm({ title: "Delete match?", message: "This cannot be undone.", danger: true, confirmText: "Delete" });
     if (!ok) return;
     setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => m.id !== matchId) } : prev);
+    setDeletedToast(true);
+    setTimeout(() => setDeletedToast(false), 2500);
     await fetch(`/api/matches/${matchId}`, { method: "DELETE" });
     await refreshEvent();
   };
@@ -1348,6 +1351,11 @@ export default function PairingConfigPage() {
       </>)}
 
       <h2 id="matches-header" className="text-xl font-bold text-center">Matches</h2>
+      {deletedToast && (
+        <div className="flex items-center justify-center gap-2 py-2 text-sm text-danger font-medium animate-pulse">
+          🗑️ Match deleted
+        </div>
+      )}
       {/* Matches — current, future, past */}
       {(() => {
         const allMatches = event.matches;
