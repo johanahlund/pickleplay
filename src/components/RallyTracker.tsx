@@ -815,8 +815,13 @@ export function RallyTracker({
                   const isServing = servingTeam === (swapped ? 2 : 1);
                   const serveFromRight = isServing && playerScore % 2 === 0;
                   const serveFromLeft = isServing && playerScore % 2 !== 0;
-                  const recvRight = !isServing && (() => { const svrScore = swapped ? score[0] : score[1]; return svrScore % 2 !== 0; })();
-                  const recvLeft = !isServing && !recvRight;
+                  // Left team receiver: server (right team) even=top-right, so receiver=bottom-left(right)
+                  // Server (right team) odd=bottom-right, so receiver=top-left(left)
+                  // Left team layout: top=left, bottom=right
+                  // Receiver is diagonal from server: server even(top-right) → recv bottom-left = recvRight
+                  const svrScore = swapped ? score[0] : score[1];
+                  const recvRight = !isServing && svrScore % 2 === 0;
+                  const recvLeft = !isServing && !recvRight && !isServing;
                   const leftActive = serveFromLeft || recvLeft;
                   const rightActive = serveFromRight || recvRight;
                   return (
@@ -867,8 +872,12 @@ export function RallyTracker({
                   const isServing = servingTeam === (swapped ? 1 : 2);
                   const serveFromRight = isServing && playerScore % 2 === 0;
                   const serveFromLeft = isServing && playerScore % 2 !== 0;
-                  const recvRight = !isServing && (() => { const svrScore = swapped ? score[1] : score[0]; return svrScore % 2 !== 0; })();
-                  const recvLeft = !isServing && !recvRight;
+                  // Right team receiver: server (left team) even=bottom-left, so receiver=top-right(right)
+                  // Server (left team) odd=top-left, so receiver=bottom-right(left)
+                  // Right team layout: top=right, bottom=left (mirrored)
+                  const svrScore = swapped ? score[1] : score[0];
+                  const recvRight = !isServing && svrScore % 2 === 0;
+                  const recvLeft = !isServing && !recvRight && !isServing;
                   const leftActive = serveFromLeft || recvLeft;
                   const rightActive = serveFromRight || recvRight;
                   // Right team: mirrored — top=Right(even), bottom=Left(odd)
