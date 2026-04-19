@@ -67,6 +67,8 @@ interface EventSummary {
   id: string;
   name: string;
   numCourts: number;
+  createdById?: string;
+  helpers?: { playerId: string }[];
   classes: EventClass[];
   players: EventPlayerDTO[];
   matches: EventMatchDTO[];
@@ -173,6 +175,11 @@ export default function PairingConfigPage() {
   }, []);
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const isAdmin = userRole === "admin";
+  const isOwner = event?.createdById === userId;
+  const isHelper = event?.helpers?.some((h) => h.playerId === userId);
+  const canManage = isAdmin || isOwner || !!isHelper;
   const [generating, setGenerating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saving" | "saved">("");
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -203,6 +210,8 @@ export default function PairingConfigPage() {
       id: data.id,
       name: data.name,
       numCourts: data.numCourts,
+      createdById: data.createdById,
+      helpers: data.helpers || [],
       classes: data.classes || [],
       players: data.players || [],
       matches: data.matches || [],
@@ -1005,12 +1014,14 @@ export default function PairingConfigPage() {
         </div>
       )}
 
-      {/* Pairing Settings button */}
-      <button onClick={() => setSubPage("settings")}
-        className="w-full text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
-        Pairing Settings
-        <span className="block text-[9px] text-muted font-normal mt-0.5 capitalize">{settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}</span>
-      </button>
+      {/* Pairing Settings button — managers only */}
+      {canManage && (
+        <button onClick={() => setSubPage("settings")}
+          className="w-full text-[11px] text-action font-medium border border-action/30 px-3 py-2 rounded-lg text-center">
+          Pairing Settings
+          <span className="block text-[9px] text-muted font-normal mt-0.5 capitalize">{settings.base} · {settings.gender === "mixed" ? "Mixed" : settings.gender === "same" ? "Same" : "Any"}{analysis ? ` · ${analysis.pool.active} active · ${analysis.feasibility.maxCleanRounds >= analysis.feasibility.simulatedRounds ? `${analysis.feasibility.simulatedRounds}+` : analysis.feasibility.maxCleanRounds} clean rounds` : ""}</span>
+        </button>
+      )}
 
 
 
@@ -1280,7 +1291,8 @@ export default function PairingConfigPage() {
       )}
       </>)}
 
-      {/* Actions + Sitting out — collapsible */}
+      {/* Actions + Sitting out — collapsible, managers only */}
+      {canManage && (<>
       <button onClick={() => toggleCollapsed("actions")}
         className="flex items-center gap-1 text-sm font-bold text-foreground w-full text-left py-1">
         <span className={`transition-transform ${collapsed.has("actions") ? "" : "rotate-90"}`}>›</span>
@@ -1319,6 +1331,7 @@ export default function PairingConfigPage() {
           </button>
         </div>
       </div>
+      </>)}
       </>)}
 
       <h2 id="matches-header" className="text-xl font-bold text-center">Matches</h2>
@@ -1566,6 +1579,8 @@ export default function PairingConfigPage() {
         const t2Names = t2.map((p) => playerMap2.get(p.playerId)?.name || "?").join(" & ");
         const isCompleted = m.status === "completed";
         const isActive = m.status === "active";
+        const isMatchPlayer = m.players.some((p) => p.playerId === userId);
+        const canScore = canManage || isMatchPlayer;
         const close = () => setActionMatchId(null);
         return (
           <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
@@ -1576,26 +1591,28 @@ export default function PairingConfigPage() {
                 <span className="text-xs text-muted ml-2">{t1Names} vs {t2Names}</span>
               </div>
               <div className="flex p-3 gap-3">
-                {/* Left: Edit + Delete */}
-                <div className="flex flex-col gap-1.5 w-24">
-                  {!isCompleted && (
-                    <button onClick={() => { close(); setShowManual(true); setManualCourt(m.courtNum); }}
-                      className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
-                  )}
-                  <button onClick={() => { close(); deleteMatch(m.id); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
-                </div>
+                {/* Left: Edit + Delete — managers only */}
+                {canManage && (
+                  <div className="flex flex-col gap-1.5 w-24">
+                    {!isCompleted && (
+                      <button onClick={() => { close(); setShowManual(true); setManualCourt(m.courtNum); }}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
+                    )}
+                    <button onClick={() => { close(); deleteMatch(m.id); }}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
+                  </div>
+                )}
                 {/* Right: Actions */}
                 <div className="flex-1 flex flex-col gap-1.5">
-                  {m.status === "pending" && (
+                  {m.status === "pending" && canScore && (
                     <button onClick={() => { startMatch(m.id); close(); }}
                       className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">▶ Start match</button>
                   )}
-                  {isActive && (
+                  {isActive && canScore && (
                     <button onClick={() => { pauseMatch(m.id); close(); }}
                       className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⏸️ Pause</button>
                   )}
-                  {m.status === "paused" && (
+                  {m.status === "paused" && canScore && (
                     <button onClick={() => { startMatch(m.id); close(); }}
                       className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">▶ Resume</button>
                   )}
@@ -1603,8 +1620,10 @@ export default function PairingConfigPage() {
                     <button onClick={() => { close(); window.open(`/events/${id}`, "_self"); }}
                       className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📺 Focus view</button>
                   )}
-                  <button onClick={() => { close(); }}
-                    className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">🔊 Announce</button>
+                  {canScore && (
+                    <button onClick={() => { close(); }}
+                      className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">🔊 Announce</button>
+                  )}
                 </div>
               </div>
               <div className="px-4 pb-4 pt-2">
