@@ -137,10 +137,13 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
                 </button>
               )}
               {hasOtherScore && onClearBoth && (
-                <button onClick={() => { onClearBoth(); setError(null); }} className="text-sm text-red-500 font-medium hover:underline">
+                <button onClick={() => { onClearBoth(); setOpen(false); setError(null); }} className="text-sm text-red-500 font-medium hover:underline">
                   Clear both scores
                 </button>
               )}
+              <button onClick={() => { setOpen(false); setError(null); }} className="w-full py-2.5 rounded-xl bg-gray-100 text-sm font-medium mt-2">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
