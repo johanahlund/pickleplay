@@ -3011,7 +3011,7 @@ export default function EventDetailPage() {
       : undefined;
     return (
       <div className="-mx-4">
-        {!bulkSelectMode && !showAddPlayer && (
+        {!bulkSelectMode && !showAddPlayer && activeSection !== "rounds" && activeSection !== "manual" && (
           <AppHeader
             variant="hero-sub"
             back={{ label: event.name, href: `/events/${id}`, onClick: handleBackToOverview }}
