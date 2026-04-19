@@ -131,7 +131,7 @@ export function Header() {
     if (headerRef.current) {
       const h = headerRef.current.offsetHeight;
       const main = document.getElementById("main-content");
-      if (main) main.style.paddingTop = `${h + 8}px`;
+      if (main) main.style.paddingTop = `${h}px`;
       document.documentElement.style.setProperty("--header-height", `${h}px`);
     }
   }, []);
