@@ -1031,13 +1031,8 @@ export function RallyTracker({
       {phase === "game-over" && winner && (
         <div className="p-4 space-y-3 border-t border-white/10">
           <div className="text-center">
-            <div className="text-2xl font-black text-green-400 mb-1">
-              🏆 Team {winner} wins!
-            </div>
-            <div className="text-3xl font-black tabular-nums">
-              <span className="text-blue-500">{score[0]}</span>
-              <span className="text-white/30 mx-2">—</span>
-              <span className="text-red-500">{score[1]}</span>
+            <div className="text-2xl font-black text-green-400">
+              🏆 {(winner === 1 ? team1Players : team2Players).map((p) => shortName(p)).join(" & ")} win{(winner === 1 ? team1Players : team2Players).length === 1 ? "s" : ""}!
             </div>
           </div>
           <div className="flex gap-2">
