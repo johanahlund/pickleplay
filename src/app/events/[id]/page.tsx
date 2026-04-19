@@ -2522,7 +2522,11 @@ export default function EventDetailPage() {
     <div className="space-y-3">
       {/* Sticky header: back + courts + actions */}
       <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-2 space-y-2 shadow-sm">
-      <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event <span className="text-xs text-muted font-normal">({event?.name})</span></button>
+      <div>
+        <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event Overview</button>
+        <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
+      </div>
+      <h2 className="text-xl font-bold text-center">Matches</h2>
       {/* Open Pairing page — managers only */}
       {canManage && (
         <button onClick={() => router.push(`/events/${id}/pairing`)}
