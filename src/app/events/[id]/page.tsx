@@ -1147,7 +1147,7 @@ export default function EventDetailPage() {
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
   const eventHeroHeader = (
-    <div className="-mx-4" style={{ marginTop: "calc(-1 * var(--header-height, 0px) - 8px)" }}>
+    <div className="-mx-4 -mt-2">
       <AppHeader
         variant="hero"
         back={{ label: "Events", href: "/events" }}

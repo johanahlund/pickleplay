@@ -213,6 +213,12 @@ export function Header() {
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
   if (isAuthPage || EVENT_DETAIL_RE.test(pathname)) {
+    // Reset main padding when header is hidden
+    if (typeof document !== "undefined") {
+      const main = document.getElementById("main-content");
+      if (main) main.style.paddingTop = "0px";
+      document.documentElement.style.setProperty("--header-height", "0");
+    }
     return null;
   }
 
