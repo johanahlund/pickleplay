@@ -166,9 +166,25 @@ export function RallyTracker({
   const [elapsedDisplay, setElapsedDisplay] = useState("0:00");
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [initialGameState, setInitialGameState] = useState<GameState | null>(null);
-  const [history, setHistory] = useState<GameState[]>([]); // all states, index 0 = after first rally
+  const [history, setHistory] = useState<GameState[]>([]);
   const [redoStack, setRedoStack] = useState<{ state: GameState; winner: 1 | 2 | null }[]>([]);
   const [winner, setWinner] = useState<1 | 2 | null>(null);
+
+  // Reset all state when match changes
+  useEffect(() => {
+    setTeam1Order(team1Players);
+    setTeam2Order(team2Players);
+    setPhase("pick-sides");
+    setSetupServer(null);
+    setSetupReceiver(null);
+    setGameState(null);
+    setInitialGameState(null);
+    setHistory([]);
+    setRedoStack([]);
+    setWinner(null);
+    setStartTime(null);
+    setSwapped(false);
+  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Timer
   useEffect(() => {
@@ -388,10 +404,11 @@ export function RallyTracker({
             newState.serverId = (newState.servingTeam === 1 ? team1Players[0] : team2Players[0]).id;
           }
         } else if (newState.serverNumber === 1) {
-          // Server 1 loses → Server 2 takes over from wherever they are
+          // Server 1 loses → Server 2 takes over.
+          // In doubles: Server 2 is the partner. They do NOT swap sides.
+          // They serve from wherever they're standing. The serve goes cross-court.
           newState.serverNumber = 2;
           if (isDoubles) {
-            // Partner takes over
             const currentServer = newState.serverId;
             const teamPlayers = servingTeam === 1
               ? [newState.court.team1Left, newState.court.team1Right]
