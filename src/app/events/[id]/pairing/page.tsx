@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { suggestWaitingAction } from "@/lib/solver/waitingSuggestion";
 import { ScorePicker } from "@/components/ScorePicker";
 import { useSession } from "next-auth/react";
+import { AppHeader } from "@/components/AppHeader";
 
 // ── Types mirroring src/lib/solver/types.ts ──────────────────────────────
 
@@ -647,28 +648,32 @@ export default function PairingConfigPage() {
   };
 
   if (!event) return (
-    <div className="space-y-4 pb-6" suppressHydrationWarning>
-      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
-        <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
-        <h2 className="text-xl font-bold text-center">Pairing</h2>
-      </div>
-      <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
-        <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
-        <div className="h-3 bg-gray-200 rounded w-1/2" />
-      </div>
-      <div className="space-y-2">
-        <div className="h-4 bg-gray-100 rounded w-24" />
+    <div className="space-y-4 pb-6 -mx-4" suppressHydrationWarning>
+      <AppHeader
+        variant="hero-sub"
+        back={{ label: "Event", href: `/events/${id}` }}
+        title="Event"
+        meta="Pairing"
+      />
+      <div className="px-4 space-y-4">
         <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="h-8 bg-gray-200 rounded" />
-            <div className="h-8 bg-gray-200 rounded" />
-            <div className="h-8 bg-gray-200 rounded" />
+          <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
+          <div className="h-3 bg-gray-200 rounded w-1/2" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 bg-gray-100 rounded w-24" />
+          <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="h-8 bg-gray-200 rounded" />
+              <div className="h-8 bg-gray-200 rounded" />
+              <div className="h-8 bg-gray-200 rounded" />
+            </div>
           </div>
         </div>
-      </div>
-      <div className="h-4 bg-gray-100 rounded w-20" />
-      <div className="flex justify-center py-4">
-        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        <div className="h-4 bg-gray-100 rounded w-20" />
+        <div className="flex justify-center py-4">
+          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+        </div>
       </div>
     </div>
   );
@@ -1123,16 +1128,15 @@ export default function PairingConfigPage() {
   const pmcColor = (pid: string) => playerOffsetMap.has(pid) ? "text-blue-500" : "text-muted";
 
   return (
-    <div className="space-y-4 pb-6">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
-        <div>
-          <Link href={`/events/${id}`} className="text-sm text-action font-medium">← Event Overview</Link>
-          <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
-        </div>
-        <h2 className="text-xl font-bold text-center">Pairing</h2>
-      </div>
+    <div className="space-y-4 pb-6 -mx-4">
+      <AppHeader
+        variant="hero-sub"
+        back={{ label: event.name, href: `/events/${id}` }}
+        title={event.name}
+        meta="Pairing"
+      />
 
+      <div className="px-4 space-y-4">
       {/* Class picker */}
       {event.classes.length > 1 && (
         <div className="bg-card rounded-xl border border-border p-3">
@@ -1952,6 +1956,7 @@ export default function PairingConfigPage() {
         );
       })()}
 
+      </div>
     </div>
   );
 }

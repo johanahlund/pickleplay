@@ -2,7 +2,7 @@
 
 "use client";
 
-import React from "react";
+import React, { type ReactNode } from "react";
 import Link from "next/link";
 import Logo from "./Logo";
 
@@ -10,7 +10,7 @@ export type HeaderStatus = "draft" | "open" | "active" | "completed";
 
 interface AppHeaderProps {
   /** Visual treatment. Hero is used for entity-detail pages with a title. */
-  variant?: "light" | "hero";
+  variant?: "light" | "hero" | "hero-sub";
 
   /** Entity title shown in the hero variant (event name, club name, etc). */
   title?: string;
@@ -22,7 +22,15 @@ interface AppHeaderProps {
   status?: HeaderStatus;
 
   /** Back link: label + href. Omit to hide. */
-  back?: { label: string; href: string };
+  back?: { label: string; href: string; onClick?: () => void };
+
+  /** Primary action rendered in the header's right slot (hero-sub only). */
+  action?: {
+    label: string;
+    onClick?: () => void;
+    href?: string;
+    icon?: ReactNode;
+  };
 
   /** Show the small admin pill to the right of the logo (light variant). */
   isAdmin?: boolean;
@@ -40,10 +48,14 @@ export function AppHeader({
   meta,
   status,
   back,
+  action,
   isAdmin,
   notifications,
   user,
 }: AppHeaderProps) {
+  if (variant === "hero-sub") {
+    return <HeroSubHeader {...{ title, meta, back, action, notifications, user }} />;
+  }
   return variant === "hero" ? (
     <HeroHeader {...{ title, meta, status, back, notifications, user }} />
   ) : (
@@ -60,24 +72,15 @@ function BackChevron({
   href,
   label,
   color,
+  onClick,
 }: {
   href: string;
   label: string;
   color: string;
+  onClick?: () => void;
 }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        fontSize: 15,
-        fontWeight: 500,
-        color,
-        textDecoration: "none",
-      }}
-    >
+  const inner = (
+    <>
       <svg width={10} height={16} viewBox="0 0 10 16" style={{ marginTop: 1 }}>
         <path
           d="M8 2 L2 8 L8 14"
@@ -89,6 +92,32 @@ function BackChevron({
         />
       </svg>
       {label}
+    </>
+  );
+  const sharedStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: 15,
+    fontWeight: 500,
+    color,
+    textDecoration: "none",
+    background: "none",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+  };
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} style={sharedStyle}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={href} style={sharedStyle}>
+      {inner}
     </Link>
   );
 }
@@ -334,7 +363,7 @@ function HeroHeader({
       </div>
       {back && (
         <div style={{ padding: "2px 16px 0" }}>
-          <BackChevron {...back} color="rgba(255,255,255,0.72)" />
+          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="rgba(255,255,255,0.72)" />
         </div>
       )}
       {title && (
@@ -387,6 +416,132 @@ function HeroHeader({
                 color: "rgba(255,255,255,0.82)",
                 fontWeight: 500,
                 marginTop: 8,
+                lineHeight: 1.35,
+              }}
+            >
+              {meta}
+            </div>
+          )}
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Hero-sub variant — nested sub-pages (Players, Pairing, etc.)
+   ──────────────────────────────────────────────────────────────── */
+
+function HeroSubHeader({
+  title,
+  meta,
+  back,
+  action,
+  notifications,
+  user,
+}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user">) {
+  const actionEl = action ? (
+    action.onClick ? (
+      <button
+        type="button"
+        onClick={action.onClick}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "6px 14px",
+          borderRadius: 9999,
+          background: "#fff",
+          color: "#15803d",
+          fontSize: 13,
+          fontWeight: 700,
+          border: "none",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {action.icon}
+        {action.label}
+      </button>
+    ) : (
+      <Link
+        href={action.href ?? "#"}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "6px 14px",
+          borderRadius: 9999,
+          background: "#fff",
+          color: "#15803d",
+          fontSize: 13,
+          fontWeight: 700,
+          textDecoration: "none",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {action.icon}
+        {action.label}
+      </Link>
+    )
+  ) : null;
+
+  return (
+    <header
+      style={{
+        background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
+        color: "#fff",
+        paddingBottom: 14,
+        position: "sticky",
+        top: 0,
+        zIndex: 40,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          height: 48,
+          boxSizing: "border-box",
+        }}
+      >
+        <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {actionEl}
+          <HeaderActions
+            color="#fff"
+            avatarBg="rgba(255,255,255,0.22)"
+            badge={notifications}
+            user={user}
+          />
+        </div>
+      </div>
+      {back && (
+        <div style={{ padding: "2px 16px 0" }}>
+          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="rgba(255,255,255,0.85)" />
+        </div>
+      )}
+      {title && (
+        <div style={{ padding: "6px 16px 0" }}>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 800,
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
+            }}
+          >
+            {title}
+          </div>
+          {meta && (
+            <div
+              style={{
+                fontSize: 13,
+                color: "rgba(255,255,255,0.75)",
+                fontWeight: 500,
+                marginTop: 4,
                 lineHeight: 1.35,
               }}
             >

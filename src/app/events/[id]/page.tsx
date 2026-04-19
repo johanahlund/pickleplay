@@ -2492,22 +2492,13 @@ export default function EventDetailPage() {
 
   const renderRounds = () => (
     <div className="space-y-3">
-      {/* Sticky header: back + courts + actions */}
-      <div className="sticky top-0 z-30 bg-background pb-2 -mx-4 px-4 pt-2 space-y-2 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <button onClick={() => setActiveSection("overview")} className="text-sm text-action font-medium">← Event Overview</button>
-          <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
-        </div>
-        {canManage && (
-          <button onClick={() => router.push(`/events/${id}/pairing`)}
-            className="text-xs text-action font-medium border border-action/30 px-2.5 py-1 rounded-lg hover:bg-action/5">
-            Pairing →
-          </button>
-        )}
-      </div>
-      <h2 className="text-xl font-bold text-center">Matches</h2>
-      </div>{/* end sticky */}
+      <AppHeader
+        variant="hero-sub"
+        back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
+        title={event.name}
+        meta="Matches"
+        action={canManage ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
+      />
 
       {/* Active — orange */}
       {activeMatches.length > 0 && (
@@ -2802,15 +2793,17 @@ export default function EventDetailPage() {
   // Competition mode: Players section without section bar
   if (event.competitionMode && activeSection === "players") {
     return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setActiveSection("overview")} className="text-xs text-action font-medium">← Event Overview <span className="text-[10px] text-muted font-normal">({event?.name})</span></button>
-          <span className="text-[10px] text-muted">
-            {event.name} · {new Date(event.date).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
-          </span>
-          <span className="w-12" />
+      <div className="-mx-4">
+        <AppHeader
+          variant="hero-sub"
+          back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
+          title={event.name}
+          meta="Players"
+          action={canManage ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } } : undefined}
+        />
+        <div className="px-4">
+          {renderPlayers()}
         </div>
-        {renderPlayers()}
       </div>
     );
   }
@@ -3006,40 +2999,31 @@ export default function EventDetailPage() {
   };
 
   if (activeSection !== "overview") {
+    const sectionMeta = ({ when: "Event Data", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches", competition: "Competition", manual: "Manual Match" } as Record<string, string>)[activeSection] || activeSection;
+    const handleBackToOverview = async () => {
+      if (hasEdits) {
+        const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+        if (!ok) return;
+        startEditEvent();
+      }
+      setActiveSection("overview");
+    };
+    const sectionAction = activeSection === "players" && canManage && !bulkSelectMode && !showAddPlayer
+      ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } }
+      : undefined;
     return (
-      <div className="space-y-2">
-        {activeSection !== "rounds" && activeSection !== "manual" && (bulkSelectMode || showAddPlayer) && (
-          <div className="text-xs text-foreground/70 -mx-4 px-4 py-2">{event.name}</div>
-        )}
-        {activeSection !== "rounds" && activeSection !== "manual" && !bulkSelectMode && !showAddPlayer && (
-          <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm space-y-1">
-            <div className="flex items-center justify-between">
-            <div>
-              <button onClick={async () => {
-                if (hasEdits) {
-                  const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-                  if (!ok) return;
-                  startEditEvent();
-                }
-                setActiveSection("overview");
-              }} className="text-sm text-action font-medium">← Event Overview</button>
-              <div className="text-xs text-foreground/70 mt-0.5">{event.name}</div>
-            </div>
-            {activeSection === "players" && canManage && !bulkSelectMode && !showAddPlayer && (
-              <button onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-                className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">
-                +/- Player
-              </button>
-            )}
-            </div>
-            {activeSection !== "competition" && (
-              <h2 className="text-xl font-bold text-center">{
-                ({ when: "Event Data", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches" } as Record<string, string>)[activeSection] || activeSection
-              }</h2>
-            )}
-          </div>
+      <div className="-mx-4">
+        {!bulkSelectMode && !showAddPlayer && (
+          <AppHeader
+            variant="hero-sub"
+            back={{ label: event.name, href: `/events/${id}`, onClick: handleBackToOverview }}
+            title={event.name}
+            meta={sectionMeta}
+            action={sectionAction}
+          />
         )}
 
+        <div className="px-4 space-y-2">
         {activeSection === "when" && renderWhen()}
         {activeSection === "scoring" && renderScoring()}
         {activeSection === "pairing" && renderPairing()}
@@ -3104,6 +3088,7 @@ export default function EventDetailPage() {
         {renderActionSheet()}
         {renderFocusedMatch()}
         {renderRallyTracker()}
+        </div>
       </div>
     );
   }

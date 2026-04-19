@@ -7,7 +7,7 @@ import { AppHeader } from "./AppHeader";
 
 const APP_VERSION = "5.3.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
-const EVENT_DETAIL_RE = /^\/events\/[^/]+$/;
+const EVENT_DETAIL_RE = /^\/events\/[^/]+(\/.*)?$/;
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
