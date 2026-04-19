@@ -123,6 +123,7 @@ interface Event {
   helpers: EventHelper[];
   pairs: EventPair[];
   classes: EventClassData[];
+  locationId?: string | null;
   club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
   // Legacy compat — derived from default class
   format: string;
@@ -385,6 +386,7 @@ export default function EventDetailPage() {
   const [editName, setEditName] = useState("");
   const [editStatus, setEditStatus] = useState("draft");
   const [editCourts, setEditCourts] = useState(2);
+  const [editLocationId, setEditLocationId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [editEndTime, setEditEndTime] = useState("");
@@ -766,6 +768,7 @@ export default function EventDetailPage() {
     setEditCompetitionMode(!!event.competitionMode);
     setEditOpenSignup(event.openSignup);
     setEditVisibility(event.visibility);
+    setEditLocationId(event.locationId || event.club?.locations?.[0]?.id || null);
     if (event.endDate) {
       setEditEndDate(toDateInput(event.endDate));
       setEditEndTime(toTimeInput(event.endDate));
@@ -805,6 +808,7 @@ export default function EventDetailPage() {
         rankingMode: editRankingMode,
         openSignup: editOpenSignup,
         visibility: editVisibility,
+        locationId: editLocationId,
       }),
     });
     // If competition mode changed, persist via the dedicated competition endpoint
@@ -1345,7 +1349,8 @@ export default function EventDetailPage() {
             </div>
           ) : (
             <select
-              onChange={() => setHasEdits(true)}
+              value={editLocationId || ""}
+              onChange={(e) => { setEditLocationId(e.target.value || null); setHasEdits(true); }}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               {event.club.locations.map((loc: { id: string; name: string }) => (

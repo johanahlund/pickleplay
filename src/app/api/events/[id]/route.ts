@@ -94,6 +94,7 @@ export async function PATCH(
   if (openSignup !== undefined) eventData.openSignup = !!openSignup;
   if (visibility !== undefined) eventData.visibility = visibility;
   if (body.status !== undefined) eventData.status = body.status;
+  if (body.locationId !== undefined) eventData.locationId = body.locationId;
   if (body.createdById !== undefined) {
     // Only event owner, club owner, or app admin can transfer ownership
     const user = await requireAuth();
