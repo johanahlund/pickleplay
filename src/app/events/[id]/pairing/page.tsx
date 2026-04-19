@@ -566,7 +566,7 @@ export default function PairingConfigPage() {
     setCreatingMatch(true);
     // Scroll to the matches area immediately so user sees the spinner
     setTimeout(() => {
-      document.getElementById("matches-header")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("creating-spinner")?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
 
     const r = await fetch(`/api/events/${id}/matches`, {
@@ -1335,12 +1335,6 @@ export default function PairingConfigPage() {
       </>)}
 
       <h2 id="matches-header" className="text-xl font-bold text-center">Matches</h2>
-      {(creatingMatch || generating) && (
-        <div className="flex items-center justify-center gap-2 py-3">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-muted">{creatingMatch ? "Creating match..." : "Generating..."}</span>
-        </div>
-      )}
       {/* Matches — current, future, past */}
       {(() => {
         const allMatches = event.matches;
@@ -1522,6 +1516,12 @@ export default function PairingConfigPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {(creatingMatch || generating) && (
+              <div id="creating-spinner" className="flex items-center justify-center gap-2 py-4">
+                <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-muted">{creatingMatch ? "Creating match..." : "Generating..."}</span>
               </div>
             )}
             {pending.length > 0 && (
