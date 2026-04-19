@@ -118,6 +118,14 @@ export interface SolverInput {
    * Ignored when teams === "rotating".
    */
   fixedTeams?: Team[];
+  /**
+   * Average match count computed from ALL checked-in players in the class
+   * (including busy ones), not just the idle solver pool. When set, the
+   * solver uses this instead of the locally-computed average so that
+   * fairness scoring isn't skewed by the subset of players who happen to
+   * be idle.
+   */
+  globalAvgMatchCount?: number;
 }
 
 export type ViolationType = "matchCount" | "skill" | "gender" | "variety" | "wait";

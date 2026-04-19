@@ -73,6 +73,7 @@ export async function POST(
           playerId: true,
           skillLevel: true,
           autoSkillLevel: true,
+          matchCountOffset: true,
           status: true,
           player: {
             select: {
@@ -227,6 +228,17 @@ export async function POST(
   const idleCourtCount = totalCourts - busyCourts.size;
   const courtsToFill = Math.min(totalCourts, idleCourtCount + includedCourtSet.size);
 
+  // ── Calculate global average match count from ALL players in the class
+  //    (not just idle ones) so the solver's fairness scoring isn't skewed
+  //    by which players happen to be on court right now. ──────────────────
+  const allPlayerCounts = eventClass.players.map(
+    (ep) => (counts.get(ep.playerId) || 0) + (ep.matchCountOffset || 0),
+  );
+  const globalAvg =
+    allPlayerCounts.length > 0
+      ? allPlayerCounts.reduce((s, c) => s + c, 0) / allPlayerCounts.length
+      : 0;
+
   // ── Build the solver player list ──────────────────────────────────────
   // Only include players who are NOT currently playing on a court we're not
   // waiting for. Paused players are also excluded.
@@ -246,7 +258,7 @@ export async function POST(
         name: ep.player.name,
         skillLevel: level,
         gender: normalizeGender(ep.player.gender),
-        matchCount: counts.get(ep.playerId) || 0,
+        matchCount: (counts.get(ep.playerId) || 0) + (ep.matchCountOffset || 0),
         roundsSinceLastPlayed: last > 0 ? maxRound - last : 0,
         paused: ep.status === "paused",
       };
@@ -282,6 +294,7 @@ export async function POST(
     history,
     locks,
     fixedTeams,
+    globalAvgMatchCount: globalAvg,
   };
 
   const result = generateRound(input);

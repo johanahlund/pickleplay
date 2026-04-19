@@ -299,6 +299,9 @@ model EventPlayer {
   /// Auto-assigned skill level from DUPR/rating at the time of add or
   /// last recalculate. Preserved across overrides so admins can see the gap.
   autoSkillLevel  Int?
+  /// Match count offset for late joiners — stores the average match count
+  /// at the time of check-in so the solver treats them fairly.
+  matchCountOffset Int     @default(0)
   joinedAt        DateTime @default(now())
 
   event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)

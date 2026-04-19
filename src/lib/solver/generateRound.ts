@@ -71,10 +71,11 @@ export function generateRound(input: SolverInput): SolverResult {
   const playerMap = new Map(activePlayers.map((p) => [p.id, p]));
   const repeats = buildRepeatCounts(history);
 
-  const avg =
+  const localAvg =
     activePlayers.length > 0
       ? activePlayers.reduce((s, p) => s + p.matchCount, 0) / activePlayers.length
       : 0;
+  const avg = input.globalAvgMatchCount ?? localAvg;
 
   const courtsThisRound = Math.min(
     numCourts,

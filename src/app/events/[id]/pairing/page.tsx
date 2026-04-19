@@ -40,6 +40,7 @@ interface EventPlayerDTO {
   classId: string | null;
   skillLevel: number | null;
   autoSkillLevel: number | null;
+  matchCountOffset?: number;
   status: string;
   player: {
     id: string;
@@ -1085,6 +1086,11 @@ export default function PairingConfigPage() {
       playerMatchCounts.set(p.playerId, (playerMatchCounts.get(p.playerId) || 0) + 1);
     }
   }
+  const playerOffsetMap = new Map<string, number>();
+  for (const ep of event.players) {
+    if (ep.matchCountOffset && ep.matchCountOffset > 0) playerOffsetMap.set(ep.playerId, ep.matchCountOffset);
+  }
+  const pmcColor = (pid: string) => playerOffsetMap.has(pid) ? "text-blue-500" : "text-muted";
 
   return (
     <div className="space-y-4 pb-6">
@@ -1254,7 +1260,7 @@ export default function PairingConfigPage() {
                                       : isPaused ? "line-through text-muted"
                                       : isRegistered ? "text-muted"
                                       : ""
-                                    }`}>{ep.player.name} <span className={`font-normal ${isSelected ? "text-white/70" : "text-muted"}`}>({count})</span></span>
+                                    }`}>{ep.player.name} <span className={`font-normal ${isSelected ? "text-white/70" : pmcColor(ep.playerId)}`}>({count})</span></span>
                                   </span>
                                 </span>
                               </div>
@@ -1323,6 +1329,11 @@ export default function PairingConfigPage() {
         for (const m of allMatches) {
           for (const p of m.players) matchCounts.set(p.playerId, (matchCounts.get(p.playerId) || 0) + 1);
         }
+        const offsetMap = new Map<string, number>();
+        for (const ep of classPlayers) {
+          if (ep.matchCountOffset && ep.matchCountOffset > 0) offsetMap.set(ep.playerId, ep.matchCountOffset);
+        }
+        const mcColor = (pid: string) => offsetMap.has(pid) ? "text-blue-500" : "text-muted";
 
         const renderMatchCard = (m: EventMatchDTO) => {
           const t1 = m.players.filter((p) => p.team === 1);
@@ -1346,7 +1357,7 @@ export default function PairingConfigPage() {
                     <div key={mp.playerId} className="flex items-center gap-1.5">
                       <PlayerAvatar name={pl?.name || "?"} photoUrl={pl?.photoUrl} size="xs" />
                       <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${won ? "text-green-700" : ""}`}>
-                        {pl?.name || "?"} <span className="text-sm text-muted font-normal">({matchCounts.get(mp.playerId) || 0})</span>
+                        {pl?.name || "?"} <span className={`text-sm ${mcColor(mp.playerId)} font-normal`}>({matchCounts.get(mp.playerId) || 0})</span>
                       </span>
                     </div>
                   );
@@ -1450,7 +1461,7 @@ export default function PairingConfigPage() {
                       <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
                         className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1">
                         <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                        <span className="text-[11px] font-medium">{ep.player.name} <span className="text-xs text-muted font-normal">({matchCounts.get(ep.playerId) || 0})</span></span>
+                        <span className="text-[11px] font-medium">{ep.player.name} <span className={`text-xs ${mcColor(ep.playerId)} font-normal`}>({matchCounts.get(ep.playerId) || 0})</span></span>
                       </button>
                     ))}
                   </div>
@@ -1463,7 +1474,7 @@ export default function PairingConfigPage() {
                         <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
                           className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className="text-[11px] font-medium line-through">{ep.player.name} <span className="text-xs text-muted font-normal no-underline">({matchCounts.get(ep.playerId) || 0})</span></span>
+                          <span className="text-[11px] font-medium line-through">{ep.player.name} <span className={`text-xs ${mcColor(ep.playerId)} font-normal no-underline`}>({matchCounts.get(ep.playerId) || 0})</span></span>
                         </button>
                       ))}
                     </div>
@@ -1626,7 +1637,7 @@ export default function PairingConfigPage() {
                 </span>
                 <div>
                   <div className="text-sm font-semibold">{ep.player.name}</div>
-                  <div className="text-xs text-muted">{count} match{count !== 1 ? "es" : ""} · {ep.status === "checked_in" ? "Checked in" : ep.status === "paused" ? "Paused" : "Registered"}</div>
+                  <div className={`text-xs ${pmcColor(ep.playerId)}`}>{count} match{count !== 1 ? "es" : ""} · {ep.status === "checked_in" ? "Checked in" : ep.status === "paused" ? "Paused" : "Registered"}</div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5 p-4">
@@ -1737,7 +1748,7 @@ export default function PairingConfigPage() {
                                   : "text-foreground"
                                 }`}>{ep.player.name}</span>
                               </span>
-                              <span className="text-lg text-muted tabular-nums shrink-0">{count} <span className="text-sm">matches</span></span>
+                              <span className={`text-lg ${pmcColor(ep.playerId)} tabular-nums shrink-0`}>{count} <span className="text-sm">matches</span></span>
                             </button>
                           );
                         })}
