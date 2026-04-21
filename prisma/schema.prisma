@@ -62,6 +62,7 @@ model Player {
   createdLeagues    League[]           @relation("leagueCreator")
   deputyLeagues     League[]           @relation("leagueDeputy")
   leagueHelpers     LeagueHelper[]
+  leagueGamePlayers LeagueGamePlayer[]
 }
 
 model Club {
@@ -605,13 +606,14 @@ model LeagueMatchDayTeam {
 }
 
 model LeagueGame {
-  id         String  @id @default(cuid())
-  matchDayId String
-  categoryId String
-  matchId    String? @unique // link to existing Match for scoring
-  team1Id    String
-  team2Id    String
-  winnerId   String? // set when match completes
+  id          String  @id @default(cuid())
+  matchDayId  String
+  categoryId  String
+  matchId     String? @unique // link to existing Match for scoring
+  team1Id     String
+  team2Id     String
+  winnerId    String? // set when match completes
+  isPrincipal Boolean @default(true) // false = extra/repeat game (doesn't count for category ranking)
 
   matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
   category LeagueCategory @relation(fields: [categoryId], references: [id])
@@ -619,4 +621,16 @@ model LeagueGame {
   team1    LeagueTeam     @relation("gameTeam1", fields: [team1Id], references: [id])
   team2    LeagueTeam     @relation("gameTeam2", fields: [team2Id], references: [id])
   winner   LeagueTeam?    @relation("gameWinner", fields: [winnerId], references: [id])
+  gamePlayers LeagueGamePlayer[]
+}
+
+model LeagueGamePlayer {
+  id           String @id @default(cuid())
+  leagueGameId String
+  playerId     String
+
+  leagueGame LeagueGame @relation(fields: [leagueGameId], references: [id], onDelete: Cascade)
+  player     Player     @relation(fields: [playerId], references: [id])
+
+  @@unique([leagueGameId, playerId])
 }

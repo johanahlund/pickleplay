@@ -18,6 +18,7 @@ import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
 import { RallyTracker } from "@/components/RallyTracker";
+import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 
@@ -1038,10 +1039,13 @@ export default function EventDetailPage() {
     return (
       <div className="-mx-4 -mt-2">
         {/* Hero header skeleton — green background */}
-        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18, paddingTop: "max(env(safe-area-inset-top, 0px), 8px)" }}>
-          <div className="flex items-center justify-between px-4 pt-3 pb-2">
-            <Link href="/events" className="text-sm text-white/70 font-medium flex items-center gap-1">
-              <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18, paddingTop: "max(env(safe-area-inset-top, 0px), 12px)" }}>
+          <div className="flex items-center justify-between px-3.5" style={{ height: 48 }}>
+            <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
+          </div>
+          <div className="px-4 pt-0.5">
+            <Link href="/events" className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
+              <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
               Events
             </Link>
           </div>
@@ -1408,6 +1412,8 @@ export default function EventDetailPage() {
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
           <option value="1">1</option>
           <option value="2">2</option>
+          <option value="2_gp18">2 (Golden Point @18)</option>
+          <option value="2_gp21">2 (Golden Point @21)</option>
           <option value="cap13">Cap 13</option>
           <option value="cap15">Cap 15</option>
           <option value="cap17">Cap 17</option>
@@ -2144,6 +2150,14 @@ export default function EventDetailPage() {
                     <span className="w-3 h-3 bg-green-500 text-white rounded-full flex items-center justify-center text-[7px] font-bold inline-flex">✓</span> Check in all
                   </button>
                 )}
+                {canManage && !bulkSelectMode && !showAddPlayer && !levelEditMode && (
+                  <button
+                    onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
+                    className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
+                  >
+                    +/- Player
+                  </button>
+                )}
                 <button
                   onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
                   className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
@@ -2332,6 +2346,10 @@ export default function EventDetailPage() {
     const isCourtFree = courtFreeMatchIds.has(match.id);
     const hasLiveScore = rallyMatchId === match.id && rallyLiveScore;
 
+    // Pickle detection: one team scored 0 in a completed match
+    const isPickle = isCompleted && displayScore1 !== null && displayScore2 !== null && (displayScore1 === 0 || displayScore2 === 0) && (displayScore1 + displayScore2 > 0);
+    const pickleWinnerTeam = isPickle ? (displayScore1 === 0 ? 2 : 1) : null;
+
     // Court circle color
     const courtColor = isActive ? "bg-orange-500 text-white" : isPaused ? "bg-amber-500 text-white" : isCourtFree && isPending ? "bg-green-500 text-white" : isCompleted ? "bg-gray-300 text-white" : "bg-gray-100 text-muted";
     const statusText = isActive ? "In Play" : isPaused ? "Paused" : isPending && isCourtFree ? "Ready" : isPending && isNextMatch ? "Next" : "";
@@ -2486,12 +2504,24 @@ export default function EventDetailPage() {
         {match.scorer && (
           <div className="px-2 pb-1.5 text-[9px] text-muted text-right">Scorer: {match.scorer.name}</div>
         )}
+        {isPickle && (
+          <div className="bg-amber-50 border-t border-amber-200 px-3 py-1.5 flex items-center gap-2">
+            <span className="text-sm">🍺</span>
+            <span className="text-[10px] text-amber-700 font-medium">
+              Pickle! {pickleWinnerTeam === 1
+                ? (team1.map((p) => p.player.name.split(" ")[0]).join(" & "))
+                : (team2.map((p) => p.player.name.split(" ")[0]).join(" & "))
+              } owe{team1.length > 1 || team2.length > 1 ? "" : "s"} a beer to the losers!
+            </span>
+            <span className="text-sm">🍺</span>
+          </div>
+        )}
       </div>
     );
   };
 
   const renderRounds = () => (
-    <div className="space-y-3">
+    <div>
       <AppHeader
         variant="hero-sub"
         back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
@@ -2499,39 +2529,77 @@ export default function EventDetailPage() {
         action={canManage ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
       />
 
-      {/* Active — orange */}
-      {activeMatches.length > 0 && (
-        <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
-          <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" /><span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span></div>
-          <div className="space-y-2">{activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
-        </div>
-      )}
+      <div className="px-4 space-y-3 pt-3">
+        {/* Active — orange */}
+        {activeMatches.length > 0 && (
+          <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
+            <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" /><span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span></div>
+            <div className="space-y-2">{activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+          </div>
+        )}
 
-      {/* Paused — amber */}
-      {pausedMatches.length > 0 && (
-        <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200">
-          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span></div>
-          <div className="space-y-2">{pausedMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
-        </div>
-      )}
+        {/* Paused — amber */}
+        {pausedMatches.length > 0 && (
+          <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200">
+            <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span></div>
+            <div className="space-y-2">{pausedMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+          </div>
+        )}
 
-      {/* Pending — normal */}
-      {pendingMatches.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span></div>
-          <div className="space-y-2">{pendingMatches.sort((a, b) => a.round - b.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
-        </div>
-      )}
+        {/* Pending — normal */}
+        {pendingMatches.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span></div>
+            <div className="space-y-2">{pendingMatches.sort((a, b) => a.round - b.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+          </div>
+        )}
 
-      {/* Completed — grey */}
-      {completedMatches.length > 0 && (
-        <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
-          <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-muted uppercase tracking-wider">Completed</span></div>
-          <div className="space-y-2">{[...completedMatches].sort((a, b) => b.round - a.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
-        </div>
-      )}
+        {/* Completed — grey */}
+        {completedMatches.length > 0 && (
+          <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
+            <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-muted uppercase tracking-wider">Completed</span></div>
+            <div className="space-y-2">{[...completedMatches].sort((a, b) => b.round - a.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+          </div>
+        )}
 
-      {event.matches.length === 0 && <p className="text-center py-8 text-muted text-sm">No matches yet</p>}
+        {/* Pickle summary */}
+        {(() => {
+          const pickles = completedMatches.filter((m) => {
+            const t1 = m.players.filter((p) => p.team === 1);
+            const t2 = m.players.filter((p) => p.team === 2);
+            const s1 = t1[0]?.score ?? -1;
+            const s2 = t2[0]?.score ?? -1;
+            return (s1 === 0 || s2 === 0) && (s1 + s2 > 0);
+          });
+          if (pickles.length === 0) return null;
+          return (
+            <div className="bg-amber-50 rounded-xl border border-amber-200 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">🍺</span>
+                <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Pickle Alert — Beers Owed!</span>
+                <span className="text-base">🍺</span>
+              </div>
+              <div className="space-y-1">
+                {pickles.map((m) => {
+                  const t1 = m.players.filter((p) => p.team === 1);
+                  const t2 = m.players.filter((p) => p.team === 2);
+                  const s1 = t1[0]?.score ?? 0;
+                  const winners = s1 === 0 ? t2 : t1;
+                  const losers = s1 === 0 ? t1 : t2;
+                  return (
+                    <p key={m.id} className="text-[11px] text-amber-700">
+                      Court {m.courtNum}: <span className="font-semibold">{winners.map((p) => p.player.name.split(" ")[0]).join(" & ")}</span>
+                      {" "}owe a beer to {losers.map((p) => p.player.name.split(" ")[0]).join(" & ")}
+                    </p>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {event.matches.length === 0 && <p className="text-center py-8 text-muted text-sm">No matches yet</p>}
+      </div>
     </div>
   );
 
@@ -2732,9 +2800,10 @@ export default function EventDetailPage() {
               <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (event default)</option>
               <option value="1">1</option>
               <option value="2">2</option>
+              <option value="2_gp18">2 (GP@18)</option>
             </select>
             <p className="text-[10px] text-muted mt-0.5">
-              {(manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2") === "1" ? "First to target wins" : "Must win by 2 points"}
+              {(() => { const wb = manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"; return wb === "1" ? "First to target wins" : wb.includes("_gp") ? `Win by 2, golden point at ${wb.split("gp")[1]}` : "Must win by 2 points"; })()}
             </p>
           </div>
         </div>
@@ -3006,9 +3075,7 @@ export default function EventDetailPage() {
       }
       setActiveSection("overview");
     };
-    const sectionAction = activeSection === "players" && canManage && !bulkSelectMode && !showAddPlayer
-      ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } }
-      : undefined;
+    const sectionAction = undefined;
     return (
       <div className="-mx-4">
         {!bulkSelectMode && !showAddPlayer && activeSection !== "rounds" && activeSection !== "manual" && (
@@ -3080,12 +3147,12 @@ export default function EventDetailPage() {
             )}
           </div>
         )}
-        {activeSection === "rounds" && renderRounds()}
-        {activeSection === "manual" && renderManual()}
         {renderActionSheet()}
         {renderFocusedMatch()}
         {renderRallyTracker()}
         </div>
+        {activeSection === "rounds" && renderRounds()}
+        {activeSection === "manual" && renderManual()}
       </div>
     );
   }

@@ -23,6 +23,7 @@ interface LeagueTeam {
 interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number }
 interface LeagueGame {
   id: string; categoryId: string;
+  isPrincipal: boolean;
   category: { id: string; name: string };
   team1: { id: string; name: string };
   team2: { id: string; name: string };
@@ -39,13 +40,13 @@ interface LeagueRound { id: string; roundNumber: number; name: string | null; su
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
-  config: { maxRoster?: number; maxPointsPerMatchDay?: number } | null;
+  config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number } | null;
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
   helpers: LeagueHelperEntry[];
   teams: LeagueTeam[]; rounds: LeagueRound[]; categories: LeagueCategory[];
 }
-interface Standing { teamId: string; teamName: string; logoUrl: string | null; played: number; won: number; lost: number; drawn: number; points: number; totalCategoryWins: number }
+interface Standing { teamId: string; teamName: string; logoUrl: string | null; played: number; won: number; lost: number; drawn: number; points: number; totalCategoryWins: number; h2h: Record<string, number>; pointDifference: number }
 
 type Tab = "overview" | "standings" | "rounds" | "matches" | "teams";
 
@@ -66,6 +67,13 @@ export default function LeagueDetailPage() {
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [allClubs, setAllClubs] = useState<{ id: string; name: string; emoji: string }[]>([]);
+
+  // Eligibility state
+  const [eligibility, setEligibility] = useState<{ minMatchDays: number; teams: { teamId: string; teamName: string; players: { playerId: string; name: string; matchDaysPlayed: number; eligible: boolean }[] }[] } | null>(null);
+  const fetchEligibility = useCallback(async () => {
+    const r = await fetch(`/api/leagues/${id}/eligibility`);
+    if (r.ok) setEligibility(await r.json());
+  }, [id]);
 
   // League matches state
   interface LeagueMatch {
@@ -122,6 +130,7 @@ export default function LeagueDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   const [editMaxRoster, setEditMaxRoster] = useState(14);
   const [editMaxPoints, setEditMaxPoints] = useState(3);
+  const [editMinMatchDays, setEditMinMatchDays] = useState(2);
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -201,6 +210,7 @@ export default function LeagueDetailPage() {
     setEditStatus(league.status);
     setEditMaxRoster(league.config?.maxRoster || 14);
     setEditMaxPoints(league.config?.maxPointsPerMatchDay || 3);
+    setEditMinMatchDays(league.config?.minMatchDaysForPlayoff ?? 2);
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -217,7 +227,7 @@ export default function LeagueDetailPage() {
         description: editDescription.trim() || null,
         season: editSeason.trim() || null,
         status: editStatus,
-        config: { maxRoster: editMaxRoster, maxPointsPerMatchDay: editMaxPoints },
+        config: { maxRoster: editMaxRoster, maxPointsPerMatchDay: editMaxPoints, minMatchDaysForPlayoff: editMinMatchDays },
         deputyId: editDeputyId || null,
       }),
     });
@@ -523,6 +533,11 @@ export default function LeagueDetailPage() {
               <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(parseInt(e.target.value) || 0); setDirty(true); }} min={1}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Min Match Days for Playoff</label>
+              <input type="number" value={editMinMatchDays} onChange={(e) => { setEditMinMatchDays(parseInt(e.target.value) || 0); setDirty(true); }} min={0}
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
           </div>
           {editFooter(saveInfo, "")}
         </div>
@@ -541,6 +556,7 @@ export default function LeagueDetailPage() {
   const winBySelect = (value: string, onChange: (v: string) => void) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
       <option value="1">1</option><option value="2">2</option>
+      <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
       <option value="cap13">Cap 13</option><option value="cap15">Cap 15</option><option value="cap17">Cap 17</option>
       <option value="cap18">Cap 18</option><option value="cap23">Cap 23</option><option value="cap25">Cap 25</option>
     </select>
@@ -963,6 +979,27 @@ export default function LeagueDetailPage() {
       {/* ── Overview Tab ── */}
       {tab === "overview" && (
         <div className="space-y-3">
+          {/* Create Grande Final */}
+          {canEdit && league.status === "active" && (
+            <button
+              onClick={async () => {
+                const ok = await confirm({ title: "Create Grande Final", message: "Create Grande Final event from current standings? This will create a new playoff round with bracket seeding.", confirmText: "Create" });
+                if (!ok) return;
+                const r = await fetch(`/api/leagues/${id}/playoff`, { method: "POST" });
+                if (r.ok) {
+                  const data = await r.json();
+                  router.push(`/events/${data.eventId}`);
+                } else {
+                  const err = await r.json().catch(() => ({ error: "Failed" }));
+                  alert(err.error || "Failed to create playoff");
+                }
+              }}
+              className="w-full bg-action-dark text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+            >
+              🏆 Create Grande Final
+            </button>
+          )}
+
           {/* League Format card */}
           <div onClick={() => { if (canEdit) { startEditInfo(); setEditSection("format"); } }}
             className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
@@ -971,7 +1008,7 @@ export default function LeagueDetailPage() {
               {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
             </div>
             <div className="text-sm space-y-1">
-              <p><span className="text-xs text-muted">Max roster </span><span className="font-medium">{league.config?.maxRoster || "—"}</span><span className="text-xs text-muted"> · Max pts/day </span><span className="font-medium">{league.config?.maxPointsPerMatchDay || "—"}</span></p>
+              <p><span className="text-xs text-muted">Max roster </span><span className="font-medium">{league.config?.maxRoster || "—"}</span><span className="text-xs text-muted"> · Max pts/day </span><span className="font-medium">{league.config?.maxPointsPerMatchDay || "—"}</span><span className="text-xs text-muted"> · Min match days for playoff </span><span className="font-medium">{league.config?.minMatchDaysForPlayoff ?? 2}</span></p>
             </div>
           </div>
 
@@ -1068,6 +1105,8 @@ export default function LeagueDetailPage() {
                   <th className="text-center px-1 py-1">W</th>
                   <th className="text-center px-1 py-1">L</th>
                   <th className="text-center px-1 py-1">D</th>
+                  <th className="text-center px-1 py-1">CW</th>
+                  <th className="text-center px-1 py-1">PD</th>
                   <th className="text-center px-2 py-1 font-bold">Pts</th>
                 </tr>
               </thead>
@@ -1080,12 +1119,36 @@ export default function LeagueDetailPage() {
                     <td className="text-center px-1 py-2 text-green-600">{s.won}</td>
                     <td className="text-center px-1 py-2 text-red-500">{s.lost}</td>
                     <td className="text-center px-1 py-2 text-muted">{s.drawn}</td>
+                    <td className="text-center px-1 py-2 text-muted text-[10px]">{s.totalCategoryWins}</td>
+                    <td className="text-center px-1 py-2 text-muted text-[10px]">{s.pointDifference > 0 ? `+${s.pointDifference}` : s.pointDifference}</td>
                     <td className="text-center px-2 py-2 font-bold">{s.points}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Playoff eligibility */}
+          {canEdit && (
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <button onClick={() => { if (!eligibility) fetchEligibility(); else setEligibility(null); }}
+                className="w-full text-left text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium hover:bg-gray-50">
+                {eligibility ? "▾" : "▸"} Playoff Eligibility (min {(league.config as Record<string, number> | null)?.minMatchDaysForPlayoff ?? 2} match days)
+              </button>
+              {eligibility && eligibility.teams.map((team) => (
+                <div key={team.teamId} className="px-3 py-2 border-t border-border">
+                  <p className="text-xs font-semibold mb-1">{team.teamName}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {team.players.map((p) => (
+                      <span key={p.playerId} className={`text-[10px] ${p.eligible ? "text-green-600" : "text-red-400"}`}>
+                        {p.eligible ? "✓" : "✗"} {p.name} ({p.matchDaysPlayed})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Category standings */}
           {standings.categories.map((cat) => (
@@ -1156,8 +1219,8 @@ export default function LeagueDetailPage() {
                   {md.games.length > 0 && (
                     <div className="space-y-1">
                       {md.games.map((game) => (
-                        <div key={game.id} className="flex items-center gap-2 text-xs">
-                          <span className="text-muted w-24 truncate">{game.category.name}</span>
+                        <div key={game.id} className={`flex items-center gap-2 text-xs ${!game.isPrincipal ? "opacity-60 pl-2 border-l-2 border-dashed border-gray-300" : ""}`}>
+                          <span className="text-muted w-24 truncate">{game.category.name}{!game.isPrincipal && <span className="text-[8px] ml-1 text-amber-600">(extra)</span>}</span>
                           <span className={`flex-1 font-medium ${game.winner?.id === game.team1.id ? "text-green-600" : ""}`}>{game.team1.name}</span>
                           <span className="text-muted">vs</span>
                           <span className={`flex-1 font-medium text-right ${game.winner?.id === game.team2.id ? "text-green-600" : ""}`}>{game.team2.name}</span>
@@ -1170,6 +1233,26 @@ export default function LeagueDetailPage() {
                           </select>
                         </div>
                       ))}
+                      {/* Add extra game */}
+                      {md.teams.length === 2 && canEdit && (
+                        <button
+                          onClick={async () => {
+                            const catId = prompt("Category ID for extra game (copy from existing game):");
+                            if (!catId) return;
+                            const cat = league.categories.find((c: LeagueCategory) => c.id === catId || c.name.toLowerCase().includes(catId.toLowerCase()));
+                            if (!cat) { alert("Category not found"); return; }
+                            await fetch(`/api/leagues/${id}/match-days/${md.id}/games`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "create_extra", categoryId: cat.id, team1Id: md.teams[0].teamId, team2Id: md.teams[1].teamId }),
+                            });
+                            fetchLeague();
+                          }}
+                          className="text-[10px] text-action font-medium hover:underline mt-1"
+                        >
+                          + Add extra game
+                        </button>
+                      )}
                     </div>
                   )}
 

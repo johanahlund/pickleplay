@@ -11,8 +11,10 @@ export interface TeamStanding {
   lost: number;
   drawn: number;
   points: number; // capped per match day
-  totalCategoryWins: number; // tiebreaker
+  totalCategoryWins: number; // tiebreaker 2
   categoryWins: Record<string, number>; // per category
+  h2h: Record<string, number>; // teamId -> match day wins against them
+  pointDifference: number; // total points scored - conceded
 }
 
 // GET: compute league standings (login required)
@@ -34,7 +36,15 @@ export async function GET(
           matchDays: {
             include: {
               teams: true,
-              games: true,
+              games: {
+                include: {
+                  match: {
+                    include: {
+                      players: { select: { team: true, score: true } },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -60,6 +70,8 @@ export async function GET(
       points: 0,
       totalCategoryWins: 0,
       categoryWins: Object.fromEntries(league.categories.map((c) => [c.id, 0])),
+      h2h: {},
+      pointDifference: 0,
     };
   }
 
@@ -76,6 +88,15 @@ export async function GET(
               (standings[game.winnerId].categoryWins[game.categoryId] || 0) + 1;
           }
         }
+
+        // Point difference from linked match
+        if (game.match?.players) {
+          const t1Score = game.match.players.filter((p) => p.team === 1).reduce((s, p) => Math.max(s, p.score), 0);
+          const t2Score = game.match.players.filter((p) => p.team === 2).reduce((s, p) => Math.max(s, p.score), 0);
+          // team1Id in LeagueGame corresponds to team 1 in the match
+          if (standings[game.team1Id]) standings[game.team1Id].pointDifference += (t1Score - t2Score);
+          if (standings[game.team2Id]) standings[game.team2Id].pointDifference += (t2Score - t1Score);
+        }
       }
 
       // Only count completed match days (at least one game with a winner)
@@ -91,16 +112,16 @@ export async function GET(
         standings[teamId].points += pts;
       }
 
-      // W/L/D only for 2-team match days
+      // W/L/D and H2H only for 2-team match days
       if (teamIds.length === 2) {
         const [a, b] = teamIds;
         const aWins = mdWins[a] || 0;
         const bWins = mdWins[b] || 0;
         if (aWins > bWins) {
-          if (standings[a]) standings[a].won++;
+          if (standings[a]) { standings[a].won++; standings[a].h2h[b] = (standings[a].h2h[b] || 0) + 1; }
           if (standings[b]) standings[b].lost++;
         } else if (bWins > aWins) {
-          if (standings[b]) standings[b].won++;
+          if (standings[b]) { standings[b].won++; standings[b].h2h[a] = (standings[b].h2h[a] || 0) + 1; }
           if (standings[a]) standings[a].lost++;
         } else {
           if (standings[a]) standings[a].drawn++;
@@ -110,12 +131,22 @@ export async function GET(
     }
   }
 
-  // Sort: points desc, then totalCategoryWins desc
-  const general = Object.values(standings).sort((a, b) =>
-    b.points - a.points || b.totalCategoryWins - a.totalCategoryWins
-  );
+  // Sort with full tiebreaker cascade:
+  // 1. Points (capped) desc
+  // 2. H2H record (pairwise for 2 tied teams)
+  // 3. Total category wins desc
+  // 4. Point difference desc
+  const general = Object.values(standings).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    // H2H: direct confrontation wins
+    const aH2H = a.h2h[b.teamId] || 0;
+    const bH2H = b.h2h[a.teamId] || 0;
+    if (aH2H !== bH2H) return bH2H - aH2H;
+    if (b.totalCategoryWins !== a.totalCategoryWins) return b.totalCategoryWins - a.totalCategoryWins;
+    return b.pointDifference - a.pointDifference;
+  });
 
-  // Category standings
+  // Category standings — only principal games count for per-category rankings
   const categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number; gamesPlayed: number }[]> = {};
   for (const cat of league.categories) {
     const catTeams: Record<string, { wins: number; losses: number; played: number }> = {};
@@ -127,6 +158,8 @@ export async function GET(
       for (const md of round.matchDays) {
         for (const game of md.games) {
           if (game.categoryId !== cat.id || !game.winnerId) continue;
+          // Only principal games count for category rankings
+          if (game.isPrincipal === false) continue;
           catTeams[game.winnerId].wins++;
           catTeams[game.winnerId].played++;
           const loserId = game.team1Id === game.winnerId ? game.team2Id : game.team1Id;

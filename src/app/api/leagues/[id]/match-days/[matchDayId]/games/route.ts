@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// POST: record game result (set winner)
+// POST: record game result (set winner) or create extra game
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string; matchDayId: string }> }
@@ -10,13 +10,32 @@ export async function POST(
   const { id, matchDayId } = await params;
   try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
-  const { gameId, winnerId } = await req.json();
+  const body = await req.json();
+
+  // --- Create extra (non-principal) game ---
+  if (body.action === "create_extra") {
+    const { categoryId, team1Id, team2Id } = body;
+    if (!categoryId || !team1Id || !team2Id) {
+      return NextResponse.json({ error: "categoryId, team1Id, team2Id required" }, { status: 400 });
+    }
+    const game = await prisma.leagueGame.create({
+      data: { matchDayId, categoryId, team1Id, team2Id, isPrincipal: false },
+    });
+    return NextResponse.json(game);
+  }
+
+  // --- Set winner for existing game ---
+  const { gameId, winnerId } = body;
   if (!gameId) return NextResponse.json({ error: "gameId required" }, { status: 400 });
 
   // Verify game belongs to this match day, which belongs to this league
   const game = await prisma.leagueGame.findUnique({
     where: { id: gameId },
-    select: { matchDayId: true, matchDay: { select: { round: { select: { leagueId: true } } } } },
+    select: {
+      matchDayId: true,
+      matchId: true,
+      matchDay: { select: { round: { select: { leagueId: true } } } },
+    },
   });
   if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
   if (game.matchDayId !== matchDayId || game.matchDay.round.leagueId !== id) {
@@ -27,6 +46,21 @@ export async function POST(
     where: { id: gameId },
     data: { winnerId: winnerId || null },
   });
+
+  // Auto-populate LeagueGamePlayer from the linked Match's players
+  if (game.matchId && winnerId) {
+    const matchPlayers = await prisma.matchPlayer.findMany({
+      where: { matchId: game.matchId },
+      select: { playerId: true },
+    });
+    for (const mp of matchPlayers) {
+      await prisma.leagueGamePlayer.upsert({
+        where: { leagueGameId_playerId: { leagueGameId: gameId, playerId: mp.playerId } },
+        create: { leagueGameId: gameId, playerId: mp.playerId },
+        update: {},
+      });
+    }
+  }
 
   // Recalculate match day team points
   const games = await prisma.leagueGame.findMany({ where: { matchDayId } });

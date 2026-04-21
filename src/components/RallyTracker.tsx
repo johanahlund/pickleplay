@@ -49,9 +49,12 @@ function parseFormat(fmt: string): { isRally: boolean; targetScore: number; sets
   return { isRally, targetScore: pts || 11, sets };
 }
 
-function parseWinBy(wb: string): { winByN: number; cap: number | null } {
-  if (wb.startsWith("cap")) return { winByN: 2, cap: parseInt(wb.replace("cap", "")) || null };
-  return { winByN: parseInt(wb) || 2, cap: null };
+function parseWinBy(wb: string): { winByN: number; cap: number | null; goldenPoint: number | null } {
+  // "2_gp18" → win by 2, but at 17-17 golden point (first to 18 wins, no win-by-2 needed)
+  const gpMatch = wb.match(/^(\d+)_gp(\d+)$/);
+  if (gpMatch) return { winByN: parseInt(gpMatch[1]), cap: null, goldenPoint: parseInt(gpMatch[2]) };
+  if (wb.startsWith("cap")) return { winByN: 2, cap: parseInt(wb.replace("cap", "")) || null, goldenPoint: null };
+  return { winByN: parseInt(wb) || 2, cap: null, goldenPoint: null };
 }
 
 function getReceiverId(court: CourtState, serverId: string): string {
@@ -68,8 +71,17 @@ function getServerSide(court: CourtState, serverId: string): "left" | "right" {
   return "left";
 }
 
-function isGameWon(score: [number, number], target: number, winByN: number, cap: number | null): false | 1 | 2 {
+function isGameWon(score: [number, number], target: number, winByN: number, cap: number | null, goldenPoint: number | null = null): false | 1 | 2 {
   const [s1, s2] = score;
+  // Golden point: at (gp-1)-(gp-1), first to gp wins (no win-by-2 needed)
+  if (goldenPoint) {
+    if (s1 >= goldenPoint) return 1;
+    if (s2 >= goldenPoint) return 2;
+    // Below golden point threshold, normal win-by-N applies
+    if (s1 >= target && s1 - s2 >= winByN) return 1;
+    if (s2 >= target && s2 - s1 >= winByN) return 2;
+    return false;
+  }
   const needed = cap ? Math.min(target, cap) : target;
   if (s1 >= needed && s1 - s2 >= winByN) return 1;
   if (s2 >= needed && s2 - s1 >= winByN) return 2;
@@ -79,12 +91,12 @@ function isGameWon(score: [number, number], target: number, winByN: number, cap:
   return false;
 }
 
-function isGamePoint(score: [number, number], target: number, winByN: number, cap: number | null): boolean {
+function isGamePoint(score: [number, number], target: number, winByN: number, cap: number | null, goldenPoint: number | null = null): boolean {
   const [s1, s2] = score;
   // Check if either team is one point from winning
   return (
-    isGameWon([s1 + 1, s2], target, winByN, cap) !== false ||
-    isGameWon([s1, s2 + 1], target, winByN, cap) !== false
+    isGameWon([s1 + 1, s2], target, winByN, cap, goldenPoint) !== false ||
+    isGameWon([s1, s2 + 1], target, winByN, cap, goldenPoint) !== false
   );
 }
 
@@ -103,6 +115,7 @@ function buildAnnouncement(
   targetScore: number,
   winByN: number,
   cap: number | null,
+  goldenPoint: number | null = null,
 ): string {
   const [s1, s2] = state.score;
   const server = findPlayer(state.court, state.serverId);
@@ -114,11 +127,13 @@ function buildAnnouncement(
   if (!isRally) text += `, Server ${state.serverNumber}`;
   text += `. ${server.name} serves from the ${side} to ${receiver.name}.`;
 
-  if (isGamePoint(state.score, targetScore, winByN, cap)) {
-    // Which team has game point?
-    if (isGameWon([s1 + 1, s2], targetScore, winByN, cap) === 1) {
+  // Golden point announcement
+  if (goldenPoint && s1 === goldenPoint - 1 && s2 === goldenPoint - 1) {
+    text = `Golden point! ` + text;
+  } else if (isGamePoint(state.score, targetScore, winByN, cap, goldenPoint)) {
+    if (isGameWon([s1 + 1, s2], targetScore, winByN, cap, goldenPoint) === 1) {
       text = `Game point Team A! ` + text;
-    } else if (isGameWon([s1, s2 + 1], targetScore, winByN, cap) === 2) {
+    } else if (isGameWon([s1, s2 + 1], targetScore, winByN, cap, goldenPoint) === 2) {
       text = `Game point Team B! ` + text;
     } else {
       text = `Game point! ` + text;
@@ -150,7 +165,7 @@ export function RallyTracker({
   onClose,
 }: RallyTrackerProps) {
   const { isRally, targetScore } = parseFormat(scoringFormat);
-  const { winByN, cap } = parseWinBy(winBy);
+  const { winByN, cap, goldenPoint } = parseWinBy(winBy);
   const isDoubles = team1Players.length === 2 && team2Players.length === 2;
 
   const [phase, setPhase] = useState<Phase>("pick-sides");
@@ -433,7 +448,7 @@ export function RallyTracker({
     }
 
     // Check for game over
-    const w = isGameWon(newState.score, targetScore, winByN, cap);
+    const w = isGameWon(newState.score, targetScore, winByN, cap, goldenPoint);
     if (w) {
       setWinner(w);
       setPhase("game-over");
@@ -446,7 +461,7 @@ export function RallyTracker({
     // Auto-speak
     if (autoSpeak && !w) {
       setTimeout(() => {
-        speak(buildAnnouncement(newState, isRally, targetScore, winByN, cap));
+        speak(buildAnnouncement(newState, isRally, targetScore, winByN, cap, goldenPoint));
       }, 300);
     }
   }, [gameState, isRally, isDoubles, targetScore, winByN, cap, autoSpeak, team1Players, team2Players]);
@@ -481,7 +496,7 @@ export function RallyTracker({
       return;
     }
     if (!gameState) return;
-    speak(buildAnnouncement(gameState, isRally, targetScore, winByN, cap));
+    speak(buildAnnouncement(gameState, isRally, targetScore, winByN, cap, goldenPoint));
   };
 
   const handleSubmit = () => {
@@ -663,7 +678,8 @@ export function RallyTracker({
   const { score, servingTeam, serverId, court } = gameState;
   const receiverId = getReceiverId(court, serverId);
   const serverSide = getServerSide(court, serverId);
-  const gamePointActive = isGamePoint(score, targetScore, winByN, cap);
+  const gamePointActive = isGamePoint(score, targetScore, winByN, cap, goldenPoint);
+  const isGoldenPoint = !!(goldenPoint && score[0] === goldenPoint - 1 && score[1] === goldenPoint - 1);
 
   const renderCourtPlayer = (player: RallyPlayer, position: "t1l" | "t1r" | "t2l" | "t2r") => {
     const isServer = player.id === serverId;
@@ -914,7 +930,9 @@ export function RallyTracker({
 
       {/* Rally counter — between court and score */}
       <div className="text-center">
-        {gamePointActive && !winner ? (
+        {isGoldenPoint && !winner ? (
+          <span className="text-base font-bold text-amber-300 animate-pulse">⚡ Golden Point!</span>
+        ) : gamePointActive && !winner ? (
           <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
         ) : (
           <span className="text-xs text-white/40 font-medium">

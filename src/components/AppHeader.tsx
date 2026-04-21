@@ -365,7 +365,7 @@ function HeroHeader({
       </div>
       {back && (
         <div style={{ padding: "2px 16px 0" }}>
-          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="rgba(255,255,255,0.72)" />
+          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="#d9f99d" />
         </div>
       )}
       {title && (
