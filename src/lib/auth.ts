@@ -222,6 +222,50 @@ export async function requireLeagueOwner(leagueId: string) {
 }
 
 /**
+ * Allowed if the user is a league manager OR the captain / vice-captain of
+ * the given team. Lets team leaders manage their own roster without giving
+ * them league-wide management rights.
+ */
+export async function requireTeamRosterManager(teamId: string, leagueId: string) {
+  const user = await requireAuth();
+  // Try league manager first
+  if (user.role === "admin") return user;
+
+  const [league, team] = await Promise.all([
+    prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { createdById: true, deputyId: true, clubId: true },
+    }),
+    prisma.leagueTeam.findUnique({
+      where: { id: teamId },
+      select: { captainId: true, viceCaptainId: true, leagueId: true },
+    }),
+  ]);
+  if (!league) throw new Error("NotFound");
+  if (!team || team.leagueId !== leagueId) throw new Error("NotFound");
+
+  if (team.captainId === user.id) return user;
+  if (team.viceCaptainId === user.id) return user;
+  if (league.createdById === user.id) return user;
+  if (league.deputyId === user.id) return user;
+
+  if (league.clubId) {
+    const clubMember = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: league.clubId, playerId: user.id } },
+      select: { role: true },
+    });
+    if (clubMember && (clubMember.role === "owner" || clubMember.role === "admin")) return user;
+  }
+
+  const helper = await prisma.leagueHelper.findFirst({
+    where: { leagueId, playerId: user.id },
+  });
+  if (helper) return user;
+
+  throw new Error("Forbidden");
+}
+
+/**
  * Check if the current user is an owner or admin of the given club, or an
  * app admin. Used to gate league creation and editing to club leadership.
  */

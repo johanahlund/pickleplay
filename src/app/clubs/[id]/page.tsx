@@ -342,6 +342,9 @@ export default function ClubDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberSearch, setAddMemberSearch] = useState("");
+  const [addMemberGender, setAddMemberGender] = useState<"all" | "M" | "F">("all");
+  const [addedMemberIds, setAddedMemberIds] = useState<Set<string>>(new Set());
+  const [flashMemberId, setFlashMemberId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [editing, setEditing] = useState(false);
   const [clubDirty, setClubDirty] = useState(false);
@@ -758,6 +761,83 @@ export default function ClubDetailPage() {
         </button>
       </div>
   );
+
+  if (showAddMember && club) {
+    const filtered = nonMembers
+      .filter((p) => !addedMemberIds.has(p.id))
+      .filter((p) => addMemberGender === "all" || p.gender === addMemberGender);
+    return (
+      <div className="space-y-2">
+        <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+          <button
+            onClick={() => { setShowAddMember(false); setAddedMemberIds(new Set()); setFlashMemberId(null); }}
+            className="text-sm text-action font-medium"
+          >← Members <span className="text-xs text-muted font-normal">({club.name})</span></button>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Add Member to {club.name}</h3>
+          <div className="flex gap-1">
+            <button onClick={() => setAddMemberGender("all")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              All
+            </button>
+            <button onClick={() => setAddMemberGender("M")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "M" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              <span className={addMemberGender === "M" ? "text-white" : "text-blue-500"}>♂</span> Men
+            </button>
+            <button onClick={() => setAddMemberGender("F")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "F" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              <span className={addMemberGender === "F" ? "text-white" : "text-pink-500"}>♀</span> Women
+            </button>
+          </div>
+          <ClearInput value={addMemberSearch} onChange={setAddMemberSearch} placeholder="Search by name..." className="text-sm" />
+          <div className="text-[11px] text-muted">{filtered.length} available {addedMemberIds.size > 0 && `· ${addedMemberIds.size} added`}</div>
+          {filtered.length === 0 ? (
+            <p className="text-xs text-muted text-center py-6">No players to add</p>
+          ) : (
+            <div className="space-y-0.5">
+              {filtered.map((p) => {
+                const flashing = flashMemberId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={flashing}
+                    onClick={() => {
+                      setFlashMemberId(p.id);
+                      addMember(p.id);
+                      setTimeout(() => {
+                        setAddedMemberIds((s) => { const n = new Set(s); n.add(p.id); return n; });
+                        setFlashMemberId((cur) => (cur === p.id ? null : cur));
+                      }, 800);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                      flashing ? "bg-emerald-50" : "hover:bg-gray-50 active:bg-gray-100"
+                    }`}
+                  >
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                    </div>
+                    {p.gender && (
+                      <span className={`text-xs ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
+                    {flashing ? (
+                      <span className="text-xs font-semibold text-emerald-600">✓ Selected</span>
+                    ) : (
+                      <span className="text-xs text-primary">+ Add</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -1292,7 +1372,14 @@ export default function ClubDetailPage() {
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-foreground">Members</h3>
               <button
-                onClick={() => { fetchAllPlayers(); setShowAddMember(true); setAddMemberSearch(""); }}
+                onClick={() => {
+                  fetchAllPlayers();
+                  setAddMemberSearch("");
+                  setAddMemberGender("all");
+                  setAddedMemberIds(new Set());
+                  setFlashMemberId(null);
+                  setShowAddMember(true);
+                }}
                 className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
               >
                 + Member
@@ -1354,12 +1441,6 @@ export default function ClubDetailPage() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted">
               {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
-              {canManage && filteredMembers.some((m) => {
-                const isSelfRow = m.playerId === userId;
-                return (m.role !== "owner" || isGlobalAdmin) && (!isSelfRow || isGlobalAdmin);
-              })
-                ? " · tap ✕ to remove"
-                : ""}
             </p>
             {canManage && (
               <button onClick={async () => {
@@ -1405,34 +1486,6 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          {canManage && showAddMember && (
-              <div className="bg-card rounded-xl border border-border p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-muted">Add Member</h4>
-                  <button onClick={() => setShowAddMember(false)} className="text-xs text-muted px-2 py-1 rounded bg-gray-100">Close</button>
-                </div>
-                <ClearInput value={addMemberSearch} onChange={setAddMemberSearch} placeholder="Search by name..." className="text-sm" />
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {nonMembers.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => addMember(p.id)}
-                      className="w-full text-left py-2 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors"
-                    >
-                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
-                      <span className="text-sm font-medium flex-1">{p.name}</span>
-                      {p.gender && (
-                        <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                          {p.gender === "M" ? "♂" : "♀"}
-                        </span>
-                      )}
-                      <span className="text-xs text-primary">+ Add</span>
-                    </button>
-                  ))}
-                  {nonMembers.length === 0 && <p className="text-center py-4 text-muted text-sm">No players to add</p>}
-                </div>
-              </div>
-          )}
         </div>
       )}
 

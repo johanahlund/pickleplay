@@ -126,12 +126,12 @@ export function Header() {
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
 
-  // Dynamically set main content padding based on header height
+  // Header is position: sticky and lives in normal document flow, so main
+  // does NOT need paddingTop. We only expose --header-height as a CSS var
+  // for any consumer that needs to position something against the header.
   const updateMainPadding = useCallback(() => {
     if (headerRef.current) {
       const h = headerRef.current.offsetHeight;
-      const main = document.getElementById("main-content");
-      if (main) main.style.paddingTop = `${h}px`;
       document.documentElement.style.setProperty("--header-height", `${h}px`);
     }
   }, []);
@@ -214,11 +214,9 @@ export function Header() {
 
   const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname);
 
-  // Reset main padding when header is hidden — in useEffect to avoid hydration mismatch
+  // Reset header height var when header is hidden — in useEffect to avoid hydration mismatch
   useEffect(() => {
     if (isHidden) {
-      const main = document.getElementById("main-content");
-      if (main) main.style.paddingTop = "0px";
       document.documentElement.style.setProperty("--header-height", "0");
     }
   }, [isHidden]);

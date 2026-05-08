@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
+import { requireTeamRosterManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 async function assertTeamInLeague(teamId: string, leagueId: string) {
@@ -20,7 +20,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; teamId: string }> }
 ) {
   const { id, teamId } = await params;
-  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
+  try { await requireTeamRosterManager(teamId, id); } catch (e) { return authErrorResponse(e); }
   const err = await assertTeamInLeague(teamId, id);
   if (err) return err;
 
@@ -55,7 +55,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; teamId: string }> }
 ) {
   const { id, teamId } = await params;
-  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
+  try { await requireTeamRosterManager(teamId, id); } catch (e) { return authErrorResponse(e); }
   const err = await assertTeamInLeague(teamId, id);
   if (err) return err;
 

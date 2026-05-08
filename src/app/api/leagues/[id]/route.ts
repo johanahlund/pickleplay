@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireLeagueManager, requireLeagueOwner, authErrorResponse, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
+import { requireAuth, requireLeagueManager, requireLeagueOwner, requireClubOwner, authErrorResponse, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // GET: league details with all relations (login required; emails stripped for non-club-owners)
@@ -15,6 +15,7 @@ export async function GET(
   const league = await prisma.league.findUnique({
     where: { id },
     include: {
+      club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
       createdBy: { select: { id: true, name: true } },
       deputy: { select: { id: true, name: true } },
       helpers: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true } } } },
@@ -81,6 +82,14 @@ export async function PATCH(
   if (body.config !== undefined) data.config = body.config;
   if (body.deputyId !== undefined) data.deputyId = body.deputyId || null;
   if (body.createdById !== undefined) data.createdById = body.createdById;
+  if (body.clubId !== undefined) {
+    if (body.clubId) {
+      try { await requireClubOwner(String(body.clubId)); } catch (e) { return authErrorResponse(e); }
+      data.clubId = String(body.clubId);
+    } else {
+      data.clubId = null;
+    }
+  }
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 

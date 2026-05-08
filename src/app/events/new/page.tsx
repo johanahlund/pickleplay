@@ -411,7 +411,7 @@ export default function NewEventPage() {
                     onClick={() => setNumCourts(n)}
                     className={`min-w-[52px] h-12 px-3 rounded-xl text-lg font-bold transition-all ${
                       numCourts === n
-                        ? "bg-action text-white"
+                        ? "bg-black text-white"
                         : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
@@ -429,7 +429,7 @@ export default function NewEventPage() {
                   type="button"
                   onClick={() => setCompetition(false)}
                   className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                    !competition ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                    !competition ? "bg-black text-white" : "bg-gray-100 text-foreground"
                   }`}
                 >
                   Social
@@ -438,7 +438,7 @@ export default function NewEventPage() {
                   type="button"
                   onClick={() => setCompetition(true)}
                   className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all ${
-                    competition ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                    competition ? "bg-black text-white" : "bg-gray-100 text-foreground"
                   }`}
                 >
                   🏆 Competition
@@ -532,7 +532,7 @@ export default function NewEventPage() {
                       }
                     }}
                     className={`h-14 rounded-xl text-base font-bold transition-all ${
-                      currentValue === v ? "bg-action text-white ring-2 ring-action/50 scale-110" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                      currentValue === v ? "bg-black text-white ring-2 ring-black/30 scale-110" : "bg-gray-100 text-foreground hover:bg-gray-200"
                     }`}
                   >
                     {v}

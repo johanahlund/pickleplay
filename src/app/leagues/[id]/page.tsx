@@ -40,6 +40,8 @@ interface LeagueRound { id: string; roundNumber: number; name: string | null; su
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
+  clubId?: string | null;
+  club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
   config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number } | null;
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
@@ -63,7 +65,7 @@ export default function LeagueDetailPage() {
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
-  const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam">("");
+  const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam" | "addPlayer">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [allClubs, setAllClubs] = useState<{ id: string; name: string; emoji: string }[]>([]);
@@ -121,6 +123,8 @@ export default function LeagueDetailPage() {
   const [addPlayerFilter, setAddPlayerFilter] = useState<"all" | "club">("club");
   const [addPlayerGender, setAddPlayerGender] = useState<"all" | "M" | "F">("all");
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [addedThisSession, setAddedThisSession] = useState<Set<string>>(new Set());
+  const [flashSelectedId, setFlashSelectedId] = useState<string | null>(null);
   const [addingPlayerId, setAddingPlayerId] = useState<string | null>(null);
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [clubMembersCache, setClubMembersCache] = useState<Record<string, Player[]>>({});
@@ -128,6 +132,7 @@ export default function LeagueDetailPage() {
   // Edit state
   const [dirty, setDirty] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editLeagueClubId, setEditLeagueClubId] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editSeason, setEditSeason] = useState("");
   const [editStatus, setEditStatus] = useState("");
@@ -211,6 +216,7 @@ export default function LeagueDetailPage() {
     setEditDescription(league.description || "");
     setEditSeason(league.season || "");
     setEditStatus(league.status);
+    setEditLeagueClubId(league.club?.id || league.clubId || "");
     setEditMaxRoster(league.config?.maxRoster || 14);
     setEditMaxPoints(league.config?.maxPointsPerMatchDay || 3);
     setEditMinMatchDays(league.config?.minMatchDaysForPlayoff ?? 2);
@@ -218,11 +224,12 @@ export default function LeagueDetailPage() {
     setShowAddHelper(false);
     setHelperSearch("");
     setDirty(false);
+    fetchClubs();
     setEditSection("info");
   };
 
   const saveInfo = async () => {
-    await fetch(`/api/leagues/${id}`, {
+    const r = await fetch(`/api/leagues/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -230,10 +237,16 @@ export default function LeagueDetailPage() {
         description: editDescription.trim() || null,
         season: editSeason.trim() || null,
         status: editStatus,
+        clubId: editLeagueClubId || null,
         config: { maxRoster: editMaxRoster, maxPointsPerMatchDay: editMaxPoints, minMatchDaysForPlayoff: editMinMatchDays },
         deputyId: editDeputyId || null,
       }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || "Failed to save league");
+      return;
+    }
     setEditSection("");
     fetchLeague();
   };
@@ -315,11 +328,19 @@ export default function LeagueDetailPage() {
     fetchLeague();
   };
 
-  const openAddPlayerModal = async (team: LeagueTeam) => {
+  const openAddPlayer = async (team: LeagueTeam) => {
     setAddPlayerTeam(team);
     setAddPlayerSearch("");
+    setAddPlayerGender("all");
+    setLastAddedName(null);
+    setAddingPlayerId(null);
+    setAddedThisSession(new Set());
+    setFlashSelectedId(null);
     const clubId = team.clubId || team.club?.id;
     setAddPlayerFilter(clubId ? "club" : "all");
+    // make sure the team is expanded when we return
+    setCollapsedTeams((prev) => { const n = new Set(prev); n.delete(team.id); return n; });
+    setEditSection("addPlayer");
     fetchPlayers();
     if (clubId && !clubMembersCache[clubId]) {
       const r = await fetch(`/api/clubs/${clubId}`);
@@ -329,6 +350,16 @@ export default function LeagueDetailPage() {
         setClubMembersCache((prev) => ({ ...prev, [clubId]: members }));
       }
     }
+  };
+
+  const closeAddPlayer = () => {
+    setAddPlayerTeam(null);
+    setLastAddedName(null);
+    setAddingPlayerId(null);
+    setAddedThisSession(new Set());
+    setFlashSelectedId(null);
+    setEditSection("");
+    setTab("teams");
   };
 
   const openTeamEdit = (team: LeagueTeam | null) => {
@@ -512,6 +543,14 @@ export default function LeagueDetailPage() {
                 <option value="completed">Completed</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Organizing Club <span className="opacity-70 font-normal">(optional)</span></label>
+            <select value={editLeagueClubId} onChange={(e) => { setEditLeagueClubId(e.target.value); setDirty(true); }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">Independent — no club</option>
+              {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+            </select>
           </div>
           {editFooter(saveInfo, "")}
         </div>
@@ -945,6 +984,115 @@ export default function LeagueDetailPage() {
     );
   }
 
+  if (editSection === "addPlayer" && addPlayerTeam) {
+    const team = addPlayerTeam;
+    const teamClubId = team.clubId || team.club?.id;
+    const onTeamIds = new Set(team.players.map((tp) => tp.playerId));
+    const allClubMembers = teamClubId ? (clubMembersCache[teamClubId] || []) : [];
+    const source = addPlayerFilter === "club" ? allClubMembers : allPlayers;
+    const search = addPlayerSearch.toLowerCase();
+    const results = source
+      .filter((p) => !onTeamIds.has(p.id) && !addedThisSession.has(p.id) && p.name.toLowerCase().includes(search))
+      .filter((p) => addPlayerGender === "all" || p.gender === addPlayerGender)
+      .slice(0, 100);
+
+    return (
+      <div className="space-y-2">
+        <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
+          <button onClick={closeAddPlayer} className="text-sm text-action font-medium">
+            ← {team.name} <span className="text-xs text-muted font-normal">({league.name})</span>
+          </button>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Add Player to {team.name}</h3>
+          {teamClubId && (
+            <div className="flex gap-1">
+              <button onClick={() => setAddPlayerFilter("club")}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "club" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+                {team.club?.name || "Club"} members
+              </button>
+              <button onClick={() => setAddPlayerFilter("all")}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+                All players
+              </button>
+            </div>
+          )}
+          <div className="flex gap-1">
+            <button onClick={() => setAddPlayerGender("all")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              All
+            </button>
+            <button onClick={() => setAddPlayerGender("M")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "M" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              <span className={addPlayerGender === "M" ? "text-white" : "text-blue-500"}>♂</span> Men
+            </button>
+            <button onClick={() => setAddPlayerGender("F")}
+              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "F" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+              <span className={addPlayerGender === "F" ? "text-white" : "text-pink-500"}>♀</span> Women
+            </button>
+          </div>
+          <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
+            placeholder="Search by name..." autoFocus
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          <div className="text-[11px] text-muted">{results.length} available {addedThisSession.size > 0 && `· ${addedThisSession.size} added`}</div>
+          {results.length === 0 ? (
+            <p className="text-xs text-muted text-center py-6">
+              {addPlayerFilter === "club" && allClubMembers.length === 0 ? "No club members found" : "No players match"}
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {results.map((p) => {
+                const flashing = flashSelectedId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={flashing}
+                    onClick={() => {
+                      // Optimistic: flash "Selected", then remove from list ~800ms later
+                      setFlashSelectedId(p.id);
+                      addPlayerToTeam(team.id, p.id).then(async () => {
+                        const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
+                        if (updated) {
+                          setLeague(updated);
+                          const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
+                          if (fresh) setAddPlayerTeam(fresh);
+                        }
+                      });
+                      setTimeout(() => {
+                        setAddedThisSession((s) => { const n = new Set(s); n.add(p.id); return n; });
+                        setFlashSelectedId((cur) => (cur === p.id ? null : cur));
+                      }, 800);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                      flashing ? "bg-emerald-50" : "hover:bg-gray-50 active:bg-gray-100"
+                    }`}
+                  >
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                      {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
+                    </div>
+                    {p.gender && (
+                      <span className={`text-xs ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
+                    {flashing ? (
+                      <span className="text-xs font-semibold text-emerald-600">✓ Selected</span>
+                    ) : (
+                      <span className="text-xs text-muted">{p.rating?.toFixed(0)}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -972,7 +1120,15 @@ export default function LeagueDetailPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
+          <button
+            key={t}
+            onClick={() => {
+              if (t === "teams" && tab !== "teams") {
+                // Default: collapse all teams when entering the tab
+                setCollapsedTeams(new Set(league.teams.map((tm) => tm.id)));
+              }
+              setTab(t);
+            }}
             className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
               tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
             }`}>{t}</button>
@@ -1456,7 +1612,10 @@ export default function LeagueDetailPage() {
               </div>
             );
           })()}
-          {[...league.teams].sort((a, b) => a.name.localeCompare(b.name)).map((team) => (
+          {[...league.teams].sort((a, b) => a.name.localeCompare(b.name)).map((team) => {
+          const canAddToTeam = isAppAdmin || isDirector
+            || team.captain?.id === userId || team.viceCaptain?.id === userId;
+          return (
             <div key={team.id} className="bg-card rounded-xl border border-border overflow-hidden">
               {team.photoUrl && (
                 <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
@@ -1491,10 +1650,20 @@ export default function LeagueDetailPage() {
                     {team.slogan && <div className="text-[11px] italic text-muted truncate">&ldquo;{team.slogan}&rdquo;</div>}
                   </div>
                 </div>
-                {canEdit && (
-                  <span onClick={(e) => { e.stopPropagation(); openTeamEdit(team); }} className="text-muted hover:text-foreground p-1 shrink-0">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                  </span>
+                {(canEdit || canAddToTeam) && (
+                  <div className="flex flex-col items-end justify-between shrink-0 self-stretch py-0.5 gap-2">
+                    {canEdit ? (
+                      <span onClick={(e) => { e.stopPropagation(); openTeamEdit(team); }} className="text-muted hover:text-foreground p-1">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </span>
+                    ) : <span />}
+                    {canAddToTeam && (
+                      <span
+                        onClick={(e) => { e.stopPropagation(); openAddPlayer(team); }}
+                        className="text-[11px] text-primary font-medium px-2 py-0.5 mr-2 rounded hover:bg-primary/10"
+                      >+ Add Player</span>
+                    )}
+                  </div>
                 )}
               </button>
               {!collapsedTeams.has(team.id) && (<>
@@ -1530,14 +1699,11 @@ export default function LeagueDetailPage() {
                   </div>
                   );
                 })}
-                {canEdit && (
-                  <button onClick={() => openAddPlayerModal(team)}
-                    className="text-xs text-primary font-medium mt-1">+ Add Player</button>
-                )}
               </div>
               </>)}
             </div>
-          ))}
+          );
+          })}
 
           {canEdit && (
             <button onClick={() => openTeamEdit(null)}
@@ -1547,120 +1713,6 @@ export default function LeagueDetailPage() {
           )}
         </div>
       )}
-
-      {/* Add Player Modal */}
-      {addPlayerTeam && (() => {
-        const team = addPlayerTeam;
-        const teamClubId = team.clubId || team.club?.id;
-        const onTeamIds = new Set(team.players.map((tp) => tp.playerId));
-        const allClubMembers = teamClubId ? (clubMembersCache[teamClubId] || []) : [];
-        const source = addPlayerFilter === "club" ? allClubMembers : allPlayers;
-        const search = addPlayerSearch.toLowerCase();
-        const results = source
-          .filter((p) => !onTeamIds.has(p.id) && p.name.toLowerCase().includes(search))
-          .filter((p) => addPlayerGender === "all" || p.gender === addPlayerGender)
-          .slice(0, 50);
-
-        return (
-          <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setAddPlayerTeam(null)}>
-            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <div className="px-4 py-3 border-b border-border">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-sm">Add Player to {team.name}</h3>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setAddPlayerTeam(null); setLastAddedName(null); setAddingPlayerId(null); }}
-                    className="text-muted text-2xl leading-none w-9 h-9 flex items-center justify-center -m-2 rounded-full hover:bg-gray-100 active:bg-gray-200"
-                    aria-label="Close"
-                  >×</button>
-                </div>
-                {lastAddedName && (
-                  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 mb-2 flex items-center gap-1.5">
-                    <span>✓</span>
-                    <span className="truncate">Added <span className="font-medium">{lastAddedName}</span></span>
-                  </div>
-                )}
-                {teamClubId && (
-                  <div className="flex gap-1 mb-2">
-                    <button onClick={() => setAddPlayerFilter("club")}
-                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "club" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-                      {team.club?.name || "Club"} members
-                    </button>
-                    <button onClick={() => setAddPlayerFilter("all")}
-                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-                      All players
-                    </button>
-                  </div>
-                )}
-                <div className="flex gap-1 mb-2">
-                  <button onClick={() => setAddPlayerGender("all")}
-                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-                    All
-                  </button>
-                  <button onClick={() => setAddPlayerGender("M")}
-                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "M" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-                    <span className={addPlayerGender === "M" ? "text-white" : "text-blue-500"}>♂</span> Men
-                  </button>
-                  <button onClick={() => setAddPlayerGender("F")}
-                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "F" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-                    <span className={addPlayerGender === "F" ? "text-white" : "text-pink-500"}>♀</span> Women
-                  </button>
-                </div>
-                <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
-                  placeholder="Search by name..." autoFocus
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-              </div>
-              <div className="flex-1 overflow-y-auto px-2 py-1">
-                {results.length === 0 ? (
-                  <p className="text-xs text-muted text-center py-6">
-                    {addPlayerFilter === "club" && allClubMembers.length === 0 ? "No club members found" : "No players match"}
-                  </p>
-                ) : (
-                  results.map((p) => {
-                    const pending = addingPlayerId === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        disabled={pending}
-                        onClick={async () => {
-                          setAddingPlayerId(p.id);
-                          try {
-                            await addPlayerToTeam(team.id, p.id);
-                            const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
-                            if (updated) {
-                              setLeague(updated);
-                              const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
-                              if (fresh) setAddPlayerTeam(fresh);
-                            }
-                            setLastAddedName(p.name);
-                            setTimeout(() => setLastAddedName((cur) => (cur === p.name ? null : cur)), 1800);
-                          } finally {
-                            setAddingPlayerId(null);
-                          }
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                          pending ? "bg-emerald-50" : "hover:bg-gray-50 active:bg-gray-100"
-                        }`}
-                      >
-                        <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{p.name}</div>
-                          {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
-                        </div>
-                        <span className="text-xs text-muted">{p.rating?.toFixed(0)}</span>
-                        {pending && (
-                          <span className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                        )}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
     </div>
   );
