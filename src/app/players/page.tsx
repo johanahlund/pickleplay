@@ -27,6 +27,7 @@ interface Player {
   gender?: string | null;
   phone?: string | null;
   role?: string;
+  canCreateLeagues?: boolean;
   clubs?: PlayerClub[];
   _count?: { matchPlayers: number };
 }
@@ -168,6 +169,23 @@ export default function PlayersPage() {
     } finally {
       setResettingId(null);
     }
+  };
+
+  const toggleLeagueCreator = async (player: Player) => {
+    const next = !player.canCreateLeagues;
+    const verb = next ? "grant" : "revoke";
+    if (!confirm(`${verb === "grant" ? "Grant" : "Revoke"} league-creation permission for ${player.name}?`)) return;
+    const res = await fetch(`/api/players/${player.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canCreateLeagues: next }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || `Failed to ${verb}`);
+      return;
+    }
+    fetchPlayers();
   };
 
   const resetRating = async (player: Player) => {
@@ -325,6 +343,11 @@ export default function PlayersPage() {
                             Admin
                           </span>
                         )}
+                        {p.canCreateLeagues && p.role !== "admin" && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create leagues">
+                            🏆 League
+                          </span>
+                        )}
                         {isUnclaimed(p) && (
                           <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
                             Unclaimed
@@ -361,7 +384,7 @@ export default function PlayersPage() {
                             className="text-[10px] bg-gray-100 text-foreground px-2 py-0.5 rounded-full font-medium truncate"
                             title={`${c.name} (${c.role})`}
                           >
-                            {c.emoji} {c.name}
+                            {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
                           </span>
                         ))}
                       </div>
@@ -393,6 +416,19 @@ export default function PlayersPage() {
                           className="text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                         >
                           Reset ELO
+                        </button>
+                      )}
+                      {p.role !== "admin" && (
+                        <button
+                          onClick={() => toggleLeagueCreator(p)}
+                          className={`text-xs px-2 py-1 rounded transition-colors ${
+                            p.canCreateLeagues
+                              ? "text-emerald-700 hover:bg-emerald-50"
+                              : "text-muted hover:bg-gray-100"
+                          }`}
+                          title={p.canCreateLeagues ? "Revoke league-creation permission" : "Grant league-creation permission"}
+                        >
+                          {p.canCreateLeagues ? "🏆 Revoke" : "🏆 Grant"}
                         </button>
                       )}
                       <button

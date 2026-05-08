@@ -3,15 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useViewRole, hasRole } from "./RoleToggle";
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
 
 const defaultTabs = [
+  { href: "/players", label: "Players", iconName: "players", iconOnly: true },
   { href: "/clubs", label: "Clubs", iconName: "clubs" },
   { href: "/leagues", label: "Leagues", iconName: "trophy" },
   { href: "/events", label: "Events", iconName: "calendar" },
-  { href: "/matches", label: "My Matches", iconName: "paddle" },
+  { href: "/matches", label: "Matches", iconName: "paddle" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
@@ -25,8 +25,6 @@ interface ActiveEvent {
 export function BottomNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { viewRole } = useViewRole();
-  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && hasRole(viewRole, "admin");
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [activeEvent, setActiveEvent] = useState<ActiveEvent | null>(null);
 
@@ -96,15 +94,7 @@ export function BottomNav() {
 
   if (HIDDEN_PATHS.some((p) => pathname.startsWith(p))) return null;
 
-  // Detect club context from URL
-  const clubMatch = pathname.match(/^\/clubs\/([^/]+)/);
-  const clubId = clubMatch ? clubMatch[1] : null;
-
-  const tabs = defaultTabs;
-
-  const allTabs = isAdmin && !clubId
-    ? [{ href: "/players", label: "Players", iconName: "players" }, ...tabs]
-    : tabs;
+  const allTabs = defaultTabs;
 
   const isOnActiveEvent = activeEvent && pathname === `/events/${activeEvent.id}`;
 
@@ -128,7 +118,7 @@ export function BottomNav() {
               }`}
             >
               <Icon name={tab.iconName} size={24} color={isActive ? "#2563EB" : "#6B7280"} />
-              <span className="text-[11px]">{tab.label}</span>
+              {!tab.iconOnly && <span className="text-[11px]">{tab.label}</span>}
             </Link>
           );
         })}

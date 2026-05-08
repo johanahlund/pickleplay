@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 const DEFAULT_CATEGORIES = [
   { name: "Men's Doubles", format: "doubles", gender: "male", scoringFormat: "3x15", winBy: "2" },
@@ -14,6 +15,10 @@ interface MyClub { id: string; name: string; emoji: string; myRole: string }
 
 export default function NewLeaguePage() {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
+  const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const canCreateLeagues = !!(session?.user as { canCreateLeagues?: boolean } | undefined)?.canCreateLeagues;
+  const allowed = userRole === "admin" || canCreateLeagues;
 
   useEffect(() => {
     const nav = document.querySelector("nav.fixed.bottom-0");
@@ -48,7 +53,6 @@ export default function NewLeaguePage() {
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-    if (!clubId) { alert("Please select an organizing club"); return; }
     setCreating(true);
     const enabledCats = categories.filter((c) => c.enabled).map(({ enabled: _enabled, customFormat, ...c }) => {
       void _enabled;
@@ -61,7 +65,7 @@ export default function NewLeaguePage() {
         name: name.trim(),
         description: description.trim() || undefined,
         season: season.trim() || undefined,
-        clubId,
+        clubId: clubId || undefined,
         config: { maxRoster, maxPointsPerMatchDay },
         categories: enabledCats,
       }),
@@ -76,7 +80,7 @@ export default function NewLeaguePage() {
     }
   };
 
-  if (loadingClubs) {
+  if (loadingClubs || sessionStatus === "loading") {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Create League</h2>
@@ -87,13 +91,13 @@ export default function NewLeaguePage() {
     );
   }
 
-  if (ownedClubs.length === 0) {
+  if (!allowed) {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Create League</h2>
         <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-          <p className="text-sm">Only club owners and admins can create leagues.</p>
-          <p className="text-xs text-muted">You need to own or be an admin of a club before you can create a league. Visit the Clubs page to create one or ask an existing club owner to make you an admin.</p>
+          <p className="text-sm">You don&apos;t have permission to create leagues.</p>
+          <p className="text-xs text-muted">Ask an app admin to grant you league-creation permission.</p>
         </div>
       </div>
     );
@@ -105,12 +109,15 @@ export default function NewLeaguePage() {
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-muted mb-1">Organizing Club</label>
+          <label className="block text-sm font-medium text-muted mb-1">Organizing Club <span className="text-muted/70 font-normal">(optional)</span></label>
           <select value={clubId} onChange={(e) => setClubId(e.target.value)}
             className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
-            <option value="">Select club...</option>
+            <option value="">Independent — no club</option>
             {ownedClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
           </select>
+          {ownedClubs.length === 0 && (
+            <p className="text-[11px] text-muted mt-1">You don&apos;t own any clubs. The league will be independent.</p>
+          )}
         </div>
 
         <div>
@@ -194,7 +201,7 @@ export default function NewLeaguePage() {
           </div>
         </div>
 
-        <button onClick={handleCreate} disabled={!name.trim() || !clubId || creating}
+        <button onClick={handleCreate} disabled={!name.trim() || creating}
           className="w-full bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50">
           {creating ? "Creating..." : "Create League"}
         </button>

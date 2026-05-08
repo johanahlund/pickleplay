@@ -16,26 +16,17 @@ interface League {
   _count: { rounds: number; categories: number };
 }
 
-interface MyClub { myRole: string }
-
 export default function LeaguesPage() {
   const { data: session } = useSession();
   const [leagues, setLeagues] = useState<League[]>([]);
   const [loading, setLoading] = useState(true);
-  const [canCreate, setCanCreate] = useState(false);
   const userRole = (session?.user as { role?: string } | undefined)?.role;
+  const canCreateLeagues = !!(session?.user as { canCreateLeagues?: boolean } | undefined)?.canCreateLeagues;
+  const canCreate = userRole === "admin" || canCreateLeagues;
 
   useEffect(() => {
     fetch("/api/leagues").then((r) => r.json()).then((data) => { setLeagues(data || []); setLoading(false); });
   }, []);
-
-  useEffect(() => {
-    if (!session?.user) { setCanCreate(false); return; }
-    if (userRole === "admin") { setCanCreate(true); return; }
-    fetch("/api/clubs").then((r) => r.ok ? r.json() : []).then((clubs: MyClub[]) => {
-      setCanCreate(clubs.some((c) => c.myRole === "owner" || c.myRole === "admin"));
-    });
-  }, [session, userRole]);
 
   return (
     <div className="space-y-4">

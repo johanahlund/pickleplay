@@ -2,13 +2,33 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// List clubs the current user is a member of
+// List clubs the current user is a member of.
+// App admins get all clubs back, with `myRole` set to their real role when
+// they are a member, or "admin" (synthetic) otherwise — so admin mode behaves
+// as if they belong to every club.
 export async function GET() {
   let user;
   try {
     user = await requireAuth();
   } catch {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+
+  if (user.role === "admin") {
+    const [allClubs, myMemberships] = await Promise.all([
+      prisma.club.findMany({
+        include: { _count: { select: { members: true, events: true } } },
+        orderBy: { name: "asc" },
+      }),
+      prisma.clubMember.findMany({
+        where: { playerId: user.id },
+        select: { clubId: true, role: true },
+      }),
+    ]);
+    const roleByClub = new Map(myMemberships.map((m) => [m.clubId, m.role]));
+    return NextResponse.json(
+      allClubs.map((c) => ({ ...c, myRole: roleByClub.get(c.id) || "admin" }))
+    );
   }
 
   const memberships = await prisma.clubMember.findMany({

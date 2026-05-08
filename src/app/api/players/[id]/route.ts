@@ -55,9 +55,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const { name, emoji, gender, phone, email } = await req.json();
+  const { name, emoji, gender, phone, email, canCreateLeagues } = await req.json();
 
-  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null; email?: string | null } = {};
+  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null; email?: string | null; canCreateLeagues?: boolean } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -95,6 +95,12 @@ export async function PATCH(
   }
   if (email !== undefined) {
     data.email = email ? email.trim().toLowerCase() : null;
+  }
+  if (canCreateLeagues !== undefined) {
+    if (user.role !== "admin") {
+      return NextResponse.json({ error: "Only app admins can grant league creation" }, { status: 403 });
+    }
+    data.canCreateLeagues = !!canCreateLeagues;
   }
 
   if (Object.keys(data).length === 0) {

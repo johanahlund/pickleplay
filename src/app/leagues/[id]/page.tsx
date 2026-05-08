@@ -118,8 +118,11 @@ export default function LeagueDetailPage() {
 
   // Add player to team state (modal)
   const [addPlayerTeam, setAddPlayerTeam] = useState<LeagueTeam | null>(null);
-  const [addPlayerFilter, setAddPlayerFilter] = useState<"all" | "club">("all");
+  const [addPlayerFilter, setAddPlayerFilter] = useState<"all" | "club">("club");
+  const [addPlayerGender, setAddPlayerGender] = useState<"all" | "M" | "F">("all");
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
+  const [addingPlayerId, setAddingPlayerId] = useState<string | null>(null);
+  const [lastAddedName, setLastAddedName] = useState<string | null>(null);
   const [clubMembersCache, setClubMembersCache] = useState<Record<string, Player[]>>({});
 
   // Edit state
@@ -1438,7 +1441,22 @@ export default function LeagueDetailPage() {
       {/* ── Teams Tab ── */}
       {tab === "teams" && (
         <div className="space-y-3">
-          {league.teams.map((team) => (
+          {league.teams.length > 0 && (() => {
+            const allCollapsed = league.teams.every((t) => collapsedTeams.has(t.id));
+            return (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setCollapsedTeams(allCollapsed ? new Set() : new Set(league.teams.map((t) => t.id)))}
+                  className="text-xs text-muted hover:text-foreground flex items-center gap-1 px-2 py-1"
+                  title={allCollapsed ? "Expand all" : "Collapse all"}
+                >
+                  <span className="text-[10px]">{allCollapsed ? "▼" : "▲"}</span>
+                  {allCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              </div>
+            );
+          })()}
+          {[...league.teams].sort((a, b) => a.name.localeCompare(b.name)).map((team) => (
             <div key={team.id} className="bg-card rounded-xl border border-border overflow-hidden">
               {team.photoUrl && (
                 <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
@@ -1456,7 +1474,20 @@ export default function LeagueDetailPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="font-semibold text-sm truncate">{team.name}</span>
                       <span className="text-xs text-muted shrink-0">({team._count.players})</span>
+                      {(() => {
+                        const f = team.players.filter((tp) => tp.player.gender === "F").length;
+                        const m = team.players.filter((tp) => tp.player.gender === "M").length;
+                        if (f === 0 && m === 0) return null;
+                        return (
+                          <span className="text-[11px] shrink-0 flex items-center gap-1">
+                            {f > 0 && <span className="text-pink-500">♀{f}</span>}
+                            {m > 0 && <span className="text-blue-500">♂{m}</span>}
+                          </span>
+                        );
+                      })()}
                     </div>
+                    {team.captain && <div className="text-[10px] text-muted truncate"><span className="opacity-70">Leader:</span> <span className="text-foreground">{team.captain.name}</span></div>}
+                    {team.viceCaptain && <div className="text-[10px] text-muted truncate"><span className="opacity-70">Deputy:</span> <span className="text-foreground">{team.viceCaptain.name}</span></div>}
                     {team.slogan && <div className="text-[11px] italic text-muted truncate">&ldquo;{team.slogan}&rdquo;</div>}
                   </div>
                 </div>
@@ -1467,26 +1498,27 @@ export default function LeagueDetailPage() {
                 )}
               </button>
               {!collapsedTeams.has(team.id) && (<>
-              {/* Leader / Deputy */}
-              {(team.captain || team.viceCaptain) && (
-                <div className="px-3 py-1.5 text-xs text-muted flex gap-3 border-b border-border">
-                  {team.captain && <span>Leader: <span className="font-medium text-foreground">{team.captain.name}</span></span>}
-                  {team.viceCaptain && <span>Deputy: <span className="font-medium text-foreground">{team.viceCaptain.name}</span></span>}
-                </div>
-              )}
-              {/* Player roster — sorted: females first, then males */}
+              {/* Player roster — sorted: leader, deputy, then alphabetical */}
               <div className="px-3 py-2 space-y-1">
                 {[...team.players]
                   .sort((a, b) => {
-                    const ga = a.player.gender === "F" ? 0 : a.player.gender === "M" ? 1 : 2;
-                    const gb = b.player.gender === "F" ? 0 : b.player.gender === "M" ? 1 : 2;
-                    return ga !== gb ? ga - gb : a.player.name.localeCompare(b.player.name);
+                    const rank = (id: string) => id === team.captain?.id ? 0 : id === team.viceCaptain?.id ? 1 : 2;
+                    const ra = rank(a.playerId);
+                    const rb = rank(b.playerId);
+                    return ra !== rb ? ra - rb : a.player.name.localeCompare(b.player.name);
                   })
-                  .map((tp) => (
+                  .map((tp) => {
+                  const isLeader = team.captain?.id === tp.playerId;
+                  const isDeputy = team.viceCaptain?.id === tp.playerId;
+                  return (
                   <div key={tp.id} className="flex items-center gap-2 py-1">
                     <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{tp.player.name}</div>
+                      <div className="text-sm font-medium truncate">
+                        {tp.player.name}
+                        {isLeader && <span className="text-[10px] text-muted ml-1">(Leader)</span>}
+                        {isDeputy && <span className="text-[10px] text-muted ml-1">(Deputy)</span>}
+                      </div>
                     </div>
                     {tp.player.gender && (
                       <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
@@ -1496,7 +1528,8 @@ export default function LeagueDetailPage() {
                     <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
                     {canEdit && <button onClick={() => removePlayerFromTeam(team.id, tp.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>}
                   </div>
-                ))}
+                  );
+                })}
                 {canEdit && (
                   <button onClick={() => openAddPlayerModal(team)}
                     className="text-xs text-primary font-medium mt-1">+ Add Player</button>
@@ -1525,6 +1558,7 @@ export default function LeagueDetailPage() {
         const search = addPlayerSearch.toLowerCase();
         const results = source
           .filter((p) => !onTeamIds.has(p.id) && p.name.toLowerCase().includes(search))
+          .filter((p) => addPlayerGender === "all" || p.gender === addPlayerGender)
           .slice(0, 50);
 
         return (
@@ -1533,20 +1567,45 @@ export default function LeagueDetailPage() {
               <div className="px-4 py-3 border-b border-border">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-semibold text-sm">Add Player to {team.name}</h3>
-                  <button onClick={() => setAddPlayerTeam(null)} className="text-muted text-lg leading-none">✕</button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setAddPlayerTeam(null); setLastAddedName(null); setAddingPlayerId(null); }}
+                    className="text-muted text-2xl leading-none w-9 h-9 flex items-center justify-center -m-2 rounded-full hover:bg-gray-100 active:bg-gray-200"
+                    aria-label="Close"
+                  >×</button>
                 </div>
+                {lastAddedName && (
+                  <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 mb-2 flex items-center gap-1.5">
+                    <span>✓</span>
+                    <span className="truncate">Added <span className="font-medium">{lastAddedName}</span></span>
+                  </div>
+                )}
                 {teamClubId && (
                   <div className="flex gap-1 mb-2">
                     <button onClick={() => setAddPlayerFilter("club")}
-                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "club" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}>
+                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "club" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
                       {team.club?.name || "Club"} members
                     </button>
                     <button onClick={() => setAddPlayerFilter("all")}
-                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "all" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}>
+                      className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerFilter === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
                       All players
                     </button>
                   </div>
                 )}
+                <div className="flex gap-1 mb-2">
+                  <button onClick={() => setAddPlayerGender("all")}
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+                    All
+                  </button>
+                  <button onClick={() => setAddPlayerGender("M")}
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "M" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+                    <span className={addPlayerGender === "M" ? "text-white" : "text-blue-500"}>♂</span> Men
+                  </button>
+                  <button onClick={() => setAddPlayerGender("F")}
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addPlayerGender === "F" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
+                    <span className={addPlayerGender === "F" ? "text-white" : "text-pink-500"}>♀</span> Women
+                  </button>
+                </div>
                 <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
                   placeholder="Search by name..." autoFocus
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
@@ -1557,25 +1616,45 @@ export default function LeagueDetailPage() {
                     {addPlayerFilter === "club" && allClubMembers.length === 0 ? "No club members found" : "No players match"}
                   </p>
                 ) : (
-                  results.map((p) => (
-                    <button key={p.id} onClick={async () => {
-                      await addPlayerToTeam(team.id, p.id);
-                      // refresh team in modal so the just-added player disappears from results
-                      const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
-                      if (updated) {
-                        setLeague(updated);
-                        const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
-                        if (fresh) setAddPlayerTeam(fresh);
-                      }
-                    }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 text-left">
-                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{p.name}</div>
-                        {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
-                      </div>
-                      <span className="text-xs text-muted">{p.rating?.toFixed(0)}</span>
-                    </button>
-                  ))
+                  results.map((p) => {
+                    const pending = addingPlayerId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={pending}
+                        onClick={async () => {
+                          setAddingPlayerId(p.id);
+                          try {
+                            await addPlayerToTeam(team.id, p.id);
+                            const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
+                            if (updated) {
+                              setLeague(updated);
+                              const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
+                              if (fresh) setAddPlayerTeam(fresh);
+                            }
+                            setLastAddedName(p.name);
+                            setTimeout(() => setLastAddedName((cur) => (cur === p.name ? null : cur)), 1800);
+                          } finally {
+                            setAddingPlayerId(null);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                          pending ? "bg-emerald-50" : "hover:bg-gray-50 active:bg-gray-100"
+                        }`}
+                      >
+                        <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                          {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
+                        </div>
+                        <span className="text-xs text-muted">{p.rating?.toFixed(0)}</span>
+                        {pending && (
+                          <span className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>

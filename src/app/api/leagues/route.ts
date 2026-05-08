@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireClubOwner, authErrorResponse } from "@/lib/auth";
+import { requireAuth, requireClubOwner, requireLeagueCreator, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // GET: list all leagues (login required)
@@ -19,16 +19,21 @@ export async function GET() {
   return NextResponse.json(leagues);
 }
 
-// POST: create a new league — must be owner/admin of the organizing club (or app admin)
+// POST: create a new league — requires canCreateLeagues (granted by app admin).
+// If clubId is provided, the user must also be owner/admin of that club.
 export async function POST(req: Request) {
   const { name, description, season, config, categories, clubId } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Name required" }, { status: 400 });
-  if (!clubId || typeof clubId !== "string") {
-    return NextResponse.json({ error: "Organizing club is required" }, { status: 400 });
-  }
 
   let user;
-  try { user = await requireClubOwner(clubId); } catch (e) { return authErrorResponse(e); }
+  try { user = await requireLeagueCreator(); } catch (e) { return authErrorResponse(e); }
+
+  if (clubId) {
+    if (typeof clubId !== "string") {
+      return NextResponse.json({ error: "Invalid clubId" }, { status: 400 });
+    }
+    try { await requireClubOwner(clubId); } catch (e) { return authErrorResponse(e); }
+  }
 
   const league = await prisma.league.create({
     data: {
@@ -36,7 +41,7 @@ export async function POST(req: Request) {
       description: description?.trim() || null,
       season: season?.trim() || null,
       config: config || { maxRoster: 14, maxPointsPerMatchDay: 3 },
-      clubId,
+      clubId: clubId || null,
       createdById: user.id,
       ...(categories?.length ? {
         categories: {

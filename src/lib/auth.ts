@@ -73,6 +73,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: player.name,
           role: player.role,
           emoji: player.emoji,
+          canCreateLeagues: player.canCreateLeagues,
         };
       },
     }),
@@ -83,6 +84,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.id = user.id;
         token.role = (user as unknown as { role: string }).role;
         token.emoji = (user as unknown as { emoji: string }).emoji;
+        token.canCreateLeagues = (user as unknown as { canCreateLeagues?: boolean }).canCreateLeagues ?? false;
       }
       return token;
     },
@@ -93,6 +95,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         u.id = token.id;
         u.role = token.role;
         u.emoji = token.emoji;
+        u.canCreateLeagues = token.canCreateLeagues ?? false;
       }
       return session;
     },
@@ -109,7 +112,23 @@ export async function requireAuth() {
   if (!session?.user?.id) {
     throw new Error("Unauthorized");
   }
-  return session.user as { id: string; name: string; email: string; role: string; emoji: string };
+  return session.user as { id: string; name: string; email: string; role: string; emoji: string; canCreateLeagues?: boolean };
+}
+
+/**
+ * Check if the current user is allowed to create leagues. App admins always
+ * can; other users require the canCreateLeagues flag (granted by app admin).
+ * The session may be stale, so we re-read the flag from the DB.
+ */
+export async function requireLeagueCreator() {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+  const player = await prisma.player.findUnique({
+    where: { id: user.id },
+    select: { canCreateLeagues: true },
+  });
+  if (player?.canCreateLeagues) return user;
+  throw new Error("Forbidden");
 }
 
 /** Get the current session user and verify admin role, or return 403 */

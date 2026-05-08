@@ -33,6 +33,7 @@ export async function GET() {
       gender: true,
       phone: true,
       role: true,
+      canCreateLeagues: true,
       passwordHash: true, // only used to derive hasAccount below
       _count: { select: { matchPlayers: true } },
       clubMembers: {
