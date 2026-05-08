@@ -42,14 +42,26 @@ export async function GET() {
           club: { select: { id: true, name: true, emoji: true } },
         },
       },
+      leagueTeamPlayers: {
+        select: {
+          team: {
+            select: {
+              id: true,
+              name: true,
+              league: { select: { id: true, name: true, season: true } },
+            },
+          },
+        },
+      },
     },
   });
 
   const allowEmail = await canSeeEmails(user.id, user.role);
 
   // Strip passwordHash, add hasAccount flag, optionally strip email, flatten
-  // club memberships into a lightweight `clubs` array.
-  const safe = players.map(({ passwordHash, email, clubMembers, ...rest }) => ({
+  // club memberships into a lightweight `clubs` array, plus league-team
+  // memberships into a lightweight `leagueTeams` array.
+  const safe = players.map(({ passwordHash, email, clubMembers, leagueTeamPlayers, ...rest }) => ({
     ...rest,
     ...(allowEmail ? { email } : {}),
     hasAccount: !!passwordHash,
@@ -58,6 +70,13 @@ export async function GET() {
       name: m.club.name,
       emoji: m.club.emoji,
       role: m.role,
+    })),
+    leagueTeams: leagueTeamPlayers.map((tp) => ({
+      teamId: tp.team.id,
+      teamName: tp.team.name,
+      leagueId: tp.team.league.id,
+      leagueName: tp.team.league.name,
+      season: tp.team.league.season,
     })),
   }));
 

@@ -436,13 +436,19 @@ export default function LeagueDetailPage() {
     fetchLeague();
   };
 
-  const addPlayerToTeam = async (teamId: string, playerId: string) => {
-    await fetch(`/api/leagues/${id}/teams/${teamId}/players`, {
+  const addPlayerToTeam = async (teamId: string, playerId: string): Promise<boolean> => {
+    const r = await fetch(`/api/leagues/${id}/teams/${teamId}/players`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || `Failed to add player (${r.status})`);
+      return false;
+    }
     fetchLeague();
+    return true;
   };
 
   const removePlayerFromTeam = async (teamId: string, playerId: string) => {
@@ -988,11 +994,16 @@ export default function LeagueDetailPage() {
     const team = addPlayerTeam;
     const teamClubId = team.clubId || team.club?.id;
     const onTeamIds = new Set(team.players.map((tp) => tp.playerId));
+    // Players already on ANY team in this league — the API rejects duplicates,
+    // so exclude them from the available list across both filter modes.
+    const onAnyTeamIds = new Set(
+      league.teams.flatMap((t) => t.players.map((tp) => tp.playerId))
+    );
     const allClubMembers = teamClubId ? (clubMembersCache[teamClubId] || []) : [];
     const source = addPlayerFilter === "club" ? allClubMembers : allPlayers;
     const search = addPlayerSearch.toLowerCase();
     const results = source
-      .filter((p) => !onTeamIds.has(p.id) && !addedThisSession.has(p.id) && p.name.toLowerCase().includes(search))
+      .filter((p) => !onTeamIds.has(p.id) && !onAnyTeamIds.has(p.id) && !addedThisSession.has(p.id) && p.name.toLowerCase().includes(search))
       .filter((p) => addPlayerGender === "all" || p.gender === addPlayerGender)
       .slice(0, 100);
 
@@ -1048,17 +1059,21 @@ export default function LeagueDetailPage() {
                     key={p.id}
                     type="button"
                     disabled={flashing}
-                    onClick={() => {
-                      // Optimistic: flash "Selected", then remove from list ~800ms later
+                    onClick={async () => {
                       setFlashSelectedId(p.id);
-                      addPlayerToTeam(team.id, p.id).then(async () => {
-                        const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
-                        if (updated) {
-                          setLeague(updated);
-                          const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
-                          if (fresh) setAddPlayerTeam(fresh);
-                        }
-                      });
+                      const ok = await addPlayerToTeam(team.id, p.id);
+                      if (!ok) {
+                        // API failed (alert already shown) — clear flash, leave player in list
+                        setFlashSelectedId((cur) => (cur === p.id ? null : cur));
+                        return;
+                      }
+                      // refresh team in modal so the just-added player disappears from results
+                      const updated = await fetch(`/api/leagues/${id}`).then((r) => r.json()).catch(() => null);
+                      if (updated) {
+                        setLeague(updated);
+                        const fresh = updated.teams.find((t: LeagueTeam) => t.id === team.id);
+                        if (fresh) setAddPlayerTeam(fresh);
+                      }
                       setTimeout(() => {
                         setAddedThisSession((s) => { const n = new Set(s); n.add(p.id); return n; });
                         setFlashSelectedId((cur) => (cur === p.id ? null : cur));

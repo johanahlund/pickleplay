@@ -14,6 +14,14 @@ interface PlayerClub {
   role: string;
 }
 
+interface PlayerLeagueTeam {
+  teamId: string;
+  teamName: string;
+  leagueId: string;
+  leagueName: string;
+  season: string | null;
+}
+
 interface Player {
   id: string;
   name: string;
@@ -29,7 +37,15 @@ interface Player {
   role?: string;
   canCreateLeagues?: boolean;
   clubs?: PlayerClub[];
+  leagueTeams?: PlayerLeagueTeam[];
   _count?: { matchPlayers: number };
+}
+
+// Short-name a league: take the first two whitespace-separated tokens.
+// e.g. "I Liga Interclubes Pickleball Zona Centro - Portugal" → "I Liga"
+function shortLeagueName(name: string): string {
+  const tokens = name.trim().split(/\s+/);
+  return tokens.slice(0, 2).join(" ");
 }
 
 export default function PlayersPage() {
@@ -376,7 +392,7 @@ export default function PlayersPage() {
                         {p.email && (isAdmin || session?.user?.id === p.id) && <span className="ml-1.5 text-xs">· {p.email}</span>}
                       </div>
                     </div>
-                    {(p.clubs || []).length > 0 && (
+                    {((p.clubs || []).length > 0 || (p.leagueTeams || []).length > 0) && (
                       <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[45%]">
                         {(p.clubs || []).map((c) => (
                           <span
@@ -385,6 +401,15 @@ export default function PlayersPage() {
                             title={`${c.name} (${c.role})`}
                           >
                             {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
+                          </span>
+                        ))}
+                        {(p.leagueTeams || []).map((lt) => (
+                          <span
+                            key={lt.teamId}
+                            className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium truncate"
+                            title={`${lt.leagueName}${lt.season ? ` (${lt.season})` : ""} — ${lt.teamName}`}
+                          >
+                            🏆 {shortLeagueName(lt.leagueName)} · {lt.teamName}
                           </span>
                         ))}
                       </div>

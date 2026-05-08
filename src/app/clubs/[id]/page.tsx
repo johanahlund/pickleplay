@@ -244,7 +244,14 @@ function SwipeableMemberRow({
       onTouchEnd={handleTouchEnd}
     >
       <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
-      <span className="font-medium text-sm flex-1 min-w-0 truncate">{p.name}</span>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-sm truncate">{p.name}</div>
+        {(member.role === "owner" || member.role === "admin") && (
+          <div className="mt-0.5">
+            <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
+          </div>
+        )}
+      </div>
       {p.gender && (
         <span className={`text-xs w-4 text-center ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
           {p.gender === "M" ? "♂" : "♀"}
@@ -260,7 +267,6 @@ function SwipeableMemberRow({
       )}
       <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
       <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
-      <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
       {/* Always-visible remove button (touch: also swipe-left works) */}
       {canRemove && (
         <button
@@ -576,10 +582,15 @@ export default function ClubDetailPage() {
   // Filtered members
   const filteredMembers = useMemo(() => {
     if (!club) return [];
+    const rank = (role: string) => role === "owner" ? 0 : role === "admin" ? 1 : 2;
     return club.members
       .filter((m) => !memberSearch || m.player.name.toLowerCase().includes(memberSearch.toLowerCase()))
       .filter((m) => !memberGender || m.player.gender === memberGender)
-      .sort((a, b) => a.player.name.localeCompare(b.player.name));
+      .sort((a, b) => {
+        const ra = rank(a.role); const rb = rank(b.role);
+        if (ra !== rb) return ra - rb;
+        return a.player.name.localeCompare(b.player.name);
+      });
   }, [club, memberSearch, memberGender]);
 
   // Rankings
