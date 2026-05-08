@@ -136,9 +136,11 @@ export default function LeagueDetailPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editSeason, setEditSeason] = useState("");
   const [editStatus, setEditStatus] = useState("");
-  const [editMaxRoster, setEditMaxRoster] = useState(14);
-  const [editMaxPoints, setEditMaxPoints] = useState(3);
-  const [editMinMatchDays, setEditMinMatchDays] = useState(2);
+  // Numeric edit fields are stored as strings so the user can clear them
+  // freely while typing. They are parsed to numbers on save.
+  const [editMaxRoster, setEditMaxRoster] = useState("14");
+  const [editMaxPoints, setEditMaxPoints] = useState("3");
+  const [editMinMatchDays, setEditMinMatchDays] = useState("2");
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -217,9 +219,9 @@ export default function LeagueDetailPage() {
     setEditSeason(league.season || "");
     setEditStatus(league.status);
     setEditLeagueClubId(league.club?.id || league.clubId || "");
-    setEditMaxRoster(league.config?.maxRoster || 14);
-    setEditMaxPoints(league.config?.maxPointsPerMatchDay || 3);
-    setEditMinMatchDays(league.config?.minMatchDaysForPlayoff ?? 2);
+    setEditMaxRoster(String(league.config?.maxRoster ?? 14));
+    setEditMaxPoints(String(league.config?.maxPointsPerMatchDay ?? 3));
+    setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -238,7 +240,11 @@ export default function LeagueDetailPage() {
         season: editSeason.trim() || null,
         status: editStatus,
         clubId: editLeagueClubId || null,
-        config: { maxRoster: editMaxRoster, maxPointsPerMatchDay: editMaxPoints, minMatchDaysForPlayoff: editMinMatchDays },
+        config: {
+          maxRoster: parseInt(editMaxRoster, 10) || 14,
+          maxPointsPerMatchDay: parseInt(editMaxPoints, 10) || 3,
+          minMatchDaysForPlayoff: editMinMatchDays.trim() === "" ? 0 : parseInt(editMinMatchDays, 10) || 0,
+        },
         deputyId: editDeputyId || null,
       }),
     });
@@ -573,17 +579,17 @@ export default function LeagueDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-muted mb-1">Max Roster</label>
-              <input type="number" value={editMaxRoster} onChange={(e) => { setEditMaxRoster(parseInt(e.target.value) || 0); setDirty(true); }} min={1}
+              <input type="number" value={editMaxRoster} onChange={(e) => { setEditMaxRoster(e.target.value); setDirty(true); }} min={1}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Max Pts / Match Day</label>
-              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(parseInt(e.target.value) || 0); setDirty(true); }} min={1}
+              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(e.target.value); setDirty(true); }} min={1}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Min Match Days for Playoff</label>
-              <input type="number" value={editMinMatchDays} onChange={(e) => { setEditMinMatchDays(parseInt(e.target.value) || 0); setDirty(true); }} min={0}
+              <input type="number" value={editMinMatchDays} onChange={(e) => { setEditMinMatchDays(e.target.value); setDirty(true); }} min={0}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>

@@ -253,8 +253,10 @@ function LightHeader({
       style={{
         background: "#ffffff",
         borderBottom: "1px solid #e2e8f0",
-        position: "sticky",
+        position: "fixed",
         top: 0,
+        left: 0,
+        right: 0,
         zIndex: 40,
         paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
       }}
@@ -340,8 +342,10 @@ function HeroHeader({
         color: "#fff",
         paddingBottom: 18,
         paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
-        position: "sticky",
+        position: "fixed",
         top: 0,
+        left: 0,
+        right: 0,
         zIndex: 40,
       }}
     >
@@ -495,8 +499,10 @@ function HeroSubHeader({
         color: "#fff",
         paddingBottom: 14,
         paddingTop: "max(env(safe-area-inset-top, 0px), 12px)",
-        position: "sticky",
+        position: "fixed",
         top: 0,
+        left: 0,
+        right: 0,
         zIndex: 40,
       }}
     >
