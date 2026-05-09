@@ -137,7 +137,7 @@ interface Event {
   pairs: EventPair[];
   classes: EventClassData[];
   locationId?: string | null;
-  club?: { id: string; name: string; emoji: string; locations: ClubLocation[] } | null;
+  club?: { id: string; name: string; shortName?: string | null; emoji: string; logoUrl?: string | null; locations: ClubLocation[] } | null;
   // Legacy compat — derived from default class
   format: string;
   scoringFormat: string;
@@ -1092,7 +1092,7 @@ export default function EventDetailPage() {
               <>
                 <h2 className="text-2xl font-extrabold" style={{ letterSpacing: "-0.02em" }}>{preview.name}</h2>
                 <p className="text-sm text-white/80 mt-2">
-                  {preview.club && `${preview.club.emoji} ${preview.club.name} · `}
+                  {preview.club && `${(preview.club.shortName?.trim() || preview.club.name)} · `}
                   {new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
                   {" · "}
                   {new Date(preview.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
@@ -3372,6 +3372,26 @@ export default function EventDetailPage() {
       })()}
       {canManage && managerCard}
 
+      {/* Event Data — name, date, time, status (managers only) */}
+      {canManage && (
+        <div className={frameClass}>
+          <div onClick={() => { startEditEvent(); setActiveSection("when"); }} className={rowClass} style={{ cursor: "pointer" }}>
+            <span className="text-base font-bold text-foreground">Event Data</span>
+            <span className="flex-1 text-right">
+              <span className="text-sm font-medium">
+                {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                {" · "}
+                {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span className="block text-[10px] text-muted capitalize">
+                {event.status === "draft" ? "setup" : event.status}
+              </span>
+            </span>
+            <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>
+          </div>
+        </div>
+      )}
+
       {/* Format — managers only (normal users see it in the header card) */}
       {canManage && (
         <div className={frameClass}>
@@ -3444,6 +3464,13 @@ export default function EventDetailPage() {
       </div>
 
       {renderRallyTracker()}
+
+      {(isOwner || isAdmin) && (
+        <button onClick={deleteEvent}
+          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
+          Delete Event
+        </button>
+      )}
     </div>
   );
 }

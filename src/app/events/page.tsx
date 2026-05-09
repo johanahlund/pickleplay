@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ClubBadge } from "@/components/ClubBadge";
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -24,7 +25,7 @@ interface Event {
   visibility: string;
   createdById: string | null;
   clubId: string | null;
-  club?: { id: string; name: string; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
+  club?: { id: string; name: string; shortName?: string | null; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null; skillMin?: number | null; skillMax?: number | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string; status?: string }[];
   helpers: { playerId: string }[];
@@ -34,6 +35,7 @@ interface Event {
 interface UserClub {
   id: string;
   name: string;
+  shortName?: string | null;
   emoji: string;
   logoUrl?: string | null;
 }
@@ -262,23 +264,52 @@ function EventsPage() {
         ) : null}
       </div>
 
-      {/* Filter bar — Filter toggle hidden while the panel is open */}
-      {(!showFilters || activeFilters.length > 0) && (
+      {/* Filter bar — quick club pills + advanced filter button */}
+      {!showFilters && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          {!showFilters && (
-            <button onClick={() => setShowFilters(true)}
-              className="text-sm px-2 py-1 rounded-lg transition-colors bg-gray-100 text-muted hover:text-foreground">
-              ☰ Filter
-            </button>
-          )}
+          {userClubs.length > 0 && (() => {
+            const allSelected = selectedClubIds.size === 0 || selectedClubIds.size === userClubs.length;
+            return (
+              <>
+                <button
+                  onClick={() => setSelectedClubIds(new Set(userClubs.map((c) => c.id)))}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                    allSelected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                  }`}
+                >ALL</button>
+                {userClubs.map((c) => {
+                  const selected = !allSelected && selectedClubIds.has(c.id);
+                  return (
+                    <button key={c.id}
+                      onClick={() => {
+                        // If ALL is currently active, switching to a single club narrows to just that one.
+                        if (allSelected) { setSelectedClubIds(new Set([c.id])); return; }
+                        toggleClub(c.id);
+                      }}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
+                        selected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                      }`}
+                    >
+                      <ClubBadge logoUrl={c.logoUrl} size={14} />
+                      {(c.shortName?.trim() || c.name.slice(0, 10))}
+                    </button>
+                  );
+                })}
+              </>
+            );
+          })()}
+          <button onClick={() => setShowFilters(true)}
+            className="text-sm px-2 py-1 rounded-lg transition-colors bg-gray-100 text-muted hover:text-foreground ml-auto">
+            ☰ Filter
+          </button>
           {activeFilters.length > 0 && (
-            <>
+            <div className="basis-full flex items-center gap-1.5 flex-wrap">
               {activeFilters.map((f, i) => (
                 <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
               ))}
               <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
                 className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -297,10 +328,11 @@ function EventsPage() {
               <div className="flex flex-wrap gap-1.5">
                 {userClubs.map((club) => (
                   <button key={club.id} onClick={() => toggleClub(club.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
                       selectedClubIds.has(club.id) ? "bg-action text-white" : "bg-gray-100 text-muted"
                     }`}>
-                    {club.emoji} {club.name}
+                    <ClubBadge logoUrl={club.logoUrl} size={14} />
+                    {(club.shortName?.trim() || club.name.slice(0, 10))}
                   </button>
                 ))}
               </div>
@@ -399,10 +431,8 @@ function EventsPage() {
                     {/* Club + Location row */}
                     {event.club && (
                       <div className="flex items-center gap-1 mb-0.5 text-[10px]">
-                        {event.club && (
-                          <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/clubs/${event.club!.id}`); }}
-                            className="text-muted font-medium hover:text-action cursor-pointer">{event.club.emoji} {event.club.name}</span>
-                        )}
+                        <span onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/clubs/${event.club!.id}`); }}
+                          className="text-muted font-medium hover:text-action cursor-pointer">{(event.club.shortName?.trim() || event.club.name.slice(0, 10))}</span>
                         {event.club?.locations?.[0] && (
                           <>
                             <span className="text-muted">·</span>
@@ -416,7 +446,7 @@ function EventsPage() {
                         )}
                       </div>
                     )}
-                    {/* Event name + type */}
+                    {/* Event name + type + status */}
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
@@ -425,6 +455,9 @@ function EventsPage() {
                       ) : (
                         <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
                       )}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 capitalize ${statusBadge(event.status)}`}>
+                        {event.status === "draft" ? "setup" : event.status}
+                      </span>
                     </div>
                     {/* Time + DUPR */}
                     <div className="flex items-center gap-1 mt-0.5">

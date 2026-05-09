@@ -29,8 +29,6 @@ interface LeagueTeam {
   viceCaptain?: { id: string; name: string; email?: string | null; photoUrl?: string | null } | null;
   players: { id: string; playerId: string; player: Player }[];
   _count: { players: number };
-  rosterLocked?: boolean;
-  rosterLockedAt?: string | null;
 }
 interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number; maxPerEvent: number | null }
 interface LeagueGame {
@@ -50,7 +48,14 @@ interface LeagueMatchDay {
   event?: { id: string; name: string; date: string; status: string } | null;
   lineups?: LeagueLineupStatus[];
 }
-interface LeagueRound { id: string; roundNumber: number; name: string | null; suggestedDate: string | null; status: string; matchDays: LeagueMatchDay[] }
+interface LeagueRound {
+  id: string; roundNumber: number; name: string | null;
+  startDate: string | null; endDate: string | null;
+  configOverride: Record<string, unknown> | null;
+  categoriesOverride: unknown[] | null;
+  status: string;
+  matchDays: LeagueMatchDay[];
+}
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
@@ -61,7 +66,7 @@ interface League {
   rulesPdfUrl?: string | null;
   rulesPdfName?: string | null;
   documents?: { id: string; url: string; name: string; mimeType: string; sizeBytes: number }[];
-  participationRequests?: { id: string; playerId: string; preferredTeamId: string | null; status: string; player: { id: string; gender: string | null } }[];
+  participationRequests?: { id: string; playerId: string; preferredTeamId: string | null; status: string; preferences?: Record<string, { level: "prefer" | "ok" | "no"; note?: string }> | null; player: { id: string; gender: string | null } }[];
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
   helpers: LeagueHelperEntry[];
@@ -70,6 +75,105 @@ interface League {
 interface Standing { teamId: string; teamName: string; logoUrl: string | null; played: number; won: number; lost: number; drawn: number; points: number; totalCategoryWins: number; h2h: Record<string, number>; pointDifference: number }
 
 type Tab = "overview" | "standings" | "rounds" | "matches" | "teams";
+
+interface TeamRosterProps {
+  team: LeagueTeam;
+  canEdit: boolean;
+  removingPlayerId: string | null;
+  onRemove: (playerId: string, playerName: string) => void;
+}
+
+function TeamRoster({ team, canEdit, removingPlayerId, onRemove }: TeamRosterProps) {
+  const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
+  const [nameQuery, setNameQuery] = useState("");
+
+  const sorted = [...team.players].sort((a, b) => {
+    const rank = (id: string) => id === team.captain?.id ? 0 : id === team.viceCaptain?.id ? 1 : 2;
+    const ra = rank(a.playerId);
+    const rb = rank(b.playerId);
+    return ra !== rb ? ra - rb : a.player.name.localeCompare(b.player.name);
+  });
+
+  const q = nameQuery.trim().toLowerCase();
+  const filtered = sorted.filter((tp) => {
+    if (genderFilter !== "all" && tp.player.gender !== genderFilter) return false;
+    if (q && !tp.player.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const fCount = team.players.filter((tp) => tp.player.gender === "F").length;
+  const mCount = team.players.filter((tp) => tp.player.gender === "M").length;
+  const showFilters = team.players.length > 0;
+
+  return (
+    <div className="px-3 py-2 space-y-1">
+      {showFilters && (
+        <div className="flex items-center gap-1.5 pb-1">
+          <button
+            onClick={() => setGenderFilter("all")}
+            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${genderFilter === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}
+          >All</button>
+          {fCount > 0 && (
+            <button
+              onClick={() => setGenderFilter((g) => (g === "F" ? "all" : "F"))}
+              className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${genderFilter === "F" ? "bg-pink-500 text-white" : "bg-gray-100 text-pink-500"}`}
+            >♀ {fCount}</button>
+          )}
+          {mCount > 0 && (
+            <button
+              onClick={() => setGenderFilter((g) => (g === "M" ? "all" : "M"))}
+              className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${genderFilter === "M" ? "bg-blue-500 text-white" : "bg-gray-100 text-blue-500"}`}
+            >♂ {mCount}</button>
+          )}
+          <input
+            type="text"
+            value={nameQuery}
+            onChange={(e) => setNameQuery(e.target.value)}
+            placeholder="Filter by name…"
+            className="flex-1 min-w-0 text-xs border border-border rounded-full px-2.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          />
+        </div>
+      )}
+      {filtered.length === 0 && team.players.length > 0 && (
+        <div className="text-[11px] text-muted px-1 py-1">No players match the filter.</div>
+      )}
+      {filtered.map((tp) => {
+        const isLeader = team.captain?.id === tp.playerId;
+        const isDeputy = team.viceCaptain?.id === tp.playerId;
+        const removing = removingPlayerId === tp.playerId;
+        return (
+          <div key={tp.id} className={`flex items-center gap-2 py-1 transition-opacity ${removing ? "opacity-50 line-through" : ""}`}>
+            <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">
+                {tp.player.name}
+                {isLeader && <span className="text-[10px] text-muted ml-1">(Leader)</span>}
+                {isDeputy && <span className="text-[10px] text-muted ml-1">(Deputy)</span>}
+              </div>
+            </div>
+            {tp.player.gender && (
+              <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                {tp.player.gender === "F" ? "♀" : "♂"}
+              </span>
+            )}
+            <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
+            {canEdit && (
+              removing ? (
+                <span className="w-3.5 h-3.5 border-2 border-danger border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <button
+                  onClick={() => onRemove(tp.playerId, tp.player.name)}
+                  className="text-xs text-danger px-1 hover:underline"
+                  aria-label={`Remove ${tp.player.name}`}
+                >✕</button>
+              )
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function LeagueDetailPage() {
   const { id } = useParams();
@@ -139,7 +243,8 @@ export default function LeagueDetailPage() {
   const [showAddRound, setShowAddRound] = useState(false);
   const [newRoundNumber, setNewRoundNumber] = useState(1);
   const [newRoundName, setNewRoundName] = useState("");
-  const [newRoundDate, setNewRoundDate] = useState("");
+  const [newRoundStart, setNewRoundStart] = useState("");
+  const [newRoundEnd, setNewRoundEnd] = useState("");
   const [newRoundTeam1, setNewRoundTeam1] = useState("");
   const [newRoundTeam2, setNewRoundTeam2] = useState("");
 
@@ -229,6 +334,22 @@ export default function LeagueDetailPage() {
 
   useEffect(() => { fetchLeague(); fetchStandings(); }, [fetchLeague, fetchStandings]);
 
+  // Poll the league every 30s while the tab is visible so roster changes
+  // (e.g. someone leaving a team) and request updates show up without a
+  // manual refresh. Pauses while the tab is hidden to avoid background work.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (timer) return;
+      timer = setInterval(() => { fetchLeague(); }, 30_000);
+    };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const onVis = () => { document.visibilityState === "visible" ? start() : stop(); };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { document.removeEventListener("visibilitychange", onVis); stop(); };
+  }, [fetchLeague]);
+
   const fetchLeagueMatches = useCallback(async () => {
     const r = await fetch(`/api/leagues/${id}/matches`);
     if (r.ok) { setLeagueMatches(await r.json()); setMatchesLoaded(true); }
@@ -236,6 +357,27 @@ export default function LeagueDetailPage() {
 
   // Lazy-load matches when tab is selected
   useEffect(() => { if (tab === "matches" && !matchesLoaded) fetchLeagueMatches(); }, [tab, matchesLoaded, fetchLeagueMatches]);
+
+  // Always fetch fresh participation requests when entering the requests
+  // section or when the tab regains focus — preferences can change while a
+  // captain is reviewing.
+  const fetchParticipationRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    const r = await fetch(`/api/leagues/${id}/participation-requests`);
+    if (r.ok) setRequestList(await r.json());
+    setRequestsLoading(false);
+  }, [id]);
+  useEffect(() => {
+    if (editSection !== "requests") return;
+    fetchParticipationRequests();
+    const onFocus = () => { if (document.visibilityState === "visible") fetchParticipationRequests(); };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [editSection, fetchParticipationRequests]);
 
   // Hide bottom nav when in edit views
   useEffect(() => {
@@ -267,7 +409,7 @@ export default function LeagueDetailPage() {
                   <h2 className="text-xl font-bold">{preview.name}</h2>
                   <span className="text-sm text-muted">Season {preview.season || "—"}</span>
                 </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${statusPill(preview.status)}`}>{preview.status}</span>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${statusPill(preview.status)}`}>{preview.status === "forming" ? "registration closed" : preview.status === "registration" ? "registration open" : preview.status}</span>
               </div>
               {preview.description && <p className="text-sm text-muted mt-1">{preview.description}</p>}
             </div>
@@ -296,7 +438,10 @@ export default function LeagueDetailPage() {
   const isAppAdmin = userRole === "admin" && hasRole(viewRole, "admin");
   // Admins toggling "view as" downgrade their effective league powers; for
   // non-admins, roles are based purely on the actual relationship.
-  const leaguePowersAllowed = userRole !== "admin" || hasRole(viewRole, "league");
+  // Club role is club-scoped — it does NOT inherit league powers. Admin
+  // viewing as Club should see leagues exactly like a User would. League
+  // powers stay only for the explicit "league" / "admin" roles.
+  const leaguePowersAllowed = userRole !== "admin" || viewRole === "league" || viewRole === "admin";
   const isDirector = leaguePowersAllowed && league.createdBy?.id === userId;
   const isDeputy = leaguePowersAllowed && league.deputy?.id === userId;
   const isHelper = leaguePowersAllowed && (league.helpers?.some((h) => h.playerId === userId) ?? false);
@@ -608,13 +753,19 @@ export default function LeagueDetailPage() {
   };
 
   const addRound = async () => {
-    const matchDays = newRoundTeam1 && newRoundTeam2 ? [{ teamIds: [newRoundTeam1, newRoundTeam2], hostTeamId: newRoundTeam1, date: newRoundDate || undefined }] : [];
+    const matchDays = newRoundTeam1 && newRoundTeam2 ? [{ teamIds: [newRoundTeam1, newRoundTeam2], hostTeamId: newRoundTeam1, date: newRoundStart || undefined }] : [];
     await fetch(`/api/leagues/${id}/rounds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roundNumber: newRoundNumber, name: newRoundName.trim() || undefined, suggestedDate: newRoundDate || undefined, matchDays }),
+      body: JSON.stringify({
+        roundNumber: newRoundNumber,
+        name: newRoundName.trim() || undefined,
+        startDate: newRoundStart || undefined,
+        endDate: newRoundEnd || undefined,
+        matchDays,
+      }),
     });
-    setShowAddRound(false); setNewRoundName(""); setNewRoundDate(""); setNewRoundTeam1(""); setNewRoundTeam2("");
+    setShowAddRound(false); setNewRoundName(""); setNewRoundStart(""); setNewRoundEnd(""); setNewRoundTeam1(""); setNewRoundTeam2("");
     fetchLeague(); fetchStandings();
   };
 
@@ -692,8 +843,8 @@ export default function LeagueDetailPage() {
               <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setDirty(true); }}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm">
                 <option value="setup">Setup</option>
-                <option value="registration">Registration</option>
-                <option value="forming">Forming teams</option>
+                <option value="registration">Registration open</option>
+                <option value="forming">Registration closed</option>
                 <option value="active">Active</option>
                 <option value="complete">Complete</option>
               </select>
@@ -1251,14 +1402,16 @@ export default function LeagueDetailPage() {
   }
 
   if (editSection === "requests") {
-    const loadRequests = async () => {
-      setRequestsLoading(true);
-      const r = await fetch(`/api/leagues/${id}/participation-requests`);
-      if (r.ok) setRequestList(await r.json());
-      setRequestsLoading(false);
-    };
-    if (requestList.length === 0 && !requestsLoading) loadRequests();
     const handleAction = async (req: RequestDetail, action: "accept" | "decline", teamId?: string) => {
+      if (action === "decline") {
+        const ok = await confirm({
+          title: "Decline sign-up?",
+          message: `${req.player.name} will be notified that their sign-up was declined. They can sign up again if registration is still open.`,
+          confirmText: "Decline",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       setRequestActionId(req.id);
       const r = await fetch(`/api/leagues/${id}/participation-requests/${req.id}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1266,7 +1419,7 @@ export default function LeagueDetailPage() {
       });
       setRequestActionId(null);
       if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
-      await Promise.all([loadRequests(), fetchLeague()]);
+      await Promise.all([fetchParticipationRequests(), fetchLeague()]);
     };
 
     const captainTeamIds = new Set(
@@ -1309,13 +1462,13 @@ export default function LeagueDetailPage() {
                 <div className="space-y-0.5">
                   {league.categories.map((c) => {
                     const p = prefs[c.id];
-                    if (!p) return null;
-                    const lvlIcon = p.level === "prefer" ? "⭐" : p.level === "ok" ? "·" : "✕";
-                    const lvlColor = p.level === "prefer" ? "text-emerald-700" : p.level === "no" ? "text-rose-700" : "text-muted";
+                    // Hide "no" — captain only needs to see what the player wants.
+                    if (!p || p.level === "no") return null;
+                    const isPrefer = p.level === "prefer";
                     return (
-                      <div key={c.id} className={`text-[11px] ${lvlColor}`}>
-                        <span className="font-medium">{lvlIcon} {c.name}</span>
-                        {p.note && <span className="text-muted"> — {p.note}</span>}
+                      <div key={c.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
+                        <span>{c.name}</span>
+                        {p.note && <span className="text-muted font-normal italic"> ({p.note})</span>}
                       </div>
                     );
                   })}
@@ -1323,26 +1476,28 @@ export default function LeagueDetailPage() {
               )}
             </div>
           </div>
-          <div className="flex flex-col gap-1.5 shrink-0">
-            {canAccept && req.preferredTeamId && (
-              <button onClick={() => handleAction(req, "accept", req.preferredTeamId!)} disabled={pending}
-                className="text-xs bg-action text-white px-3 py-1 rounded-lg font-medium disabled:opacity-50">
-                Accept
-              </button>
-            )}
-            {canAccept && !req.preferredTeamId && (
-              <select
-                onChange={(e) => { if (e.target.value) handleAction(req, "accept", e.target.value); }}
-                defaultValue=""
-                disabled={pending}
-                className="text-xs border border-action text-action rounded-lg px-2 py-1 disabled:opacity-50"
-              >
-                <option value="">Accept to…</option>
-                {[...league.teams].sort((a, b) => a.name.localeCompare(b.name))
-                  .filter((t) => isAppAdmin || isDirector || isDeputy || isHelper || captainTeamIds.has(t.id))
-                  .map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            )}
+          <div className="flex flex-col justify-between items-end self-stretch shrink-0 gap-1.5">
+            <div className="flex flex-col items-end gap-1.5">
+              {canAccept && req.preferredTeamId && (
+                <button onClick={() => handleAction(req, "accept", req.preferredTeamId!)} disabled={pending}
+                  className="text-xs bg-action text-white px-3 py-1 rounded-lg font-medium disabled:opacity-50">
+                  Accept
+                </button>
+              )}
+              {canAccept && !req.preferredTeamId && (
+                <select
+                  onChange={(e) => { if (e.target.value) handleAction(req, "accept", e.target.value); }}
+                  defaultValue=""
+                  disabled={pending}
+                  className="text-xs border border-action text-action rounded-lg px-2 py-1 disabled:opacity-50"
+                >
+                  <option value="">Accept to…</option>
+                  {[...league.teams].sort((a, b) => a.name.localeCompare(b.name))
+                    .filter((t) => isAppAdmin || isDirector || isDeputy || isHelper || captainTeamIds.has(t.id))
+                    .map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              )}
+            </div>
             {canDecline && (
               <button onClick={() => handleAction(req, "decline")} disabled={pending}
                 className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50 disabled:opacity-50">
@@ -1512,7 +1667,7 @@ export default function LeagueDetailPage() {
           <div className="flex items-center gap-2 shrink-0">
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
               league.status === "active" ? "bg-green-100 text-green-700" : league.status === "complete" ? "bg-gray-100 text-muted" : league.status === "registration" ? "bg-amber-100 text-amber-700" : league.status === "forming" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
-            }`}>{league.status}</span>
+            }`}>{league.status === "forming" ? "registration closed" : league.status === "registration" ? "registration open" : league.status}</span>
             {canEdit && (
               <span className="text-muted">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -1607,8 +1762,12 @@ export default function LeagueDetailPage() {
             }
 
             // Pending request
+            const myPrefs = myReq?.preferences || {};
+            const myPrefRows = league.categories
+              .map((c) => ({ cat: c, p: myPrefs[c.id] }))
+              .filter(({ p }) => p && p.level !== "no");
             return (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-2">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start justify-between gap-2">
                 <div className="text-sm text-emerald-900 flex-1 min-w-0">
                   <div>
                     <strong>
@@ -1618,6 +1777,19 @@ export default function LeagueDetailPage() {
                     </strong>
                   </div>
                   <div>Waiting for approval</div>
+                  {myPrefRows.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {myPrefRows.map(({ cat, p }) => {
+                        const isPrefer = p!.level === "prefer";
+                        return (
+                          <div key={cat.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
+                            <span>{cat.name}</span>
+                            {p!.note && <span className="text-muted font-normal italic"> ({p!.note})</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={() => myReq && handleCancel(myReq.id, false)}
@@ -2010,10 +2182,18 @@ export default function LeagueDetailPage() {
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs text-muted mb-1">Date</label>
-                <input type="date" value={newRoundDate} onChange={(e) => setNewRoundDate(e.target.value)}
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-muted mb-1">Start date</label>
+                  <input type="date" value={newRoundStart} onChange={(e) => setNewRoundStart(e.target.value)}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-muted mb-1">End date</label>
+                  <input type="date" value={newRoundEnd} onChange={(e) => setNewRoundEnd(e.target.value)}
+                    min={newRoundStart || undefined}
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+                </div>
               </div>
               {league.teams.length >= 2 && (
                 <div className="flex gap-3">
@@ -2213,31 +2393,21 @@ export default function LeagueDetailPage() {
               <span className="truncate">Removed <span className="font-medium">{lastRemovedName}</span></span>
             </div>
           )}
-          {(isAppAdmin || isDirector || isDeputy) && league.teams.length > 0 && (league.status === "registration" || league.status === "forming") && (() => {
-            const allLocked = league.teams.every((t) => t.rosterLocked);
-            const lockedCount = league.teams.filter((t) => t.rosterLocked).length;
-            return (
-              <div className={`text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-2 border ${allLocked ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-blue-50 border-blue-200 text-blue-800"}`}>
-                <span>
-                  {allLocked
-                    ? "All teams are locked. Move the league to Active to publish rosters."
-                    : `${lockedCount} of ${league.teams.length} teams locked. Rosters become visible when the league goes Active.`}
-                </span>
-                {allLocked && (
-                  <button onClick={async () => {
-                    const ok = await confirm({ title: "Activate league", message: "Move the league to Active? Team rosters become visible to everyone.", confirmText: "Activate" });
-                    if (!ok) return;
-                    const r = await fetch(`/api/leagues/${id}`, {
-                      method: "PATCH", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ status: "active" }),
-                    });
-                    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
-                    fetchLeague();
-                  }} className="bg-action text-white px-3 py-1 rounded-lg font-medium text-xs whitespace-nowrap">Go Active</button>
-                )}
-              </div>
-            );
-          })()}
+          {(isAppAdmin || isDirector || isDeputy) && league.teams.length > 0 && (league.status === "registration" || league.status === "forming") && (
+            <div className="text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-2 border bg-blue-50 border-blue-200 text-blue-800">
+              <span>Rosters become visible when the league goes Active.</span>
+              <button onClick={async () => {
+                const ok = await confirm({ title: "Activate league", message: "Move the league to Active? Team rosters become visible to everyone and roster changes are frozen.", confirmText: "Activate" });
+                if (!ok) return;
+                const r = await fetch(`/api/leagues/${id}`, {
+                  method: "PATCH", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "active" }),
+                });
+                if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+                fetchLeague();
+              }} className="bg-action text-white px-3 py-1 rounded-lg font-medium text-xs whitespace-nowrap">Go Active</button>
+            </div>
+          )}
           {(() => {
             // A team's roster is visible to: organizers/helpers/admin always,
             // its own captain/vice always, and to everyone once the league
@@ -2268,9 +2438,9 @@ export default function LeagueDetailPage() {
           // Team captain/vice powers are tied to the team, not platform admin
           // status — so they apply even when an admin is viewing as "User".
           const isTeamLeader = team.captain?.id === userId || team.viceCaptain?.id === userId;
-          const canAddToTeam = isAppAdmin || isDirector || isTeamLeader;
-          const canLockTeam = (isTeamLeader || isAppAdmin || isDirector || isDeputy) && !team.rosterLocked;
-          const canUnlockTeam = (isAppAdmin || isDirector || isDeputy) && team.rosterLocked;
+          // League status active/complete freezes all roster changes.
+          const leagueRosterFrozen = league.status === "active" || league.status === "complete";
+          const canAddToTeam = (isAppAdmin || isDirector || isTeamLeader) && !leagueRosterFrozen;
           const rostersAreVisible = league.status === "active" || league.status === "complete";
           const canSeeRoster = isAppAdmin || isDirector || isDeputy || isHelper ||
             rostersAreVisible || isTeamLeader;
@@ -2326,9 +2496,6 @@ export default function LeagueDetailPage() {
                           </span>
                         );
                       })()}
-                      {team.rosterLocked && (
-                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🔒 Locked</span>
-                      )}
                       {(() => {
                         const myReq = (league.participationRequests || []).find(
                           (r) => r.playerId === userId && r.preferredTeamId === team.id,
@@ -2346,92 +2513,30 @@ export default function LeagueDetailPage() {
                     {team.slogan && <div className="text-[11px] italic text-muted truncate">&ldquo;{team.slogan}&rdquo;</div>}
                   </div>
                 </div>
-                {(canEditTeam || canAddToTeam || canLockTeam || canUnlockTeam) && (
+                {(canEditTeam || canAddToTeam) && (
                   <div className="flex flex-col items-end justify-between shrink-0 self-stretch py-0.5 gap-1">
                     {canEditTeam ? (
                       <span onClick={(e) => { e.stopPropagation(); openTeamEdit(team); }} className="text-muted hover:text-foreground p-1">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                       </span>
                     ) : <span />}
-                    {canAddToTeam && !team.rosterLocked && (
+                    {canAddToTeam && (
                       <span
                         onClick={(e) => { e.stopPropagation(); openAddPlayer(team); }}
                         className="text-[11px] text-primary font-medium px-2 py-0.5 mr-2 rounded hover:bg-primary/10"
                       >+ Add Player</span>
                     )}
-                    {(canLockTeam || canUnlockTeam) && (
-                      <span
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const newLocked = !team.rosterLocked;
-                          const ok = await confirm({
-                            title: newLocked ? "Lock roster" : "Unlock roster",
-                            message: newLocked
-                              ? `Lock ${team.name}'s roster? Captains can't add/remove players after this. League director can unlock.`
-                              : `Unlock ${team.name}'s roster?`,
-                            confirmText: newLocked ? "Lock" : "Unlock",
-                            danger: !newLocked,
-                          });
-                          if (!ok) return;
-                          const r = await fetch(`/api/leagues/${id}/teams/${team.id}`, {
-                            method: "PATCH", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ rosterLocked: newLocked }),
-                          });
-                          if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
-                          fetchLeague();
-                        }}
-                        className={`text-[11px] font-medium px-2 py-0.5 mr-2 rounded ${team.rosterLocked ? "text-amber-700 hover:bg-amber-50" : "text-emerald-700 hover:bg-emerald-50"}`}
-                      >{team.rosterLocked ? "Unlock" : "🔒 Lock"}</span>
-                    )}
                   </div>
                 )}
               </button>
-              {canSeeRoster && !collapsedTeams.has(team.id) && (<>
-              {/* Player roster — sorted: leader, deputy, then alphabetical */}
-              <div className="px-3 py-2 space-y-1">
-                {[...team.players]
-                  .sort((a, b) => {
-                    const rank = (id: string) => id === team.captain?.id ? 0 : id === team.viceCaptain?.id ? 1 : 2;
-                    const ra = rank(a.playerId);
-                    const rb = rank(b.playerId);
-                    return ra !== rb ? ra - rb : a.player.name.localeCompare(b.player.name);
-                  })
-                  .map((tp) => {
-                  const isLeader = team.captain?.id === tp.playerId;
-                  const isDeputy = team.viceCaptain?.id === tp.playerId;
-                  const removing = removingPlayerId === tp.playerId;
-                  return (
-                  <div key={tp.id} className={`flex items-center gap-2 py-1 transition-opacity ${removing ? "opacity-50 line-through" : ""}`}>
-                    <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {tp.player.name}
-                        {isLeader && <span className="text-[10px] text-muted ml-1">(Leader)</span>}
-                        {isDeputy && <span className="text-[10px] text-muted ml-1">(Deputy)</span>}
-                      </div>
-                    </div>
-                    {tp.player.gender && (
-                      <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
-                        {tp.player.gender === "F" ? "♀" : "♂"}
-                      </span>
-                    )}
-                    <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
-                    {canEdit && (
-                      removing ? (
-                        <span className="w-3.5 h-3.5 border-2 border-danger border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <button
-                          onClick={() => removePlayerFromTeam(team.id, tp.playerId, tp.player.name)}
-                          className="text-xs text-danger px-1 hover:underline"
-                          aria-label={`Remove ${tp.player.name}`}
-                        >✕</button>
-                      )
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-              </>)}
+              {canSeeRoster && !collapsedTeams.has(team.id) && (
+                <TeamRoster
+                  team={team}
+                  canEdit={canEdit}
+                  removingPlayerId={removingPlayerId}
+                  onRemove={(playerId, playerName) => removePlayerFromTeam(team.id, playerId, playerName)}
+                />
+              )}
             </div>
           );
           })}

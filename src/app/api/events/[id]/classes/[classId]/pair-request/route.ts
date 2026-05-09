@@ -72,13 +72,22 @@ export async function POST(
       update: { requestedId: partnerId, status: "pending" },
     });
 
-    // Notify the requested player
+    // Notify the requested player. Body includes the event + class name so
+    // the alerts list shows context. Query params on linkUrl carry the
+    // requestId + classId so the alerts page can render inline Accept/Decline.
+    const eventInfo = await prisma.event.findUnique({
+      where: { id },
+      select: { name: true, classes: { where: { id: classId }, select: { name: true } } },
+    });
+    const eventName = eventInfo?.name ?? "";
+    const className = eventInfo?.classes[0]?.name ?? "";
+    const contextLine = [eventName, className].filter(Boolean).join(" · ");
     await sendNotification(
       partnerId,
       "pair_request",
       `${user.name} wants to partner with you`,
-      "Tap to view and accept or decline",
-      `/events/${id}`
+      contextLine || "Tap to accept or decline",
+      `/events/${id}?pairRequest=${request.id}&class=${classId}`,
     );
 
     return NextResponse.json(request);
@@ -134,12 +143,19 @@ export async function POST(
     });
 
     // Notify the requester
+    const eventInfo = await prisma.event.findUnique({
+      where: { id },
+      select: { name: true, classes: { where: { id: classId }, select: { name: true } } },
+    });
+    const eventName = eventInfo?.name ?? "";
+    const className = eventInfo?.classes[0]?.name ?? "";
+    const contextLine = [eventName, className].filter(Boolean).join(" · ");
     await sendNotification(
       request.requesterId,
       "pair_accepted",
       `${user.name} accepted your partner request!`,
-      "You're now paired for this class",
-      `/events/${id}`
+      contextLine || "You're now paired for this class",
+      `/events/${id}`,
     );
 
     return NextResponse.json({ ok: true, status: "accepted" });

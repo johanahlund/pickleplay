@@ -165,21 +165,21 @@ function HeaderActions({
         style={{ position: "relative", lineHeight: 0 }}
         aria-label="Notifications"
       >
-        <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-          <path
-            d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8z"
-            stroke={color}
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M10 21a2 2 0 004 0"
-            stroke={color}
-            strokeWidth={1.8}
-            strokeLinecap="round"
-          />
-        </svg>
+        {(() => {
+          const hasUnread = !!badge && badge > 0;
+          // Unread → filled bell. All read → outline bell.
+          return hasUnread ? (
+            <svg width={22} height={22} viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth={1.5} strokeLinejoin="round">
+              <path d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8z" />
+              <path d="M10 21a2 2 0 004 0" fill="none" strokeWidth={1.8} strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <path d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M10 21a2 2 0 004 0" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+            </svg>
+          );
+        })()}
         {!!badge && badge > 0 && (
           <span
             style={{

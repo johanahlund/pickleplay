@@ -104,11 +104,20 @@ export default function LeagueSignUpPage() {
   const submit = async () => {
     setSaving(true);
     setErrorMsg(null);
+    // Default any visible category the user didn't explicitly tap to "ok" so
+    // the captain sees a complete picture (otherwise unset categories look
+    // missing on the request card).
+    const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
+    const completePrefs: Record<string, { level: Preference; note?: string }> = {};
+    for (const c of visibleCategories) {
+      const existing = preferences[c.id];
+      completePrefs[c.id] = existing ?? { level: "ok" };
+    }
     const r = await fetch(`/api/leagues/${id}/participation-requests`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         preferredTeamId: preferredTeamId || null,
-        preferences,
+        preferences: completePrefs,
       }),
     });
     setSaving(false);

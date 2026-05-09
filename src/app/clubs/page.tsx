@@ -48,6 +48,7 @@ export default function ClubsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newShortName, setNewShortName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newCity, setNewCity] = useState("");
   const [newCountry, setNewCountry] = useState("");
@@ -91,6 +92,7 @@ export default function ClubsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: newName.trim(),
+        shortName: newShortName.trim() || undefined,
         description: newDescription.trim() || undefined,
         city: newCity.trim() || undefined,
         country: newCountry.trim() || undefined,
@@ -116,7 +118,7 @@ export default function ClubsPage() {
       }
       await Promise.all(uploads);
     }
-    setNewName(""); setNewDescription(""); setNewCity(""); setNewCountry(""); setNewStatus("active");
+    setNewName(""); setNewShortName(""); setNewDescription(""); setNewCity(""); setNewCountry(""); setNewStatus("active");
     setNewLocations([]); setNewLogoFile(null); setNewLogoPreview(null);
     setNewCoverFile(null); setNewCoverPreview(null);
     setShowCreate(false);
@@ -186,6 +188,13 @@ export default function ClubsPage() {
               placeholder="e.g. Tuesday Crew"
               className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
               autoFocus />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤10 chars, used in pills)</span></label>
+            <input type="text" value={newShortName} onChange={(e) => setNewShortName(e.target.value.slice(0, 10))}
+              maxLength={10}
+              placeholder="e.g. Tue Crew"
+              className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
           </div>
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Logo</label>

@@ -11,13 +11,27 @@ export async function GET() {
   const userId = (session.user as { id?: string }).id;
   const userRole = (session.user as { role?: string }).role;
 
+  // Lazy auto-complete: events that ended >24h ago but are still "active"
+  // get flipped to "completed" before the read. One bulk update — cheap.
+  const completedCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  await prisma.event.updateMany({
+    where: {
+      status: "active",
+      OR: [
+        { endDate: { lt: completedCutoff } },
+        { endDate: null, date: { lt: completedCutoff } },
+      ],
+    },
+    data: { status: "completed" },
+  });
+
   const events = await prisma.event.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       classes: true,
       players: { include: { player: { select: safePlayerSelect } } },
       helpers: { include: { player: { select: safePlayerSelect } } },
-      club: { select: { id: true, name: true, emoji: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
+      club: { select: { id: true, name: true, shortName: true, emoji: true, logoUrl: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
       // Used by visibility check: league participants (team players/captains,
       // helpers, organizers) can see league match-day events even when those

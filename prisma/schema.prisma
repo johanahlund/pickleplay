@@ -600,7 +600,15 @@ model LeagueRound {
   leagueId    String
   roundNumber Int
   name        String?   // "Jornada 1", "Grande Final"
-  suggestedDate DateTime?
+  // Replaces the old single suggestedDate. Rounds are time windows. Events
+  // attached to a round are expected to fall inside [startDate, endDate];
+  // this is treated as a soft hint, not a hard constraint.
+  startDate   DateTime?
+  endDate     DateTime?
+  // Optional per-round overrides. When set, take precedence over the league
+  // defaults at read time (e.g. resolveRoundConfig(round, league)).
+  configOverride     Json?
+  categoriesOverride Json?
   status      String    @default("scheduled") // scheduled, in_progress, completed
 
   league    League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)

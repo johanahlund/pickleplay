@@ -24,6 +24,12 @@ export async function POST(
   const err = await assertTeamInLeague(teamId, id);
   if (err) return err;
 
+  // League status active/complete freezes all rosters.
+  const league = await prisma.league.findUnique({ where: { id }, select: { status: true, config: true } });
+  if (league && (league.status === "active" || league.status === "complete")) {
+    return NextResponse.json({ error: "League is active — roster changes are frozen" }, { status: 400 });
+  }
+
   const { playerId } = await req.json();
   if (!playerId) return NextResponse.json({ error: "playerId required" }, { status: 400 });
 
@@ -37,7 +43,6 @@ export async function POST(
   }
 
   // Check roster limit
-  const league = await prisma.league.findUnique({ where: { id }, select: { config: true } });
   const config = (league?.config as Record<string, number> | null) || {};
   const maxRoster = config.maxRoster || 99;
   const currentCount = await prisma.leagueTeamPlayer.count({ where: { teamId } });
@@ -58,6 +63,11 @@ export async function DELETE(
   try { await requireTeamRosterManager(teamId, id); } catch (e) { return authErrorResponse(e); }
   const err = await assertTeamInLeague(teamId, id);
   if (err) return err;
+
+  const league = await prisma.league.findUnique({ where: { id }, select: { status: true } });
+  if (league && (league.status === "active" || league.status === "complete")) {
+    return NextResponse.json({ error: "League is active — roster changes are frozen" }, { status: 400 });
+  }
 
   const { playerId } = await req.json();
   await prisma.leagueTeamPlayer.deleteMany({ where: { teamId, playerId } });

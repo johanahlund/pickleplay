@@ -43,5 +43,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (action === "delete" && notificationId) {
+    // Only let the user delete their own alerts.
+    const n = await prisma.notification.findUnique({ where: { id: notificationId }, select: { playerId: true } });
+    if (!n) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (n.playerId !== user.id) return NextResponse.json({ error: "Not yours" }, { status: 403 });
+    await prisma.notification.delete({ where: { id: notificationId } });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "delete_read") {
+    await prisma.notification.deleteMany({ where: { playerId: user.id, read: true } });
+    return NextResponse.json({ ok: true });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

@@ -10,7 +10,7 @@ async function loadContext(leagueId: string, reqId: string) {
     select: {
       createdById: true, deputyId: true, config: true,
       helpers: { select: { playerId: true } },
-      teams: { select: { id: true, captainId: true, viceCaptainId: true, _count: { select: { players: true } } } },
+      teams: { select: { id: true, name: true, captainId: true, viceCaptainId: true, _count: { select: { players: true } } } },
     },
   });
   if (!league) throw new Error("NotFound");
@@ -123,6 +123,20 @@ export async function POST(
       where: { id: reqId },
       data: { status: "declined", respondedById: ctx.user.id, respondedAt: new Date() },
     });
+
+    // Notify the player. Don't say which team declined — the requester
+    // doesn't always have a preferred team, and "captain X declined" is
+    // more info than they need; just tell them the sign-up didn't go through.
+    if (ctx.request.playerId !== ctx.user.id) {
+      const league = await prisma.league.findUnique({ where: { id }, select: { name: true } });
+      await sendNotification(
+        ctx.request.playerId,
+        "league_signup_declined",
+        `Your sign-up for ${league?.name ?? "the league"} was declined`,
+        "You can sign up again if registration is still open.",
+        `/leagues/${id}`,
+      ).catch(() => {});
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -162,5 +176,18 @@ export async function POST(
       data: { status: "accepted", respondedById: ctx.user.id, respondedAt: new Date() },
     });
   });
+
+  // Notify the player they're on the team. Self-accept (rare; admin/director
+  // accepting their own request) is suppressed.
+  if (ctx.request.playerId !== ctx.user.id) {
+    const league = await prisma.league.findUnique({ where: { id }, select: { name: true } });
+    await sendNotification(
+      ctx.request.playerId,
+      "league_signup_accepted",
+      `You're on team ${targetTeam.name}!`,
+      `Welcome to ${league?.name ?? "the league"}.`,
+      `/leagues/${id}`,
+    ).catch(() => {});
+  }
   return NextResponse.json({ ok: true });
 }

@@ -106,6 +106,7 @@ interface ClubLocation { id: string; name: string; googleMapsUrl?: string | null
 interface Club {
   id: string;
   name: string;
+  shortName?: string | null;
   emoji: string;
   logoUrl?: string | null;
   coverUrl?: string | null;
@@ -363,6 +364,7 @@ export default function ClubDetailPage() {
     return () => { nav?.classList.remove("hidden"); };
   }, [editing]);
   const [editName, setEditName] = useState("");
+  const [editShortName, setEditShortName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCity, setEditCity] = useState("");
@@ -490,6 +492,7 @@ export default function ClubDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: editName,
+        shortName: editShortName.trim() || null,
         emoji: editEmoji,
         description: editDescription,
         city: editCity,
@@ -505,6 +508,7 @@ export default function ClubDetailPage() {
   const startEditing = () => {
     if (!club) return;
     setEditName(club.name);
+    setEditShortName(club.shortName || "");
     setEditEmoji(club.emoji);
     setEditDescription(club.description || "");
     setEditCity(club.city || "");
@@ -882,6 +886,15 @@ export default function ClubDetailPage() {
                 <label className="block text-sm font-medium text-muted mb-1">Club Name</label>
                 <input
                   type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setClubDirty(true); }}
+                  className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤10 chars, used in pills)</span></label>
+                <input
+                  type="text" value={editShortName} maxLength={10}
+                  onChange={(e) => { setEditShortName(e.target.value.slice(0, 10)); setClubDirty(true); }}
+                  placeholder={editName.slice(0, 10)}
                   className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>

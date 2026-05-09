@@ -5,13 +5,14 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
+import { ClubBadge } from "@/components/ClubBadge";
 
 interface PlayerInfo { id: string; name: string; emoji: string; photoUrl?: string | null }
 interface MatchPlayer { id: string; playerId: string; team: number; score: number; player: PlayerInfo }
 interface Match {
   id: string; courtNum: number; round: number; status: string; eloChange: number; createdAt: string;
   players: MatchPlayer[];
-  event: { id: string; name: string; date: string; format: string; clubId?: string | null; club?: { name: string; emoji: string } | null };
+  event: { id: string; name: string; date: string; format: string; clubId?: string | null; club?: { name: string; shortName?: string | null; emoji: string; logoUrl?: string | null } | null };
 }
 
 export default function MatchesPageWrapper() {
@@ -131,7 +132,12 @@ function MatchesPage() {
         isCompleted ? (won ? "border-green-500" : "border-red-400") : "border-action"
       }`}>
         <div className="px-2.5 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1.5">
-          {m.event.club && <span className="text-[10px] text-muted">{m.event.club.emoji} {m.event.club.name} ·</span>}
+          {m.event.club && (
+            <span className="text-[10px] text-muted inline-flex items-center gap-1">
+              <ClubBadge logoUrl={m.event.club.logoUrl} size={12} />
+              {(m.event.club.shortName?.trim() || m.event.club.name)} ·
+            </span>
+          )}
           <span className="text-[10px] text-muted flex-1">{m.event.name} · {new Date(m.event.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
           {isCompleted && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${won ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{won ? "W" : "L"}</span>}
           {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}

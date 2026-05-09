@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { setPreview } from "@/lib/entityPreview";
+import { ClubBadge } from "@/components/ClubBadge";
 
 interface League {
   id: string;
@@ -67,13 +68,13 @@ export default function LeaguesPage() {
                     league.status === "registration" ? "bg-amber-100 text-amber-700" :
                     league.status === "forming" ? "bg-orange-100 text-orange-700" :
                     "bg-blue-100 text-blue-700"
-                  }`}>{league.status}</span>
+                  }`}>{league.status === "forming" ? "registration closed" : league.status === "registration" ? "registration open" : league.status}</span>
                   <span className="text-xl text-muted">›</span>
                 </div>
               </div>
               {league.club && (
                 <div className="flex items-center gap-1.5 mt-1 text-xs text-muted">
-                  <span>{league.club.emoji}</span>
+                  <ClubBadge logoUrl={league.club.logoUrl} size={14} />
                   <span className="font-medium text-foreground">{league.club.name}</span>
                 </div>
               )}
@@ -85,9 +86,10 @@ export default function LeaguesPage() {
               </div>
               {league.teams.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {league.teams.map((t) => (
-                    <span key={t.id} className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full font-medium">
-                      {t.club?.emoji || "🏟️"} {t.name} ({t._count.players})
+                  {[...league.teams].sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
+                    <span key={t.id} className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1">
+                      <ClubBadge logoUrl={t.club?.logoUrl} size={12} />
+                      {t.name} ({t._count.players})
                     </span>
                   ))}
                 </div>

@@ -28,6 +28,9 @@ export async function GET(
         where: { OR: [{ status: "pending" }, { status: "accepted", playerId: user.id }] },
         select: {
           id: true, playerId: true, preferredTeamId: true, status: true,
+          // preferences is included only for the viewer's own request below; we
+          // strip it for everyone else so other captains can't see prefs here.
+          preferences: true,
           player: { select: { id: true, gender: true } },
         },
       },
@@ -97,10 +100,23 @@ export async function GET(
       ...league,
       teams: league.teams.map((t) => {
         const canSeeRoster = t.captain?.id === user.id || t.viceCaptain?.id === user.id;
-        return canSeeRoster ? t : { ...t, players: [] };
+        if (canSeeRoster) return t;
+        // Keep the viewer's own membership so the client can tell they're on
+        // the team (drives the "You're on team X" banner). Hide everyone else.
+        return { ...t, players: t.players.filter((tp) => tp.player.id === user.id) };
       }),
     };
   }
+
+  // Strip preferences from other people's participation requests — captains
+  // managing their own team's requests fetch full data via the dedicated
+  // /participation-requests endpoint (which has its own visibility rules).
+  view = {
+    ...view,
+    participationRequests: view.participationRequests.map((r) =>
+      r.playerId === user.id ? r : { ...r, preferences: null },
+    ),
+  };
 
   const allowed = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowed ? view : stripEmailsDeep(view));

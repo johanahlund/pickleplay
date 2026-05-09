@@ -57,7 +57,7 @@ export async function GET(
         },
       },
       createdBy: { select: { id: true, name: true, emoji: true } },
-      club: { select: { id: true, name: true, emoji: true, locations: true } },
+      club: { select: { id: true, name: true, shortName: true, emoji: true, logoUrl: true, locations: true } },
     },
   });
   if (!event) {
