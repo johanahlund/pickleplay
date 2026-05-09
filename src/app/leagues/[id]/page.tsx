@@ -20,7 +20,7 @@ interface LeagueTeam {
   players: { id: string; playerId: string; player: Player }[];
   _count: { players: number };
 }
-interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number }
+interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number; maxPerEvent: number | null }
 interface LeagueGame {
   id: string; categoryId: string;
   isPrincipal: boolean;
@@ -44,7 +44,8 @@ interface League {
   id: string; name: string; description: string | null; season: string | null; status: string;
   clubId?: string | null;
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
-  config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number } | null;
+  config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
+  rulesPdfUrl?: string | null;
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
   helpers: LeagueHelperEntry[];
@@ -145,6 +146,7 @@ export default function LeagueDetailPage() {
   const [editMaxRoster, setEditMaxRoster] = useState("14");
   const [editMaxPoints, setEditMaxPoints] = useState("3");
   const [editMinMatchDays, setEditMinMatchDays] = useState("2");
+  const [editMaxMatchesPerEvent, setEditMaxMatchesPerEvent] = useState("");
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -226,6 +228,7 @@ export default function LeagueDetailPage() {
     setEditMaxRoster(String(league.config?.maxRoster ?? 14));
     setEditMaxPoints(String(league.config?.maxPointsPerMatchDay ?? 3));
     setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
+    setEditMaxMatchesPerEvent(league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "");
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -245,9 +248,11 @@ export default function LeagueDetailPage() {
         status: editStatus,
         clubId: editLeagueClubId || null,
         config: {
+          ...(league.config || {}),
           maxRoster: parseInt(editMaxRoster, 10) || 14,
           maxPointsPerMatchDay: parseInt(editMaxPoints, 10) || 3,
           minMatchDaysForPlayoff: editMinMatchDays.trim() === "" ? 0 : parseInt(editMinMatchDays, 10) || 0,
+          maxMatchesPerEvent: editMaxMatchesPerEvent.trim() === "" ? null : parseInt(editMaxMatchesPerEvent, 10) || null,
         },
         deputyId: editDeputyId || null,
       }),
@@ -287,11 +292,28 @@ export default function LeagueDetailPage() {
   };
 
   const saveCategoryEdit = async (cat: LeagueCategory) => {
-    await fetch(`/api/leagues/${id}/categories`, {
+    const r = await fetch(`/api/leagues/${id}/categories`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId: cat.id, name: cat.name, format: cat.format, gender: cat.gender, ageGroup: cat.ageGroup, skillMin: cat.skillMin, skillMax: cat.skillMax, scoringFormat: cat.scoringFormat, winBy: cat.winBy, status: cat.status }),
+      body: JSON.stringify({
+        categoryId: cat.id,
+        name: cat.name,
+        format: cat.format,
+        gender: cat.gender,
+        ageGroup: cat.ageGroup,
+        skillMin: cat.skillMin,
+        skillMax: cat.skillMax,
+        scoringFormat: cat.scoringFormat,
+        winBy: cat.winBy,
+        status: cat.status,
+        maxPerEvent: cat.maxPerEvent ?? null,
+      }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || `Failed to save category (${r.status})`);
+      throw new Error(d.error || "save failed");
+    }
   };
 
   const deleteCategory = async (catId: string) => {
@@ -587,6 +609,41 @@ export default function LeagueDetailPage() {
               {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Rules / Description PDF <span className="opacity-70 font-normal">(optional)</span></label>
+            {league.rulesPdfUrl ? (
+              <div className="flex items-center gap-2">
+                <a href={league.rulesPdfUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-action font-medium hover:underline truncate">📄 View current PDF</a>
+                <label className="text-xs text-muted px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 cursor-pointer">
+                  Replace
+                  <input type="file" accept="application/pdf" className="hidden" onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    const fd = new FormData(); fd.append("file", f);
+                    const r = await fetch(`/api/leagues/${id}/rules-pdf`, { method: "POST", body: fd });
+                    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Upload failed"); return; }
+                    fetchLeague();
+                  }} />
+                </label>
+                <button type="button" onClick={async () => {
+                  const ok = await confirm({ title: "Remove PDF", message: "Remove the rules PDF?", danger: true, confirmText: "Remove" });
+                  if (!ok) return;
+                  await fetch(`/api/leagues/${id}/rules-pdf`, { method: "DELETE" });
+                  fetchLeague();
+                }} className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Remove</button>
+              </div>
+            ) : (
+              <label className="block w-full text-center px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted hover:bg-gray-50 cursor-pointer">
+                + Upload PDF
+                <input type="file" accept="application/pdf" className="hidden" onChange={async (e) => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  const fd = new FormData(); fd.append("file", f);
+                  const r = await fetch(`/api/leagues/${id}/rules-pdf`, { method: "POST", body: fd });
+                  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Upload failed"); return; }
+                  fetchLeague();
+                }} />
+              </label>
+            )}
+          </div>
           {editFooter(saveInfo, "")}
         </div>
       </div>
@@ -611,9 +668,17 @@ export default function LeagueDetailPage() {
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-muted mb-1">Min Match Days for Playoff</label>
+              <label className="block text-xs text-muted mb-1">Max league matches / event</label>
+              <input type="number" value={editMaxMatchesPerEvent} onChange={(e) => { setEditMaxMatchesPerEvent(e.target.value); setDirty(true); }} min={1}
+                placeholder="—"
+                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[10px] text-muted mt-1">Cap for principal games per match-day. Empty = no cap.</p>
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Min match days for playoff</label>
               <input type="number" value={editMinMatchDays} onChange={(e) => { setEditMinMatchDays(e.target.value); setDirty(true); }} min={0}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[10px] text-muted mt-1">Minimum match days a player must have appeared in to be eligible for the playoff/Grande Final.</p>
             </div>
           </div>
           {editFooter(saveInfo, "")}
@@ -634,8 +699,8 @@ export default function LeagueDetailPage() {
     <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
       <option value="1">1</option><option value="2">2</option>
       <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
-      <option value="cap13">Cap 13</option><option value="cap15">Cap 15</option><option value="cap17">Cap 17</option>
-      <option value="cap18">Cap 18</option><option value="cap23">Cap 23</option><option value="cap25">Cap 25</option>
+      <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
+      <option value="cap18">GP 18</option><option value="cap23">GP 23</option><option value="cap25">GP 25</option>
     </select>
   );
   const AGE_OPTS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"];
@@ -704,6 +769,18 @@ export default function LeagueDetailPage() {
           <div><label className="block text-xs text-muted mb-1">Age Group</label><select value={cat.ageGroup} onChange={(e) => updateCat("ageGroup", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm">{AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}</select></div>
           <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5"><select value={cat.skillMin ?? ""} onChange={(e) => updateCat("skillMin", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "From"}</option>)}</select><span className="text-xs text-muted">–</span><select value={cat.skillMax ?? ""} onChange={(e) => updateCat("skillMax", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "To"}</option>)}</select></div></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(cat.scoringFormat, (v) => updateCat("scoringFormat", v))}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(cat.winBy, (v) => updateCat("winBy", v))}</div></div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Max matches per event <span className="opacity-70 font-normal">(empty = no cap)</span></label>
+            <input
+              type="number"
+              min={0}
+              max={99}
+              value={cat.maxPerEvent ?? ""}
+              onChange={(e) => updateCat("maxPerEvent", e.target.value === "" ? null : (parseInt(e.target.value, 10) || 0))}
+              placeholder="—"
+              className="w-20 border border-border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
           {editFooter(async () => { await saveCategoryEdit(cat); fetchLeague(); }, "categories")}
           <button onClick={async () => { await deleteCategory(cat.id); setDirty(false); setEditSection("categories"); }}
             className="w-full py-2 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50">Remove Category</button>

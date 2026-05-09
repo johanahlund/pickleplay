@@ -2,7 +2,7 @@ export const CATEGORY_FORMATS = ["doubles", "singles"] as const;
 export const CATEGORY_GENDERS = ["male", "female", "mix", "open"] as const;
 export const CATEGORY_AGE_GROUPS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"] as const;
 export const CATEGORY_SCORING_FORMATS = ["1x11", "3x11", "1x15", "1xR15", "1x21"] as const;
-export const CATEGORY_WIN_BY = ["1", "2"] as const;
+export const CATEGORY_WIN_BY = ["1", "2", "2_gp18", "2_gp21"] as const;
 export const CATEGORY_STATUSES = ["draft", "active"] as const;
 
 export type CategoryFormat = (typeof CATEGORY_FORMATS)[number];
@@ -22,6 +22,15 @@ export interface CategoryInput {
   scoringFormat: CategoryScoringFormat;
   winBy: CategoryWinBy;
   status: CategoryStatus;
+  maxPerEvent: number | null;
+}
+
+function parseMaxPerEvent(val: unknown): number | null | "invalid" {
+  if (val === null || val === undefined || val === "") return null;
+  const n = typeof val === "number" ? val : parseInt(String(val), 10);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return "invalid";
+  if (n < 0 || n > 99) return "invalid";
+  return n;
 }
 
 export type ValidationResult =
@@ -85,9 +94,12 @@ export function validateCategoryInput(raw: unknown): ValidationResult {
     return { ok: false, error: "skillMin must be ≤ skillMax" };
   }
 
+  const maxPerEvent = parseMaxPerEvent(r.maxPerEvent);
+  if (maxPerEvent === "invalid") return { ok: false, error: "Invalid maxPerEvent" };
+
   return {
     ok: true,
-    data: { name, format, gender, ageGroup, skillMin, skillMax, scoringFormat, winBy, status },
+    data: { name, format, gender, ageGroup, skillMin, skillMax, scoringFormat, winBy, status, maxPerEvent },
   };
 }
 
@@ -144,6 +156,11 @@ export function validateCategoryPatch(raw: unknown): PartialValidationResult {
   }
   if (data.skillMin != null && data.skillMax != null && data.skillMin > data.skillMax) {
     return { ok: false, error: "skillMin must be ≤ skillMax" };
+  }
+  if (r.maxPerEvent !== undefined) {
+    const v = parseMaxPerEvent(r.maxPerEvent);
+    if (v === "invalid") return { ok: false, error: "Invalid maxPerEvent" };
+    data.maxPerEvent = v;
   }
 
   return { ok: true, data };
