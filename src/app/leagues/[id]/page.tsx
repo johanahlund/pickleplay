@@ -2638,6 +2638,14 @@ export default function LeagueDetailPage() {
               )}
               {editingRoundId !== round.id && round.events.map((ev) => {
                 const teamLabel = ev.leagueTeams.map((t) => t.team.name).join(" vs ") || "match-day";
+                // The sign-up button shows only on the event the viewer's
+                // team is playing in (rostered player on one of the two
+                // teams). Captains/organizers without rostered membership
+                // don't see it on someone else's match.
+                const isMyMatch = !!userId && ev.leagueTeams.some((et) => {
+                  const fullTeam = league.teams.find((lt) => lt.id === et.teamId);
+                  return fullTeam?.players.some((p) => p.playerId === userId) ?? false;
+                });
                 return (
                   <div key={ev.id} className="px-3 py-2.5 border-b border-border last:border-0 flex items-center gap-2">
                     <Link href={`/events/${ev.id}`} className="flex-1 min-w-0 hover:bg-gray-50 -mx-1 px-1 py-0.5 rounded">
@@ -2654,6 +2662,12 @@ export default function LeagueDetailPage() {
                         <span className="ml-2 capitalize">· {ev.status === "draft" ? "setup" : ev.status}</span>
                       </div>
                     </Link>
+                    {isMyMatch && (
+                      <Link href={`/events/${ev.id}/sign-up`}
+                        className="text-xs bg-action text-white font-semibold px-2.5 py-1 rounded-lg whitespace-nowrap">
+                        Sign up
+                      </Link>
+                    )}
                     {canEdit && (
                       <button onClick={() => deleteRoundEvent(round.id, ev.id, teamLabel)}
                         aria-label="Delete event"
