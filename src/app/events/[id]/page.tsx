@@ -3405,8 +3405,12 @@ export default function EventDetailPage() {
           : myEp.status === "unavailable" ? "unavailable"
           : Object.keys(prefs).length === 0 || !hasAnyPlay ? "attending"
           : "playing";
+        const cats = event.round!.league.categories || [];
+        const prefRows = cats
+          .map((c) => ({ cat: c, p: prefs[c.id] }))
+          .filter(({ p }) => p && p.level !== "no");
         return (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-2">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start justify-between gap-2">
             <div className="text-sm text-emerald-900 flex-1 min-w-0">
               {intent === "none" && (
                 <span>Sign up for <strong>{myTeam.name}</strong> on this match-day.</span>
@@ -3415,6 +3419,19 @@ export default function EventDetailPage() {
                 <>
                   <div><strong>You&apos;re signed up to play</strong> for {myTeam.name}.</div>
                   <div className="text-[11px]">Update your category preferences any time.</div>
+                  {prefRows.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {prefRows.map(({ cat, p }) => {
+                        const isPrefer = p!.level === "prefer";
+                        return (
+                          <div key={cat.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
+                            <span>{cat.name}</span>
+                            {p!.note && <span className="text-muted font-normal italic"> ({p!.note})</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </>
               )}
               {intent === "attending" && (
