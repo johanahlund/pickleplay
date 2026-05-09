@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
@@ -143,8 +144,11 @@ export async function PATCH(
   if (name !== undefined) data.name = name?.trim() || null;
   if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : null;
   if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
-  if (configOverride !== undefined) data.configOverride = configOverride;
-  if (categoriesOverride !== undefined) data.categoriesOverride = categoriesOverride;
+  // Prisma needs Prisma.DbNull (not plain null) to clear an optional Json
+  // column to SQL NULL. Plain null would write a JSON `null` literal that
+  // doesn't match `null` checks afterwards.
+  if (configOverride !== undefined) data.configOverride = configOverride === null ? Prisma.DbNull : configOverride;
+  if (categoriesOverride !== undefined) data.categoriesOverride = categoriesOverride === null ? Prisma.DbNull : categoriesOverride;
   if (status !== undefined && ["scheduled", "in_progress", "completed"].includes(status)) data.status = status;
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

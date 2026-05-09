@@ -35,20 +35,50 @@ export async function POST(
   // merged onto league defaults. The overrides snapshot only stores fields the
   // user changed; missing fields fall back to league.categories[id].
   type CatRow = (typeof round.league.categories)[number];
-  type OverrideRow = { id: string; name?: string; format?: string; gender?: string; ageGroup?: string;
+  type OverrideRow = { id?: string; name?: string; format?: string; gender?: string; ageGroup?: string;
     skillMin?: number | null; skillMax?: number | null; scoringFormat?: string; winBy?: string; maxPerEvent?: number | null };
-  let effectiveCats: CatRow[];
+  // Effective categories. Each has either:
+  //   - { id: leagueCategoryId, ... } — references LeagueCategory (FK target
+  //     for LeagueGame), with optional field overrides merged in
+  //   - { id: null, ... } — round-only "virtual" category. EventClass mirror
+  //     gets created but no LeagueGame (no FK target — these don't count
+  //     toward standings).
+  type EffectiveCat = CatRow & { _hasFK: boolean };
+  let effectiveCats: EffectiveCat[];
   if (Array.isArray(round.categoriesOverride)) {
     const byId = new Map(round.league.categories.map((c) => [c.id, c]));
     effectiveCats = (round.categoriesOverride as unknown as OverrideRow[])
-      .map((o) => {
-        const base = byId.get(o.id);
-        if (!base) return null;
-        return { ...base, ...Object.fromEntries(Object.entries(o).filter(([k, v]) => k !== "id" && v !== undefined && v !== null)) } as CatRow;
+      .map((o): EffectiveCat | null => {
+        if (o.id) {
+          const base = byId.get(o.id);
+          if (!base) return null;
+          return {
+            ...base,
+            ...Object.fromEntries(Object.entries(o).filter(([k, v]) => k !== "id" && v !== undefined && v !== null)),
+            _hasFK: true,
+          } as EffectiveCat;
+        }
+        // Round-only category. No FK target, no LeagueGame later.
+        return {
+          id: "", // not used; _hasFK=false skips LeagueGame
+          leagueId: round.leagueId,
+          name: o.name ?? "Custom",
+          format: o.format ?? "doubles",
+          gender: o.gender ?? "open",
+          ageGroup: o.ageGroup ?? "open",
+          skillMin: o.skillMin ?? null,
+          skillMax: o.skillMax ?? null,
+          scoringFormat: o.scoringFormat ?? "3x11",
+          winBy: o.winBy ?? "2",
+          status: "active",
+          sortOrder: 999,
+          maxPerEvent: o.maxPerEvent ?? null,
+          _hasFK: false,
+        } as unknown as EffectiveCat;
       })
-      .filter((c): c is CatRow => c !== null);
+      .filter((c): c is EffectiveCat => c !== null);
   } else {
-    effectiveCats = round.league.categories;
+    effectiveCats = round.league.categories.map((c) => ({ ...c, _hasFK: true }));
   }
 
   const body = await req.json().catch(() => null);
@@ -98,11 +128,12 @@ export async function POST(
     },
   });
 
-  // Pre-create LeagueGame rows when 2 teams play. Reference the real
-  // LeagueCategory.id (FK), even if the round overrode some display fields.
+  // Pre-create LeagueGame rows when 2 teams play. Skip round-only custom
+  // categories (no FK target, doesn't count toward standings).
   if (teamIds.length === 2 && effectiveCats.length > 0) {
     const [t1Id, t2Id] = teamIds;
     for (const cat of effectiveCats) {
+      if (!cat._hasFK) continue;
       await prisma.leagueGame.create({
         data: { eventId: event.id, categoryId: cat.id, team1Id: t1Id, team2Id: t2Id },
       });

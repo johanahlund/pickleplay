@@ -76,6 +76,41 @@ interface Standing { teamId: string; teamName: string; logoUrl: string | null; p
 
 type Tab = "overview" | "standings" | "rounds" | "matches" | "teams";
 
+// Shared option lists for category fields. Used by the league category
+// editor and the per-round override form.
+const AGE_OPTS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"];
+const SKILL_OPTS = ["", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"];
+const FORMAT_OPTS = [
+  { value: "doubles", label: "Doubles" },
+  { value: "singles", label: "Singles" },
+];
+const GENDER_OPTS = [
+  { value: "open", label: "Open" },
+  { value: "male", label: "Men" },
+  { value: "female", label: "Women" },
+  { value: "mix", label: "Mixed" },
+];
+function ScoringSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
+      <optgroup label="Normal — 1 Set"><option value="1x7">1 set to 7</option><option value="1x9">1 set to 9</option><option value="1x11">1 set to 11</option><option value="1x15">1 set to 15</option></optgroup>
+      <optgroup label="Normal — Best of 3"><option value="3x11">Bo3 to 11</option><option value="3x15">Bo3 to 15</option></optgroup>
+      <optgroup label="Rally — 1 Set"><option value="1xR15">Rally to 15</option><option value="1xR21">Rally to 21</option></optgroup>
+      <optgroup label="Rally — Best of 3"><option value="3xR15">Bo3 rally 15</option><option value="3xR21">Bo3 rally 21</option></optgroup>
+    </select>
+  );
+}
+function WinBySelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
+      <option value="1">1</option><option value="2">2</option>
+      <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
+      <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
+      <option value="cap18">GP 18</option><option value="cap23">GP 23</option><option value="cap25">GP 25</option>
+    </select>
+  );
+}
+
 interface TeamRosterProps {
   team: LeagueTeam;
   canEdit: boolean;
@@ -235,7 +270,21 @@ interface RoundFormValues {
   startDate: string;
   endDate: string;
   configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
-  categoriesOverride: { id: string; name?: string; ageGroup?: string; skillMin?: number | null; skillMax?: number | null; scoringFormat?: string; winBy?: string; maxPerEvent?: number | null }[] | null;
+  // Each row is either an existing league category (id present, optional
+  // override fields) or a brand-new round-only category (id absent, all
+  // descriptor fields present).
+  categoriesOverride: ({
+    id?: string;
+    name?: string;
+    format?: string;
+    gender?: string;
+    ageGroup?: string;
+    skillMin?: number | null;
+    skillMax?: number | null;
+    scoringFormat?: string;
+    winBy?: string;
+    maxPerEvent?: number | null;
+  })[] | null;
 }
 
 interface RoundFormProps {
@@ -275,7 +324,8 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
 
   const initialCatMap: Record<string, CatOverrideForm> = useMemo(() => {
     const out: Record<string, CatOverrideForm> = {};
-    const overrideById = new Map((initial.categoriesOverride ?? []).map((o) => [o.id, o]));
+    const existing = (initial.categoriesOverride ?? []).filter((o) => !!o.id);
+    const overrideById = new Map(existing.map((o) => [o.id as string, o]));
     for (const c of leagueCategories) {
       const o = overrideById.get(c.id);
       out[c.id] = {
@@ -293,11 +343,36 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
     return out;
   }, [initial.categoriesOverride, leagueCategories]);
 
+  // Round-only ("custom") categories — have no league.id. Stored as a list.
+  type CustomCat = {
+    localId: string;
+    name: string; format: string; gender: string; ageGroup: string;
+    skillMin: string; skillMax: string; scoringFormat: string; winBy: string; maxPerEvent: string;
+  };
+  const initialCustomCats: CustomCat[] = useMemo(() => {
+    return (initial.categoriesOverride ?? [])
+      .filter((o) => !o.id)
+      .map((o, i) => ({
+        localId: `existing:${i}`,
+        name: o.name ?? "",
+        format: o.format ?? "doubles",
+        gender: o.gender ?? "open",
+        ageGroup: o.ageGroup ?? "open",
+        skillMin: o.skillMin != null ? String(o.skillMin) : "",
+        skillMax: o.skillMax != null ? String(o.skillMax) : "",
+        scoringFormat: o.scoringFormat ?? "3x11",
+        winBy: o.winBy ?? "2",
+        maxPerEvent: o.maxPerEvent != null ? String(o.maxPerEvent) : "",
+      }));
+  }, [initial.categoriesOverride]);
+
   const [useCategoriesOverride, setUseCategoriesOverride] = useState(!!initial.categoriesOverride);
   const [catOverrides, setCatOverrides] = useState<Record<string, CatOverrideForm>>(initialCatMap);
+  const [customCats, setCustomCats] = useState<CustomCat[]>(initialCustomCats);
 
-  // Re-initialise categoriesOverride state when categories list / initial changes
+  // Re-initialise on parent changes
   useEffect(() => { setCatOverrides(initialCatMap); }, [initialCatMap]);
+  useEffect(() => { setCustomCats(initialCustomCats); }, [initialCustomCats]);
 
   const handleSave = async () => {
     let configOverride: RoundFormValues["configOverride"] = null;
@@ -326,6 +401,24 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
         if (o.scoringFormat.trim() && o.scoringFormat.trim() !== cat.scoringFormat) row.scoringFormat = o.scoringFormat.trim();
         if (o.winBy.trim() && o.winBy.trim() !== cat.winBy) row.winBy = o.winBy.trim();
         if (o.maxPerEvent !== "") row.maxPerEvent = parseInt(o.maxPerEvent, 10);
+        categoriesOverride.push(row);
+      }
+      // Round-only custom categories — sent without `id`. The server treats
+      // these as new categories scoped to this round; an EventClass mirror
+      // gets created but no LeagueGame (no LeagueCategory FK).
+      for (const cc of customCats) {
+        if (!cc.name.trim()) continue;
+        const row: NonNullable<RoundFormValues["categoriesOverride"]>[number] = {
+          name: cc.name.trim(),
+          format: cc.format,
+          gender: cc.gender,
+          ageGroup: cc.ageGroup,
+          scoringFormat: cc.scoringFormat,
+          winBy: cc.winBy,
+        };
+        if (cc.skillMin !== "") row.skillMin = parseFloat(cc.skillMin);
+        if (cc.skillMax !== "") row.skillMax = parseFloat(cc.skillMax);
+        if (cc.maxPerEvent !== "") row.maxPerEvent = parseInt(cc.maxPerEvent, 10);
         categoriesOverride.push(row);
       }
     }
@@ -441,41 +534,44 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                             placeholder={c.name}
                             className="w-full border border-border rounded px-2 py-1 text-xs" />
                         </div>
-                        <div className="w-24">
+                        <div className="w-32">
                           <label className="block text-[10px] text-muted">Age group</label>
-                          <input value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value })}
-                            placeholder={c.ageGroup}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                          <select value={o.ageGroup || c.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                            {AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
+                          </select>
                         </div>
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Skill min</label>
-                          <input type="number" step={0.1} value={o.skillMin}
-                            onChange={(e) => update({ skillMin: e.target.value })}
-                            placeholder={c.skillMin != null ? String(c.skillMin) : "—"}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                          <select value={o.skillMin} onChange={(e) => update({ skillMin: e.target.value })}
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                            <option value="">{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
+                            {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
                         </div>
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Skill max</label>
-                          <input type="number" step={0.1} value={o.skillMax}
-                            onChange={(e) => update({ skillMax: e.target.value })}
-                            placeholder={c.skillMax != null ? String(c.skillMax) : "—"}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                          <select value={o.skillMax} onChange={(e) => update({ skillMax: e.target.value })}
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                            <option value="">{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
+                            {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
                         </div>
                       </div>
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Scoring</label>
-                          <input value={o.scoringFormat} onChange={(e) => update({ scoringFormat: e.target.value })}
-                            placeholder={c.scoringFormat}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                          <ScoringSelect value={o.scoringFormat || c.scoringFormat}
+                            onChange={(v) => update({ scoringFormat: v === c.scoringFormat ? "" : v })}
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
                         </div>
-                        <div className="w-20">
+                        <div className="w-28">
                           <label className="block text-[10px] text-muted">Win by</label>
-                          <input value={o.winBy} onChange={(e) => update({ winBy: e.target.value })}
-                            placeholder={c.winBy}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                          <WinBySelect value={o.winBy || c.winBy}
+                            onChange={(v) => update({ winBy: v === c.winBy ? "" : v })}
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
                         </div>
                         <div className="w-24">
                           <label className="block text-[10px] text-muted">Max / event</label>
@@ -490,6 +586,94 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                 </div>
               );
             })}
+
+            {/* Round-only custom categories */}
+            {customCats.map((cc, idx) => {
+              const updateCC = (patch: Partial<CustomCat>) => {
+                setCustomCats((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+              };
+              const removeCC = () => setCustomCats((prev) => prev.filter((_, i) => i !== idx));
+              return (
+                <div key={cc.localId} className="border border-action/30 rounded-lg p-2 bg-emerald-50/30 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded-full font-medium">round-only</span>
+                    <input value={cc.name} onChange={(e) => updateCC({ name: e.target.value })}
+                      placeholder="Category name" autoFocus={!cc.name && cc.localId.startsWith("new:")}
+                      className="flex-1 border border-border rounded px-2 py-1 text-sm font-medium" />
+                    <button onClick={removeCC} className="text-xs text-danger px-1" aria-label="Remove">✕</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Format</label>
+                      <select value={cc.format} onChange={(e) => updateCC({ format: e.target.value })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                        {FORMAT_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Gender</label>
+                      <select value={cc.gender} onChange={(e) => updateCC({ gender: e.target.value })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                        {GENDER_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Age</label>
+                      <select value={cc.ageGroup} onChange={(e) => updateCC({ ageGroup: e.target.value })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                        {AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Skill min</label>
+                      <select value={cc.skillMin} onChange={(e) => updateCC({ skillMin: e.target.value })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                        <option value="">—</option>
+                        {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Skill max</label>
+                      <select value={cc.skillMax} onChange={(e) => updateCC({ skillMax: e.target.value })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
+                        <option value="">—</option>
+                        {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] text-muted">Scoring</label>
+                      <ScoringSelect value={cc.scoringFormat} onChange={(v) => updateCC({ scoringFormat: v })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
+                    </div>
+                    <div className="w-28">
+                      <label className="block text-[10px] text-muted">Win by</label>
+                      <WinBySelect value={cc.winBy} onChange={(v) => updateCC({ winBy: v })}
+                        className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
+                    </div>
+                    <div className="w-24">
+                      <label className="block text-[10px] text-muted">Max / event</label>
+                      <input type="number" min={0} value={cc.maxPerEvent}
+                        onChange={(e) => updateCC({ maxPerEvent: e.target.value })}
+                        placeholder="—"
+                        className="w-full border border-border rounded px-2 py-1 text-xs" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <button
+              onClick={() => setCustomCats((prev) => [...prev, {
+                localId: `new:${Date.now()}`,
+                name: "", format: "doubles", gender: "open", ageGroup: "open",
+                skillMin: "", skillMax: "", scoringFormat: "3x11", winBy: "2", maxPerEvent: "",
+              }])}
+              className="w-full text-[11px] text-action font-medium py-1.5 border border-dashed border-action/30 rounded-lg hover:bg-action/5"
+            >+ Add category (round only)</button>
           </div>
         )}
       </div>
@@ -1083,14 +1267,16 @@ export default function LeagueDetailPage() {
 
   const saveRound = async (mode: "add" | "edit", v: RoundFormValues, roundId?: string) => {
     const url = `/api/leagues/${id}/rounds`;
+    // configOverride / categoriesOverride: null means "clear", { ... } means
+    // "set". Don't coalesce to undefined or the server skips the field.
     const body = JSON.stringify({
       ...(mode === "edit" ? { roundId } : {}),
       ...(mode === "add" ? { roundNumber: v.roundNumber } : {}),
       name: v.name.trim() || undefined,
       startDate: v.startDate || undefined,
       endDate: v.endDate || undefined,
-      configOverride: v.configOverride ?? undefined,
-      categoriesOverride: v.categoriesOverride ?? undefined,
+      configOverride: v.configOverride,
+      categoriesOverride: v.categoriesOverride,
     });
     const r = await fetch(url, { method: mode === "edit" ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body });
     if (!r.ok) {
@@ -1313,24 +1499,10 @@ export default function LeagueDetailPage() {
     );
   }
 
-  const scoringSelect = (value: string, onChange: (v: string) => void) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
-      <optgroup label="Normal — 1 Set"><option value="1x7">1 set to 7</option><option value="1x9">1 set to 9</option><option value="1x11">1 set to 11</option><option value="1x15">1 set to 15</option></optgroup>
-      <optgroup label="Normal — Best of 3"><option value="3x11">Bo3 to 11</option><option value="3x15">Bo3 to 15</option></optgroup>
-      <optgroup label="Rally — 1 Set"><option value="1xR15">Rally to 15</option><option value="1xR21">Rally to 21</option></optgroup>
-      <optgroup label="Rally — Best of 3"><option value="3xR15">Bo3 rally 15</option><option value="3xR21">Bo3 rally 21</option></optgroup>
-    </select>
-  );
-  const winBySelect = (value: string, onChange: (v: string) => void) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full border border-border rounded-lg px-2 py-1.5 text-xs">
-      <option value="1">1</option><option value="2">2</option>
-      <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
-      <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
-      <option value="cap18">GP 18</option><option value="cap23">GP 23</option><option value="cap25">GP 25</option>
-    </select>
-  );
-  const AGE_OPTS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"];
-  const SKILL_OPTS = ["", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"];
+  const scoringSelect = (value: string, onChange: (v: string) => void) =>
+    <ScoringSelect value={value} onChange={onChange} />;
+  const winBySelect = (value: string, onChange: (v: string) => void) =>
+    <WinBySelect value={value} onChange={onChange} />;
 
   const scoringLabel = (v: string) => {
     const m: Record<string, string> = { "1x7": "1×7", "1x9": "1×9", "1x11": "1×11", "1x15": "1×15", "3x11": "Bo3×11", "3x15": "Bo3×15", "1xR15": "Rally 15", "1xR21": "Rally 21", "3xR15": "Bo3R15", "3xR21": "Bo3R21" };
