@@ -151,7 +151,10 @@ export function Header() {
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
 
-  // Poll for unread notifications
+  // Poll for unread notifications. Also listens for a "notifications:refresh"
+  // window event so the alerts page (or anywhere else that mutates alerts)
+  // can force-refresh the badge immediately, instead of waiting for the
+  // next 30s tick.
   useEffect(() => {
     if (!session?.user) return;
     const check = () => {
@@ -164,7 +167,12 @@ export function Header() {
     };
     check();
     const interval = setInterval(check, 30000);
-    return () => clearInterval(interval);
+    const onRefresh = () => check();
+    window.addEventListener("notifications:refresh", onRefresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("notifications:refresh", onRefresh);
+    };
   }, [session?.user]);
   const isClubsListPage = pathname === "/clubs";
 

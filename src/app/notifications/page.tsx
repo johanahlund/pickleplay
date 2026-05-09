@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface Notification {
   id: string;
@@ -27,6 +28,7 @@ function timeAgo(iso: string) {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +40,10 @@ export default function NotificationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Tell the global Header to refresh its badge immediately. Otherwise it
+  // waits for its 30s poll and the bell still shows a stale count.
+  const broadcast = () => { try { window.dispatchEvent(new Event("notifications:refresh")); } catch { /* ignore */ } };
+
   const markAllRead = async () => {
     await fetch("/api/notifications", {
       method: "POST",
@@ -45,6 +51,7 @@ export default function NotificationsPage() {
       body: JSON.stringify({ action: "read_all" }),
     });
     load();
+    broadcast();
   };
 
   const markRead = async (id: string) => {
@@ -54,6 +61,7 @@ export default function NotificationsPage() {
       body: JSON.stringify({ action: "read", notificationId: id }),
     });
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    broadcast();
   };
 
   // Pull eventId, requestId, classId out of a pair_request notification's
@@ -80,6 +88,7 @@ export default function NotificationsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "delete", notificationId: id }),
     });
+    broadcast();
   };
 
   const [actingId, setActingId] = useState<string | null>(null);
@@ -106,6 +115,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-3">
+      <button onClick={() => router.back()} className="text-sm text-action font-medium">&larr; Back</button>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Alerts</h2>
         <div className="flex items-center gap-3">
@@ -116,6 +126,7 @@ export default function NotificationsPage() {
             <button onClick={async () => {
               await fetch("/api/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_read" }) });
               setItems((prev) => prev.filter((n) => !n.read));
+              broadcast();
             }} className="text-sm text-muted hover:text-foreground">Clear read</button>
           )}
         </div>
