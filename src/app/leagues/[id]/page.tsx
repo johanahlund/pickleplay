@@ -94,6 +94,17 @@ const GENDER_OPTS = [
   { value: "female", label: "Women" },
   { value: "mix", label: "Mixed" },
 ];
+// Clamp a numeric input string to [1, max] integers. Empty string passes
+// through so the user can clear the field. Negative or zero → "1".
+function clampPositiveInt(raw: string, max: number): string {
+  if (raw === "") return "";
+  const n = parseInt(raw, 10);
+  if (isNaN(n)) return "";
+  if (n < 1) return "1";
+  if (n > max) return String(max);
+  return String(n);
+}
+
 function ScoringSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
@@ -477,15 +488,15 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="block text-[11px] text-muted">Max pts / match-day</label>
-                <input type="number" min={1} value={maxPts}
-                  onChange={(e) => setMaxPts(e.target.value)}
+                <input type="number" min={1} max={99} value={maxPts}
+                  onChange={(e) => setMaxPts(clampPositiveInt(e.target.value, 99))}
                   placeholder={String(leagueConfig?.maxPointsPerMatchDay ?? 3)}
                   className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
               </div>
               <div className="flex-1">
                 <label className="block text-[11px] text-muted">Max matches / event</label>
-                <input type="number" min={1} value={maxMatches}
-                  onChange={(e) => setMaxMatches(e.target.value)}
+                <input type="number" min={1} max={99} value={maxMatches}
+                  onChange={(e) => setMaxMatches(clampPositiveInt(e.target.value, 99))}
                   placeholder={leagueConfig?.maxMatchesPerEvent != null ? String(leagueConfig.maxMatchesPerEvent) : "—"}
                   className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
               </div>
@@ -1474,12 +1485,12 @@ export default function LeagueDetailPage() {
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Max Pts / Match Day</label>
-              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(e.target.value); setDirty(true); }} min={1}
+              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(clampPositiveInt(e.target.value, 99)); setDirty(true); }} min={1} max={99}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Max league matches / event</label>
-              <input type="number" value={editMaxMatchesPerEvent} onChange={(e) => { setEditMaxMatchesPerEvent(e.target.value); setDirty(true); }} min={1}
+              <input type="number" value={editMaxMatchesPerEvent} onChange={(e) => { setEditMaxMatchesPerEvent(clampPositiveInt(e.target.value, 99)); setDirty(true); }} min={1} max={99}
                 placeholder="—"
                 className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
               <p className="text-[10px] text-muted mt-1">Cap for principal games per match-day. Empty = no cap.</p>
