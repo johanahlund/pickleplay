@@ -71,7 +71,7 @@ interface LeagueRoundLink {
     id: string; name: string; season: string | null;
     createdById: string | null; deputyId: string | null;
     categories?: { id: string; name: string; format: string; gender: string }[];
-    teams?: { captainId: string | null; viceCaptainId: string | null; players: { playerId: string }[] }[];
+    teams?: { id: string; name: string; captainId: string | null; viceCaptainId: string | null; players: { playerId: string }[] }[];
     helpers?: { playerId: string }[];
   };
 }
@@ -3382,13 +3382,15 @@ export default function EventDetailPage() {
           </Link>
         );
       })()}
-      {/* League event sign-up CTA — roster players are taken to a dedicated
-          sign-up page (/events/[id]/sign-up), mirroring the league sign-up
-          UX. The page handles availability + per-category preferences. */}
+      {/* League event sign-up CTA — only shown to a player who is on one
+          of the two teams playing this match-day. Mentions which team. */}
       {event.round && userId && (() => {
-        const teams = event.round!.league.teams || [];
-        const isOnRoster = teams.some((t) => t.players.some((p) => p.playerId === userId));
-        if (!isOnRoster) return null;
+        const allLeagueTeams = event.round!.league.teams || [];
+        // event.leagueTeams is the 1-2 teams playing this event. Find which
+        // (if any) of those teams the viewer is rostered on.
+        const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
+        const myTeam = allLeagueTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === userId));
+        if (!myTeam) return null;
         const myEp = event.players.find((ep) => ep.player.id === userId);
         const hasSignedUp = !!myEp;
         const isAvailable = !myEp || myEp.status !== "unavailable";
@@ -3396,15 +3398,15 @@ export default function EventDetailPage() {
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-2">
             <div className="text-sm text-emerald-900 flex-1 min-w-0">
               {!hasSignedUp ? (
-                <span>Sign up for this match-day to tell your captain which categories you&apos;d like to play.</span>
+                <span>Sign up for <strong>{myTeam.name}</strong> on this match-day.</span>
               ) : isAvailable ? (
                 <>
-                  <div><strong>You&apos;re signed up.</strong></div>
+                  <div><strong>You&apos;re signed up</strong> for {myTeam.name}.</div>
                   <div className="text-[11px]">Update your category preferences any time.</div>
                 </>
               ) : (
                 <>
-                  <div><strong>Marked as not available.</strong></div>
+                  <div><strong>Marked as not available</strong> for {myTeam.name}.</div>
                   <div className="text-[11px]">Tap Edit to change.</div>
                 </>
               )}
@@ -3466,6 +3468,31 @@ export default function EventDetailPage() {
             {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
           </span>
         </button>
+        {/* Per-team attendee breakdown for league events. Counts everyone who
+            registered (status registered, including "just attending"). */}
+        {event.round && (event.leagueTeams?.length ?? 0) > 0 && (() => {
+          const allLeagueTeams = event.round.league.teams || [];
+          const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
+          const attendingByPlayerId = new Set(
+            event.players.filter((p) => p.status !== "unavailable").map((p) => p.player.id),
+          );
+          const teamCounts = playingTeamIds.map((tid) => {
+            const team = (event.leagueTeams || []).find((et) => et.teamId === tid)?.team;
+            const fullTeam = allLeagueTeams.find((t) => t.id === tid);
+            const count = (fullTeam?.players ?? []).filter((p) => attendingByPlayerId.has(p.playerId)).length;
+            return { teamId: tid, name: team?.name ?? "Team", count };
+          });
+          if (teamCounts.length === 0) return null;
+          return (
+            <div className="px-3 pt-1 pb-2 flex flex-wrap gap-1.5">
+              {teamCounts.map((tc) => (
+                <span key={tc.teamId} className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full font-medium">
+                  {tc.name}: <span className="font-bold">{tc.count}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
         {event.format === "doubles" && event.pairs.length > 0 && (
           <button onClick={() => setActiveSection("pairs")} className={rowClass}>
             <span className="text-base font-bold text-foreground">Pairs</span>

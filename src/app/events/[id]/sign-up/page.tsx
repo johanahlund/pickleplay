@@ -35,8 +35,12 @@ export default function EventSignUpPage() {
   const [roundName, setRoundName] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
   const [playerGender, setPlayerGender] = useState<string | null>(null);
-  const [onRoster, setOnRoster] = useState(false);
-  const [available, setAvailable] = useState(true);
+  const [myTeamName, setMyTeamName] = useState<string | null>(null); // set if rostered on a playing team
+  // Three intents (UI tri-state). Backend stores:
+  //   playing      → status="registered", signupPreferences set
+  //   attending    → status="registered", signupPreferences = {} (no league play)
+  //   unavailable  → status="unavailable", signupPreferences kept for context
+  const [intent, setIntent] = useState<"playing" | "attending" | "unavailable">("playing");
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [savedView, setSavedView] = useState(false);
 
@@ -67,18 +71,26 @@ export default function EventSignUpPage() {
     setRoundName(ev.round.name || `Round ${ev.round.roundNumber}`);
     setCategories((ev.round.league.categories || []) as Category[]);
 
-    // Roster check: caller must be on a team in this league
-    const teams: { players: { playerId: string }[] }[] = ev.round.league.teams || [];
-    setOnRoster(teams.some((t) => t.players.some((p) => p.playerId === userId)));
+    // Find which (if any) of the event's playing teams the viewer is on.
+    // Sign-up is gated to rostered players on one of the playing teams.
+    type LeagueTeamLite = { id: string; name: string; players: { playerId: string }[] };
+    const allTeams: LeagueTeamLite[] = ev.round.league.teams || [];
+    const playingTeamIds: string[] = (ev.leagueTeams || []).map((et: { teamId: string }) => et.teamId);
+    const myTeam = allTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === userId));
+    setMyTeamName(myTeam?.name ?? null);
 
-    // Existing EventPlayer for this user — pre-fill from signupPreferences + status
+    // Existing EventPlayer for this user — pre-fill intent + prefs.
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
     const myEp: EP | undefined = (ev.players || []).find((ep: EP) => ep.player.id === userId);
     if (myEp) {
-      setAvailable(myEp.status !== "unavailable");
-      if (myEp.signupPreferences && typeof myEp.signupPreferences === "object") {
-        setPreferences(myEp.signupPreferences as Record<string, { level: Preference; note?: string }>);
-      }
+      const prefs = myEp.signupPreferences && typeof myEp.signupPreferences === "object"
+        ? myEp.signupPreferences as Record<string, { level: Preference; note?: string }>
+        : {};
+      const hasAnyPlay = Object.values(prefs).some((p) => p.level === "prefer" || p.level === "ok");
+      if (myEp.status === "unavailable") setIntent("unavailable");
+      else if (Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
+      else setIntent("playing");
+      setPreferences(prefs);
     }
 
     if (meR && meR.ok) {
@@ -115,19 +127,25 @@ export default function EventSignUpPage() {
   const submit = async () => {
     setSaving(true);
     setErrorMsg(null);
-    // Default any visible category the user didn't tap to "ok" so the
-    // captain sees a complete picture (mirrors league sign-up flow).
-    const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
-    const completePrefs: Record<string, { level: Preference; note?: string }> = {};
-    for (const c of visibleCategories) {
-      completePrefs[c.id] = preferences[c.id] ?? { level: "ok" };
+    let payload: { status: "registered" | "unavailable"; preferences: Record<string, { level: Preference; note?: string }> };
+    if (intent === "playing") {
+      // Default any visible category the user didn't tap to "ok" so the
+      // captain sees a complete picture.
+      const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
+      const completePrefs: Record<string, { level: Preference; note?: string }> = {};
+      for (const c of visibleCategories) {
+        completePrefs[c.id] = preferences[c.id] ?? { level: "ok" };
+      }
+      payload = { status: "registered", preferences: completePrefs };
+    } else if (intent === "attending") {
+      // Attending only — no league play. Keep any prior notes by sending {}.
+      payload = { status: "registered", preferences: {} };
+    } else {
+      payload = { status: "unavailable", preferences };
     }
     const r = await fetch(`/api/events/${id}/signup-prefs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: available ? "registered" : "unavailable",
-        preferences: completePrefs,
-      }),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
@@ -135,6 +153,16 @@ export default function EventSignUpPage() {
   };
 
   if (savedView) {
+    const intentLabel = intent === "playing"
+      ? "You're signed up to play"
+      : intent === "attending"
+        ? "You're signed up — attending only"
+        : "Marked as not available";
+    const intentBody = intent === "playing"
+      ? <>The team captain will use your preferences to build the lineup.</>
+      : intent === "attending"
+        ? <>The captain knows you&apos;re coming but not playing league matches this match-day.</>
+        : <>The captain knows you can&apos;t make it.</>;
     return (
       <div className="space-y-2">
         <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
@@ -142,13 +170,9 @@ export default function EventSignUpPage() {
         </div>
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
           <p className="font-semibold text-emerald-900">
-            {available ? <>✓ You&apos;re signed up</> : <>✓ Marked as not available</>}
+            ✓ {intentLabel}{myTeamName ? <> for <span className="font-bold">{myTeamName}</span></> : null}
           </p>
-          <p className="text-emerald-800">
-            {available
-              ? <>The team captain will use your preferences to build the lineup.</>
-              : <>The captain knows you can&apos;t play this match-day.</>}
-          </p>
+          <p className="text-emerald-800">{intentBody}</p>
           <button onClick={() => router.push(`/events/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
         </div>
       </div>
@@ -162,7 +186,9 @@ export default function EventSignUpPage() {
       </div>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-        <h2 className="text-lg font-bold">Sign up{eventName ? ` — ${eventName}` : ""}</h2>
+        <h2 className="text-lg font-bold">
+          Sign up{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}
+        </h2>
         <p className="text-[11px] text-muted">
           {leagueName} · {roundName}
           {eventDate && <> · {new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</>}
@@ -171,26 +197,32 @@ export default function EventSignUpPage() {
           <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{errorMsg}</div>
         )}
 
-        {!loading && !onRoster && (
-          <p className="text-sm text-muted">You&apos;re not on a team in this league, so you can&apos;t sign up for this event.</p>
+        {!loading && !myTeamName && (
+          <p className="text-sm text-muted">Sign-up is for players on one of the two teams playing this match-day.</p>
         )}
 
-        {onRoster && (
+        {myTeamName && (
           <div>
-            <label className="block text-xs text-muted mb-1">Availability</label>
-            <div className="flex gap-1">
-              <button onClick={() => setAvailable(true)}
-                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${available ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
-              >Available</button>
-              <button onClick={() => setAvailable(false)}
-                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${!available ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
-              >Can&apos;t play</button>
+            <label className="block text-xs text-muted mb-1">What are you doing?</label>
+            <div className="grid grid-cols-3 gap-1">
+              <button onClick={() => setIntent("playing")}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "playing" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
+              >Playing</button>
+              <button onClick={() => setIntent("attending")}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "attending" ? "bg-emerald-500 text-white" : "bg-gray-100 text-muted"}`}
+              >Just attending</button>
+              <button onClick={() => setIntent("unavailable")}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "unavailable" ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
+              >Can&apos;t come</button>
             </div>
+            {intent === "attending" && (
+              <p className="text-[11px] text-muted mt-2">You&apos;ll be counted as coming but not playing any league matches.</p>
+            )}
           </div>
         )}
       </div>
 
-      {onRoster && available && (() => {
+      {myTeamName && intent === "playing" && (() => {
         const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
         if (!loading && visibleCategories.length === 0) return null;
         return (
@@ -224,11 +256,11 @@ export default function EventSignUpPage() {
         );
       })()}
 
-      {onRoster && (
+      {myTeamName && (
         <div className="bg-card rounded-xl border border-border p-3 sticky bottom-2">
           <button onClick={submit} disabled={saving || loading}
             className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">
-            {saving ? "Signing up…" : "Save sign-up"}
+            {saving ? "Saving…" : "Save sign-up"}
           </button>
         </div>
       )}

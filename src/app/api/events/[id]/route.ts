@@ -39,7 +39,7 @@ export async function GET(
               categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
               // For visibility checks: anyone on a team in the league should
               // be able to see the league-attached event regardless of its status.
-              teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
+              teams: { select: { id: true, name: true, captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
               helpers: { select: { playerId: true } },
             },
           },
