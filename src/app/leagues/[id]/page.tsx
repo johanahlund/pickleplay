@@ -2639,7 +2639,15 @@ export default function LeagueDetailPage() {
                   />
                 </div>
               )}
-              {editingRoundId !== round.id && round.events.map((ev) => {
+              {editingRoundId !== round.id && [...round.events].sort((a, b) => {
+                // Sort by home team name. Home team = hostTeamId match in
+                // leagueTeams, or fallback to leagueTeams[0].
+                const homeName = (ev: typeof a) => {
+                  const host = ev.leagueTeams.find((t) => t.teamId === ev.hostTeamId)?.team.name;
+                  return host ?? ev.leagueTeams[0]?.team.name ?? "";
+                };
+                return homeName(a).localeCompare(homeName(b));
+              }).map((ev) => {
                 const teamLabel = ev.leagueTeams.map((t) => t.team.name).join(" vs ") || "match-day";
                 // The sign-up button shows only on the event the viewer's
                 // team is playing in (rostered on one of the two teams).
