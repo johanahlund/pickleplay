@@ -60,16 +60,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const { name, description, city, country, status, locations } = await req.json();
+  const { name, shortName, description, city, country, status, locations } = await req.json();
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
+  const cleanShortName = typeof shortName === "string" && shortName.trim()
+    ? shortName.trim().slice(0, 10)
+    : null;
   const validStatuses = ["draft", "active", "closed"];
   const cleanStatus = status && validStatuses.includes(status) ? status : "active";
 
   const club = await prisma.club.create({
     data: {
       name: name.trim(),
+      shortName: cleanShortName,
       emoji: "🏟️",
       description: description?.trim() || null,
       city: city?.trim() || null,

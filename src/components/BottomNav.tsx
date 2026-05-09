@@ -59,8 +59,8 @@ export function BottomNav() {
           const start = new Date(e.date).getTime();
           const end = e.endDate ? new Date(e.endDate).getTime() : start + 2 * HOUR;
 
-          // 0) Draft event being set up by user
-          if (e.status === "draft" && e.createdById === userId) {
+          // 0) Setup event being prepared by user
+          if ((e.status === "setup" || e.status === "draft") && e.createdById === userId) {
             if (!best || 110 > best.priority) best = { event: e, priority: 110 };
             continue;
           }
@@ -127,12 +127,12 @@ export function BottomNav() {
           <Link
             href={`/events/${activeEvent.id}`}
             className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg text-white shadow-md ${
-              activeEvent.status === "draft" ? "bg-blue-600" : "bg-green-600 animate-pulse-slow"
+              (activeEvent.status === "setup" || activeEvent.status === "draft") ? "bg-blue-600" : "bg-green-600 animate-pulse-slow"
             }`}
             aria-label={`Active event: ${activeEvent.name}`}
           >
-            <Icon name={activeEvent.status === "draft" ? "edit" : "pickleball"} size={20} color="white" />
-            <span className="text-[9px] font-bold truncate max-w-[50px]">{activeEvent.status === "draft" ? "Draft" : "Live"}</span>
+            <Icon name={(activeEvent.status === "setup" || activeEvent.status === "draft") ? "edit" : "pickleball"} size={20} color="white" />
+            <span className="text-[9px] font-bold truncate max-w-[50px]">{(activeEvent.status === "setup" || activeEvent.status === "draft") ? "Setup" : "Live"}</span>
           </Link>
         )}
       </div>

@@ -76,6 +76,7 @@ model Player {
 model Club {
   id          String   @id @default(cuid())
   name        String
+  shortName   String?  // ≤10 chars, used in pills/badges; falls back to name[:10]
   emoji       String   @default("🏟️")
   logoUrl     String?
   coverUrl    String?
@@ -179,7 +180,7 @@ model Event {
   name         String
   date         DateTime @default(now())
   endDate      DateTime?
-  status       String   @default("draft") // draft, visible, open, closed, active, completed
+  status       String   @default("setup") // setup, visible, open, closed, active, completed (legacy: "draft" still recognized)
   numCourts    Int      @default(2)
   openSignup   Boolean  @default(true)  // kept for backwards compat
   visibility   String   @default("visible") // kept for backwards compat
@@ -496,12 +497,17 @@ model League {
   name        String
   description String?
   season      String?  // "2025", "Spring 2026"
+  // Status drives visibility:
+  //   setup        — only organizers see the league
+  //   registration — public; players can self-sign-up
+  //   forming      — public; self-signup CLOSED; captains/admins still add players
+  //   active       — public; rosters are visible to everyone (teams locked)
+  //   complete     — public; archived
   status      String   @default("setup") // setup | registration | forming | active | complete
   config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
   rulesPdfUrl  String?  // optional PDF (rules, regulations, schedule, etc.)
   rulesPdfName String?  // original filename, for display
   visibility    String  @default("public")  // "public" | "participants"
-  rostersPublic Boolean @default(false)     // when true, all team rosters are viewable to everyone
   clubId      String?  // Organizing club (required at creation; optional for legacy rows)
   createdById String?  // League Director
   deputyId    String?  // Deputy Director

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { setPreview } from "@/lib/entityPreview";
 
 interface League {
   id: string;
@@ -49,6 +50,10 @@ export default function LeaguesPage() {
         <div className="space-y-2">
           {leagues.map((league) => (
             <Link key={league.id} href={`/leagues/${league.id}`}
+              onClick={() => setPreview("league", league.id, {
+                id: league.id, name: league.name, description: league.description,
+                season: league.season, status: league.status, club: league.club ?? null,
+              })}
               className="block bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors">
               <div className="flex items-center justify-between">
                 <div>

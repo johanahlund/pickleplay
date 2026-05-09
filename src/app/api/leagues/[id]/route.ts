@@ -23,8 +23,9 @@ export async function GET(
       documents: { orderBy: { uploadedAt: "asc" } },
       // Pending requests so the UI can show counts. Slot detail (preferences,
       // note) is fetched via /participation-requests for captains/organizers.
+      // Also include the viewer's own accepted request so they can cancel/leave.
       participationRequests: {
-        where: { status: "pending" },
+        where: { OR: [{ status: "pending" }, { status: "accepted", playerId: user.id }] },
         select: {
           id: true, playerId: true, preferredTeamId: true, status: true,
           player: { select: { id: true, gender: true } },
@@ -70,6 +71,10 @@ export async function GET(
   const isOrganizer = isAppAdmin || league.createdBy?.id === user.id || league.deputy?.id === user.id;
   const isHelper = league.helpers.some((h) => h.player.id === user.id);
 
+  // Setup gate: leagues in "setup" are only visible to organizers (director/deputy/admin).
+  if (league.status === "setup" && !isOrganizer) {
+    return NextResponse.json({ error: "Not visible" }, { status: 403 });
+  }
   // Visibility gate: when "participants", only league participants + organizers
   // (and app admin) may see the league.
   if (league.visibility === "participants" && !isAppAdmin) {
@@ -82,10 +87,12 @@ export async function GET(
     }
   }
 
-  // Roster visibility: hide other teams' players unless league.rostersPublic is true,
-  // OR the viewer is an organizer/helper/admin, OR the viewer is captain/vice of that team.
+  // Roster visibility: hide other teams' players unless the league has reached
+  // "active" (or "complete"), OR the viewer is an organizer/helper/admin,
+  // OR the viewer is captain/vice of that team.
+  const rostersAreVisible = league.status === "active" || league.status === "complete";
   let view = league;
-  if (!league.rostersPublic && !isOrganizer && !isHelper) {
+  if (!rostersAreVisible && !isOrganizer && !isHelper) {
     view = {
       ...league,
       teams: league.teams.map((t) => {
@@ -139,10 +146,6 @@ export async function PATCH(
     }
     data.visibility = body.visibility;
   }
-  if (body.rostersPublic !== undefined) {
-    data.rostersPublic = !!body.rostersPublic;
-  }
-
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const league = await prisma.league.update({ where: { id }, data });

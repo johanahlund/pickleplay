@@ -412,7 +412,7 @@ export default function EventDetailPage() {
   const [hasEdits, setHasEdits] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editStatus, setEditStatus] = useState("draft");
+  const [editStatus, setEditStatus] = useState("setup");
   const [editCourts, setEditCourts] = useState(2);
   const [editLocationId, setEditLocationId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -1377,7 +1377,7 @@ export default function EventDetailPage() {
         <label className="block text-sm font-medium text-muted mb-1">Status</label>
         <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="draft">Draft — only organizers can see</option>
+          <option value="setup">Setup — only organizers can see</option>
           <option value="visible">Visible — everyone can see, no signup</option>
           <option value="open">Open — players can sign up</option>
           <option value="closed">Closed — no more signups</option>

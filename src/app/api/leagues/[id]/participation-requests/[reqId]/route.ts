@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { sendNotification } from "@/lib/notify";
 import { NextResponse } from "next/server";
 
 async function loadContext(leagueId: string, reqId: string) {
@@ -27,7 +28,10 @@ async function loadContext(leagueId: string, reqId: string) {
   return { user, league, request, isAppAdmin, isOrganizer, isHelper, captainTeamIds };
 }
 
-// DELETE: requester withdraws their own request.
+// DELETE: requester (or an organizer) withdraws the request.
+//   - status="pending": just mark as "withdrawn".
+//   - status="accepted": also remove the player from the team and notify the
+//     team captain + vice-captain so they know a roster slot opened up.
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; reqId: string }> }
@@ -38,6 +42,47 @@ export async function DELETE(
   if (ctx.request.playerId !== ctx.user.id && !ctx.isOrganizer) {
     return NextResponse.json({ error: "Only the requester or an organizer can withdraw" }, { status: 403 });
   }
+
+  if (ctx.request.status === "accepted") {
+    // Find the team the player was placed on (preferredTeam OR the actual membership).
+    const membership = await prisma.leagueTeamPlayer.findFirst({
+      where: { playerId: ctx.request.playerId, team: { leagueId: id } },
+      include: { team: { select: { id: true, name: true, captainId: true, viceCaptainId: true } } },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      if (membership) {
+        await tx.leagueTeamPlayer.delete({ where: { id: membership.id } });
+      }
+      await tx.leagueParticipationRequest.update({
+        where: { id: reqId },
+        data: { status: "withdrawn" },
+      });
+    });
+
+    // Notify captain + vice (best-effort; don't fail the response if this throws).
+    if (membership) {
+      const player = await prisma.player.findUnique({ where: { id: ctx.request.playerId }, select: { name: true } });
+      const playerName = player?.name || "A player";
+      const recipients = new Set<string>();
+      if (membership.team.captainId) recipients.add(membership.team.captainId);
+      if (membership.team.viceCaptainId) recipients.add(membership.team.viceCaptainId);
+      recipients.delete(ctx.user.id); // don't notify the actor
+      await Promise.all(
+        Array.from(recipients).map((rid) =>
+          sendNotification(
+            rid,
+            "league_player_left",
+            `${playerName} left ${membership.team.name}`,
+            `They cancelled their league registration. Their roster slot is open again.`,
+            `/leagues/${id}`,
+          ).catch(() => {}),
+        ),
+      );
+    }
+    return NextResponse.json({ ok: true, removedFromTeam: !!membership });
+  }
+
   await prisma.leagueParticipationRequest.update({
     where: { id: reqId },
     data: { status: "withdrawn" },

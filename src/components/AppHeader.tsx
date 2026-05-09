@@ -2,9 +2,34 @@
 
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import Logo from "./Logo";
+
+/** Measure the fixed header element and push its height to:
+ *   - the CSS var `--header-height` (used by sticky tab bars below)
+ *   - #main-content paddingTop (so the page body sits below the header)
+ *
+ * Used by every variant since they're all `position: fixed`. The global
+ * Header.tsx also runs this for the light variant; both writers stay in
+ * sync because the value is the actual measured height. */
+function useHeaderHeightSync(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const HEADER_GAP_PX = 24;
+    const update = () => {
+      const h = el.offsetHeight;
+      const main = document.getElementById("main-content");
+      if (main) main.style.paddingTop = `${h + HEADER_GAP_PX}px`;
+      document.documentElement.style.setProperty("--header-height", `${h}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+}
 
 export type HeaderStatus = "draft" | "open" | "active" | "completed";
 
@@ -248,8 +273,11 @@ function LightHeader({
   user,
 }: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user">) {
   const hasBack = !!back;
+  const ref = useRef<HTMLElement | null>(null);
+  useHeaderHeightSync(ref);
   return (
     <header
+      ref={ref}
       style={{
         background: "#ffffff",
         borderBottom: "1px solid #e2e8f0",
@@ -334,9 +362,12 @@ function HeroHeader({
     completed: { bg: "rgba(255,255,255,0.12)", fg: "rgba(255,255,255,0.75)", dot: "rgba(255,255,255,0.55)" },
   };
   const s = status ? statusStyles[status] : undefined;
+  const ref = useRef<HTMLElement | null>(null);
+  useHeaderHeightSync(ref);
 
   return (
     <header
+      ref={ref}
       style={{
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",
@@ -492,8 +523,12 @@ function HeroSubHeader({
     )
   ) : null;
 
+  const ref = useRef<HTMLElement | null>(null);
+  useHeaderHeightSync(ref);
+
   return (
     <header
+      ref={ref}
       style={{
         background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)",
         color: "#fff",

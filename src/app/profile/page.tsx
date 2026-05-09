@@ -16,37 +16,16 @@ interface RatingData {
   }[];
 }
 
-interface CompResult {
-  id: string;
-  eventId: string;
-  classId: string;
-  groupLabel?: string | null;
-  groupPosition?: number | null;
-  groupWins: number;
-  groupLosses: number;
-  bracketReached?: string | null;
-  finalPlacement?: number | null;
-}
-
 interface RecentMatch {
   id: string;
   status: string;
-  courtNum: number;
-  createdAt: string;
-  event: { id: string; name: string; date: string };
-  class?: { format: string } | null;
-  players: { playerId: string; team: number; score: number; player: { name: string; emoji: string } }[];
+  players: { playerId: string; team: number; score: number }[];
 }
-
-const BRACKET_LABELS: Record<string, string> = {
-  winner: "🥇 Winner", f: "🥈 Finalist", "3rd": "🥉 3rd", sf: "Semi-final", qf: "Quarter-final",
-};
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [ratings, setRatings] = useState<RatingData | null>(null);
-  const [results, setResults] = useState<CompResult[]>([]);
   const [matches, setMatches] = useState<RecentMatch[]>([]);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -60,9 +39,9 @@ export default function ProfilePage() {
   }, [editing]);
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editGender, setEditGender] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"all" | "social" | "competition">("all");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,6 +58,7 @@ export default function ProfilePage() {
         setEditName(playerData.name || "");
         setEditPhone(playerData.phone || "");
         setEditEmail(playerData.email || "");
+        setEditGender(playerData.gender || null);
       }
       setLoading(false);
     });
@@ -156,13 +136,30 @@ export default function ProfilePage() {
                 placeholder="+CC 123 456 789"
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
+            <div>
+              <label className="block text-xs text-muted mb-0.5">Gender</label>
+              <div className="flex gap-2">
+                {[
+                  { value: null, label: "Skip" },
+                  { value: "M", label: "♂ Male" },
+                  { value: "F", label: "♀ Female" },
+                ].map((g) => (
+                  <button key={g.label} type="button" onClick={() => setEditGender(g.value)}
+                    className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+                      editGender === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
+                    }`}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2 pt-1">
               <button disabled={saving} onClick={async () => {
                 setSaving(true);
                 await fetch(`/api/players/${userId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim() }),
+                  body: JSON.stringify({ name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim(), gender: editGender }),
                 });
                 setSaving(false);
                 setEditing(false);
@@ -244,55 +241,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Tab toggle */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["all", "social", "competition"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
-              tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
-            }`}>{t}</button>
-        ))}
-      </div>
-
-      {/* Recent matches */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold">Recent Matches</h3>
-        {matches.length === 0 ? (
-          <p className="text-xs text-muted text-center py-4">No matches yet</p>
-        ) : (
-          matches.slice(0, 15).map((m) => {
-            const myTeam = m.players.find((p) => p.playerId === userId)?.team;
-            const team1 = m.players.filter((p) => p.team === 1);
-            const team2 = m.players.filter((p) => p.team === 2);
-            const t1Score = team1.reduce((s, p) => s + p.score, 0);
-            const t2Score = team2.reduce((s, p) => s + p.score, 0);
-            const won = myTeam === 1 ? t1Score > t2Score : t2Score > t1Score;
-            const myTeamPlayers = myTeam === 1 ? team1 : team2;
-            const oppTeamPlayers = myTeam === 1 ? team2 : team1;
-
-            return (
-              <div key={m.id} className={`bg-card rounded-lg border px-3 py-2 ${won ? "border-green-200" : "border-border"}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-1 text-xs">
-                      {myTeamPlayers.map((p) => <span key={p.playerId}>{p.player.emoji}</span>)}
-                      <span className="text-muted mx-1">vs</span>
-                      {oppTeamPlayers.map((p) => <span key={p.playerId}>{p.player.emoji}</span>)}
-                    </div>
-                    <p className="text-[10px] text-muted mt-0.5">{m.event.name}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-sm font-bold ${won ? "text-green-600" : "text-gray-400"}`}>
-                      {myTeam === 1 ? t1Score : t2Score}-{myTeam === 1 ? t2Score : t1Score}
-                    </span>
-                    <span className={`ml-1 text-xs font-medium ${won ? "text-green-600" : "text-danger"}`}>{won ? "W" : "L"}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
     </div>
   );
 }

@@ -39,6 +39,10 @@ export async function GET(
                 select: {
                   id: true, name: true, season: true, createdById: true, deputyId: true,
                   categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
+                  // For visibility checks: anyone on a team in the league should
+                  // be able to see the match-day event regardless of its status.
+                  teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
+                  helpers: { select: { playerId: true } },
                 },
               },
             },
@@ -58,6 +62,35 @@ export async function GET(
   });
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+  // Hide hidden + setup/draft events from outsiders. League match-day and
+  // playoff events count league participants (team captains/vice/players,
+  // helpers, organizers) as insiders so they can see their own match-day
+  // even before an organizer flips the event status.
+  const isSetup = event.status === "setup" || event.status === "draft";
+  const needsInsiderView = event.visibility === "hidden" || isSetup;
+  if (needsInsiderView) {
+    const isAdmin = user.role === "admin";
+    const league = event.leagueMatchDay?.round.league;
+    const isLeagueParticipant = !!league && (
+      league.createdById === user.id ||
+      league.deputyId === user.id ||
+      league.helpers?.some((h: { playerId: string }) => h.playerId === user.id) ||
+      league.teams?.some((t: { captainId: string | null; viceCaptainId: string | null; players: { playerId: string }[] }) =>
+        t.captainId === user.id ||
+        t.viceCaptainId === user.id ||
+        t.players.some((p) => p.playerId === user.id),
+      )
+    );
+    const isInsider =
+      isAdmin ||
+      event.createdById === user.id ||
+      event.helpers.some((h) => h.playerId === user.id) ||
+      event.players.some((p) => p.playerId === user.id) ||
+      isLeagueParticipant;
+    if (!isInsider) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
   }
   const allowEmail = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowEmail ? event : stripEmailsDeep(event));

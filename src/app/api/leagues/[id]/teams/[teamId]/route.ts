@@ -60,10 +60,38 @@ export async function PATCH(
     return NextResponse.json(updated);
   }
 
-  // Regular team edit (name, slogan, captain, etc.)
-  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
-  const err = await assertTeamInLeague(teamId, id);
-  if (err) return err;
+  // Regular team edit. Field-level permissions:
+  //   - Manager-only: captainId, viceCaptainId, clubId (leadership/structure).
+  //   - Team captain/vice (or manager): name, slogan, logoUrl, photoUrl.
+  const managerOnlyFields = ["captainId", "viceCaptainId", "clubId"] as const;
+  const wantsManagerField = managerOnlyFields.some((f) => body[f] !== undefined);
+
+  let user;
+  try { user = await requireAuth(); } catch (e) { return authErrorResponse(e); }
+  const team = await prisma.leagueTeam.findUnique({
+    where: { id: teamId },
+    select: { leagueId: true, captainId: true, viceCaptainId: true },
+  });
+  if (!team || team.leagueId !== id) return NextResponse.json({ error: "Team not found" }, { status: 404 });
+  const league = await prisma.league.findUnique({
+    where: { id }, select: { createdById: true, deputyId: true, clubId: true },
+  });
+  const isAppAdmin = user.role === "admin";
+  const isLeagueOrganizer = isAppAdmin || league?.createdById === user.id || league?.deputyId === user.id;
+  let isLeagueHelper = false;
+  if (!isLeagueOrganizer) {
+    const helper = await prisma.leagueHelper.findFirst({ where: { leagueId: id, playerId: user.id } });
+    isLeagueHelper = !!helper;
+  }
+  const isManager = isLeagueOrganizer || isLeagueHelper;
+  const isTeamLeader = team.captainId === user.id || team.viceCaptainId === user.id;
+
+  if (wantsManagerField && !isManager) {
+    return NextResponse.json({ error: "Only league managers can change team name / captains / club" }, { status: 403 });
+  }
+  if (!isManager && !isTeamLeader) {
+    return NextResponse.json({ error: "Not authorized to edit this team" }, { status: 403 });
+  }
 
   const data: Record<string, unknown> = {};
   if (body.name !== undefined) data.name = String(body.name).trim();
@@ -74,8 +102,8 @@ export async function PATCH(
   if (body.slogan !== undefined) data.slogan = body.slogan ? String(body.slogan).trim() : null;
   if (body.clubId !== undefined) data.clubId = body.clubId || null;
 
-  const team = await prisma.leagueTeam.update({ where: { id: teamId }, data });
-  return NextResponse.json(team);
+  const updated = await prisma.leagueTeam.update({ where: { id: teamId }, data });
+  return NextResponse.json(updated);
 }
 
 // DELETE: remove team

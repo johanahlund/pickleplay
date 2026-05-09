@@ -19,23 +19,65 @@ export async function GET() {
       helpers: { include: { player: { select: safePlayerSelect } } },
       club: { select: { id: true, name: true, emoji: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
+      // Used by visibility check: league participants (team players/captains,
+      // helpers, organizers) can see league match-day events even when those
+      // events are still in "setup"/"draft" status.
+      leagueMatchDay: {
+        select: {
+          round: {
+            select: {
+              league: {
+                select: {
+                  createdById: true, deputyId: true,
+                  helpers: { select: { playerId: true } },
+                  teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 
-  // Filter out hidden events unless user is admin, owner, helper, or a player in the event
+  // Hide events from outsiders in two cases:
+  //   - visibility="hidden" (creator-only)
+  //   - status is "setup" / "draft" (event hasn't been published yet)
+  // In both cases, the creator/helpers/players/admin (and league participants
+  // for league match-day events) can still see them.
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const filtered = events.filter((event) => {
-    if (event.visibility !== "hidden") return true;
+    const isSetup = event.status === "setup" || event.status === "draft";
+    const needsInsiderView = event.visibility === "hidden" || isSetup;
+    if (!needsInsiderView) return true;
     if (!userId) return false;
-    const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
     if (isAdmin) return true;
     if (event.createdById === userId) return true;
     if (event.helpers.some((h) => h.playerId === userId)) return true;
     if (event.players.some((p) => p.playerId === userId)) return true;
+    const league = event.leagueMatchDay?.round.league;
+    if (league) {
+      if (league.createdById === userId) return true;
+      if (league.deputyId === userId) return true;
+      if (league.helpers.some((h) => h.playerId === userId)) return true;
+      if (league.teams.some((t) =>
+        t.captainId === userId ||
+        t.viceCaptainId === userId ||
+        t.players.some((p) => p.playerId === userId),
+      )) return true;
+    }
     return false;
+  });
+  // Drop the leagueMatchDay payload from the response — it was only needed
+  // for the visibility filter above. Keeping it would leak roster ids.
+  const stripped = filtered.map((e) => {
+    const { leagueMatchDay: _lmd, ...rest } = e;
+    void _lmd;
+    return rest;
   });
 
   const allowEmail = await canSeeEmails(userId, userRole);
-  return NextResponse.json(allowEmail ? filtered : stripEmailsDeep(filtered));
+  return NextResponse.json(allowEmail ? stripped : stripEmailsDeep(stripped));
 }
 
 export async function POST(req: Request) {

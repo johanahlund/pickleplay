@@ -129,7 +129,7 @@ export function Header() {
   // 0 height. We must measure the actual <header> element. We query it
   // by tag rather than via a ref so we don't have to thread refs through
   // each AppHeader variant.
-  const HEADER_GAP_PX = 12;
+  const HEADER_GAP_PX = 24;
   const updateMainPadding = useCallback(() => {
     const header = document.querySelector("header");
     if (header) {

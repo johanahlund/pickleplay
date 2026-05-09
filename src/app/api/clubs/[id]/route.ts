@@ -48,9 +48,14 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const { name, emoji, description, city, country, status, locations } = await req.json();
-  const data: { name?: string; emoji?: string; description?: string | null; city?: string | null; country?: string | null; status?: string } = {};
+  const { name, shortName, emoji, description, city, country, status, locations } = await req.json();
+  const data: { name?: string; shortName?: string | null; emoji?: string; description?: string | null; city?: string | null; country?: string | null; status?: string } = {};
   if (name?.trim()) data.name = name.trim();
+  if (shortName !== undefined) {
+    data.shortName = typeof shortName === "string" && shortName.trim()
+      ? shortName.trim().slice(0, 10)
+      : null;
+  }
   if (emoji) data.emoji = emoji;
   if (description !== undefined) data.description = description?.trim() || null;
   if (city !== undefined) data.city = city?.trim() || null;
