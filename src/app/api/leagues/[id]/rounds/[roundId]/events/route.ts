@@ -17,6 +17,7 @@ export async function POST(
     where: { id: roundId },
     select: {
       leagueId: true, name: true, roundNumber: true, startDate: true,
+      categoriesOverride: true,
       league: {
         select: {
           name: true,
@@ -28,6 +29,26 @@ export async function POST(
   if (!round) return NextResponse.json({ error: "Round not found" }, { status: 404 });
   if (round.leagueId !== id) {
     return NextResponse.json({ error: "Round does not belong to this league" }, { status: 403 });
+  }
+
+  // Resolve effective categories: round override (subset + per-row overrides)
+  // merged onto league defaults. The overrides snapshot only stores fields the
+  // user changed; missing fields fall back to league.categories[id].
+  type CatRow = (typeof round.league.categories)[number];
+  type OverrideRow = { id: string; name?: string; format?: string; gender?: string; ageGroup?: string;
+    skillMin?: number | null; skillMax?: number | null; scoringFormat?: string; winBy?: string; maxPerEvent?: number | null };
+  let effectiveCats: CatRow[];
+  if (Array.isArray(round.categoriesOverride)) {
+    const byId = new Map(round.league.categories.map((c) => [c.id, c]));
+    effectiveCats = (round.categoriesOverride as unknown as OverrideRow[])
+      .map((o) => {
+        const base = byId.get(o.id);
+        if (!base) return null;
+        return { ...base, ...Object.fromEntries(Object.entries(o).filter(([k, v]) => k !== "id" && v !== undefined && v !== null)) } as CatRow;
+      })
+      .filter((c): c is CatRow => c !== null);
+  } else {
+    effectiveCats = round.league.categories;
   }
 
   const body = await req.json().catch(() => null);
@@ -62,7 +83,7 @@ export async function POST(
       roundId,
       hostTeamId,
       classes: {
-        create: round.league.categories.map((cat, i) => ({
+        create: effectiveCats.map((cat, i) => ({
           name: cat.name,
           format: cat.format,
           gender: cat.gender,
@@ -77,10 +98,11 @@ export async function POST(
     },
   });
 
-  // Pre-create LeagueGame rows when 2 teams play.
-  if (teamIds.length === 2 && round.league.categories.length > 0) {
+  // Pre-create LeagueGame rows when 2 teams play. Reference the real
+  // LeagueCategory.id (FK), even if the round overrode some display fields.
+  if (teamIds.length === 2 && effectiveCats.length > 0) {
     const [t1Id, t2Id] = teamIds;
-    for (const cat of round.league.categories) {
+    for (const cat of effectiveCats) {
       await prisma.leagueGame.create({
         data: { eventId: event.id, categoryId: cat.id, team1Id: t1Id, team2Id: t2Id },
       });
