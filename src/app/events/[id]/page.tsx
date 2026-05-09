@@ -60,7 +60,7 @@ interface Match {
   classId?: string | null;
   scorerId?: string | null;
   scorer?: { id: string; name: string; photoUrl?: string | null } | null;
-  leagueGame?: { id: string; isPrincipal: boolean; lineupGenerated: boolean; category: { id: string; name: string } } | null;
+  leagueGame?: { id: string; kind: "principal" | "league" | "extra"; slotNumber: number; category: { id: string; name: string } } | null;
 }
 
 // In the new model the Event itself is the match-day. `round` is on Event,
@@ -2370,8 +2370,8 @@ export default function EventDetailPage() {
   const passesLeagueFilter = (m: Match) => {
     if (leagueFilter === "all") return true;
     if (leagueFilter === "non-league") return !m.leagueGame;
-    if (leagueFilter === "principal") return !!m.leagueGame?.isPrincipal;
-    if (leagueFilter === "friendly") return m.leagueGame ? !m.leagueGame.isPrincipal : false;
+    if (leagueFilter === "principal") return m.leagueGame?.kind === "principal";
+    if (leagueFilter === "friendly") return m.leagueGame ? m.leagueGame.kind !== "principal" : false;
     return true;
   };
   const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesLeagueFilter);
@@ -2416,13 +2416,22 @@ export default function EventDetailPage() {
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
         isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action border-l-4" : "border-border"
       }`}>
-        {lg && (
-          <div className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ${lg.isPrincipal ? "bg-emerald-50 text-emerald-700" : "bg-gray-50 text-muted"}`}>
-            <span>{lg.isPrincipal ? "🏆" : "⚪"}</span>
-            <span>{lg.isPrincipal ? "Principal" : "Friendly in league"}</span>
-            <span className="text-muted ml-1">· {lg.category.name}</span>
-          </div>
-        )}
+        {lg && (() => {
+          const isPrincipal = lg.kind === "principal";
+          const isLeague = lg.kind === "league";
+          const tone = isPrincipal ? "bg-emerald-50 text-emerald-700"
+            : isLeague ? "bg-blue-50 text-blue-700"
+            : "bg-gray-50 text-muted";
+          const icon = isPrincipal ? "🏆" : isLeague ? "🎯" : "⚪";
+          const label = isPrincipal ? "Principal" : isLeague ? "League" : "Extra";
+          return (
+            <div className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ${tone}`}>
+              <span>{icon}</span>
+              <span>{label}</span>
+              <span className="text-muted ml-1">· {lg.category.name}</span>
+            </div>
+          );
+        })()}
         <div className="flex items-center gap-2 px-2 py-2"
           onClick={() => setActionSheetMatchId(match.id)}>
           {/* Court number circle — start button for pending */}

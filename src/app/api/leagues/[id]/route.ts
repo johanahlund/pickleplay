@@ -51,16 +51,21 @@ export async function GET(
               id: true, name: true, date: true, status: true, hostTeamId: true,
               leagueTeams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
               leagueGames: {
-                include: {
+                select: {
+                  id: true, categoryId: true, slotNumber: true, kind: true,
+                  team1Id: true, team2Id: true, team1Wants: true, team2Wants: true,
+                  matchId: true, winnerId: true,
                   category: { select: { id: true, name: true } },
                   team1: { select: { id: true, name: true } },
                   team2: { select: { id: true, name: true } },
                   winner: { select: { id: true, name: true } },
+                  gamePlayers: {
+                    select: {
+                      playerId: true,
+                      player: { select: { id: true, name: true } },
+                    },
+                  },
                 },
-              },
-              // Status only — slot details come from /lineups endpoint (visibility-controlled)
-              leagueLineups: {
-                select: { id: true, teamId: true, status: true, unlockRequestedById: true },
               },
             },
           },

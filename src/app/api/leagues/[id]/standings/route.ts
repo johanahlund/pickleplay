@@ -81,6 +81,9 @@ export async function GET(
       // Calculate per-team category wins for this event
       const mdWins: Record<string, number> = {};
       for (const game of ev.leagueGames) {
+        // "extra" games are linked to the league but don't count for event
+        // points or team-level totals. Both "principal" and "league" do.
+        if (game.kind === "extra") continue;
         if (game.winnerId) {
           mdWins[game.winnerId] = (mdWins[game.winnerId] || 0) + 1;
           if (standings[game.winnerId]) {
@@ -100,8 +103,8 @@ export async function GET(
         }
       }
 
-      // Only count completed events (at least one game with a winner)
-      const hasResults = ev.leagueGames.some((g) => g.winnerId);
+      // Only count completed events (at least one principal/league game with a winner)
+      const hasResults = ev.leagueGames.some((g) => g.winnerId && g.kind !== "extra");
       if (!hasResults) continue;
 
       // Determine match-day points (capped) and W/L/D for each team
@@ -159,8 +162,10 @@ export async function GET(
       for (const ev of round.events) {
         for (const game of ev.leagueGames) {
           if (game.categoryId !== cat.id || !game.winnerId) continue;
-          // Only principal games count for category rankings
-          if (game.isPrincipal === false) continue;
+          // Only the principal game per category counts for category rankings.
+          // "league" games count toward team event points but not category
+          // standings; "extra" games count for neither.
+          if (game.kind !== "principal") continue;
           catTeams[game.winnerId].wins++;
           catTeams[game.winnerId].played++;
           const loserId = game.team1Id === game.winnerId ? game.team2Id : game.team1Id;

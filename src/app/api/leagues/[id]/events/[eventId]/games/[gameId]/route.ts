@@ -29,8 +29,10 @@ async function requireGameEditor(leagueId: string, gameId: string) {
   throw new Error("Forbidden");
 }
 
-// PATCH: toggle isPrincipal (or other game-level fields). Blocked once the
-// game has a recorded winner — in-progress matches must not flip status.
+// PATCH: change `kind` (or other game-level fields). Blocked once the game
+// has a recorded winner — in-progress matches must not flip status. When
+// promoting to "principal", any existing principal in the same category is
+// demoted to "league" so the invariant holds.
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; eventId: string; gameId: string }> }
@@ -45,7 +47,7 @@ export async function PATCH(
 
   const game = await prisma.leagueGame.findUnique({
     where: { id: gameId },
-    select: { eventId: true, winnerId: true },
+    select: { eventId: true, categoryId: true, winnerId: true },
   });
   if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
   if (game.eventId !== eventId) {
@@ -53,11 +55,20 @@ export async function PATCH(
   }
 
   const data: Record<string, unknown> = {};
-  if (typeof body.isPrincipal === "boolean") {
-    if (game.winnerId) {
-      return NextResponse.json({ error: "Cannot change status — game already has a recorded winner" }, { status: 400 });
+  if (typeof body.kind === "string") {
+    if (!["principal", "league", "extra"].includes(body.kind)) {
+      return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
     }
-    data.isPrincipal = body.isPrincipal;
+    if (game.winnerId) {
+      return NextResponse.json({ error: "Cannot change kind — game already has a recorded winner" }, { status: 400 });
+    }
+    if (body.kind === "principal") {
+      await prisma.leagueGame.updateMany({
+        where: { eventId, categoryId: game.categoryId, kind: "principal", NOT: { id: gameId } },
+        data: { kind: "league" },
+      });
+    }
+    data.kind = body.kind;
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 

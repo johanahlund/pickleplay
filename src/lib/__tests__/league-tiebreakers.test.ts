@@ -10,7 +10,10 @@ interface Game {
   team1Id: string;
   team2Id: string;
   winnerId: string | null;
-  isPrincipal: boolean;
+  // "principal" = sole game per category that counts for category standings
+  // "league"    = counts toward team event points but not category standings
+  // "extra"     = recorded against the league but counts for neither
+  kind: "principal" | "league" | "extra";
   matchScore?: { team1: number; team2: number } | null;
 }
 interface MatchDayEvent { teams: { teamId: string }[]; games: Game[] }
@@ -49,6 +52,7 @@ function computeStandings(
     for (const md of round.events) {
       const mdWins: Record<string, number> = {};
       for (const game of md.games) {
+        if (game.kind === "extra") continue;
         if (game.winnerId) {
           mdWins[game.winnerId] = (mdWins[game.winnerId] || 0) + 1;
           standings[game.winnerId].totalCategoryWins++;
@@ -62,7 +66,7 @@ function computeStandings(
         }
       }
 
-      const hasResults = md.games.some((g) => g.winnerId);
+      const hasResults = md.games.some((g) => g.winnerId && g.kind !== "extra");
       if (!hasResults) continue;
 
       const tids = md.teams.map((t) => t.teamId);
@@ -109,7 +113,7 @@ function computeCategoryStandings(
     for (const md of round.events) {
       for (const game of md.games) {
         if (game.categoryId !== categoryId || !game.winnerId) continue;
-        if (game.isPrincipal === false) continue; // only principal games
+        if (game.kind !== "principal") continue; // only the principal game per category
         catTeams[game.winnerId].wins++;
         const loserId = game.team1Id === game.winnerId ? game.team2Id : game.team1Id;
         catTeams[loserId].losses++;
@@ -133,15 +137,15 @@ describe("H2H Tiebreaker", () => {
     const rounds: Round[] = [
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
-        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
+        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" })),
       }] },
       { events: [{
         teams: [{ teamId: "B" }, { teamId: "C" }],
-        games: cats.map((c) => ({ categoryId: c, team1Id: "B", team2Id: "C", winnerId: "B", isPrincipal: true })),
+        games: cats.map((c) => ({ categoryId: c, team1Id: "B", team2Id: "C", winnerId: "B", kind: "principal" })),
       }] },
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "C" }],
-        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "C", winnerId: "C", isPrincipal: true })),
+        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "C", winnerId: "C", kind: "principal" })),
       }] },
     ];
     const result = computeStandings(teams, rounds, cats, 3);
@@ -162,15 +166,15 @@ describe("H2H Tiebreaker", () => {
     const rounds: Round[] = [
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
-        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
+        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" })),
       }] },
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
         ],
       }] },
     ];
@@ -192,10 +196,10 @@ describe("Point Difference Tiebreaker", () => {
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true, matchScore: { team1: 15, team2: 5 } },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true, matchScore: { team1: 15, team2: 10 } },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true, matchScore: { team1: 10, team2: 15 } },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true, matchScore: { team1: 5, team2: 15 } },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal", matchScore: { team1: 15, team2: 5 } },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal", matchScore: { team1: 15, team2: 10 } },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal", matchScore: { team1: 10, team2: 15 } },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal", matchScore: { team1: 5, team2: 15 } },
         ],
       }] },
     ];
@@ -213,10 +217,10 @@ describe("Point Difference Tiebreaker", () => {
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true, matchScore: { team1: 15, team2: 0 } },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true, matchScore: { team1: 13, team2: 15 } },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: null, isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: null, isPrincipal: true },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal", matchScore: { team1: 15, team2: 0 } },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal", matchScore: { team1: 13, team2: 15 } },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: null, kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: null, kind: "principal" },
         ],
       }] },
     ];
@@ -229,14 +233,14 @@ describe("Point Difference Tiebreaker", () => {
   });
 });
 
-describe("isPrincipal in Category Standings", () => {
+describe("Game kind in Category Standings", () => {
   test("extra games do not count for category rankings", () => {
     const rounds: Round[] = [{
       events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: false }, // extra game
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", kind: "extra" }, // extra game
         ],
       }],
     }];
@@ -254,13 +258,13 @@ describe("isPrincipal in Category Standings", () => {
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
         ],
       }] },
       { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
         ],
       }] },
     ];
@@ -277,7 +281,7 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
     const rounds: Round[] = [{
       events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
-        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
+        games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" })),
       }],
     }];
     const result = computeStandings(["A", "B"], rounds, cats, 3);
@@ -290,10 +294,10 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
       events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
         ],
       }],
     }];
@@ -303,16 +307,19 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
   });
 
   test("Example 3 (with repetitions): 6 games, A wins 4, B wins 2, tabela 3-2", () => {
+    // Repeats within a category use kind="league": they count toward team
+    // event points (capped) but not toward category standings — only the
+    // single principal game per category does.
     const rounds: Round[] = [{
       events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: false }, // extra
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: false }, // extra
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "league" },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", kind: "league" },
         ],
       }],
     }];
@@ -327,14 +334,14 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
       events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: false },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
-          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: false },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: false },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
-          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: false },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", kind: "league" },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", kind: "principal" },
+          { categoryId: "fem", team1Id: "A", team2Id: "B", winnerId: "B", kind: "league" },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "mix", team1Id: "A", team2Id: "B", winnerId: "A", kind: "league" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "A", kind: "principal" },
+          { categoryId: "singles", team1Id: "A", team2Id: "B", winnerId: "B", kind: "league" },
         ],
       }],
     }];

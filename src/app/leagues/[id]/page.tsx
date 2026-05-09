@@ -33,20 +33,22 @@ interface LeagueTeam {
 interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number; maxPerEvent: number | null }
 interface LeagueGame {
   id: string; categoryId: string;
-  isPrincipal: boolean;
+  slotNumber: number;
+  kind: "principal" | "league" | "extra";
+  team1Id: string; team2Id: string;
+  team1Wants: boolean; team2Wants: boolean;
   category: { id: string; name: string };
   team1: { id: string; name: string };
   team2: { id: string; name: string };
   winner?: { id: string; name: string } | null;
   matchId?: string | null;
+  gamePlayers: { playerId: string; player: { id: string; name: string } }[];
 }
-interface LeagueLineupStatus { id: string; teamId: string; status: "draft" | "submitted" | "revealed"; unlockRequestedById: string | null }
 // A league-attached event = a match-day for a round. Two teams play under it.
 interface LeagueRoundEvent {
   id: string; name: string; date: string; status: string; hostTeamId: string | null;
   leagueTeams: { teamId: string; points: number; team: { id: string; name: string; logoUrl: string | null } }[];
   leagueGames: LeagueGame[];
-  leagueLineups?: LeagueLineupStatus[];
 }
 interface LeagueRound {
   id: string; roundNumber: number; name: string | null;

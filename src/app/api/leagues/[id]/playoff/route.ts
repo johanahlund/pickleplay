@@ -53,7 +53,7 @@ export async function POST(
       for (const ev of round.events) {
         for (const game of ev.leagueGames) {
           if (game.categoryId !== cat.id || !game.winnerId) continue;
-          if (game.isPrincipal === false) continue;
+          if (game.kind !== "principal") continue;
           catWins[game.winnerId] = (catWins[game.winnerId] || 0) + 1;
         }
       }

@@ -92,20 +92,10 @@ export async function POST(
         },
       });
 
-      // Pre-create LeagueGame rows (category × team pair) when 2 teams play.
-      if ((seed.teamIds || []).length === 2 && categories.length > 0) {
-        const [t1Id, t2Id] = seed.teamIds;
-        for (const cat of categories) {
-          await prisma.leagueGame.create({
-            data: {
-              eventId: event.id,
-              categoryId: cat.id,
-              team1Id: t1Id,
-              team2Id: t2Id,
-            },
-          });
-        }
-      }
+      // LeagueGame rows are NOT pre-created. They're lazy-created when a
+      // captain ticks "we want to play this slot" via the lineup builder
+      // (see /api/leagues/[id]/events/[eventId]/games slot-toggle endpoint).
+      void event; void categories;
     }
   }
 
