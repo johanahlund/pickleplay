@@ -25,6 +25,7 @@ interface Event {
   visibility: string;
   createdById: string | null;
   clubId: string | null;
+  roundId?: string | null; // present when this event is attached to a league round
   club?: { id: string; name: string; shortName?: string | null; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null; skillMin?: number | null; skillMax?: number | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string; status?: string }[];
@@ -450,7 +451,9 @@ function EventsPage() {
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
-                      {event.classes?.some((c) => c.competitionMode) ? (
+                      {event.roundId ? (
+                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 League</span>
+                      ) : event.classes?.some((c) => c.competitionMode) ? (
                         <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 Comp</span>
                       ) : (
                         <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
