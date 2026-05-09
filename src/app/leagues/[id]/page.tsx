@@ -2686,13 +2686,21 @@ export default function LeagueDetailPage() {
                   </div>
                 );
               })}
-              {editingRoundId !== round.id && canEdit && league.teams.length >= 2 && (
-                <AddRoundEventForm
-                  teams={league.teams.map((t) => ({ id: t.id, name: t.name }))}
-                  defaultDate={round.startDate}
-                  onAdd={(t1, t2, host, date) => addEventToRound(round.id, t1, t2, host, date)}
-                />
-              )}
+              {(() => {
+                if (editingRoundId === round.id || !canEdit || league.teams.length < 2) return null;
+                // Exclude teams that are already in an event for this round —
+                // a team can play at most once per round.
+                const usedTeamIds = new Set(round.events.flatMap((ev) => ev.leagueTeams.map((t) => t.teamId)));
+                const available = league.teams.filter((t) => !usedTeamIds.has(t.id));
+                if (available.length < 2) return null;
+                return (
+                  <AddRoundEventForm
+                    teams={available.map((t) => ({ id: t.id, name: t.name }))}
+                    defaultDate={round.startDate}
+                    onAdd={(t1, t2, host, date) => addEventToRound(round.id, t1, t2, host, date)}
+                  />
+                );
+              })()}
             </div>
           ))}
 
