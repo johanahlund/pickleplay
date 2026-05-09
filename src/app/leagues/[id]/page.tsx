@@ -217,9 +217,12 @@ export default function LeagueDetailPage() {
   );
 
   const isAppAdmin = userRole === "admin" && hasRole(viewRole, "admin");
-  const isDirector = league.createdBy?.id === userId;
-  const isDeputy = league.deputy?.id === userId;
-  const isHelper = league.helpers?.some((h) => h.playerId === userId);
+  // Admins toggling "view as" downgrade their effective league powers; for
+  // non-admins, roles are based purely on the actual relationship.
+  const leaguePowersAllowed = userRole !== "admin" || hasRole(viewRole, "league");
+  const isDirector = leaguePowersAllowed && league.createdBy?.id === userId;
+  const isDeputy = leaguePowersAllowed && league.deputy?.id === userId;
+  const isHelper = leaguePowersAllowed && (league.helpers?.some((h) => h.playerId === userId) ?? false);
   const canEdit = isAppAdmin || isDirector || isDeputy || isHelper;
 
   const startEditInfo = () => {
@@ -739,7 +742,7 @@ export default function LeagueDetailPage() {
             className="bg-card rounded-xl border border-border p-3 flex items-center gap-2 active:opacity-70 cursor-pointer">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{cat.name}</p>
-              <p className="text-xs text-muted">{cat.format} · {genderLabel(cat.gender)}{cat.ageGroup !== "open" ? ` · ${cat.ageGroup}` : ""} · {scoringLabel(cat.scoringFormat)} · win by {cat.winBy}</p>
+              <p className="text-xs text-muted">{cat.format} · {genderLabel(cat.gender)}{cat.ageGroup !== "open" ? ` · ${cat.ageGroup}` : ""} · {scoringLabel(cat.scoringFormat)} · win by {cat.winBy}{cat.maxPerEvent != null ? ` · max ${cat.maxPerEvent}/event` : ""}</p>
             </div>
             {cat.status === "draft" && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">Draft</span>}
             <span className="text-muted shrink-0"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>
@@ -784,7 +787,19 @@ export default function LeagueDetailPage() {
           <div><label className="block text-xs text-muted mb-1">Format</label><select value={cat.format} onChange={(e) => updateCat("format", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="doubles">Doubles</option><option value="singles">Singles</option></select></div>
           <div><label className="block text-xs text-muted mb-1">Gender</label><select value={cat.gender} onChange={(e) => updateCat("gender", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="open">Open</option><option value="male">Men</option><option value="female">Women</option><option value="mix">Mixed</option></select></div>
           <div><label className="block text-xs text-muted mb-1">Age Group</label><select value={cat.ageGroup} onChange={(e) => updateCat("ageGroup", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm">{AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}</select></div>
-          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5"><select value={cat.skillMin ?? ""} onChange={(e) => updateCat("skillMin", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "From"}</option>)}</select><span className="text-xs text-muted">–</span><select value={cat.skillMax ?? ""} onChange={(e) => updateCat("skillMax", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "To"}</option>)}</select></div></div>
+          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5">
+            <select value={cat.skillMin != null ? cat.skillMin.toFixed(1) : ""} onChange={(e) => updateCat("skillMin", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="" disabled hidden>From</option>
+              <option value="">–</option>
+              {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span className="text-xs text-muted">–</span>
+            <select value={cat.skillMax != null ? cat.skillMax.toFixed(1) : ""} onChange={(e) => updateCat("skillMax", e.target.value ? parseFloat(e.target.value) : null)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="" disabled hidden>To</option>
+              <option value="">–</option>
+              {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(cat.scoringFormat, (v) => updateCat("scoringFormat", v))}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(cat.winBy, (v) => updateCat("winBy", v))}</div></div>
           <div>
             <label className="block text-xs text-muted mb-1">Max matches per event <span className="opacity-70 font-normal">(empty = no cap)</span></label>
@@ -815,7 +830,19 @@ export default function LeagueDetailPage() {
           <div><label className="block text-xs text-muted mb-1">Format</label><select value={newCatFormat} onChange={(e) => setNewCatFormat(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="doubles">Doubles</option><option value="singles">Singles</option></select></div>
           <div><label className="block text-xs text-muted mb-1">Gender</label><select value={newCatGender} onChange={(e) => setNewCatGender(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="open">Open</option><option value="male">Men</option><option value="female">Women</option><option value="mix">Mixed</option></select></div>
           <div><label className="block text-xs text-muted mb-1">Age Group</label><select value={newCatAge} onChange={(e) => setNewCatAge(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm">{AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}</select></div>
-          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5"><select value={newCatSkillMin} onChange={(e) => setNewCatSkillMin(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "From"}</option>)}</select><span className="text-xs text-muted">–</span><select value={newCatSkillMax} onChange={(e) => setNewCatSkillMax(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">{SKILL_OPTS.map((s) => <option key={s} value={s}>{s || "To"}</option>)}</select></div></div>
+          <div><label className="block text-xs text-muted mb-1">Level (DUPR)</label><div className="flex items-center gap-1.5">
+            <select value={newCatSkillMin} onChange={(e) => setNewCatSkillMin(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="" disabled hidden>From</option>
+              <option value="">–</option>
+              {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span className="text-xs text-muted">–</span>
+            <select value={newCatSkillMax} onChange={(e) => setNewCatSkillMax(e.target.value)} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm">
+              <option value="" disabled hidden>To</option>
+              <option value="">–</option>
+              {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(newCatScoring, setNewCatScoring)}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(newCatWinBy, setNewCatWinBy)}</div></div>
           <div className="bg-gray-50 rounded-lg px-3 py-2"><span className="text-xs text-muted">Name: </span><span className="text-sm font-medium">{autoCatName()}</span></div>
           <div className="flex gap-2 mt-4">
@@ -1349,7 +1376,7 @@ export default function LeagueDetailPage() {
               {league.categories.map((cat) => (
                 <div key={cat.id} className="flex items-center gap-2 text-sm py-0.5">
                   <span className="font-medium flex-1">{cat.name}</span>
-                  <span className="text-xs text-muted">{cat.format} · {cat.gender}</span>
+                  <span className="text-xs text-muted">{cat.format} · {cat.gender}{cat.maxPerEvent != null ? ` · max ${cat.maxPerEvent}` : ""}</span>
                   {cat.status === "draft" && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Draft</span>}
                 </div>
               ))}
