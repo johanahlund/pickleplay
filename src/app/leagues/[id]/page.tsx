@@ -1334,14 +1334,23 @@ export default function LeagueDetailPage() {
     fetchLeague(); fetchStandings();
   };
 
-  const setGameWinner = async (eventId: string, gameId: string, winnerId: string | null) => {
-    await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gameId, winnerId }),
+  const deleteRoundEvent = async (roundId: string, eventId: string, label: string) => {
+    const ok = await confirm({
+      title: "Delete event?",
+      message: `Delete ${label}? Lineups and games for this event will also be removed.`,
+      confirmText: "Delete",
+      danger: true,
     });
+    if (!ok) return;
+    const r = await fetch(`/api/leagues/${id}/rounds/${roundId}/events`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
     fetchLeague(); fetchStandings();
   };
+
 
   const allTeamPlayerIds = new Set(league.teams.flatMap((t) => t.players.map((p) => p.playerId)));
 
@@ -2619,119 +2628,32 @@ export default function LeagueDetailPage() {
                   />
                 </div>
               )}
-              {editingRoundId !== round.id && round.events.map((ev) => (
-                <div key={ev.id} className="px-3 py-3 border-b border-border last:border-0">
-                  {/* Teams */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      {ev.leagueTeams.map((t, i) => (
-                        <span key={t.teamId} className="text-sm font-medium">
-                          {i > 0 && <span className="text-muted mx-1">vs</span>}
-                          {t.team.name}
-                          {t.teamId === ev.hostTeamId && <span className="text-[9px] text-muted ml-1">(H)</span>}
-                        </span>
-                      ))}
-                    </div>
-                    {ev.date && <span className="text-xs text-muted">{new Date(ev.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}
-                  </div>
-
-                  {/* Team points summary */}
-                  <div className="flex gap-2 mb-2">
-                    {ev.leagueTeams.map((t) => (
-                      <span key={t.teamId} className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
-                        {t.team.name}: <span className="font-bold">{t.points}</span> pts
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Lineup status / link per team */}
-                  {(() => {
-                    const lineups = ev.leagueLineups || [];
-                    const fullTeams = ev.leagueTeams.map((t) => league.teams.find((lt) => lt.id === t.teamId)).filter((t): t is NonNullable<typeof t> => !!t);
-                    const visible = fullTeams.filter((t) => isAppAdmin || isDirector || isDeputy || isHelper || t.captain?.id === userId || t.viceCaptain?.id === userId);
-                    if (visible.length === 0) return null;
-                    return (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {visible.map((t) => {
-                          const lu = lineups.find((l) => l.teamId === t.id);
-                          const status = lu?.status || "draft";
-                          const color = status === "draft" ? "bg-blue-100 text-blue-700" : status === "submitted" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700";
-                          return (
-                            <Link key={t.id} href={`/leagues/${id}/events/${ev.id}/lineup/${t.id}`}
-                              className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 border border-border flex items-center gap-1 hover:bg-gray-100">
-                              <span>{t.name}</span>
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${color}`}>{status}</span>
-                            </Link>
-                          );
-                        })}
+              {editingRoundId !== round.id && round.events.map((ev) => {
+                const teamLabel = ev.leagueTeams.map((t) => t.team.name).join(" vs ") || "match-day";
+                return (
+                  <div key={ev.id} className="px-3 py-2.5 border-b border-border last:border-0 flex items-center gap-2">
+                    <Link href={`/events/${ev.id}`} className="flex-1 min-w-0 hover:bg-gray-50 -mx-1 px-1 py-0.5 rounded">
+                      <div className="text-sm font-medium truncate">
+                        {ev.leagueTeams.map((t, i) => (
+                          <span key={t.teamId}>
+                            {i > 0 && <span className="text-muted mx-1">vs</span>}
+                            {t.team.name}
+                          </span>
+                        ))}
                       </div>
-                    );
-                  })()}
-
-                  {/* Games */}
-                  {ev.leagueGames.length > 0 && (
-                    <div className="space-y-1">
-                      {ev.leagueGames.map((game) => (
-                        <div key={game.id} className={`flex items-center gap-2 text-xs ${!game.isPrincipal ? "opacity-60 pl-2 border-l-2 border-dashed border-gray-300" : ""}`}>
-                          <span className="text-muted w-24 truncate">{game.category.name}{!game.isPrincipal && <span className="text-[8px] ml-1 text-amber-600">(friendly)</span>}</span>
-                          <span className={`flex-1 font-medium ${game.winner?.id === game.team1.id ? "text-green-600" : ""}`}>{game.team1.name}</span>
-                          <span className="text-muted">vs</span>
-                          <span className={`flex-1 font-medium text-right ${game.winner?.id === game.team2.id ? "text-green-600" : ""}`}>{game.team2.name}</span>
-                          {/* Principal/Friendly toggle (canEdit only, blocked once winner set) */}
-                          {canEdit && !game.winner && (
-                            <button
-                              onClick={async () => {
-                                const r = await fetch(`/api/leagues/${id}/events/${ev.id}/games/${game.id}`, {
-                                  method: "PATCH", headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ isPrincipal: !game.isPrincipal }),
-                                });
-                                if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
-                                fetchLeague();
-                              }}
-                              title={game.isPrincipal ? "Make friendly" : "Make principal"}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-foreground"
-                            >{game.isPrincipal ? "→ friendly" : "→ principal"}</button>
-                          )}
-                          {/* Winner selector */}
-                          <select value={game.winner?.id || ""} onChange={(e) => setGameWinner(ev.id, game.id, e.target.value || null)}
-                            className="text-[10px] border border-border rounded px-1 py-0.5 w-20">
-                            <option value="">TBD</option>
-                            <option value={game.team1.id}>{game.team1.name}</option>
-                            <option value={game.team2.id}>{game.team2.name}</option>
-                          </select>
-                        </div>
-                      ))}
-                      {/* Add extra game */}
-                      {ev.leagueTeams.length === 2 && canEdit && (
-                        <button
-                          onClick={async () => {
-                            const catId = prompt("Category ID for extra game (copy from existing game):");
-                            if (!catId) return;
-                            const cat = league.categories.find((c: LeagueCategory) => c.id === catId || c.name.toLowerCase().includes(catId.toLowerCase()));
-                            if (!cat) { alert("Category not found"); return; }
-                            await fetch(`/api/leagues/${id}/events/${ev.id}/games`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ action: "create_extra", categoryId: cat.id, team1Id: ev.leagueTeams[0].teamId, team2Id: ev.leagueTeams[1].teamId }),
-                            });
-                            fetchLeague();
-                          }}
-                          className="text-[10px] text-action font-medium hover:underline mt-1"
-                        >
-                          + Add extra game
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Event link */}
-                  <div className="mt-2">
-                    <Link href={`/events/${ev.id}`} className="text-xs text-action font-medium hover:underline">
-                      📅 {ev.name} ({ev.status})
+                      <div className="text-[11px] text-muted">
+                        {ev.date && new Date(ev.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                        <span className="ml-2 capitalize">· {ev.status === "draft" ? "setup" : ev.status}</span>
+                      </div>
                     </Link>
+                    {canEdit && (
+                      <button onClick={() => deleteRoundEvent(round.id, ev.id, teamLabel)}
+                        aria-label="Delete event"
+                        className="text-xs text-danger hover:bg-red-50 rounded px-1.5 py-0.5">✕</button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {editingRoundId !== round.id && canEdit && league.teams.length >= 2 && (
                 <AddRoundEventForm
                   teams={league.teams.map((t) => ({ id: t.id, name: t.name }))}
