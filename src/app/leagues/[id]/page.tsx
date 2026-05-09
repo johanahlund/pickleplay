@@ -2648,10 +2648,10 @@ export default function LeagueDetailPage() {
                 return (
                   <div key={ev.id} className="px-3 py-2.5 border-b border-border last:border-0 flex items-center gap-2">
                     <Link href={`/events/${ev.id}`} className="flex-1 min-w-0 hover:bg-gray-50 -mx-1 px-1 py-0.5 rounded">
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-sm font-bold truncate">
                         {ev.leagueTeams.map((t, i) => (
                           <span key={t.teamId}>
-                            {i > 0 && <span className="text-muted mx-1">vs</span>}
+                            {i > 0 && <span className="text-muted font-normal mx-1">vs</span>}
                             {t.team.name}
                           </span>
                         ))}
