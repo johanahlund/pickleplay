@@ -1194,11 +1194,17 @@ export default function EventDetailPage() {
   const heroStatus = (event.status !== "setup" ? event.status : undefined) as HeaderStatus | undefined;
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
+  // For league-attached events, the user almost certainly arrived from the
+  // league's Rounds tab. Send them back there instead of the global events
+  // list so navigation matches the entry point.
+  const backLink = event.round
+    ? { label: event.round.league.name, href: `/leagues/${event.round.league.id}?tab=rounds` }
+    : { label: "Events", href: "/events" };
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
       <AppHeader
         variant="hero"
-        back={{ label: "Events", href: "/events" }}
+        back={backLink}
         title={event.name}
         meta={heroMeta}
         status={heroStatus}
@@ -3433,8 +3439,9 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Format — managers only (normal users see it in the header card) */}
-      {canManage && (
+      {/* Format — managers only. Hidden for league events: format/scoring
+          come from the league categories, set per-class. */}
+      {canManage && !event.round && (
         <div className={frameClass}>
           <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Format</span>
@@ -3469,8 +3476,9 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Pairing — managers only (normal users see it in the header card) */}
-      {canManage && (
+      {/* Pairing — managers only. Hidden for league events: pairings are
+          driven by the lineup builder, not the auto-pairing engine. */}
+      {canManage && !event.round && (
         <div className={frameClass}>
           <div onClick={() => router.push(`/events/${id}/pairing`)} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Pairing</span>

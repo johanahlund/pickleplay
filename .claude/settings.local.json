@@ -83,7 +83,8 @@
       "Bash(rmdir src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\]/lineup/\\\\[teamId\\\\] src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\]/lineup src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\] src/app/leagues/\\\\[id\\\\]/match-days)",
       "Bash(mkdir -p \"src/app/leagues/[id]/events/[eventId]/lineup/[teamId]\")",
       "Bash(mv /tmp/lineup-page.tsx \"src/app/leagues/[id]/events/[eventId]/lineup/[teamId]/page.tsx\")",
-      "Bash(rmdir \"src/app/leagues/[id]/match-days/[matchDayId]/lineup/[teamId]\" \"src/app/leagues/[id]/match-days/[matchDayId]/lineup\" \"src/app/leagues/[id]/match-days/[matchDayId]\" \"src/app/leagues/[id]/match-days\")"
+      "Bash(rmdir \"src/app/leagues/[id]/match-days/[matchDayId]/lineup/[teamId]\" \"src/app/leagues/[id]/match-days/[matchDayId]/lineup\" \"src/app/leagues/[id]/match-days/[matchDayId]\" \"src/app/leagues/[id]/match-days\")",
+      "Bash({league.name})"
     ]
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -726,7 +726,15 @@ export default function LeagueDetailPage() {
   const [league, setLeague] = useState<League | null>(null);
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>("overview");
+  // Initial tab can be set via ?tab=rounds in the URL — used when navigating
+  // back to a specific league tab (e.g. from a league-attached event).
+  const searchParams = useSearchParams();
+  const initialTab = (() => {
+    const t = searchParams.get("tab");
+    if (t === "overview" || t === "standings" || t === "rounds" || t === "matches" || t === "teams") return t as Tab;
+    return "overview" as Tab;
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam" | "addPlayer" | "requests">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
