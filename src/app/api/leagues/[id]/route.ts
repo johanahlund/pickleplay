@@ -118,6 +118,12 @@ export async function GET(
     ),
   };
 
+  // Hide rounds with status="setup" from non-managers — those are still
+  // being configured by the league admin and shouldn't show to players.
+  if (!isOrganizer && !isHelper) {
+    view = { ...view, rounds: view.rounds.filter((r) => r.status !== "setup") };
+  }
+
   const allowed = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowed ? view : stripEmailsDeep(view));
 }

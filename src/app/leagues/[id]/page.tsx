@@ -94,6 +94,33 @@ const GENDER_OPTS = [
   { value: "female", label: "Women" },
   { value: "mix", label: "Mixed" },
 ];
+// Round display status. Stored status is `setup | active`. When active,
+// the lifecycle is derived from the date window:
+//   now < startDate     → "scheduled"
+//   in [startDate, endDate]  → "in_progress"
+//   now > endDate       → "completed"
+// Missing dates → "active" (no specific phase).
+type RoundDisplayStatus = "setup" | "scheduled" | "in_progress" | "completed" | "active";
+function roundDisplayStatus(round: { status: string; startDate: string | null; endDate: string | null }): RoundDisplayStatus {
+  if (round.status === "setup") return "setup";
+  const now = Date.now();
+  const start = round.startDate ? new Date(round.startDate).getTime() : null;
+  const end = round.endDate ? new Date(round.endDate).getTime() : null;
+  if (start && now < start) return "scheduled";
+  if (end && now > end) return "completed";
+  if (start || end) return "in_progress";
+  return "active";
+}
+function roundStatusLabel(s: RoundDisplayStatus): string {
+  return s === "in_progress" ? "in progress" : s;
+}
+function roundStatusClass(s: RoundDisplayStatus): string {
+  if (s === "completed") return "bg-green-100 text-green-700";
+  if (s === "in_progress" || s === "active") return "bg-orange-100 text-orange-700";
+  if (s === "setup") return "bg-amber-100 text-amber-700";
+  return "bg-gray-100 text-muted"; // scheduled
+}
+
 // Clamp a numeric input string to [1, max] integers. Empty string passes
 // through so the user can clear the field. Negative or zero → "1".
 function clampPositiveInt(raw: string, max: number): string {
@@ -284,7 +311,7 @@ interface RoundFormValues {
   name: string;
   startDate: string;
   endDate: string;
-  status: "scheduled" | "in_progress" | "completed";
+  status: "setup" | "active";
   configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   // Each row is either an existing league category (id present, optional
   // override fields) or a brand-new round-only category (id absent, all
@@ -479,17 +506,17 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
         </div>
       </div>
 
-      {mode === "edit" && (
-        <div>
-          <label className="block text-xs text-muted mb-1">Status</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as RoundFormValues["status"])}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
-            <option value="scheduled">Scheduled — round hasn&apos;t started</option>
-            <option value="in_progress">In progress — being played</option>
-            <option value="completed">Completed — all matches done</option>
-          </select>
-        </div>
-      )}
+      <div>
+        <label className="block text-xs text-muted mb-1">Visibility</label>
+        <select value={status} onChange={(e) => setStatus(e.target.value as RoundFormValues["status"])}
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="setup">Setup</option>
+          <option value="active">Active</option>
+        </select>
+        <p className="text-[11px] text-muted mt-1">
+          Setup = only league admins can see. Active = visible to everyone, with phase (Scheduled / In progress / Completed) derived from dates.
+        </p>
+      </div>
 
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-2 cursor-pointer">
@@ -2618,9 +2645,14 @@ export default function LeagueDetailPage() {
                     </span>
                   )}
                 </div>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                  round.status === "completed" ? "bg-green-100 text-green-700" : round.status === "in_progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-muted"
-                }`}>{round.status}</span>
+                {(() => {
+                  const ds = roundDisplayStatus(round);
+                  return (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize ${roundStatusClass(ds)}`}>
+                      {roundStatusLabel(ds)}
+                    </span>
+                  );
+                })()}
                 {canEdit && editingRoundId !== round.id && (
                   <>
                     <button onClick={() => setEditingRoundId(round.id)}
@@ -2643,7 +2675,7 @@ export default function LeagueDetailPage() {
                       name: round.name ?? "",
                       startDate: round.startDate ? round.startDate.slice(0, 10) : "",
                       endDate: round.endDate ? round.endDate.slice(0, 10) : "",
-                      status: (round.status === "in_progress" || round.status === "completed") ? round.status : "scheduled",
+                      status: round.status === "active" ? "active" : "setup",
                       configOverride: (round.configOverride as RoundFormValues["configOverride"]) ?? null,
                       categoriesOverride: (round.categoriesOverride as RoundFormValues["categoriesOverride"]) ?? null,
                     }}
@@ -2733,7 +2765,7 @@ export default function LeagueDetailPage() {
                 name: "",
                 startDate: "",
                 endDate: "",
-                status: "scheduled",
+                status: "setup",
                 configOverride: null,
                 categoriesOverride: null,
               }}

@@ -149,7 +149,7 @@ export async function PATCH(
   // doesn't match `null` checks afterwards.
   if (configOverride !== undefined) data.configOverride = configOverride === null ? Prisma.DbNull : configOverride;
   if (categoriesOverride !== undefined) data.categoriesOverride = categoriesOverride === null ? Prisma.DbNull : categoriesOverride;
-  if (status !== undefined && ["scheduled", "in_progress", "completed"].includes(status)) data.status = status;
+  if (status !== undefined && ["setup", "active"].includes(status)) data.status = status;
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 

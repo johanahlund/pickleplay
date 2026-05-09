@@ -626,7 +626,11 @@ model LeagueRound {
   // defaults at read time (e.g. resolveRoundConfig(round, league)).
   configOverride     Json?
   categoriesOverride Json?
-  status      String    @default("scheduled") // scheduled, in_progress, completed
+  // Stored status:
+  //   setup  — admin is still configuring; hidden from non-managers
+  //   active — published; the lifecycle (scheduled/in-progress/completed)
+  //            is then derived from startDate/endDate at display time.
+  status      String    @default("setup") // setup | active (legacy: "scheduled" still recognized as active)
 
   league    League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   events    Event[]
