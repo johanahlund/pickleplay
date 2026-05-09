@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -229,6 +229,283 @@ function AddRoundEventForm({
   );
 }
 
+interface RoundFormValues {
+  roundNumber: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
+  categoriesOverride: { id: string; name?: string; ageGroup?: string; skillMin?: number | null; skillMax?: number | null; scoringFormat?: string; winBy?: string; maxPerEvent?: number | null }[] | null;
+}
+
+interface RoundFormProps {
+  mode: "add" | "edit";
+  initial: RoundFormValues;
+  leagueCategories: LeagueCategory[];
+  leagueConfig: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
+  onSubmit: (v: RoundFormValues) => Promise<void> | void;
+  onCancel: () => void;
+}
+
+type CatOverrideForm = {
+  included: boolean;
+  expanded: boolean;
+  name: string;
+  ageGroup: string;
+  skillMin: string;
+  skillMax: string;
+  scoringFormat: string;
+  winBy: string;
+  maxPerEvent: string;
+};
+
+function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, onCancel }: RoundFormProps) {
+  const [roundNumber, setRoundNumber] = useState(initial.roundNumber);
+  const [name, setName] = useState(initial.name);
+  const [start, setStart] = useState(initial.startDate);
+  const [end, setEnd] = useState(initial.endDate);
+
+  const cfg = initial.configOverride;
+  const [useFormatOverride, setUseFormatOverride] = useState(!!cfg);
+  const [maxPts, setMaxPts] = useState(cfg?.maxPointsPerMatchDay != null ? String(cfg.maxPointsPerMatchDay) : "");
+  const [maxMatches, setMaxMatches] = useState(cfg?.maxMatchesPerEvent != null ? String(cfg.maxMatchesPerEvent) : "");
+  const [crossCat, setCrossCat] = useState<"inherit" | "allow" | "deny">(
+    cfg?.allowCrossCategoryPlay === true ? "allow" : cfg?.allowCrossCategoryPlay === false ? "deny" : "inherit"
+  );
+
+  const initialCatMap: Record<string, CatOverrideForm> = useMemo(() => {
+    const out: Record<string, CatOverrideForm> = {};
+    const overrideById = new Map((initial.categoriesOverride ?? []).map((o) => [o.id, o]));
+    for (const c of leagueCategories) {
+      const o = overrideById.get(c.id);
+      out[c.id] = {
+        included: initial.categoriesOverride ? !!o : true,
+        expanded: false,
+        name: o?.name ?? "",
+        ageGroup: o?.ageGroup ?? "",
+        skillMin: o?.skillMin != null ? String(o.skillMin) : "",
+        skillMax: o?.skillMax != null ? String(o.skillMax) : "",
+        scoringFormat: o?.scoringFormat ?? "",
+        winBy: o?.winBy ?? "",
+        maxPerEvent: o?.maxPerEvent != null ? String(o.maxPerEvent) : "",
+      };
+    }
+    return out;
+  }, [initial.categoriesOverride, leagueCategories]);
+
+  const [useCategoriesOverride, setUseCategoriesOverride] = useState(!!initial.categoriesOverride);
+  const [catOverrides, setCatOverrides] = useState<Record<string, CatOverrideForm>>(initialCatMap);
+
+  // Re-initialise categoriesOverride state when categories list / initial changes
+  useEffect(() => { setCatOverrides(initialCatMap); }, [initialCatMap]);
+
+  const handleSave = async () => {
+    let configOverride: RoundFormValues["configOverride"] = null;
+    if (useFormatOverride) {
+      const c: NonNullable<RoundFormValues["configOverride"]> = {};
+      const mp = parseInt(maxPts, 10);
+      const mm = parseInt(maxMatches, 10);
+      if (!isNaN(mp) && maxPts !== "") c.maxPointsPerMatchDay = mp;
+      if (!isNaN(mm) && maxMatches !== "") c.maxMatchesPerEvent = mm;
+      if (crossCat === "allow") c.allowCrossCategoryPlay = true;
+      else if (crossCat === "deny") c.allowCrossCategoryPlay = false;
+      if (Object.keys(c).length > 0) configOverride = c;
+    }
+
+    let categoriesOverride: RoundFormValues["categoriesOverride"] = null;
+    if (useCategoriesOverride) {
+      categoriesOverride = [];
+      for (const cat of leagueCategories) {
+        const o = catOverrides[cat.id];
+        if (!o || !o.included) continue;
+        const row: NonNullable<RoundFormValues["categoriesOverride"]>[number] = { id: cat.id };
+        if (o.name.trim() && o.name.trim() !== cat.name) row.name = o.name.trim();
+        if (o.ageGroup.trim() && o.ageGroup.trim() !== cat.ageGroup) row.ageGroup = o.ageGroup.trim();
+        if (o.skillMin !== "") row.skillMin = parseFloat(o.skillMin);
+        if (o.skillMax !== "") row.skillMax = parseFloat(o.skillMax);
+        if (o.scoringFormat.trim() && o.scoringFormat.trim() !== cat.scoringFormat) row.scoringFormat = o.scoringFormat.trim();
+        if (o.winBy.trim() && o.winBy.trim() !== cat.winBy) row.winBy = o.winBy.trim();
+        if (o.maxPerEvent !== "") row.maxPerEvent = parseInt(o.maxPerEvent, 10);
+        categoriesOverride.push(row);
+      }
+    }
+
+    await onSubmit({
+      roundNumber, name, startDate: start, endDate: end,
+      configOverride, categoriesOverride,
+    });
+  };
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div className="flex gap-3">
+        <div className="w-20">
+          <label className="block text-xs text-muted mb-1">Round #</label>
+          <input type="number" value={roundNumber}
+            onChange={(e) => setRoundNumber(parseInt(e.target.value) || 1)} min={1}
+            className="w-full border border-border rounded-lg px-2 py-2 text-sm" />
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs text-muted mb-1">Name</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder={`Round ${roundNumber}`}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="block text-xs text-muted mb-1">Start date</label>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs text-muted mb-1">End date</label>
+          <input type="date" value={end} onChange={(e) => setEnd(e.target.value)}
+            min={start || undefined}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={useFormatOverride}
+            onChange={(e) => setUseFormatOverride(e.target.checked)} className="rounded" />
+          <span className="text-sm font-medium">Override format for this round</span>
+        </label>
+        {useFormatOverride && (
+          <div className="mt-2 space-y-2 pl-6">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[11px] text-muted">Max pts / match-day</label>
+                <input type="number" min={1} value={maxPts}
+                  onChange={(e) => setMaxPts(e.target.value)}
+                  placeholder={String(leagueConfig?.maxPointsPerMatchDay ?? 3)}
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[11px] text-muted">Max matches / event</label>
+                <input type="number" min={1} value={maxMatches}
+                  onChange={(e) => setMaxMatches(e.target.value)}
+                  placeholder={leagueConfig?.maxMatchesPerEvent != null ? String(leagueConfig.maxMatchesPerEvent) : "—"}
+                  className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] text-muted mb-1">Cross-category play</label>
+              <select value={crossCat} onChange={(e) => setCrossCat(e.target.value as typeof crossCat)}
+                className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+                <option value="inherit">Inherit from league</option>
+                <option value="allow">Allow</option>
+                <option value="deny">Disallow</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={useCategoriesOverride}
+            onChange={(e) => setUseCategoriesOverride(e.target.checked)} className="rounded" />
+          <span className="text-sm font-medium">Customize categories for this round</span>
+        </label>
+        {useCategoriesOverride && (
+          <div className="mt-2 space-y-1.5 pl-6">
+            {leagueCategories.length === 0 && (
+              <p className="text-[11px] text-muted">No league categories yet.</p>
+            )}
+            {leagueCategories.map((c) => {
+              const o = catOverrides[c.id];
+              if (!o) return null;
+              const update = (patch: Partial<CatOverrideForm>) => {
+                setCatOverrides((prev) => ({ ...prev, [c.id]: { ...o, ...patch } }));
+              };
+              return (
+                <div key={c.id} className="border border-border rounded-lg p-2 bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" checked={o.included} onChange={(e) => update({ included: e.target.checked })} className="rounded" />
+                    <span className={`text-sm flex-1 truncate ${!o.included ? "line-through text-muted" : ""}`}>{c.name}</span>
+                    {o.included && (
+                      <button onClick={() => update({ expanded: !o.expanded })}
+                        className="text-[10px] text-action font-medium">
+                        {o.expanded ? "Hide" : "Edit"}
+                      </button>
+                    )}
+                  </div>
+                  {o.included && o.expanded && (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted">Name</label>
+                          <input value={o.name} onChange={(e) => update({ name: e.target.value })}
+                            placeholder={c.name}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                        <div className="w-24">
+                          <label className="block text-[10px] text-muted">Age group</label>
+                          <input value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value })}
+                            placeholder={c.ageGroup}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted">Skill min</label>
+                          <input type="number" step={0.1} value={o.skillMin}
+                            onChange={(e) => update({ skillMin: e.target.value })}
+                            placeholder={c.skillMin != null ? String(c.skillMin) : "—"}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted">Skill max</label>
+                          <input type="number" step={0.1} value={o.skillMax}
+                            onChange={(e) => update({ skillMax: e.target.value })}
+                            placeholder={c.skillMax != null ? String(c.skillMax) : "—"}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-muted">Scoring</label>
+                          <input value={o.scoringFormat} onChange={(e) => update({ scoringFormat: e.target.value })}
+                            placeholder={c.scoringFormat}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                        <div className="w-20">
+                          <label className="block text-[10px] text-muted">Win by</label>
+                          <input value={o.winBy} onChange={(e) => update({ winBy: e.target.value })}
+                            placeholder={c.winBy}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                        <div className="w-24">
+                          <label className="block text-[10px] text-muted">Max / event</label>
+                          <input type="number" min={0} value={o.maxPerEvent}
+                            onChange={(e) => update({ maxPerEvent: e.target.value })}
+                            placeholder={c.maxPerEvent != null ? String(c.maxPerEvent) : "—"}
+                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={handleSave} disabled={!roundNumber}
+          className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+          {mode === "add" ? "Add Round" : "Save"}
+        </button>
+        <button onClick={onCancel}
+          className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 export default function LeagueDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -295,32 +572,10 @@ export default function LeagueDetailPage() {
 
   // Add round state
   const [showAddRound, setShowAddRound] = useState(false);
+  const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
   const [newRoundNumber, setNewRoundNumber] = useState(1);
-  const [newRoundName, setNewRoundName] = useState("");
-  const [newRoundStart, setNewRoundStart] = useState("");
-  const [newRoundEnd, setNewRoundEnd] = useState("");
-  // Optional overrides for the round
-  const [useFormatOverride, setUseFormatOverride] = useState(false);
-  const [roundMaxPts, setRoundMaxPts] = useState("");
-  const [roundMaxMatches, setRoundMaxMatches] = useState("");
-  const [roundCrossCat, setRoundCrossCat] = useState<"inherit" | "allow" | "deny">("inherit");
-  const [useCategoriesOverride, setUseCategoriesOverride] = useState(false);
-  // Per-category override map. Key = league category id.
-  // Fields are stored as strings (form inputs); empty string means "inherit
-  // from league". `included` controls whether the category is part of the round.
-  // `expanded` is purely UI state for the per-category editor.
-  type CatOverrideForm = {
-    included: boolean;
-    expanded: boolean;
-    name: string;
-    ageGroup: string;
-    skillMin: string;
-    skillMax: string;
-    scoringFormat: string;
-    winBy: string;
-    maxPerEvent: string;
-  };
-  const [roundCatOverrides, setRoundCatOverrides] = useState<Record<string, CatOverrideForm>>({});
+  // Round form state lives inside RoundForm; only the round number is
+  // tracked here so it can default to (rounds.length + 1) when adding.
 
   // Add player to team state (modal)
   const [addPlayerTeam, setAddPlayerTeam] = useState<LeagueTeam | null>(null);
@@ -826,55 +1081,25 @@ export default function LeagueDetailPage() {
     }
   };
 
-  const addRound = async () => {
-    // Build configOverride only if the user opted in and set at least one field.
-    let configOverride: Record<string, unknown> | null = null;
-    if (useFormatOverride) {
-      const c: Record<string, unknown> = {};
-      const mp = parseInt(roundMaxPts, 10);
-      const mm = parseInt(roundMaxMatches, 10);
-      if (!isNaN(mp) && roundMaxPts !== "") c.maxPointsPerMatchDay = mp;
-      if (!isNaN(mm) && roundMaxMatches !== "") c.maxMatchesPerEvent = mm;
-      if (roundCrossCat === "allow") c.allowCrossCategoryPlay = true;
-      else if (roundCrossCat === "deny") c.allowCrossCategoryPlay = false;
-      if (Object.keys(c).length > 0) configOverride = c;
-    }
-
-    // Build categoriesOverride array if opted in. Snapshot is { id, ...overridden fields }.
-    let categoriesOverride: Record<string, unknown>[] | null = null;
-    if (useCategoriesOverride) {
-      categoriesOverride = [];
-      for (const cat of league.categories) {
-        const o = roundCatOverrides[cat.id];
-        if (!o || !o.included) continue;
-        const row: Record<string, unknown> = { id: cat.id };
-        if (o.name.trim() && o.name.trim() !== cat.name) row.name = o.name.trim();
-        if (o.ageGroup.trim() && o.ageGroup.trim() !== cat.ageGroup) row.ageGroup = o.ageGroup.trim();
-        if (o.skillMin !== "") row.skillMin = parseFloat(o.skillMin);
-        if (o.skillMax !== "") row.skillMax = parseFloat(o.skillMax);
-        if (o.scoringFormat.trim() && o.scoringFormat.trim() !== cat.scoringFormat) row.scoringFormat = o.scoringFormat.trim();
-        if (o.winBy.trim() && o.winBy.trim() !== cat.winBy) row.winBy = o.winBy.trim();
-        if (o.maxPerEvent !== "") row.maxPerEvent = parseInt(o.maxPerEvent, 10);
-        categoriesOverride.push(row);
-      }
-    }
-
-    await fetch(`/api/leagues/${id}/rounds`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roundNumber: newRoundNumber,
-        name: newRoundName.trim() || undefined,
-        startDate: newRoundStart || undefined,
-        endDate: newRoundEnd || undefined,
-        configOverride: configOverride ?? undefined,
-        categoriesOverride: categoriesOverride ?? undefined,
-      }),
+  const saveRound = async (mode: "add" | "edit", v: RoundFormValues, roundId?: string) => {
+    const url = `/api/leagues/${id}/rounds`;
+    const body = JSON.stringify({
+      ...(mode === "edit" ? { roundId } : {}),
+      ...(mode === "add" ? { roundNumber: v.roundNumber } : {}),
+      name: v.name.trim() || undefined,
+      startDate: v.startDate || undefined,
+      endDate: v.endDate || undefined,
+      configOverride: v.configOverride ?? undefined,
+      categoriesOverride: v.categoriesOverride ?? undefined,
     });
-    setShowAddRound(false);
-    setNewRoundName(""); setNewRoundStart(""); setNewRoundEnd("");
-    setUseFormatOverride(false); setRoundMaxPts(""); setRoundMaxMatches(""); setRoundCrossCat("inherit");
-    setUseCategoriesOverride(false); setRoundCatOverrides({});
+    const r = await fetch(url, { method: mode === "edit" ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || "Failed");
+      return;
+    }
+    if (mode === "add") setShowAddRound(false);
+    else setEditingRoundId(null);
     fetchLeague(); fetchStandings();
   };
 
@@ -2172,13 +2397,39 @@ export default function LeagueDetailPage() {
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                   round.status === "completed" ? "bg-green-100 text-green-700" : round.status === "in_progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-muted"
                 }`}>{round.status}</span>
-                {canEdit && (
-                  <button onClick={() => deleteRound(round.id, round.name || `Round ${round.roundNumber}`)}
-                    aria-label="Delete round"
-                    className="text-xs text-danger hover:bg-red-50 rounded px-1.5 py-0.5">✕</button>
+                {canEdit && editingRoundId !== round.id && (
+                  <>
+                    <button onClick={() => setEditingRoundId(round.id)}
+                      aria-label="Edit round"
+                      className="text-xs text-muted hover:text-foreground rounded px-1.5 py-0.5">
+                      <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    </button>
+                    <button onClick={() => deleteRound(round.id, round.name || `Round ${round.roundNumber}`)}
+                      aria-label="Delete round"
+                      className="text-xs text-danger hover:bg-red-50 rounded px-1.5 py-0.5">✕</button>
+                  </>
                 )}
               </div>
-              {round.events.map((ev) => (
+              {editingRoundId === round.id && (
+                <div className="p-3">
+                  <RoundForm
+                    mode="edit"
+                    initial={{
+                      roundNumber: round.roundNumber,
+                      name: round.name ?? "",
+                      startDate: round.startDate ? round.startDate.slice(0, 10) : "",
+                      endDate: round.endDate ? round.endDate.slice(0, 10) : "",
+                      configOverride: (round.configOverride as RoundFormValues["configOverride"]) ?? null,
+                      categoriesOverride: (round.categoriesOverride as RoundFormValues["categoriesOverride"]) ?? null,
+                    }}
+                    leagueCategories={league.categories}
+                    leagueConfig={league.config}
+                    onSubmit={(v) => saveRound("edit", v, round.id)}
+                    onCancel={() => setEditingRoundId(null)}
+                  />
+                </div>
+              )}
+              {editingRoundId !== round.id && round.events.map((ev) => (
                 <div key={ev.id} className="px-3 py-3 border-b border-border last:border-0">
                   {/* Teams */}
                   <div className="flex items-center justify-between mb-2">
@@ -2291,7 +2542,7 @@ export default function LeagueDetailPage() {
                   </div>
                 </div>
               ))}
-              {canEdit && league.teams.length >= 2 && (
+              {editingRoundId !== round.id && canEdit && league.teams.length >= 2 && (
                 <AddRoundEventForm
                   teams={league.teams.map((t) => ({ id: t.id, name: t.name }))}
                   defaultDate={round.startDate}
@@ -2308,192 +2559,21 @@ export default function LeagueDetailPage() {
               + Add Round
             </button>
           ) : (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-              <div className="flex gap-3">
-                <div className="w-20">
-                  <label className="block text-xs text-muted mb-1">Round #</label>
-                  <input type="number" value={newRoundNumber} onChange={(e) => setNewRoundNumber(parseInt(e.target.value) || 1)} min={1}
-                    className="w-full border border-border rounded-lg px-2 py-2 text-sm" />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-muted mb-1">Name</label>
-                  <input type="text" value={newRoundName} onChange={(e) => setNewRoundName(e.target.value)}
-                    placeholder={`Round ${newRoundNumber}`}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs text-muted mb-1">Start date</label>
-                  <input type="date" value={newRoundStart} onChange={(e) => setNewRoundStart(e.target.value)}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-muted mb-1">End date</label>
-                  <input type="date" value={newRoundEnd} onChange={(e) => setNewRoundEnd(e.target.value)}
-                    min={newRoundStart || undefined}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-                </div>
-              </div>
-              {/* Override format (optional) */}
-              <div className="border-t border-border pt-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={useFormatOverride}
-                    onChange={(e) => setUseFormatOverride(e.target.checked)}
-                    className="rounded" />
-                  <span className="text-sm font-medium">Override format for this round</span>
-                </label>
-                {useFormatOverride && (
-                  <div className="mt-2 space-y-2 pl-6">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className="block text-[11px] text-muted">Max pts / match-day</label>
-                        <input type="number" min={1} value={roundMaxPts}
-                          onChange={(e) => setRoundMaxPts(e.target.value)}
-                          placeholder={String(league.config?.maxPointsPerMatchDay ?? 3)}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-[11px] text-muted">Max matches / event</label>
-                        <input type="number" min={1} value={roundMaxMatches}
-                          onChange={(e) => setRoundMaxMatches(e.target.value)}
-                          placeholder={league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "—"}
-                          className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-muted mb-1">Cross-category play</label>
-                      <select value={roundCrossCat} onChange={(e) => setRoundCrossCat(e.target.value as typeof roundCrossCat)}
-                        className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-                        <option value="inherit">Inherit from league</option>
-                        <option value="allow">Allow</option>
-                        <option value="deny">Disallow</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Override categories (optional) */}
-              <div className="border-t border-border pt-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={useCategoriesOverride}
-                    onChange={(e) => {
-                      setUseCategoriesOverride(e.target.checked);
-                      // Initialize all categories as "included" when first turning on
-                      if (e.target.checked && Object.keys(roundCatOverrides).length === 0) {
-                        const init: Record<string, CatOverrideForm> = {};
-                        for (const c of league.categories) {
-                          init[c.id] = {
-                            included: true, expanded: false,
-                            name: "", ageGroup: "", skillMin: "", skillMax: "",
-                            scoringFormat: "", winBy: "", maxPerEvent: "",
-                          };
-                        }
-                        setRoundCatOverrides(init);
-                      }
-                    }}
-                    className="rounded" />
-                  <span className="text-sm font-medium">Customize categories for this round</span>
-                </label>
-                {useCategoriesOverride && (
-                  <div className="mt-2 space-y-1.5 pl-6">
-                    {league.categories.length === 0 && (
-                      <p className="text-[11px] text-muted">No league categories yet — define them in the Format card first.</p>
-                    )}
-                    {league.categories.map((c) => {
-                      const o = roundCatOverrides[c.id] || {
-                        included: true, expanded: false,
-                        name: "", ageGroup: "", skillMin: "", skillMax: "",
-                        scoringFormat: "", winBy: "", maxPerEvent: "",
-                      };
-                      const update = (patch: Partial<CatOverrideForm>) => {
-                        setRoundCatOverrides((prev) => ({ ...prev, [c.id]: { ...o, ...patch } }));
-                      };
-                      return (
-                        <div key={c.id} className="border border-border rounded-lg p-2 bg-gray-50">
-                          <div className="flex items-center gap-2">
-                            <input type="checkbox" checked={o.included} onChange={(e) => update({ included: e.target.checked })} className="rounded" />
-                            <span className={`text-sm flex-1 truncate ${!o.included ? "line-through text-muted" : ""}`}>{c.name}</span>
-                            {o.included && (
-                              <button onClick={() => update({ expanded: !o.expanded })}
-                                className="text-[10px] text-action font-medium">
-                                {o.expanded ? "Hide" : "Edit"}
-                              </button>
-                            )}
-                          </div>
-                          {o.included && o.expanded && (
-                            <div className="mt-2 space-y-1.5">
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="block text-[10px] text-muted">Name</label>
-                                  <input value={o.name} onChange={(e) => update({ name: e.target.value })}
-                                    placeholder={c.name}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                                <div className="w-24">
-                                  <label className="block text-[10px] text-muted">Age group</label>
-                                  <input value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value })}
-                                    placeholder={c.ageGroup}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="block text-[10px] text-muted">Skill min</label>
-                                  <input type="number" step={0.1} value={o.skillMin}
-                                    onChange={(e) => update({ skillMin: e.target.value })}
-                                    placeholder={c.skillMin != null ? String(c.skillMin) : "—"}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                                <div className="flex-1">
-                                  <label className="block text-[10px] text-muted">Skill max</label>
-                                  <input type="number" step={0.1} value={o.skillMax}
-                                    onChange={(e) => update({ skillMax: e.target.value })}
-                                    placeholder={c.skillMax != null ? String(c.skillMax) : "—"}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="block text-[10px] text-muted">Scoring</label>
-                                  <input value={o.scoringFormat} onChange={(e) => update({ scoringFormat: e.target.value })}
-                                    placeholder={c.scoringFormat}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                                <div className="w-20">
-                                  <label className="block text-[10px] text-muted">Win by</label>
-                                  <input value={o.winBy} onChange={(e) => update({ winBy: e.target.value })}
-                                    placeholder={c.winBy}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                                <div className="w-24">
-                                  <label className="block text-[10px] text-muted">Max / event</label>
-                                  <input type="number" min={0} value={o.maxPerEvent}
-                                    onChange={(e) => update({ maxPerEvent: e.target.value })}
-                                    placeholder={c.maxPerEvent != null ? String(c.maxPerEvent) : "—"}
-                                    className="w-full border border-border rounded px-2 py-1 text-xs" />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <p className="text-[11px] text-muted">
-                Create the round first, then add events (team vs team match-days) one by one.
-              </p>
-              <div className="flex gap-2">
-                <button onClick={addRound} disabled={!newRoundNumber}
-                  className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">Add Round</button>
-                <button onClick={() => setShowAddRound(false)}
-                  className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-              </div>
-            </div>
+            <RoundForm
+              mode="add"
+              initial={{
+                roundNumber: newRoundNumber,
+                name: "",
+                startDate: "",
+                endDate: "",
+                configOverride: null,
+                categoriesOverride: null,
+              }}
+              leagueCategories={league.categories}
+              leagueConfig={league.config}
+              onSubmit={(v) => saveRound("add", v)}
+              onCancel={() => setShowAddRound(false)}
+            />
           )}
         </div>
       )}
