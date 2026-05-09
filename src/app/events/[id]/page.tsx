@@ -3383,7 +3383,8 @@ export default function EventDetailPage() {
         );
       })()}
       {/* League event sign-up CTA — only shown to a player who is on one
-          of the two teams playing this match-day. Mentions which team. */}
+          of the two teams playing this match-day. Mentions which team and
+          which intent (playing / attending only / can't come). */}
       {event.round && userId && (() => {
         const allLeagueTeams = event.round!.league.teams || [];
         // event.leagueTeams is the 1-2 teams playing this event. Find which
@@ -3393,18 +3394,36 @@ export default function EventDetailPage() {
         if (!myTeam) return null;
         const myEp = event.players.find((ep) => ep.player.id === userId);
         const hasSignedUp = !!myEp;
-        const isAvailable = !myEp || myEp.status !== "unavailable";
+        // Derive intent the same way the sign-up page does:
+        //   unavailable → "can't come"
+        //   no prefs / all "no" → "attending only"
+        //   any prefer/ok → "playing"
+        const prefs = (myEp?.signupPreferences ?? {}) as Record<string, { level: "prefer" | "ok" | "no"; note?: string }>;
+        const hasAnyPlay = Object.values(prefs).some((p) => p.level === "prefer" || p.level === "ok");
+        const intent: "playing" | "attending" | "unavailable" | "none" =
+          !myEp ? "none"
+          : myEp.status === "unavailable" ? "unavailable"
+          : Object.keys(prefs).length === 0 || !hasAnyPlay ? "attending"
+          : "playing";
         return (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-2">
             <div className="text-sm text-emerald-900 flex-1 min-w-0">
-              {!hasSignedUp ? (
+              {intent === "none" && (
                 <span>Sign up for <strong>{myTeam.name}</strong> on this match-day.</span>
-              ) : isAvailable ? (
+              )}
+              {intent === "playing" && (
                 <>
-                  <div><strong>You&apos;re signed up</strong> for {myTeam.name}.</div>
+                  <div><strong>You&apos;re signed up to play</strong> for {myTeam.name}.</div>
                   <div className="text-[11px]">Update your category preferences any time.</div>
                 </>
-              ) : (
+              )}
+              {intent === "attending" && (
+                <>
+                  <div><strong>You&apos;re coming but not playing</strong> league matches for {myTeam.name}.</div>
+                  <div className="text-[11px]">Tap Edit to change your mind and pick categories.</div>
+                </>
+              )}
+              {intent === "unavailable" && (
                 <>
                   <div><strong>Marked as not available</strong> for {myTeam.name}.</div>
                   <div className="text-[11px]">Tap Edit to change.</div>
