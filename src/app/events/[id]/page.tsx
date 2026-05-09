@@ -3417,10 +3417,10 @@ export default function EventDetailPage() {
               )}
               {intent === "playing" && (
                 <>
-                  <div><strong>You&apos;re signed up to play</strong> for {myTeam.name}.</div>
-                  <div className="text-[11px]">Update your category preferences any time.</div>
+                  <div><strong>You&apos;re signed up to this event</strong> for {myTeam.name}.</div>
                   {prefRows.length > 0 && (
                     <div className="mt-1.5 space-y-0.5">
+                      <div className="text-[11px] text-muted">Categories you&apos;d play:</div>
                       {prefRows.map(({ cat, p }) => {
                         const isPrefer = p!.level === "prefer";
                         return (
@@ -3430,6 +3430,7 @@ export default function EventDetailPage() {
                           </div>
                         );
                       })}
+                      <div className="text-[10px] text-muted italic mt-0.5">The captain decides who actually plays each match.</div>
                     </div>
                   )}
                 </>

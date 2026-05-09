@@ -154,12 +154,12 @@ export default function EventSignUpPage() {
 
   if (savedView) {
     const intentLabel = intent === "playing"
-      ? "You're signed up to play"
+      ? "You're signed up to this event"
       : intent === "attending"
-        ? "You're signed up — attending only"
+        ? "You're coming but not playing league matches"
         : "Marked as not available";
     const intentBody = intent === "playing"
-      ? <>The team captain will use your preferences to build the lineup.</>
+      ? <>The captain will pick the lineup from everyone signed up — your preferences guide the choice but don&apos;t guarantee a slot.</>
       : intent === "attending"
         ? <>The captain knows you&apos;re coming but not playing league matches this match-day.</>
         : <>The captain knows you can&apos;t make it.</>;
