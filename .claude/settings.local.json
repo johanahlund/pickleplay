@@ -73,7 +73,17 @@
       "Bash(rmdir /Users/johanahlund/PROGRAMMING/pickleplay/src/app/events/\\\\[id\\\\]/pairing/skills)",
       "Bash(ipconfig getifaddr:*)",
       "Bash(code tunnel:*)",
-      "Bash(jobs -l)"
+      "Bash(jobs -l)",
+      "Bash(grep -n \"renderMatchCard\" /Users/johanahlund/PROGRAMMING/pickleplay/src/app/events/[id]/page.tsx)",
+      "Bash(npm test:*)",
+      "Bash(grep -n \"^  if \\(editSection\\\\|^  }$\" \"src/app/leagues/[id]/page.tsx\")",
+      "Bash(grep -n \"return \\(\\\\s*$\\\\|return \\(\\\\s*<div className=\\\\\"space-y-\" src/app/leagues/\\\\[id\\\\]/page.tsx)",
+      "Bash(grep -nA 20 \"^model Club \" prisma/schema.prisma)",
+      "Bash(grep -rn \"--header-height\\\\|--app-header-height\\\\|header.offsetHeight\" src --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(rmdir src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\]/lineup/\\\\[teamId\\\\] src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\]/lineup src/app/leagues/\\\\[id\\\\]/match-days/\\\\[matchDayId\\\\] src/app/leagues/\\\\[id\\\\]/match-days)",
+      "Bash(mkdir -p \"src/app/leagues/[id]/events/[eventId]/lineup/[teamId]\")",
+      "Bash(mv /tmp/lineup-page.tsx \"src/app/leagues/[id]/events/[eventId]/lineup/[teamId]/page.tsx\")",
+      "Bash(rmdir \"src/app/leagues/[id]/match-days/[matchDayId]/lineup/[teamId]\" \"src/app/leagues/[id]/match-days/[matchDayId]/lineup\" \"src/app/leagues/[id]/match-days/[matchDayId]\" \"src/app/leagues/[id]/match-days\")"
     ]
   }
 }

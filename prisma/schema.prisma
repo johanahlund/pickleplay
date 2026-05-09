@@ -323,6 +323,11 @@ model EventPlayer {
   /// Match count offset for late joiners — stores the average match count
   /// at the time of check-in so the solver treats them fairly.
   matchCountOffset Int     @default(0)
+  /// Per-category preferences for league-attached events. Shape:
+  ///   { [categoryId]: { level: "prefer"|"ok"|"no", note?: string } }
+  /// Mirrors LeagueParticipationRequest.preferences. Null/undefined for
+  /// standalone events.
+  signupPreferences Json?
   joinedAt        DateTime @default(now())
 
   event  Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
