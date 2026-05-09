@@ -3477,10 +3477,11 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Players & Pairs */}
+      {/* Players & Pairs — relabel "Participants" for league events since
+          rosters can include attend-only signups, not just match players. */}
       <div className={frameClass}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
-          <span className="text-base font-bold text-foreground">Players</span>
+          <span className="text-base font-bold text-foreground">{event.round ? "Participants" : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
             {activePlayers.length}
             {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
