@@ -150,7 +150,7 @@ export async function requireEventManager(eventId: string) {
     where: { id: eventId },
     select: {
       createdById: true,
-      leagueMatchDay: { select: { round: { select: { league: { select: { createdById: true, deputyId: true } } } } } },
+      round: { select: { league: { select: { createdById: true, deputyId: true } } } },
     },
   });
   if (event?.createdById === user.id) return user;
@@ -160,8 +160,8 @@ export async function requireEventManager(eventId: string) {
   });
   if (helper) return user;
 
-  // League director/deputy override on linked events
-  const league = event?.leagueMatchDay?.round?.league;
+  // League director/deputy override on league-attached events
+  const league = event?.round?.league;
   if (league && (league.createdById === user.id || league.deputyId === user.id)) return user;
 
   throw new Error("Forbidden");

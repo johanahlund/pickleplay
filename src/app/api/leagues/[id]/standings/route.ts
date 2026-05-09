@@ -33,10 +33,11 @@ export async function GET(
       categories: { orderBy: { sortOrder: "asc" } },
       rounds: {
         include: {
-          matchDays: {
-            include: {
-              teams: true,
-              games: {
+          events: {
+            select: {
+              id: true,
+              leagueTeams: true,
+              leagueGames: {
                 include: {
                   match: {
                     include: {
@@ -76,10 +77,10 @@ export async function GET(
   }
 
   for (const round of league.rounds) {
-    for (const md of round.matchDays) {
-      // Calculate per-team category wins for this match day
+    for (const ev of round.events) {
+      // Calculate per-team category wins for this event
       const mdWins: Record<string, number> = {};
-      for (const game of md.games) {
+      for (const game of ev.leagueGames) {
         if (game.winnerId) {
           mdWins[game.winnerId] = (mdWins[game.winnerId] || 0) + 1;
           if (standings[game.winnerId]) {
@@ -99,12 +100,12 @@ export async function GET(
         }
       }
 
-      // Only count completed match days (at least one game with a winner)
-      const hasResults = md.games.some((g) => g.winnerId);
+      // Only count completed events (at least one game with a winner)
+      const hasResults = ev.leagueGames.some((g) => g.winnerId);
       if (!hasResults) continue;
 
-      // Determine match day points (capped) and W/L/D for each team
-      const teamIds = md.teams.map((t) => t.teamId);
+      // Determine match-day points (capped) and W/L/D for each team
+      const teamIds = ev.leagueTeams.map((t) => t.teamId);
       for (const teamId of teamIds) {
         if (!standings[teamId]) continue;
         standings[teamId].played++;
@@ -112,7 +113,7 @@ export async function GET(
         standings[teamId].points += pts;
       }
 
-      // W/L/D and H2H only for 2-team match days
+      // W/L/D and H2H only for 2-team events
       if (teamIds.length === 2) {
         const [a, b] = teamIds;
         const aWins = mdWins[a] || 0;
@@ -155,8 +156,8 @@ export async function GET(
     }
 
     for (const round of league.rounds) {
-      for (const md of round.matchDays) {
-        for (const game of md.games) {
+      for (const ev of round.events) {
+        for (const game of ev.leagueGames) {
           if (game.categoryId !== cat.id || !game.winnerId) continue;
           // Only principal games count for category rankings
           if (game.isPrincipal === false) continue;

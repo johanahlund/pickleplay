@@ -23,36 +23,40 @@ async function loadAuth(leagueId: string, teamId: string) {
 //   - blocked entirely if any lineup-generated game already has a winner
 export async function POST(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   let auth;
   try { auth = await loadAuth(id, teamId); } catch (e) { return authErrorResponse(e); }
 
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
-    include: { lineups: true, games: { select: { lineupGenerated: true, winnerId: true } } },
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: {
+      round: { select: { leagueId: true } },
+      leagueLineups: true,
+      leagueGames: { select: { lineupGenerated: true, winnerId: true } },
+    },
   });
-  if (!matchDay || (await prisma.leagueRound.findUnique({ where: { id: matchDay.roundId }, select: { leagueId: true } }))?.leagueId !== id) {
-    return NextResponse.json({ error: "Match-day not found in league" }, { status: 404 });
+  if (!event || event.round?.leagueId !== id) {
+    return NextResponse.json({ error: "Event not found in league" }, { status: 404 });
   }
-  if (matchDay.games.some((g) => g.lineupGenerated && g.winnerId)) {
-    return NextResponse.json({ error: "Cannot unlock — match-day already in progress (a game has a recorded winner)" }, { status: 400 });
+  if (event.leagueGames.some((g) => g.lineupGenerated && g.winnerId)) {
+    return NextResponse.json({ error: "Cannot unlock — event already in progress (a game has a recorded winner)" }, { status: 400 });
   }
 
-  const myLineup = matchDay.lineups.find((l) => l.teamId === teamId);
+  const myLineup = event.leagueLineups.find((l) => l.teamId === teamId);
   if (!myLineup || myLineup.status === "draft") {
     return NextResponse.json({ error: "Nothing to unlock" }, { status: 400 });
   }
-  const otherLineup = matchDay.lineups.find((l) => l.teamId !== teamId);
+  const otherLineup = event.leagueLineups.find((l) => l.teamId !== teamId);
   const otherSubmittedOrRevealed = !!otherLineup && (otherLineup.status === "submitted" || otherLineup.status === "revealed");
 
   // Force-unlock if organizer/admin OR if opponent hasn't submitted
   if (auth.isOrganizer || !otherSubmittedOrRevealed) {
     await prisma.$transaction(async (tx) => {
-      await tx.leagueGame.deleteMany({ where: { matchDayId, lineupGenerated: true, winnerId: null } });
+      await tx.leagueGame.deleteMany({ where: { eventId, lineupGenerated: true, winnerId: null } });
       await tx.leagueLineup.updateMany({
-        where: { matchDayId },
+        where: { eventId },
         data: { status: "draft", submittedAt: null, submittedById: null, unlockRequestedById: null },
       });
     });
@@ -70,13 +74,13 @@ export async function POST(
 // DELETE: cancel a pending unlock request (caller is requester or organizer)
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   let auth;
   try { auth = await loadAuth(id, teamId); } catch (e) { return authErrorResponse(e); }
   await prisma.leagueLineup.updateMany({
-    where: { matchDayId, teamId, unlockRequestedById: auth.isOrganizer ? undefined : auth.user.id },
+    where: { eventId, teamId, unlockRequestedById: auth.isOrganizer ? undefined : auth.user.id },
     data: { unlockRequestedById: null },
   });
   return NextResponse.json({ ok: true });

@@ -41,12 +41,12 @@ interface LeagueGame {
   matchId?: string | null;
 }
 interface LeagueLineupStatus { id: string; teamId: string; status: "draft" | "submitted" | "revealed"; unlockRequestedById: string | null }
-interface LeagueMatchDay {
-  id: string; date: string | null; status: string; hostTeamId: string | null;
-  teams: { teamId: string; points: number; team: { id: string; name: string; logoUrl: string | null } }[];
-  games: LeagueGame[];
-  event?: { id: string; name: string; date: string; status: string } | null;
-  lineups?: LeagueLineupStatus[];
+// A league-attached event = a match-day for a round. Two teams play under it.
+interface LeagueRoundEvent {
+  id: string; name: string; date: string; status: string; hostTeamId: string | null;
+  leagueTeams: { teamId: string; points: number; team: { id: string; name: string; logoUrl: string | null } }[];
+  leagueGames: LeagueGame[];
+  leagueLineups?: LeagueLineupStatus[];
 }
 interface LeagueRound {
   id: string; roundNumber: number; name: string | null;
@@ -54,7 +54,7 @@ interface LeagueRound {
   configOverride: Record<string, unknown> | null;
   categoriesOverride: unknown[] | null;
   status: string;
-  matchDays: LeagueMatchDay[];
+  events: LeagueRoundEvent[];
 }
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
@@ -210,7 +210,7 @@ export default function LeagueDetailPage() {
   interface LeagueMatch {
     id: string; courtNum: number; round: number; status: string; createdAt: string;
     players: { id: string; playerId: string; team: number; score: number; player: { id: string; name: string; emoji: string; photoUrl?: string | null } }[];
-    roundNumber: number; roundName: string; matchDayId: string;
+    roundNumber: number; roundName: string; eventId: string;
     teams: { id: string; name: string }[];
     event: { id: string; name: string; date: string };
   }
@@ -753,7 +753,7 @@ export default function LeagueDetailPage() {
   };
 
   const addRound = async () => {
-    const matchDays = newRoundTeam1 && newRoundTeam2 ? [{ teamIds: [newRoundTeam1, newRoundTeam2], hostTeamId: newRoundTeam1, date: newRoundStart || undefined }] : [];
+    const events = newRoundTeam1 && newRoundTeam2 ? [{ teamIds: [newRoundTeam1, newRoundTeam2], hostTeamId: newRoundTeam1, date: newRoundStart || undefined }] : [];
     await fetch(`/api/leagues/${id}/rounds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -762,25 +762,15 @@ export default function LeagueDetailPage() {
         name: newRoundName.trim() || undefined,
         startDate: newRoundStart || undefined,
         endDate: newRoundEnd || undefined,
-        matchDays,
+        events,
       }),
     });
     setShowAddRound(false); setNewRoundName(""); setNewRoundStart(""); setNewRoundEnd(""); setNewRoundTeam1(""); setNewRoundTeam2("");
     fetchLeague(); fetchStandings();
   };
 
-  const createEvent = async (matchDayId: string) => {
-    const r = await fetch(`/api/leagues/${id}/match-days/${matchDayId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "create_event" }),
-    });
-    if (r.ok) { fetchLeague(); }
-    else { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); }
-  };
-
-  const setGameWinner = async (matchDayId: string, gameId: string, winnerId: string | null) => {
-    await fetch(`/api/leagues/${id}/match-days/${matchDayId}/games`, {
+  const setGameWinner = async (eventId: string, gameId: string, winnerId: string | null) => {
+    await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ gameId, winnerId }),
@@ -2039,25 +2029,25 @@ export default function LeagueDetailPage() {
                   round.status === "completed" ? "bg-green-100 text-green-700" : round.status === "in_progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-muted"
                 }`}>{round.status}</span>
               </div>
-              {round.matchDays.map((md) => (
-                <div key={md.id} className="px-3 py-3 border-b border-border last:border-0">
+              {round.events.map((ev) => (
+                <div key={ev.id} className="px-3 py-3 border-b border-border last:border-0">
                   {/* Teams */}
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      {md.teams.map((t, i) => (
+                      {ev.leagueTeams.map((t, i) => (
                         <span key={t.teamId} className="text-sm font-medium">
                           {i > 0 && <span className="text-muted mx-1">vs</span>}
                           {t.team.name}
-                          {t.teamId === md.hostTeamId && <span className="text-[9px] text-muted ml-1">(H)</span>}
+                          {t.teamId === ev.hostTeamId && <span className="text-[9px] text-muted ml-1">(H)</span>}
                         </span>
                       ))}
                     </div>
-                    {md.date && <span className="text-xs text-muted">{new Date(md.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}
+                    {ev.date && <span className="text-xs text-muted">{new Date(ev.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}
                   </div>
 
                   {/* Team points summary */}
                   <div className="flex gap-2 mb-2">
-                    {md.teams.map((t) => (
+                    {ev.leagueTeams.map((t) => (
                       <span key={t.teamId} className="text-xs bg-gray-100 px-2 py-0.5 rounded-full">
                         {t.team.name}: <span className="font-bold">{t.points}</span> pts
                       </span>
@@ -2066,8 +2056,8 @@ export default function LeagueDetailPage() {
 
                   {/* Lineup status / link per team */}
                   {(() => {
-                    const lineups = md.lineups || [];
-                    const fullTeams = md.teams.map((t) => league.teams.find((lt) => lt.id === t.teamId)).filter((t): t is NonNullable<typeof t> => !!t);
+                    const lineups = ev.leagueLineups || [];
+                    const fullTeams = ev.leagueTeams.map((t) => league.teams.find((lt) => lt.id === t.teamId)).filter((t): t is NonNullable<typeof t> => !!t);
                     const visible = fullTeams.filter((t) => isAppAdmin || isDirector || isDeputy || isHelper || t.captain?.id === userId || t.viceCaptain?.id === userId);
                     if (visible.length === 0) return null;
                     return (
@@ -2077,7 +2067,7 @@ export default function LeagueDetailPage() {
                           const status = lu?.status || "draft";
                           const color = status === "draft" ? "bg-blue-100 text-blue-700" : status === "submitted" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700";
                           return (
-                            <Link key={t.id} href={`/leagues/${id}/match-days/${md.id}/lineup/${t.id}`}
+                            <Link key={t.id} href={`/leagues/${id}/events/${ev.id}/lineup/${t.id}`}
                               className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 border border-border flex items-center gap-1 hover:bg-gray-100">
                               <span>{t.name}</span>
                               <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${color}`}>{status}</span>
@@ -2089,9 +2079,9 @@ export default function LeagueDetailPage() {
                   })()}
 
                   {/* Games */}
-                  {md.games.length > 0 && (
+                  {ev.leagueGames.length > 0 && (
                     <div className="space-y-1">
-                      {md.games.map((game) => (
+                      {ev.leagueGames.map((game) => (
                         <div key={game.id} className={`flex items-center gap-2 text-xs ${!game.isPrincipal ? "opacity-60 pl-2 border-l-2 border-dashed border-gray-300" : ""}`}>
                           <span className="text-muted w-24 truncate">{game.category.name}{!game.isPrincipal && <span className="text-[8px] ml-1 text-amber-600">(friendly)</span>}</span>
                           <span className={`flex-1 font-medium ${game.winner?.id === game.team1.id ? "text-green-600" : ""}`}>{game.team1.name}</span>
@@ -2101,7 +2091,7 @@ export default function LeagueDetailPage() {
                           {canEdit && !game.winner && (
                             <button
                               onClick={async () => {
-                                const r = await fetch(`/api/leagues/${id}/match-days/${md.id}/games/${game.id}`, {
+                                const r = await fetch(`/api/leagues/${id}/events/${ev.id}/games/${game.id}`, {
                                   method: "PATCH", headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ isPrincipal: !game.isPrincipal }),
                                 });
@@ -2113,7 +2103,7 @@ export default function LeagueDetailPage() {
                             >{game.isPrincipal ? "→ friendly" : "→ principal"}</button>
                           )}
                           {/* Winner selector */}
-                          <select value={game.winner?.id || ""} onChange={(e) => setGameWinner(md.id, game.id, e.target.value || null)}
+                          <select value={game.winner?.id || ""} onChange={(e) => setGameWinner(ev.id, game.id, e.target.value || null)}
                             className="text-[10px] border border-border rounded px-1 py-0.5 w-20">
                             <option value="">TBD</option>
                             <option value={game.team1.id}>{game.team1.name}</option>
@@ -2122,17 +2112,17 @@ export default function LeagueDetailPage() {
                         </div>
                       ))}
                       {/* Add extra game */}
-                      {md.teams.length === 2 && canEdit && (
+                      {ev.leagueTeams.length === 2 && canEdit && (
                         <button
                           onClick={async () => {
                             const catId = prompt("Category ID for extra game (copy from existing game):");
                             if (!catId) return;
                             const cat = league.categories.find((c: LeagueCategory) => c.id === catId || c.name.toLowerCase().includes(catId.toLowerCase()));
                             if (!cat) { alert("Category not found"); return; }
-                            await fetch(`/api/leagues/${id}/match-days/${md.id}/games`, {
+                            await fetch(`/api/leagues/${id}/events/${ev.id}/games`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ action: "create_extra", categoryId: cat.id, team1Id: md.teams[0].teamId, team2Id: md.teams[1].teamId }),
+                              body: JSON.stringify({ action: "create_extra", categoryId: cat.id, team1Id: ev.leagueTeams[0].teamId, team2Id: ev.leagueTeams[1].teamId }),
                             });
                             fetchLeague();
                           }}
@@ -2144,17 +2134,11 @@ export default function LeagueDetailPage() {
                     </div>
                   )}
 
-                  {/* Event link or create */}
+                  {/* Event link */}
                   <div className="mt-2">
-                    {md.event ? (
-                      <Link href={`/events/${md.event.id}`} className="text-xs text-action font-medium hover:underline">
-                        📅 {md.event.name} ({md.event.status})
-                      </Link>
-                    ) : (
-                      <button onClick={() => createEvent(md.id)} className="text-xs text-action font-medium hover:underline">
-                        + Create Event
-                      </button>
-                    )}
+                    <Link href={`/events/${ev.id}`} className="text-xs text-action font-medium hover:underline">
+                      📅 {ev.name} ({ev.status})
+                    </Link>
                   </div>
                 </div>
               ))}

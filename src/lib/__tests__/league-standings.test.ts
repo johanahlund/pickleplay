@@ -7,8 +7,8 @@ import { describe, test, expect } from "vitest";
 
 // Standalone computation functions (mirrors the API logic)
 interface Game { categoryId: string; team1Id: string; team2Id: string; winnerId: string | null }
-interface MatchDay { teams: { teamId: string }[]; games: Game[] }
-interface Round { matchDays: MatchDay[] }
+interface MatchDayEvent { teams: { teamId: string }[]; games: Game[] }
+interface Round { events: MatchDayEvent[] }
 
 function computeStandings(
   teamIds: string[],
@@ -22,7 +22,7 @@ function computeStandings(
   }
 
   for (const round of rounds) {
-    for (const md of round.matchDays) {
+    for (const md of round.events) {
       const mdWins: Record<string, number> = {};
       for (const game of md.games) {
         if (game.winnerId) {
@@ -67,7 +67,7 @@ describe("League Standings", () => {
 
   test("winning all 4 categories only gives maxPointsPerMatchDay (3)", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })),
       }],
@@ -81,7 +81,7 @@ describe("League Standings", () => {
 
   test("winning 2 categories gives 2 points (under cap)", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: [
           { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" },
@@ -102,7 +102,7 @@ describe("League Standings", () => {
 
   test("3-1 result gives winner 3 points, loser 1 (capped)", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: [
           { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" },
@@ -123,8 +123,8 @@ describe("League Standings", () => {
 
   test("multiple rounds accumulate correctly", () => {
     const rounds: Round[] = [
-      { matchDays: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })) }] },
-      { matchDays: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamB" })) }] },
+      { events: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })) }] },
+      { events: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamB" })) }] },
     ];
     const result = computeStandings(teams, rounds, cats, 3);
     const a = result.find((r) => r.teamId === "teamA")!;
@@ -138,8 +138,8 @@ describe("League Standings", () => {
   test("category wins used as tiebreaker", () => {
     // Both teams have 3 points but teamA has more total category wins
     const rounds: Round[] = [
-      { matchDays: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })) }] },
-      { matchDays: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: [
+      { events: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })) }] },
+      { events: [{ teams: [{ teamId: "teamA" }, { teamId: "teamB" }], games: [
         { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamB" },
         { categoryId: "fem", team1Id: "teamA", team2Id: "teamB", winnerId: "teamB" },
         { categoryId: "mix", team1Id: "teamA", team2Id: "teamB", winnerId: "teamB" },
@@ -156,7 +156,7 @@ describe("League Standings", () => {
 
   test("unplayed games (winnerId null) are ignored", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: [
           { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" },
@@ -175,7 +175,7 @@ describe("League Standings", () => {
 
   test("category standings track per-category wins", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: [
           { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" },
@@ -194,7 +194,7 @@ describe("League Standings", () => {
 
   test("maxPointsPerMatchDay=99 effectively means no cap", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "teamA" }, { teamId: "teamB" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" })),
       }],
@@ -207,7 +207,7 @@ describe("League Standings", () => {
   test("3+ teams in a match day", () => {
     const threeTeams = ["teamA", "teamB", "teamC"];
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: threeTeams.map((t) => ({ teamId: t })),
         games: [
           { categoryId: "masc", team1Id: "teamA", team2Id: "teamB", winnerId: "teamA" },

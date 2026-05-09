@@ -26,9 +26,10 @@ export async function GET(
       },
       rounds: {
         include: {
-          matchDays: {
-            include: {
-              games: {
+          events: {
+            select: {
+              id: true,
+              leagueGames: {
                 include: {
                   gamePlayers: { select: { playerId: true } },
                 },
@@ -44,14 +45,14 @@ export async function GET(
   const config = (league.config as Record<string, number> | null) || {};
   const minMatchDays = config.minMatchDaysForPlayoff ?? 2;
 
-  // Count distinct match days each player participated in
+  // Count distinct match-day events each player participated in
   const playerMatchDays: Record<string, Set<string>> = {};
   for (const round of league.rounds) {
-    for (const md of round.matchDays) {
-      for (const game of md.games) {
+    for (const ev of round.events) {
+      for (const game of ev.leagueGames) {
         for (const gp of game.gamePlayers) {
           if (!playerMatchDays[gp.playerId]) playerMatchDays[gp.playerId] = new Set();
-          playerMatchDays[gp.playerId].add(md.id);
+          playerMatchDays[gp.playerId].add(ev.id);
         }
       }
     }

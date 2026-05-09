@@ -7,8 +7,8 @@ import { describe, test, expect } from "vitest";
 
 interface GamePlayer { playerId: string }
 interface Game { gamePlayers: GamePlayer[] }
-interface MatchDay { id: string; games: Game[] }
-interface Round { matchDays: MatchDay[] }
+interface MatchDayEvent { id: string; games: Game[] }
+interface Round { events: MatchDayEvent[] }
 
 function computeEligibility(
   rounds: Round[],
@@ -17,7 +17,7 @@ function computeEligibility(
   const playerMatchDays: Record<string, Set<string>> = {};
 
   for (const round of rounds) {
-    for (const md of round.matchDays) {
+    for (const md of round.events) {
       for (const game of md.games) {
         for (const gp of game.gamePlayers) {
           if (!playerMatchDays[gp.playerId]) playerMatchDays[gp.playerId] = new Set();
@@ -46,7 +46,7 @@ describe("Player Eligibility", () => {
 
   test("player with 1 match day is not eligible (min=2)", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         id: "md1",
         games: [{ gamePlayers: [{ playerId: "p1" }, { playerId: "p2" }] }],
       }],
@@ -58,8 +58,8 @@ describe("Player Eligibility", () => {
 
   test("player with 2 match days is eligible (min=2)", () => {
     const rounds: Round[] = [
-      { matchDays: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
-      { matchDays: [{ id: "md2", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
+      { events: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
+      { events: [{ id: "md2", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
     ];
     const result = computeEligibility(rounds, 2);
     expect(result["p1"].matchDaysPlayed).toBe(2);
@@ -68,7 +68,7 @@ describe("Player Eligibility", () => {
 
   test("multiple games in same match day count as 1", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         id: "md1",
         games: [
           { gamePlayers: [{ playerId: "p1" }, { playerId: "p2" }] },
@@ -83,7 +83,7 @@ describe("Player Eligibility", () => {
 
   test("different match days across rounds are counted separately", () => {
     const rounds: Round[] = [
-      { matchDays: [
+      { events: [
         { id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }] }] },
         { id: "md2", games: [{ gamePlayers: [{ playerId: "p1" }] }] },
       ] },
@@ -95,7 +95,7 @@ describe("Player Eligibility", () => {
 
   test("min=0 makes everyone eligible", () => {
     const rounds: Round[] = [{
-      matchDays: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }] }] }],
+      events: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }] }] }],
     }];
     const result = computeEligibility(rounds, 0);
     expect(result["p1"].eligible).toBe(true);
@@ -103,9 +103,9 @@ describe("Player Eligibility", () => {
 
   test("tracks multiple players independently", () => {
     const rounds: Round[] = [
-      { matchDays: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }, { playerId: "p2" }] }] }] },
-      { matchDays: [{ id: "md2", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
-      { matchDays: [{ id: "md3", games: [{ gamePlayers: [{ playerId: "p2" }, { playerId: "p3" }] }] }] },
+      { events: [{ id: "md1", games: [{ gamePlayers: [{ playerId: "p1" }, { playerId: "p2" }] }] }] },
+      { events: [{ id: "md2", games: [{ gamePlayers: [{ playerId: "p1" }] }] }] },
+      { events: [{ id: "md3", games: [{ gamePlayers: [{ playerId: "p2" }, { playerId: "p3" }] }] }] },
     ];
     const result = computeEligibility(rounds, 2);
     expect(result["p1"].matchDaysPlayed).toBe(2);

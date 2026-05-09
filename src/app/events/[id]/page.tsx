@@ -63,15 +63,17 @@ interface Match {
   leagueGame?: { id: string; isPrincipal: boolean; lineupGenerated: boolean; category: { id: string; name: string } } | null;
 }
 
-interface LeagueMatchDayLink {
-  id: string;
-  round: { id: string; roundNumber: number; name: string | null; league: {
+// In the new model the Event itself is the match-day. `round` is on Event,
+// and the two playing teams hang off Event.leagueTeams.
+interface LeagueRoundLink {
+  id: string; roundNumber: number; name: string | null;
+  league: {
     id: string; name: string; season: string | null;
     createdById: string | null; deputyId: string | null;
     categories?: { id: string; name: string; format: string; gender: string }[];
-  } };
-  teams: { teamId: string; team: { id: string; name: string; logoUrl: string | null } }[];
+  };
 }
+interface LeagueEventTeamLink { teamId: string; team: { id: string; name: string; logoUrl: string | null } }
 
 interface EventHelper {
   playerId: string;
@@ -146,7 +148,9 @@ interface Event {
   competitionMode?: string | null;
   competitionConfig?: Record<string, unknown> | null;
   competitionPhase?: string | null;
-  leagueMatchDay?: LeagueMatchDayLink | null;
+  round?: LeagueRoundLink | null;
+  leagueTeams?: LeagueEventTeamLink[];
+  hostTeamId?: string | null;
 }
 
 function toDateInput(iso: string) {
@@ -495,7 +499,7 @@ export default function EventDetailPage() {
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
   const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId)) && hasRole(viewRole, "event");
   // League director/deputy of the league this event is linked to also gets manage rights.
-  const leagueOfEvent = event?.leagueMatchDay?.round?.league;
+  const leagueOfEvent = event?.round?.league;
   const isLeagueOrganizerOfEvent = !!(userId && leagueOfEvent && (leagueOfEvent.createdById === userId || leagueOfEvent.deputyId === userId)) && hasRole(viewRole, "league");
   const canManage = isAdmin || isOwner || isHelper || isLeagueOrganizerOfEvent;
 
@@ -1019,19 +1023,19 @@ export default function EventDetailPage() {
           ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
         }),
       });
-      // If "Friendly in league" toggle is on AND event is league-linked,
+      // If "Friendly in league" toggle is on AND event is league-attached,
       // also create a non-principal LeagueGame referencing the new match.
-      if (r.ok && manualFriendlyInLeague && event?.leagueMatchDay && manualLeagueCategoryId) {
+      if (r.ok && manualFriendlyInLeague && event?.round && manualLeagueCategoryId) {
         const newMatch = await r.json().catch(() => null);
-        const md = event.leagueMatchDay;
-        if (newMatch?.id && md.teams.length === 2) {
-          await fetch(`/api/leagues/${md.round.league.id}/match-days/${md.id}/games`, {
+        const teams = event.leagueTeams || [];
+        if (newMatch?.id && teams.length === 2) {
+          await fetch(`/api/leagues/${event.round.league.id}/events/${event.id}/games`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "create_extra",
               categoryId: manualLeagueCategoryId,
-              team1Id: md.teams[0].teamId,
-              team2Id: md.teams[1].teamId,
+              team1Id: teams[0].teamId,
+              team2Id: teams[1].teamId,
               matchId: newMatch.id,
             }),
           });
@@ -2583,7 +2587,7 @@ export default function EventDetailPage() {
       />
 
       <div className="px-4 space-y-3 pt-3">
-        {event.leagueMatchDay && (
+        {event.round && (
           <div className="flex gap-1 overflow-x-auto -mx-1 px-1">
             {([
               { v: "all", label: "All" },
@@ -2892,8 +2896,8 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {/* League linkage toggle — only for new matches in league-linked events */}
-      {event.leagueMatchDay && !editingManualMatchId && (
+      {/* League linkage toggle — only for new matches in league-attached events */}
+      {event.round && !editingManualMatchId && (
         <div className="bg-card rounded-xl border border-border p-3 space-y-2">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -2908,7 +2912,7 @@ export default function EventDetailPage() {
             <select value={manualLeagueCategoryId} onChange={(e) => setManualLeagueCategoryId(e.target.value)}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
               <option value="">Pick category…</option>
-              {event.leagueMatchDay.round.league.categories?.map((c) => (
+              {event.round.league.categories?.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
@@ -3346,23 +3350,23 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-3">
       {eventHeroHeader}
-      {/* League banner — visible when event is linked to a league match-day */}
-      {event.leagueMatchDay && (() => {
-        const md = event.leagueMatchDay!;
-        const teamNames = md.teams.map((t) => t.team.name).join(" vs ");
+      {/* League banner — visible when event is attached to a league round */}
+      {event.round && (() => {
+        const r = event.round!;
+        const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
         return (
           <Link
-            href={`/leagues/${md.round.league.id}?tab=rounds`}
+            href={`/leagues/${r.league.id}?tab=rounds`}
             className="block bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm hover:bg-emerald-100"
           >
             <div className="flex items-center gap-2">
               <span>🏆</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-emerald-900 truncate">
-                  {md.round.league.name}{md.round.league.season ? ` · ${md.round.league.season}` : ""}
+                  {r.league.name}{r.league.season ? ` · ${r.league.season}` : ""}
                 </div>
                 <div className="text-[11px] text-emerald-700 truncate">
-                  {md.round.name || `Round ${md.round.roundNumber}`} · {teamNames}
+                  {r.name || `Round ${r.roundNumber}`}{teamNames ? ` · ${teamNames}` : ""}
                 </div>
               </div>
               <span className="text-emerald-700 text-xs">›</span>

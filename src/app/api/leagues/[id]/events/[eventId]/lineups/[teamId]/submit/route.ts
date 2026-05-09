@@ -21,14 +21,14 @@ async function requireLineupEditor(leagueId: string, teamId: string) {
 // the server reveals both lineups and generates LeagueGame rows.
 export async function POST(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   let auth;
   try { auth = await requireLineupEditor(id, teamId); } catch (e) { return authErrorResponse(e); }
 
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
     include: {
       round: {
         include: {
@@ -45,20 +45,20 @@ export async function POST(
           },
         },
       },
-      lineups: { include: { slots: true } },
+      leagueLineups: { include: { slots: true } },
     },
   });
-  if (!matchDay || matchDay.round.leagueId !== id) {
-    return NextResponse.json({ error: "Match-day not found in league" }, { status: 404 });
+  if (!event || event.round?.leagueId !== id) {
+    return NextResponse.json({ error: "Event not found in league" }, { status: 404 });
   }
-  const myLineup = matchDay.lineups.find((l) => l.teamId === teamId);
+  const myLineup = event.leagueLineups.find((l) => l.teamId === teamId);
   if (!myLineup) return NextResponse.json({ error: "No lineup to submit — save a draft first" }, { status: 400 });
   if (myLineup.slots.length === 0) return NextResponse.json({ error: "Lineup is empty" }, { status: 400 });
 
   // Re-validate at submit (rules might have changed since draft was saved)
-  const team = matchDay.round.league.teams[0];
+  const team = event.round.league.teams[0];
   const categoriesById = new Map<string, CategoryRules>(
-    matchDay.round.league.categories.map((c) => [c.id, {
+    event.round.league.categories.map((c) => [c.id, {
       id: c.id, format: c.format, gender: c.gender, ageGroup: c.ageGroup,
       skillMin: c.skillMin, skillMax: c.skillMax, maxPerEvent: c.maxPerEvent, sortOrder: c.sortOrder,
     }]),
@@ -66,7 +66,7 @@ export async function POST(
   const rosterById = new Map<string, PlayerLite>(
     team.players.map((tp) => [tp.player.id, { id: tp.player.id, gender: tp.player.gender, duprRating: tp.player.duprRating }]),
   );
-  const config = (matchDay.round.league.config as LeagueConfig | null) || {};
+  const config = (event.round.league.config as LeagueConfig | null) || {};
   const slotsAsInput: LineupSlotInput[] = myLineup.slots.map((s) => ({
     categoryId: s.categoryId, slotNumber: s.slotNumber, player1Id: s.player1Id, player2Id: s.player2Id,
   }));
@@ -79,10 +79,10 @@ export async function POST(
   });
 
   // If the other team is also submitted (or revealed), trigger reveal + generation.
-  const otherLineup = matchDay.lineups.find((l) => l.teamId !== teamId);
+  const otherLineup = event.leagueLineups.find((l) => l.teamId !== teamId);
   const allSubmitted = !!otherLineup && (otherLineup.status === "submitted" || otherLineup.status === "revealed");
   if (allSubmitted) {
-    await revealAndGenerate(matchDayId);
+    await revealAndGenerate(eventId);
     return NextResponse.json({ ok: true, revealed: true });
   }
   return NextResponse.json({ ok: true, revealed: false });

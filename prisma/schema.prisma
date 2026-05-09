@@ -212,11 +212,22 @@ model Event {
   matches        Match[]
   helpers        EventHelper[]
   whatsappGroups EventWhatsAppGroup[]
-  leagueMatchDay LeagueMatchDay?
+
+  // League-attached fields. When `roundId` is set, the event represents a
+  // specific match-day for two league teams. Otherwise the event is a
+  // standalone social/competition event.
+  roundId        String?
+  round          LeagueRound?       @relation(fields: [roundId], references: [id])
+  hostTeamId     String?
+  hostTeam       LeagueTeam?        @relation("eventHostTeam", fields: [hostTeamId], references: [id])
+  leagueTeams    LeagueEventTeam[]
+  leagueGames    LeagueGame[]
+  leagueLineups  LeagueLineup[]
 
   @@index([clubId])
   @@index([status])
   @@index([date])
+  @@index([roundId])
 }
 
 model EventClass {
@@ -556,7 +567,8 @@ model LeagueTeam {
   captain     Player?  @relation("teamCaptain", fields: [captainId], references: [id])
   viceCaptain Player?  @relation("teamViceCaptain", fields: [viceCaptainId], references: [id])
   players     LeagueTeamPlayer[]
-  matchDayTeams LeagueMatchDayTeam[]
+  eventTeams    LeagueEventTeam[]
+  hostedEvents  Event[]      @relation("eventHostTeam")
   gamesAsTeam1  LeagueGame[] @relation("gameTeam1")
   gamesAsTeam2  LeagueGame[] @relation("gameTeam2")
   gamesWon      LeagueGame[] @relation("gameWinner")
@@ -612,38 +624,27 @@ model LeagueRound {
   status      String    @default("scheduled") // scheduled, in_progress, completed
 
   league    League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  matchDays LeagueMatchDay[]
+  events    Event[]
 }
 
-model LeagueMatchDay {
-  id         String    @id @default(cuid())
-  roundId    String
-  eventId    String?   @unique // link to Event for actual scoring
-  date       DateTime?
-  status     String    @default("scheduled") // scheduled, in_progress, completed
-  hostTeamId String?
+// ── League event team participation ──
+// Each league-attached Event has 1-2 LeagueEventTeam rows recording the
+// teams that play, plus their cached match-day points.
+model LeagueEventTeam {
+  id      String @id @default(cuid())
+  eventId String
+  teamId  String
+  points  Int    @default(0)
 
-  round  LeagueRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
-  event  Event?               @relation(fields: [eventId], references: [id])
-  teams  LeagueMatchDayTeam[]
-  games  LeagueGame[]
-  lineups LeagueLineup[]
-}
-
-model LeagueMatchDayTeam {
-  id         String @id @default(cuid())
-  matchDayId String
-  teamId     String
-  points     Int    @default(0) // cached team points for this match day
-
-  matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
-  team     LeagueTeam     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  @@unique([matchDayId, teamId])
+  event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  team  LeagueTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  @@unique([eventId, teamId])
+  @@index([eventId])
 }
 
 model LeagueGame {
   id          String  @id @default(cuid())
-  matchDayId  String
+  eventId     String
   categoryId  String
   matchId     String? @unique // link to existing Match for scoring
   team1Id     String
@@ -652,13 +653,14 @@ model LeagueGame {
   isPrincipal Boolean @default(true) // false = extra/friendly (doesn't count for category ranking)
   lineupGenerated Boolean @default(false) // true if auto-created from lineup pairing (eligible for cleanup on unlock)
 
-  matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   category LeagueCategory @relation(fields: [categoryId], references: [id])
   match    Match?         @relation(fields: [matchId], references: [id])
   team1    LeagueTeam     @relation("gameTeam1", fields: [team1Id], references: [id])
   team2    LeagueTeam     @relation("gameTeam2", fields: [team2Id], references: [id])
   winner   LeagueTeam?    @relation("gameWinner", fields: [winnerId], references: [id])
   gamePlayers LeagueGamePlayer[]
+  @@index([eventId])
 }
 
 model LeagueGamePlayer {
@@ -695,13 +697,13 @@ model LeagueParticipationRequest {
   @@index([leagueId])
 }
 
-// ── Match-day lineups ──
-// Each team submits a lineup per match-day. Lineups are kept private until both
-// teams submit; once both submit, the server reveals them and pairs slot 1 vs
-// slot 1, slot 2 vs slot 2, etc., for each category.
+// ── League event lineups ──
+// Each team submits a lineup per league-attached event. Lineups are kept
+// private until both teams submit; once both submit, the server reveals them
+// and pairs slot 1 vs slot 1, slot 2 vs slot 2, etc., for each category.
 model LeagueLineup {
   id             String   @id @default(cuid())
-  matchDayId     String
+  eventId        String
   teamId         String
   status         String   @default("draft")  // "draft" | "submitted" | "revealed"
   submittedAt    DateTime?
@@ -710,14 +712,14 @@ model LeagueLineup {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  matchDay   LeagueMatchDay     @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
+  event      Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   team       LeagueTeam         @relation(fields: [teamId], references: [id], onDelete: Cascade)
   submittedBy Player?           @relation("lineupSubmitter", fields: [submittedById], references: [id])
   unlockRequestedBy Player?     @relation("lineupUnlockRequester", fields: [unlockRequestedById], references: [id])
   slots      LeagueLineupSlot[]
 
-  @@unique([matchDayId, teamId])
-  @@index([matchDayId])
+  @@unique([eventId, teamId])
+  @@index([eventId])
 }
 
 // ── League documents (rules, schedule, posters, etc.) ──

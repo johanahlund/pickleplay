@@ -8,27 +8,27 @@ import { NextResponse } from "next/server";
 // Effect: both lineups → draft, auto-generated games (without winner) deleted.
 export async function POST(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   let user;
   try { user = await requireAuth(); } catch {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
     include: {
       round: { select: { leagueId: true } },
-      lineups: true,
-      teams: { include: { team: { select: { id: true, captainId: true, viceCaptainId: true } } } },
+      leagueLineups: true,
+      leagueTeams: { include: { team: { select: { id: true, captainId: true, viceCaptainId: true } } } },
     },
   });
-  if (!matchDay || matchDay.round.leagueId !== id) {
-    return NextResponse.json({ error: "Match-day not found in league" }, { status: 404 });
+  if (!event || event.round?.leagueId !== id) {
+    return NextResponse.json({ error: "Event not found in league" }, { status: 404 });
   }
 
-  const myLineup = matchDay.lineups.find((l) => l.teamId === teamId);
+  const myLineup = event.leagueLineups.find((l) => l.teamId === teamId);
   if (!myLineup) return NextResponse.json({ error: "No lineup for that team" }, { status: 404 });
   if (!myLineup.unlockRequestedById) {
     return NextResponse.json({ error: "No pending unlock request" }, { status: 400 });
@@ -38,16 +38,16 @@ export async function POST(
   const isAppAdmin = user.role === "admin";
   const isOrganizer = isAppAdmin || league?.createdById === user.id || league?.deputyId === user.id;
   // Caller is the OTHER team's leader?
-  const otherTeam = matchDay.teams.find((t) => t.team.id !== teamId)?.team;
+  const otherTeam = event.leagueTeams.find((t) => t.team.id !== teamId)?.team;
   const isOtherLeader = !!otherTeam && (otherTeam.captainId === user.id || otherTeam.viceCaptainId === user.id);
   if (!isOrganizer && !isOtherLeader) {
     return NextResponse.json({ error: "Only the other team's captain or a league organizer can confirm" }, { status: 403 });
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.leagueGame.deleteMany({ where: { matchDayId, lineupGenerated: true, winnerId: null } });
+    await tx.leagueGame.deleteMany({ where: { eventId, lineupGenerated: true, winnerId: null } });
     await tx.leagueLineup.updateMany({
-      where: { matchDayId },
+      where: { eventId },
       data: { status: "draft", submittedAt: null, submittedById: null, unlockRequestedById: null },
     });
   });

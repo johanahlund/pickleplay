@@ -34,19 +34,15 @@ export async function GET() {
       club: { select: { id: true, name: true, shortName: true, emoji: true, logoUrl: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
       // Used by visibility check: league participants (team players/captains,
-      // helpers, organizers) can see league match-day events even when those
+      // helpers, organizers) can see league-attached events even when those
       // events are still in "setup"/"draft" status.
-      leagueMatchDay: {
+      round: {
         select: {
-          round: {
+          league: {
             select: {
-              league: {
-                select: {
-                  createdById: true, deputyId: true,
-                  helpers: { select: { playerId: true } },
-                  teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
-                },
-              },
+              createdById: true, deputyId: true,
+              helpers: { select: { playerId: true } },
+              teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
             },
           },
         },
@@ -69,7 +65,7 @@ export async function GET() {
     if (event.createdById === userId) return true;
     if (event.helpers.some((h) => h.playerId === userId)) return true;
     if (event.players.some((p) => p.playerId === userId)) return true;
-    const league = event.leagueMatchDay?.round.league;
+    const league = event.round?.league;
     if (league) {
       if (league.createdById === userId) return true;
       if (league.deputyId === userId) return true;
@@ -82,11 +78,11 @@ export async function GET() {
     }
     return false;
   });
-  // Drop the leagueMatchDay payload from the response — it was only needed
+  // Drop the round.league inner detail from the response — it was only used
   // for the visibility filter above. Keeping it would leak roster ids.
   const stripped = filtered.map((e) => {
-    const { leagueMatchDay: _lmd, ...rest } = e;
-    void _lmd;
+    const { round: _round, ...rest } = e;
+    void _round;
     return rest;
   });
 

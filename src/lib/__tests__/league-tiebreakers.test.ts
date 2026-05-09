@@ -13,8 +13,8 @@ interface Game {
   isPrincipal: boolean;
   matchScore?: { team1: number; team2: number } | null;
 }
-interface MatchDay { teams: { teamId: string }[]; games: Game[] }
-interface Round { matchDays: MatchDay[] }
+interface MatchDayEvent { teams: { teamId: string }[]; games: Game[] }
+interface Round { events: MatchDayEvent[] }
 
 interface TeamStanding {
   teamId: string;
@@ -46,7 +46,7 @@ function computeStandings(
   }
 
   for (const round of rounds) {
-    for (const md of round.matchDays) {
+    for (const md of round.events) {
       const mdWins: Record<string, number> = {};
       for (const game of md.games) {
         if (game.winnerId) {
@@ -106,7 +106,7 @@ function computeCategoryStandings(
   for (const tid of teamIds) catTeams[tid] = { wins: 0, losses: 0 };
 
   for (const round of rounds) {
-    for (const md of round.matchDays) {
+    for (const md of round.events) {
       for (const game of md.games) {
         if (game.categoryId !== categoryId || !game.winnerId) continue;
         if (game.isPrincipal === false) continue; // only principal games
@@ -131,15 +131,15 @@ describe("H2H Tiebreaker", () => {
     // Both have 3 points. But say A won the H2H in a separate third encounter...
     // Simpler: A beats B in round 1, B beats C in round 2, A and B both have 3 pts
     const rounds: Round[] = [
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
       }] },
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "B" }, { teamId: "C" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "B", team2Id: "C", winnerId: "B", isPrincipal: true })),
       }] },
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "C" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "C", winnerId: "C", isPrincipal: true })),
       }] },
@@ -160,11 +160,11 @@ describe("H2H Tiebreaker", () => {
     // A and B play twice: A wins first, B wins second. Same points.
     // But A has more total category wins because A won 4-0, B won 3-1
     const rounds: Round[] = [
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
       }] },
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
@@ -189,7 +189,7 @@ describe("Point Difference Tiebreaker", () => {
 
   test("point difference breaks tie when H2H and category wins are equal", () => {
     const rounds: Round[] = [
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true, matchScore: { team1: 15, team2: 5 } },
@@ -210,7 +210,7 @@ describe("Point Difference Tiebreaker", () => {
 
     // Now test with unequal margins
     const rounds2: Round[] = [
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true, matchScore: { team1: 15, team2: 0 } },
@@ -232,7 +232,7 @@ describe("Point Difference Tiebreaker", () => {
 describe("isPrincipal in Category Standings", () => {
   test("extra games do not count for category rankings", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
@@ -251,13 +251,13 @@ describe("isPrincipal in Category Standings", () => {
 
   test("principal games accumulate across rounds", () => {
     const rounds: Round[] = [
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
         ],
       }] },
-      { matchDays: [{
+      { events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "B", isPrincipal: true },
@@ -275,7 +275,7 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
 
   test("Example 1: A wins 4-0, tabela 3-0 (cap at 3)", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: cats.map((c) => ({ categoryId: c, team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true })),
       }],
@@ -287,7 +287,7 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
 
   test("Example 2: A wins 3, B wins 1, tabela 3-1", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
@@ -304,7 +304,7 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
 
   test("Example 3 (with repetitions): 6 games, A wins 4, B wins 2, tabela 3-2", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },
@@ -324,7 +324,7 @@ describe("Liga Interclubes Examples from Regulation V2", () => {
 
   test("Example 4 (with repetitions): 8 games, A wins 5, B wins 3, tabela 3-3", () => {
     const rounds: Round[] = [{
-      matchDays: [{
+      events: [{
         teams: [{ teamId: "A" }, { teamId: "B" }],
         games: [
           { categoryId: "masc", team1Id: "A", team2Id: "B", winnerId: "A", isPrincipal: true },

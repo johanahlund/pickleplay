@@ -29,27 +29,23 @@ export async function GET(
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
       helpers: { include: { player: { select: safePlayerSelect } } },
-      // If this event is the host event for a league match-day, expose the
-      // link so the UI can show a banner + filter the match list.
-      leagueMatchDay: {
+      // If this event is attached to a league round, expose the league + teams
+      // so the UI can show a banner + filter the match list.
+      round: {
         include: {
-          round: {
-            include: {
-              league: {
-                select: {
-                  id: true, name: true, season: true, createdById: true, deputyId: true,
-                  categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
-                  // For visibility checks: anyone on a team in the league should
-                  // be able to see the match-day event regardless of its status.
-                  teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
-                  helpers: { select: { playerId: true } },
-                },
-              },
+          league: {
+            select: {
+              id: true, name: true, season: true, createdById: true, deputyId: true,
+              categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
+              // For visibility checks: anyone on a team in the league should
+              // be able to see the league-attached event regardless of its status.
+              teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
+              helpers: { select: { playerId: true } },
             },
           },
-          teams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
         },
       },
+      leagueTeams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
       pairs: {
         include: {
           player1: { select: { id: true, name: true, emoji: true, photoUrl: true, rating: true, gender: true } },
@@ -71,7 +67,7 @@ export async function GET(
   const needsInsiderView = event.visibility === "hidden" || isSetup;
   if (needsInsiderView) {
     const isAdmin = user.role === "admin";
-    const league = event.leagueMatchDay?.round.league;
+    const league = event.round?.league;
     const isLeagueParticipant = !!league && (
       league.createdById === user.id ||
       league.deputyId === user.id ||

@@ -27,17 +27,17 @@ async function requireLineupEditor(leagueId: string, teamId: string) {
 // PUT: replace this team's lineup slots (resets status to draft).
 export async function PUT(
   req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   let auth;
   try { auth = await requireLineupEditor(id, teamId); } catch (e) { return authErrorResponse(e); }
 
   const body = await req.json().catch(() => null);
   const slots: LineupSlotInput[] = Array.isArray(body?.slots) ? body.slots : [];
 
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
     include: {
       round: {
         include: {
@@ -58,14 +58,14 @@ export async function PUT(
       },
     },
   });
-  if (!matchDay || matchDay.round.leagueId !== id) {
-    return NextResponse.json({ error: "Match-day not found in league" }, { status: 404 });
+  if (!event || event.round?.leagueId !== id) {
+    return NextResponse.json({ error: "Event not found in league" }, { status: 404 });
   }
-  const team = matchDay.round.league.teams[0];
+  const team = event.round.league.teams[0];
   if (!team) return NextResponse.json({ error: "Team not in league" }, { status: 404 });
 
   const categoriesById = new Map<string, CategoryRules>(
-    matchDay.round.league.categories.map((c) => [c.id, {
+    event.round.league.categories.map((c) => [c.id, {
       id: c.id, format: c.format, gender: c.gender, ageGroup: c.ageGroup,
       skillMin: c.skillMin, skillMax: c.skillMax, maxPerEvent: c.maxPerEvent, sortOrder: c.sortOrder,
     }]),
@@ -73,13 +73,13 @@ export async function PUT(
   const rosterById = new Map<string, PlayerLite>(
     team.players.map((tp) => [tp.player.id, { id: tp.player.id, gender: tp.player.gender, duprRating: tp.player.duprRating }]),
   );
-  const config = (matchDay.round.league.config as LeagueConfig | null) || {};
+  const config = (event.round.league.config as LeagueConfig | null) || {};
   const err = validateLineup(slots, categoriesById, rosterById, config, !auth.isOrganizer);
   if (err) return NextResponse.json({ error: err }, { status: 400 });
 
   // Upsert lineup, replace all slots
   const existing = await prisma.leagueLineup.findUnique({
-    where: { matchDayId_teamId: { matchDayId, teamId } },
+    where: { eventId_teamId: { eventId, teamId } },
   });
   await prisma.$transaction(async (tx) => {
     let lineupId: string;
@@ -92,7 +92,7 @@ export async function PUT(
       });
     } else {
       const created = await tx.leagueLineup.create({
-        data: { matchDayId, teamId, status: "draft" },
+        data: { eventId, teamId, status: "draft" },
       });
       lineupId = created.id;
     }
@@ -111,7 +111,7 @@ export async function PUT(
     // changed, so any pairings are stale. We delete only games without a
     // recorded winner (don't lose actual scores).
     await tx.leagueGame.deleteMany({
-      where: { matchDayId, lineupGenerated: true, winnerId: null },
+      where: { eventId, lineupGenerated: true, winnerId: null },
     });
   });
 
@@ -121,14 +121,14 @@ export async function PUT(
 // DELETE: clear this team's lineup entirely.
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string; teamId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string; teamId: string }> }
 ) {
-  const { id, matchDayId, teamId } = await params;
+  const { id, eventId, teamId } = await params;
   try { await requireLineupEditor(id, teamId); } catch (e) { return authErrorResponse(e); }
   await prisma.$transaction(async (tx) => {
-    await tx.leagueLineup.deleteMany({ where: { matchDayId, teamId } });
+    await tx.leagueLineup.deleteMany({ where: { eventId, teamId } });
     await tx.leagueGame.deleteMany({
-      where: { matchDayId, lineupGenerated: true, winnerId: null },
+      where: { eventId, lineupGenerated: true, winnerId: null },
     });
   });
   return NextResponse.json({ ok: true });

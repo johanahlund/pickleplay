@@ -1,7 +1,8 @@
-// Helpers for league match-day lineups.
+// Helpers for league event lineups.
 //
 // Conventions:
-//  - A lineup belongs to a (matchDay, team) pair.
+//  - A lineup belongs to a (event, team) pair where the event has a roundId
+//    set (i.e. it's a league-attached event for a specific round).
 //  - Each lineup is a list of slots, grouped by category and ordered by
 //    slotNumber (1-based). Slot N from team A plays slot N from team B.
 //  - Lineups are kept private until both teams submit; once both submit,
@@ -237,21 +238,22 @@ export function planGames(
 /**
  * Reveal both lineups and create LeagueGame rows in the database.
  * Idempotent-ish: deletes any prior lineup-generated games (without a
- * winner) for this match-day before creating new ones.
+ * winner) for this event before creating new ones.
  */
-export async function revealAndGenerate(matchDayId: string) {
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
+export async function revealAndGenerate(eventId: string) {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
     include: {
-      lineups: { include: { slots: true } },
+      leagueLineups: { include: { slots: true } },
       round: { include: { league: { include: { categories: true } } } },
     },
   });
-  if (!matchDay) throw new Error("MatchDay not found");
-  const lineups = matchDay.lineups;
+  if (!event) throw new Error("Event not found");
+  if (!event.round) throw new Error("Event is not attached to a league round");
+  const lineups = event.leagueLineups;
   if (lineups.length !== 2) throw new Error("Need exactly two lineups");
   const [a, b] = lineups;
-  const cats: CategoryRules[] = matchDay.round.league.categories.map((c) => ({
+  const cats: CategoryRules[] = event.round.league.categories.map((c) => ({
     id: c.id,
     format: c.format,
     gender: c.gender,
@@ -261,7 +263,7 @@ export async function revealAndGenerate(matchDayId: string) {
     maxPerEvent: c.maxPerEvent,
     sortOrder: c.sortOrder,
   }));
-  const config = (matchDay.round.league.config as LeagueConfig | null) || {};
+  const config = (event.round.league.config as LeagueConfig | null) || {};
   const aSlots = a.slots.map((s) => ({ categoryId: s.categoryId, slotNumber: s.slotNumber, player1Id: s.player1Id, player2Id: s.player2Id }));
   const bSlots = b.slots.map((s) => ({ categoryId: s.categoryId, slotNumber: s.slotNumber, player1Id: s.player1Id, player2Id: s.player2Id }));
   const planned = planGames(aSlots, bSlots, cats, config);
@@ -269,12 +271,12 @@ export async function revealAndGenerate(matchDayId: string) {
   await prisma.$transaction(async (tx) => {
     // Clean up any prior auto-generated games without a recorded winner
     await tx.leagueGame.deleteMany({
-      where: { matchDayId, lineupGenerated: true, winnerId: null },
+      where: { eventId, lineupGenerated: true, winnerId: null },
     });
     for (const g of planned) {
       const game = await tx.leagueGame.create({
         data: {
-          matchDayId,
+          eventId,
           categoryId: g.categoryId,
           team1Id: a.teamId,
           team2Id: b.teamId,
@@ -287,6 +289,6 @@ export async function revealAndGenerate(matchDayId: string) {
         await tx.leagueGamePlayer.create({ data: { leagueGameId: game.id, playerId: pid } });
       }
     }
-    await tx.leagueLineup.updateMany({ where: { matchDayId }, data: { status: "revealed" } });
+    await tx.leagueLineup.updateMany({ where: { eventId }, data: { status: "revealed" } });
   });
 }

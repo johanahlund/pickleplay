@@ -2,17 +2,31 @@ import { prisma } from "@/lib/db";
 import { requireLeagueManager, authErrorResponse } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// POST: add a round (jornada) with match days
+// POST: add a round (jornada). Optionally seed initial league-attached
+// Events (each event = a match-day between two teams) via the `events` array.
+// Body shape:
+//   { roundNumber, name?, startDate?, endDate?, configOverride?,
+//     categoriesOverride?, events?: { teamIds: string[]; hostTeamId?: string; date?: string }[] }
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
+  let user;
+  try { user = await requireLeagueManager(id); } catch (e) { return authErrorResponse(e); }
 
-  const { roundNumber, name, startDate, endDate, configOverride, categoriesOverride, matchDays } = await req.json();
+  const body = await req.json();
+  const {
+    roundNumber, name, startDate, endDate,
+    configOverride, categoriesOverride,
+    events, matchDays, // matchDays kept as alias for backwards compat
+  } = body;
   if (!roundNumber) return NextResponse.json({ error: "roundNumber required" }, { status: 400 });
 
+  const seedEvents: { teamIds: string[]; hostTeamId?: string; date?: string }[] =
+    events ?? matchDays ?? [];
+
+  // Create the round first (no nested Event create — we need extra context).
   const round = await prisma.leagueRound.create({
     data: {
       leagueId: id,
@@ -22,24 +36,90 @@ export async function POST(
       endDate: endDate ? new Date(endDate) : null,
       configOverride: configOverride ?? undefined,
       categoriesOverride: categoriesOverride ?? undefined,
-      ...(matchDays?.length ? {
-        matchDays: {
-          create: matchDays.map((md: { teamIds: string[]; hostTeamId?: string; date?: string }) => ({
-            date: md.date ? new Date(md.date) : null,
-            hostTeamId: md.hostTeamId || md.teamIds?.[0] || null,
-            teams: {
-              create: md.teamIds.map((teamId: string) => ({ teamId })),
-            },
-          })),
-        },
-      } : {}),
-    },
-    include: {
-      matchDays: { include: { teams: { include: { team: { select: { id: true, name: true } } } } } },
     },
   });
 
-  return NextResponse.json(round);
+  // Seed events if provided. Each event is a league match-day:
+  //  - one Event row, attached to the round
+  //  - LeagueEventTeam rows for each team
+  //  - Auto-creates EventClass rows mirroring the league's categories so the
+  //    standalone-event UI has classes to schedule under.
+  if (seedEvents.length > 0) {
+    const league = await prisma.league.findUnique({
+      where: { id },
+      include: { categories: { orderBy: { sortOrder: "asc" } } },
+    });
+    const categories = league?.categories ?? [];
+
+    // Resolve clubId for the host team (first team if hostTeamId not given)
+    const allTeamIds = Array.from(new Set(seedEvents.flatMap((e) => [...(e.teamIds || []), e.hostTeamId || ""].filter(Boolean))));
+    const teams = await prisma.leagueTeam.findMany({
+      where: { id: { in: allTeamIds } },
+      include: { club: { select: { id: true, name: true } } },
+    });
+    const teamById = new Map(teams.map((t) => [t.id, t]));
+
+    for (const seed of seedEvents) {
+      const hostTeamId = seed.hostTeamId || seed.teamIds?.[0] || null;
+      const hostClubId = hostTeamId ? teamById.get(hostTeamId)?.club?.id ?? null : null;
+      const teamNames = (seed.teamIds || []).map((tid) => teamById.get(tid)?.name).filter(Boolean).join(" vs ");
+      const eventName = `${league?.name ?? "League"}: ${teamNames || "match-day"} — ${round.name || `R${round.roundNumber}`}`;
+
+      const event = await prisma.event.create({
+        data: {
+          name: eventName,
+          date: seed.date ? new Date(seed.date) : (round.startDate ?? new Date()),
+          numCourts: 2,
+          status: "setup",
+          createdById: user.id,
+          clubId: hostClubId,
+          roundId: round.id,
+          hostTeamId,
+          classes: {
+            create: categories.map((cat, i) => ({
+              name: cat.name,
+              format: cat.format,
+              gender: cat.gender,
+              scoringFormat: cat.scoringFormat,
+              winBy: cat.winBy,
+              isDefault: i === 0,
+            })),
+          },
+          leagueTeams: {
+            create: (seed.teamIds || []).map((teamId) => ({ teamId })),
+          },
+        },
+      });
+
+      // Pre-create LeagueGame rows (category × team pair) when 2 teams play.
+      if ((seed.teamIds || []).length === 2 && categories.length > 0) {
+        const [t1Id, t2Id] = seed.teamIds;
+        for (const cat of categories) {
+          await prisma.leagueGame.create({
+            data: {
+              eventId: event.id,
+              categoryId: cat.id,
+              team1Id: t1Id,
+              team2Id: t2Id,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  // Return the round with its events for client convenience.
+  const enriched = await prisma.leagueRound.findUnique({
+    where: { id: round.id },
+    include: {
+      events: {
+        include: {
+          leagueTeams: { include: { team: { select: { id: true, name: true } } } },
+        },
+      },
+    },
+  });
+  return NextResponse.json(enriched);
 }
 
 // PATCH: update round fields (dates, name, overrides)

@@ -25,10 +25,11 @@ export async function POST(
       categories: { orderBy: { sortOrder: "asc" } },
       rounds: {
         include: {
-          matchDays: {
-            include: {
-              teams: true,
-              games: {
+          events: {
+            select: {
+              id: true,
+              leagueTeams: true,
+              leagueGames: {
                 include: { gamePlayers: { select: { playerId: true } } },
               },
             },
@@ -49,8 +50,8 @@ export async function POST(
     for (const team of league.teams) catWins[team.id] = 0;
 
     for (const round of league.rounds) {
-      for (const md of round.matchDays) {
-        for (const game of md.games) {
+      for (const ev of round.events) {
+        for (const game of ev.leagueGames) {
           if (game.categoryId !== cat.id || !game.winnerId) continue;
           if (game.isPrincipal === false) continue;
           catWins[game.winnerId] = (catWins[game.winnerId] || 0) + 1;
@@ -63,14 +64,14 @@ export async function POST(
       .sort((a, b) => b.wins - a.wins);
   }
 
-  // Compute player eligibility (distinct match days played)
+  // Compute player eligibility (distinct match-day events played)
   const playerMatchDays: Record<string, Set<string>> = {};
   for (const round of league.rounds) {
-    for (const md of round.matchDays) {
-      for (const game of md.games) {
+    for (const ev of round.events) {
+      for (const game of ev.leagueGames) {
         for (const gp of game.gamePlayers) {
           if (!playerMatchDays[gp.playerId]) playerMatchDays[gp.playerId] = new Set();
-          playerMatchDays[gp.playerId].add(md.id);
+          playerMatchDays[gp.playerId].add(ev.id);
         }
       }
     }
@@ -95,7 +96,7 @@ export async function POST(
     },
   });
 
-  // Create the Grande Final event
+  // Create the Grande Final event, attached to the playoff round
   const event = await prisma.event.create({
     data: {
       name: `${league.name} — Grande Final`,
@@ -104,6 +105,7 @@ export async function POST(
       numCourts: 2,
       clubId: league.club?.id || null,
       createdById: league.createdById,
+      roundId: playoffRound.id,
     },
   });
 
@@ -136,16 +138,6 @@ export async function POST(
       }
     }
   }
-
-  // Create a match day linking the round to the event
-  await prisma.leagueMatchDay.create({
-    data: {
-      roundId: playoffRound.id,
-      eventId: event.id,
-      date: new Date(),
-      status: "scheduled",
-    },
-  });
 
   return NextResponse.json({
     ok: true,

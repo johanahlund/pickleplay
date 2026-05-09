@@ -22,7 +22,7 @@ interface LineupView {
 }
 
 export default function LineupBuilderPage() {
-  const { id, matchDayId, teamId } = useParams() as { id: string; matchDayId: string; teamId: string };
+  const { id, eventId, teamId } = useParams() as { id: string; eventId: string; teamId: string };
   const router = useRouter();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string })?.id;
@@ -58,7 +58,7 @@ export default function LineupBuilderPage() {
   const loadAll = useCallback(async () => {
     const [leagueR, lineupsR] = await Promise.all([
       fetch(`/api/leagues/${id}`),
-      fetch(`/api/leagues/${id}/match-days/${matchDayId}/lineups`),
+      fetch(`/api/leagues/${id}/events/${eventId}/lineups`),
     ]);
     const league = await leagueR.json();
     const lineupsBundle = await lineupsR.json();
@@ -81,7 +81,7 @@ export default function LineupBuilderPage() {
     }
     setDirty(false);
     setLoading(false);
-  }, [id, matchDayId, teamId]);
+  }, [id, eventId, teamId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -148,7 +148,7 @@ export default function LineupBuilderPage() {
   const saveDraft = async () => {
     setSaving(true);
     setErrorMsg(null);
-    const r = await fetch(`/api/leagues/${id}/match-days/${matchDayId}/lineups/${teamId}`, {
+    const r = await fetch(`/api/leagues/${id}/events/${eventId}/lineups/${teamId}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slots }),
     });
@@ -162,7 +162,7 @@ export default function LineupBuilderPage() {
     if (dirty) { const ok = await saveDraft(); if (!ok) return; }
     setSaving(true);
     setErrorMsg(null);
-    const r = await fetch(`/api/leagues/${id}/match-days/${matchDayId}/lineups/${teamId}/submit`, { method: "POST" });
+    const r = await fetch(`/api/leagues/${id}/events/${eventId}/lineups/${teamId}/submit`, { method: "POST" });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to submit"); return; }
     await loadAll();
@@ -170,7 +170,7 @@ export default function LineupBuilderPage() {
 
   const requestUnlock = async () => {
     setSaving(true);
-    const r = await fetch(`/api/leagues/${id}/match-days/${matchDayId}/lineups/${teamId}/unlock-request`, { method: "POST" });
+    const r = await fetch(`/api/leagues/${id}/events/${eventId}/lineups/${teamId}/unlock-request`, { method: "POST" });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to unlock"); return; }
     await loadAll();
@@ -178,7 +178,7 @@ export default function LineupBuilderPage() {
 
   const cancelUnlock = async () => {
     setSaving(true);
-    await fetch(`/api/leagues/${id}/match-days/${matchDayId}/lineups/${teamId}/unlock-request`, { method: "DELETE" });
+    await fetch(`/api/leagues/${id}/events/${eventId}/lineups/${teamId}/unlock-request`, { method: "DELETE" });
     setSaving(false);
     await loadAll();
   };

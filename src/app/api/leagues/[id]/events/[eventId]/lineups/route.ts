@@ -2,29 +2,29 @@ import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// GET: list both lineups for the match-day. Slot details are visible only
-// to that team's roster manager (captain/vice/director/admin) OR if the
-// lineup has been revealed.
+// GET: list both lineups for the league-attached event. Slot details are
+// visible only to that team's roster manager (captain/vice/director/admin)
+// OR if the lineup has been revealed.
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ id: string; matchDayId: string }> }
+  { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
   let user;
   try { user = await requireAuth(); } catch {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
-  const { id, matchDayId } = await params;
+  const { id, eventId } = await params;
 
-  const matchDay = await prisma.leagueMatchDay.findUnique({
-    where: { id: matchDayId },
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
     include: {
       round: { select: { leagueId: true } },
-      teams: {
+      leagueTeams: {
         include: {
           team: { select: { id: true, name: true, captainId: true, viceCaptainId: true } },
         },
       },
-      lineups: {
+      leagueLineups: {
         include: {
           slots: {
             include: {
@@ -39,8 +39,8 @@ export async function GET(
       },
     },
   });
-  if (!matchDay || matchDay.round.leagueId !== id) {
-    return NextResponse.json({ error: "Match-day not found in league" }, { status: 404 });
+  if (!event || event.round?.leagueId !== id) {
+    return NextResponse.json({ error: "Event not found in league" }, { status: 404 });
   }
 
   const league = await prisma.league.findUnique({
@@ -50,9 +50,9 @@ export async function GET(
   const isAppAdmin = user.role === "admin";
   const isOrganizer = isAppAdmin || league?.createdById === user.id || league?.deputyId === user.id;
 
-  type Slot = (typeof matchDay.lineups)[number]["slots"][number];
-  const stripSlots = (lineup: typeof matchDay.lineups[number]) => {
-    const team = matchDay.teams.find((t) => t.team.id === lineup.teamId)?.team;
+  type Slot = (typeof event.leagueLineups)[number]["slots"][number];
+  const stripSlots = (lineup: typeof event.leagueLineups[number]) => {
+    const team = event.leagueTeams.find((t) => t.team.id === lineup.teamId)?.team;
     const isTeamLeader = !!team && (team.captainId === user.id || team.viceCaptainId === user.id);
     const canSeeSlots = isOrganizer || isTeamLeader || lineup.status === "revealed";
     return {
@@ -76,9 +76,9 @@ export async function GET(
   };
 
   return NextResponse.json({
-    matchDayId,
-    teams: matchDay.teams.map((t) => ({ id: t.team.id, name: t.team.name })),
-    lineups: matchDay.lineups.map(stripSlots),
+    eventId,
+    teams: event.leagueTeams.map((t) => ({ id: t.team.id, name: t.team.name })),
+    lineups: event.leagueLineups.map(stripSlots),
     config: league?.config || {},
   });
 }

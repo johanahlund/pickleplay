@@ -46,10 +46,11 @@ export async function GET(
       rounds: {
         orderBy: { roundNumber: "asc" },
         include: {
-          matchDays: {
-            include: {
-              teams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
-              games: {
+          events: {
+            select: {
+              id: true, name: true, date: true, status: true, hostTeamId: true,
+              leagueTeams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
+              leagueGames: {
                 include: {
                   category: { select: { id: true, name: true } },
                   team1: { select: { id: true, name: true } },
@@ -57,9 +58,8 @@ export async function GET(
                   winner: { select: { id: true, name: true } },
                 },
               },
-              event: { select: { id: true, name: true, date: true, status: true } },
               // Status only — slot details come from /lineups endpoint (visibility-controlled)
-              lineups: {
+              leagueLineups: {
                 select: { id: true, teamId: true, status: true, unlockRequestedById: true },
               },
             },
