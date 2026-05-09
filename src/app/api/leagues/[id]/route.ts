@@ -21,6 +21,15 @@ export async function GET(
       helpers: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true } } } },
       categories: { orderBy: { sortOrder: "asc" } },
       documents: { orderBy: { uploadedAt: "asc" } },
+      // Pending requests so the UI can show counts. Slot detail (preferences,
+      // note) is fetched via /participation-requests for captains/organizers.
+      participationRequests: {
+        where: { status: "pending" },
+        select: {
+          id: true, playerId: true, preferredTeamId: true, status: true,
+          player: { select: { id: true, gender: true } },
+        },
+      },
       teams: {
         include: {
           club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
@@ -57,8 +66,37 @@ export async function GET(
   });
   if (!league) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const isAppAdmin = user.role === "admin";
+  const isOrganizer = isAppAdmin || league.createdBy?.id === user.id || league.deputy?.id === user.id;
+  const isHelper = league.helpers.some((h) => h.player.id === user.id);
+
+  // Visibility gate: when "participants", only league participants + organizers
+  // (and app admin) may see the league.
+  if (league.visibility === "participants" && !isAppAdmin) {
+    const isOnTeam = league.teams.some((t) =>
+      t.captain?.id === user.id || t.viceCaptain?.id === user.id ||
+      t.players.some((tp) => tp.player.id === user.id),
+    );
+    if (!isOrganizer && !isHelper && !isOnTeam) {
+      return NextResponse.json({ error: "Not visible" }, { status: 403 });
+    }
+  }
+
+  // Roster visibility: hide other teams' players unless league.rostersPublic is true,
+  // OR the viewer is an organizer/helper/admin, OR the viewer is captain/vice of that team.
+  let view = league;
+  if (!league.rostersPublic && !isOrganizer && !isHelper) {
+    view = {
+      ...league,
+      teams: league.teams.map((t) => {
+        const canSeeRoster = t.captain?.id === user.id || t.viceCaptain?.id === user.id;
+        return canSeeRoster ? t : { ...t, players: [] };
+      }),
+    };
+  }
+
   const allowed = await canSeeEmails(user.id, user.role);
-  return NextResponse.json(allowed ? league : stripEmailsDeep(league));
+  return NextResponse.json(allowed ? view : stripEmailsDeep(view));
 }
 
 // PATCH: update league
@@ -94,6 +132,15 @@ export async function PATCH(
     } else {
       data.clubId = null;
     }
+  }
+  if (body.visibility !== undefined) {
+    if (body.visibility !== "public" && body.visibility !== "participants") {
+      return NextResponse.json({ error: "Invalid visibility" }, { status: 400 });
+    }
+    data.visibility = body.visibility;
+  }
+  if (body.rostersPublic !== undefined) {
+    data.rostersPublic = !!body.rostersPublic;
   }
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

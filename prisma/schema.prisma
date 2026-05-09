@@ -69,6 +69,8 @@ model Player {
   lineupSlotsAsP1   LeagueLineupSlot[] @relation("lineupSlotPlayer1")
   lineupSlotsAsP2   LeagueLineupSlot[] @relation("lineupSlotPlayer2")
   uploadedLeagueDocuments LeagueDocument[] @relation("leagueDocumentUploader")
+  leagueParticipationRequests LeagueParticipationRequest[] @relation("playerLeagueRequests")
+  leagueParticipationResponses LeagueParticipationRequest[] @relation("leagueRequestResponder")
 }
 
 model Club {
@@ -494,10 +496,12 @@ model League {
   name        String
   description String?
   season      String?  // "2025", "Spring 2026"
-  status      String   @default("draft") // draft, active, completed
+  status      String   @default("setup") // setup | registration | forming | active | complete
   config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
   rulesPdfUrl  String?  // optional PDF (rules, regulations, schedule, etc.)
   rulesPdfName String?  // original filename, for display
+  visibility    String  @default("public")  // "public" | "participants"
+  rostersPublic Boolean @default(false)     // when true, all team rosters are viewable to everyone
   clubId      String?  // Organizing club (required at creation; optional for legacy rows)
   createdById String?  // League Director
   deputyId    String?  // Deputy Director
@@ -511,6 +515,7 @@ model League {
   categories LeagueCategory[]
   helpers    LeagueHelper[]
   documents  LeagueDocument[]
+  participationRequests LeagueParticipationRequest[]
 
   @@index([clubId])
 }
@@ -536,6 +541,9 @@ model LeagueTeam {
   photoUrl      String? // team group photo
   captainId     String? // "Team Leader"
   viceCaptainId String? // "Deputy"
+  rosterLocked  Boolean   @default(false)
+  rosterLockedAt DateTime?
+  rosterLockedById String?
 
   league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   club        Club?    @relation(fields: [clubId], references: [id])
@@ -547,6 +555,7 @@ model LeagueTeam {
   gamesAsTeam2  LeagueGame[] @relation("gameTeam2")
   gamesWon      LeagueGame[] @relation("gameWinner")
   lineups       LeagueLineup[]
+  participationRequests LeagueParticipationRequest[] @relation("preferredTeamRequests")
 }
 
 model LeagueTeamPlayer {
@@ -647,6 +656,29 @@ model LeagueGamePlayer {
   player     Player     @relation(fields: [playerId], references: [id])
 
   @@unique([leagueGameId, playerId])
+}
+
+// ── League participation requests ──
+// A signed-up player that captains/director can accept onto a team.
+model LeagueParticipationRequest {
+  id              String   @id @default(cuid())
+  leagueId        String
+  playerId        String
+  status          String   @default("pending") // pending | accepted | declined | withdrawn
+  preferredTeamId String?
+  preferences     Json?    // { [categoryId]: { level: "prefer"|"ok"|"no", note?: string } }
+  respondedById   String?
+  respondedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  league        League      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  player        Player      @relation("playerLeagueRequests", fields: [playerId], references: [id])
+  preferredTeam LeagueTeam? @relation("preferredTeamRequests", fields: [preferredTeamId], references: [id])
+  respondedBy   Player?     @relation("leagueRequestResponder", fields: [respondedById], references: [id])
+
+  @@unique([leagueId, playerId])
+  @@index([leagueId])
 }
 
 // ── Match-day lineups ──
