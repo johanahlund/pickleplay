@@ -284,6 +284,7 @@ interface RoundFormValues {
   name: string;
   startDate: string;
   endDate: string;
+  status: "scheduled" | "in_progress" | "completed";
   configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   // Each row is either an existing league category (id present, optional
   // override fields) or a brand-new round-only category (id absent, all
@@ -328,6 +329,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   const [name, setName] = useState(initial.name);
   const [start, setStart] = useState(initial.startDate);
   const [end, setEnd] = useState(initial.endDate);
+  const [status, setStatus] = useState<RoundFormValues["status"]>(initial.status);
 
   const cfg = initial.configOverride;
   const [useFormatOverride, setUseFormatOverride] = useState(!!cfg);
@@ -442,7 +444,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
     }
 
     await onSubmit({
-      roundNumber, name, startDate: start, endDate: end,
+      roundNumber, name, startDate: start, endDate: end, status,
       configOverride, categoriesOverride,
     });
   };
@@ -476,6 +478,18 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
             className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+
+      {mode === "edit" && (
+        <div>
+          <label className="block text-xs text-muted mb-1">Status</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value as RoundFormValues["status"])}
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="scheduled">Scheduled — round hasn&apos;t started</option>
+            <option value="in_progress">In progress — being played</option>
+            <option value="completed">Completed — all matches done</option>
+          </select>
+        </div>
+      )}
 
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-2 cursor-pointer">
@@ -1299,7 +1313,7 @@ export default function LeagueDetailPage() {
     // configOverride / categoriesOverride: null means "clear", { ... } means
     // "set". Don't coalesce to undefined or the server skips the field.
     const body = JSON.stringify({
-      ...(mode === "edit" ? { roundId } : {}),
+      ...(mode === "edit" ? { roundId, status: v.status } : {}),
       ...(mode === "add" ? { roundNumber: v.roundNumber } : {}),
       name: v.name.trim() || undefined,
       startDate: v.startDate || undefined,
@@ -2629,6 +2643,7 @@ export default function LeagueDetailPage() {
                       name: round.name ?? "",
                       startDate: round.startDate ? round.startDate.slice(0, 10) : "",
                       endDate: round.endDate ? round.endDate.slice(0, 10) : "",
+                      status: (round.status === "in_progress" || round.status === "completed") ? round.status : "scheduled",
                       configOverride: (round.configOverride as RoundFormValues["configOverride"]) ?? null,
                       categoriesOverride: (round.categoriesOverride as RoundFormValues["categoriesOverride"]) ?? null,
                     }}
@@ -2718,6 +2733,7 @@ export default function LeagueDetailPage() {
                 name: "",
                 startDate: "",
                 endDate: "",
+                status: "scheduled",
                 configOverride: null,
                 categoriesOverride: null,
               }}
