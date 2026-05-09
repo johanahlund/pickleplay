@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Lightweight middleware — just checks for session token cookie.
-// Full auth validation happens in API routes via requireAuth().
-// This avoids bundling Prisma/bcrypt into the edge function.
-export function middleware(request: NextRequest) {
+// Lightweight proxy (Next.js 16 — was "middleware") — just checks for the
+// session token cookie. Full auth validation happens in API routes via
+// requireAuth(). Keeps Prisma/bcrypt out of the edge bundle.
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Public routes that don't need auth
