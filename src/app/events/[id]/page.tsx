@@ -60,6 +60,17 @@ interface Match {
   classId?: string | null;
   scorerId?: string | null;
   scorer?: { id: string; name: string; photoUrl?: string | null } | null;
+  leagueGame?: { id: string; isPrincipal: boolean; lineupGenerated: boolean; category: { id: string; name: string } } | null;
+}
+
+interface LeagueMatchDayLink {
+  id: string;
+  round: { id: string; roundNumber: number; name: string | null; league: {
+    id: string; name: string; season: string | null;
+    createdById: string | null; deputyId: string | null;
+    categories?: { id: string; name: string; format: string; gender: string }[];
+  } };
+  teams: { teamId: string; team: { id: string; name: string; logoUrl: string | null } }[];
 }
 
 interface EventHelper {
@@ -135,6 +146,7 @@ interface Event {
   competitionMode?: string | null;
   competitionConfig?: Record<string, unknown> | null;
   competitionPhase?: string | null;
+  leagueMatchDay?: LeagueMatchDayLink | null;
 }
 
 function toDateInput(iso: string) {
@@ -437,6 +449,7 @@ export default function EventDetailPage() {
   const [levelEditMode, setLevelEditMode] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
+  const [leagueFilter, setLeagueFilter] = useState<"all" | "principal" | "friendly" | "non-league">("all");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
@@ -465,6 +478,8 @@ export default function EventDetailPage() {
   const [manualMatchFormat, setManualMatchFormat] = useState("");
   const [manualRankingMode, setManualRankingMode] = useState("");
   const [manualWinBy, setManualWinBy] = useState("");
+  const [manualFriendlyInLeague, setManualFriendlyInLeague] = useState(false);
+  const [manualLeagueCategoryId, setManualLeagueCategoryId] = useState("");
   const [pairingInProgress, setPairingInProgress] = useState<Set<string>>(new Set());
   const [waGroups, setWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
@@ -479,7 +494,10 @@ export default function EventDetailPage() {
 
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
   const isHelper = !!(event && userId && event.helpers?.some((h) => h.playerId === userId)) && hasRole(viewRole, "event");
-  const canManage = isAdmin || isOwner || isHelper;
+  // League director/deputy of the league this event is linked to also gets manage rights.
+  const leagueOfEvent = event?.leagueMatchDay?.round?.league;
+  const isLeagueOrganizerOfEvent = !!(userId && leagueOfEvent && (leagueOfEvent.createdById === userId || leagueOfEvent.deputyId === userId)) && hasRole(viewRole, "league");
+  const canManage = isAdmin || isOwner || isHelper || isLeagueOrganizerOfEvent;
 
   // Sync SWR data → local event state with derived fields
   useEffect(() => {
@@ -990,7 +1008,7 @@ export default function EventDetailPage() {
       });
     } else {
       // Create new match
-      await fetch(`/api/events/${id}/matches`, {
+      const r = await fetch(`/api/events/${id}/matches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1001,6 +1019,24 @@ export default function EventDetailPage() {
           ...(manualRankingMode ? { rankingMode: manualRankingMode } : {}),
         }),
       });
+      // If "Friendly in league" toggle is on AND event is league-linked,
+      // also create a non-principal LeagueGame referencing the new match.
+      if (r.ok && manualFriendlyInLeague && event?.leagueMatchDay && manualLeagueCategoryId) {
+        const newMatch = await r.json().catch(() => null);
+        const md = event.leagueMatchDay;
+        if (newMatch?.id && md.teams.length === 2) {
+          await fetch(`/api/leagues/${md.round.league.id}/match-days/${md.id}/games`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "create_extra",
+              categoryId: manualLeagueCategoryId,
+              team1Id: md.teams[0].teamId,
+              team2Id: md.teams[1].teamId,
+              matchId: newMatch.id,
+            }),
+          });
+        }
+      }
     }
     setShowAddMatch(false);
     setManualTeam1([]);
@@ -1009,6 +1045,8 @@ export default function EventDetailPage() {
     setManualMatchFormat("");
     setManualRankingMode("");
     setManualWinBy("");
+    setManualFriendlyInLeague(false);
+    setManualLeagueCategoryId("");
     setEditingManualMatchId(null);
     setActiveSection("rounds");
     await fetchEvent();
@@ -2317,10 +2355,17 @@ export default function EventDetailPage() {
   };
 
   // ── Section: Rounds ──
-  const completedMatches = event.matches.filter((m) => m.status === "completed");
-  const pausedMatches = event.matches.filter((m) => m.status === "paused");
-  const activeMatches = event.matches.filter((m) => m.status === "active");
-  const pendingMatches = event.matches.filter((m) => m.status === "pending");
+  const passesLeagueFilter = (m: Match) => {
+    if (leagueFilter === "all") return true;
+    if (leagueFilter === "non-league") return !m.leagueGame;
+    if (leagueFilter === "principal") return !!m.leagueGame?.isPrincipal;
+    if (leagueFilter === "friendly") return m.leagueGame ? !m.leagueGame.isPrincipal : false;
+    return true;
+  };
+  const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesLeagueFilter);
+  const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesLeagueFilter);
+  const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesLeagueFilter);
+  const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesLeagueFilter);
   const freeCourts = Array.from({ length: event.numCourts }, (_, i) => i + 1)
     .filter((c) => !activeMatches.some((m) => m.courtNum === c) && !pendingMatches.some((m) => m.courtNum === c && m.players.length >= 2));
 
@@ -2354,10 +2399,18 @@ export default function EventDetailPage() {
     const courtColor = isActive ? "bg-orange-500 text-white" : isPaused ? "bg-amber-500 text-white" : isCourtFree && isPending ? "bg-green-500 text-white" : isCompleted ? "bg-gray-300 text-white" : "bg-gray-100 text-muted";
     const statusText = isActive ? "In Play" : isPaused ? "Paused" : isPending && isCourtFree ? "Ready" : isPending && isNextMatch ? "Next" : "";
 
+    const lg = match.leagueGame;
     return (
       <div key={match.id} className={`bg-card rounded-xl border overflow-hidden transition-all ${
         isActive ? "border-orange-400 shadow-md shadow-orange-100" : isPaused ? "border-amber-400" : isCourtFree && isPending ? "border-green-400 shadow-md shadow-green-100" : isMatchPlayer ? "border-action border-l-4" : "border-border"
       }`}>
+        {lg && (
+          <div className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium ${lg.isPrincipal ? "bg-emerald-50 text-emerald-700" : "bg-gray-50 text-muted"}`}>
+            <span>{lg.isPrincipal ? "🏆" : "⚪"}</span>
+            <span>{lg.isPrincipal ? "Principal" : "Friendly in league"}</span>
+            <span className="text-muted ml-1">· {lg.category.name}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2 px-2 py-2"
           onClick={() => setActionSheetMatchId(match.id)}>
           {/* Court number circle — start button for pending */}
@@ -2530,6 +2583,22 @@ export default function EventDetailPage() {
       />
 
       <div className="px-4 space-y-3 pt-3">
+        {event.leagueMatchDay && (
+          <div className="flex gap-1 overflow-x-auto -mx-1 px-1">
+            {([
+              { v: "all", label: "All" },
+              { v: "principal", label: "🏆 Principal" },
+              { v: "friendly", label: "⚪ Friendly" },
+              { v: "non-league", label: "Non-league" },
+            ] as const).map((f) => (
+              <button
+                key={f.v}
+                onClick={() => setLeagueFilter(f.v)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${leagueFilter === f.v ? "bg-black text-white" : "bg-gray-100 text-muted"}`}
+              >{f.label}</button>
+            ))}
+          </div>
+        )}
         {/* Active — orange */}
         {activeMatches.length > 0 && (
           <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
@@ -2823,9 +2892,36 @@ export default function EventDetailPage() {
         </div>
       </div>
 
+      {/* League linkage toggle — only for new matches in league-linked events */}
+      {event.leagueMatchDay && !editingManualMatchId && (
+        <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={manualFriendlyInLeague}
+              onChange={(e) => setManualFriendlyInLeague(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm font-medium">Friendly in league <span className="text-muted font-normal">(doesn&apos;t count for standings)</span></span>
+          </label>
+          {manualFriendlyInLeague && (
+            <select value={manualLeagueCategoryId} onChange={(e) => setManualLeagueCategoryId(e.target.value)}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">Pick category…</option>
+              {event.leagueMatchDay.round.league.categories?.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-2">
-        <button onClick={addManualMatch} disabled={manualTeam1.length === 0 || manualTeam2.length === 0}
-          className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50">{editingManualMatchId ? "Save Match" : "Create Match"}</button>
+        <button
+          onClick={addManualMatch}
+          disabled={manualTeam1.length === 0 || manualTeam2.length === 0 || (manualFriendlyInLeague && !manualLeagueCategoryId)}
+          className="flex-1 bg-action text-white py-3 rounded-xl font-semibold text-lg active:bg-action-dark disabled:opacity-50"
+        >{editingManualMatchId ? "Save Match" : "Create Match"}</button>
         <button onClick={() => { setManualTeam1([]); setManualTeam2([]); setEditingManualMatchId(null); setActiveSection("rounds"); }}
           className="px-4 py-3 rounded-xl text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200">Cancel</button>
       </div>
@@ -3250,6 +3346,30 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-3">
       {eventHeroHeader}
+      {/* League banner — visible when event is linked to a league match-day */}
+      {event.leagueMatchDay && (() => {
+        const md = event.leagueMatchDay!;
+        const teamNames = md.teams.map((t) => t.team.name).join(" vs ");
+        return (
+          <Link
+            href={`/leagues/${md.round.league.id}?tab=rounds`}
+            className="block bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm hover:bg-emerald-100"
+          >
+            <div className="flex items-center gap-2">
+              <span>🏆</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-emerald-900 truncate">
+                  {md.round.league.name}{md.round.league.season ? ` · ${md.round.league.season}` : ""}
+                </div>
+                <div className="text-[11px] text-emerald-700 truncate">
+                  {md.round.name || `Round ${md.round.roundNumber}`} · {teamNames}
+                </div>
+              </div>
+              <span className="text-emerald-700 text-xs">›</span>
+            </div>
+          </Link>
+        );
+      })()}
       {canManage && managerCard}
 
       {/* Format — managers only (normal users see it in the header card) */}

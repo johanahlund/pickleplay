@@ -14,12 +14,12 @@ export async function POST(
 
   // --- Create extra (non-principal) game ---
   if (body.action === "create_extra") {
-    const { categoryId, team1Id, team2Id } = body;
+    const { categoryId, team1Id, team2Id, matchId } = body;
     if (!categoryId || !team1Id || !team2Id) {
       return NextResponse.json({ error: "categoryId, team1Id, team2Id required" }, { status: 400 });
     }
     const game = await prisma.leagueGame.create({
-      data: { matchDayId, categoryId, team1Id, team2Id, isPrincipal: false },
+      data: { matchDayId, categoryId, team1Id, team2Id, isPrincipal: false, ...(matchId ? { matchId } : {}) },
     });
     return NextResponse.json(game);
   }

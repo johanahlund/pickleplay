@@ -64,6 +64,10 @@ model Player {
   deputyLeagues     League[]           @relation("leagueDeputy")
   leagueHelpers     LeagueHelper[]
   leagueGamePlayers LeagueGamePlayer[]
+  submittedLineups  LeagueLineup[]     @relation("lineupSubmitter")
+  unlockRequestedLineups LeagueLineup[] @relation("lineupUnlockRequester")
+  lineupSlotsAsP1   LeagueLineupSlot[] @relation("lineupSlotPlayer1")
+  lineupSlotsAsP2   LeagueLineupSlot[] @relation("lineupSlotPlayer2")
 }
 
 model Club {
@@ -538,6 +542,7 @@ model LeagueTeam {
   gamesAsTeam1  LeagueGame[] @relation("gameTeam1")
   gamesAsTeam2  LeagueGame[] @relation("gameTeam2")
   gamesWon      LeagueGame[] @relation("gameWinner")
+  lineups       LeagueLineup[]
 }
 
 model LeagueTeamPlayer {
@@ -564,9 +569,11 @@ model LeagueCategory {
   winBy         String  @default("2")
   status        String  @default("active") // "draft" | "active"
   sortOrder     Int     @default(0)
+  maxPerEvent   Int?    // max number of slots in this category per match-day event
 
   league League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   games  LeagueGame[]
+  lineupSlots LeagueLineupSlot[]
 }
 
 model LeagueRound {
@@ -593,6 +600,7 @@ model LeagueMatchDay {
   event  Event?               @relation(fields: [eventId], references: [id])
   teams  LeagueMatchDayTeam[]
   games  LeagueGame[]
+  lineups LeagueLineup[]
 }
 
 model LeagueMatchDayTeam {
@@ -614,7 +622,8 @@ model LeagueGame {
   team1Id     String
   team2Id     String
   winnerId    String? // set when match completes
-  isPrincipal Boolean @default(true) // false = extra/repeat game (doesn't count for category ranking)
+  isPrincipal Boolean @default(true) // false = extra/friendly (doesn't count for category ranking)
+  lineupGenerated Boolean @default(false) // true if auto-created from lineup pairing (eligible for cleanup on unlock)
 
   matchDay LeagueMatchDay @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
   category LeagueCategory @relation(fields: [categoryId], references: [id])
@@ -634,4 +643,46 @@ model LeagueGamePlayer {
   player     Player     @relation(fields: [playerId], references: [id])
 
   @@unique([leagueGameId, playerId])
+}
+
+// ── Match-day lineups ──
+// Each team submits a lineup per match-day. Lineups are kept private until both
+// teams submit; once both submit, the server reveals them and pairs slot 1 vs
+// slot 1, slot 2 vs slot 2, etc., for each category.
+model LeagueLineup {
+  id             String   @id @default(cuid())
+  matchDayId     String
+  teamId         String
+  status         String   @default("draft")  // "draft" | "submitted" | "revealed"
+  submittedAt    DateTime?
+  submittedById  String?
+  unlockRequestedById String? // team captain who is asking for unlock; cleared on confirm
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  matchDay   LeagueMatchDay     @relation(fields: [matchDayId], references: [id], onDelete: Cascade)
+  team       LeagueTeam         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  submittedBy Player?           @relation("lineupSubmitter", fields: [submittedById], references: [id])
+  unlockRequestedBy Player?     @relation("lineupUnlockRequester", fields: [unlockRequestedById], references: [id])
+  slots      LeagueLineupSlot[]
+
+  @@unique([matchDayId, teamId])
+  @@index([matchDayId])
+}
+
+model LeagueLineupSlot {
+  id          String  @id @default(cuid())
+  lineupId    String
+  categoryId  String
+  slotNumber  Int     // 1-based ordering within category — slot 1 plays the other team's slot 1, etc.
+  player1Id   String
+  player2Id   String? // null for singles
+
+  lineup    LeagueLineup   @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  category  LeagueCategory @relation(fields: [categoryId], references: [id])
+  player1   Player         @relation("lineupSlotPlayer1", fields: [player1Id], references: [id])
+  player2   Player?        @relation("lineupSlotPlayer2", fields: [player2Id], references: [id])
+
+  @@unique([lineupId, categoryId, slotNumber])
+  @@index([lineupId])
 }

@@ -140,14 +140,18 @@ export async function requireAdmin() {
   return user;
 }
 
-/** Check if the current user can manage the given event (admin, owner, or helper) */
+/** Check if the current user can manage the given event (admin, owner, helper,
+ *  or league director/deputy if the event is part of a league match-day). */
 export async function requireEventManager(eventId: string) {
   const user = await requireAuth();
   if (user.role === "admin") return user;
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { createdById: true },
+    select: {
+      createdById: true,
+      leagueMatchDay: { select: { round: { select: { league: { select: { createdById: true, deputyId: true } } } } } },
+    },
   });
   if (event?.createdById === user.id) return user;
 
@@ -155,6 +159,10 @@ export async function requireEventManager(eventId: string) {
     where: { eventId, playerId: user.id },
   });
   if (helper) return user;
+
+  // League director/deputy override on linked events
+  const league = event?.leagueMatchDay?.round?.league;
+  if (league && (league.createdById === user.id || league.deputyId === user.id)) return user;
 
   throw new Error("Forbidden");
 }

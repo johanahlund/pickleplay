@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
@@ -120,19 +120,20 @@ export function Header() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<{ id: string; title: string; body?: string | null; linkUrl?: string | null; read: boolean; createdAt: string }[]>([]);
-  const headerRef = useRef<HTMLElement>(null);
 
   const [clubName, setClubName] = useState<string | null>(null);
   const [clubEmoji, setClubEmoji] = useState<string | null>(null);
   const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
 
-  // Header is position: fixed (taken out of flow) so we push <main> down by
-  // the header height plus a small gap so content doesn't sit flush against
-  // the bottom edge of the header.
+  // Header is position: fixed (taken out of flow) so the wrapping div has
+  // 0 height. We must measure the actual <header> element. We query it
+  // by tag rather than via a ref so we don't have to thread refs through
+  // each AppHeader variant.
   const HEADER_GAP_PX = 12;
   const updateMainPadding = useCallback(() => {
-    if (headerRef.current) {
-      const h = headerRef.current.offsetHeight;
+    const header = document.querySelector("header");
+    if (header) {
+      const h = header.offsetHeight;
       const main = document.getElementById("main-content");
       if (main) main.style.paddingTop = `${h + HEADER_GAP_PX}px`;
       document.documentElement.style.setProperty("--header-height", `${h}px`);
@@ -141,8 +142,10 @@ export function Header() {
 
   useEffect(() => {
     updateMainPadding();
+    const header = document.querySelector("header");
+    if (!header) return;
     const observer = new ResizeObserver(updateMainPadding);
-    if (headerRef.current) observer.observe(headerRef.current);
+    observer.observe(header);
     return () => observer.disconnect();
   }, [updateMainPadding, clubName]);
 
@@ -232,7 +235,7 @@ export function Header() {
 
   return (
     <>
-      <div ref={headerRef as React.RefObject<HTMLDivElement>}>
+      <div>
         <AppHeader
           isAdmin={isAdmin}
           notifications={unreadCount}

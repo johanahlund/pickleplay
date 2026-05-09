@@ -30,11 +30,13 @@ interface LeagueGame {
   winner?: { id: string; name: string } | null;
   matchId?: string | null;
 }
+interface LeagueLineupStatus { id: string; teamId: string; status: "draft" | "submitted" | "revealed"; unlockRequestedById: string | null }
 interface LeagueMatchDay {
   id: string; date: string | null; status: string; hostTeamId: string | null;
   teams: { teamId: string; points: number; team: { id: string; name: string; logoUrl: string | null } }[];
   games: LeagueGame[];
   event?: { id: string; name: string; date: string; status: string } | null;
+  lineups?: LeagueLineupStatus[];
 }
 interface LeagueRound { id: string; roundNumber: number; name: string | null; suggestedDate: string | null; status: string; matchDays: LeagueMatchDay[] }
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
@@ -127,6 +129,8 @@ export default function LeagueDetailPage() {
   const [flashSelectedId, setFlashSelectedId] = useState<string | null>(null);
   const [addingPlayerId, setAddingPlayerId] = useState<string | null>(null);
   const [lastAddedName, setLastAddedName] = useState<string | null>(null);
+  const [removingPlayerId, setRemovingPlayerId] = useState<string | null>(null);
+  const [lastRemovedName, setLastRemovedName] = useState<string | null>(null);
   const [clubMembersCache, setClubMembersCache] = useState<Record<string, Player[]>>({});
 
   // Edit state
@@ -457,13 +461,32 @@ export default function LeagueDetailPage() {
     return true;
   };
 
-  const removePlayerFromTeam = async (teamId: string, playerId: string) => {
-    await fetch(`/api/leagues/${id}/teams/${teamId}/players`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId }),
+  const removePlayerFromTeam = async (teamId: string, playerId: string, playerName: string) => {
+    const ok = await confirm({
+      title: "Remove from team",
+      message: `Remove ${playerName} from this team?`,
+      confirmText: "Remove",
+      danger: true,
     });
-    fetchLeague();
+    if (!ok) return;
+    setRemovingPlayerId(playerId);
+    try {
+      const r = await fetch(`/api/leagues/${id}/teams/${teamId}/players`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        alert(d.error || `Failed to remove player (${r.status})`);
+        return;
+      }
+      await fetchLeague();
+      setLastRemovedName(playerName);
+      setTimeout(() => setLastRemovedName((cur) => (cur === playerName ? null : cur)), 1800);
+    } finally {
+      setRemovingPlayerId(null);
+    }
   };
 
   const addRound = async () => {
@@ -1395,15 +1418,54 @@ export default function LeagueDetailPage() {
                     ))}
                   </div>
 
+                  {/* Lineup status / link per team */}
+                  {(() => {
+                    const lineups = md.lineups || [];
+                    const fullTeams = md.teams.map((t) => league.teams.find((lt) => lt.id === t.teamId)).filter((t): t is NonNullable<typeof t> => !!t);
+                    const visible = fullTeams.filter((t) => isAppAdmin || isDirector || isDeputy || isHelper || t.captain?.id === userId || t.viceCaptain?.id === userId);
+                    if (visible.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {visible.map((t) => {
+                          const lu = lineups.find((l) => l.teamId === t.id);
+                          const status = lu?.status || "draft";
+                          const color = status === "draft" ? "bg-blue-100 text-blue-700" : status === "submitted" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700";
+                          return (
+                            <Link key={t.id} href={`/leagues/${id}/match-days/${md.id}/lineup/${t.id}`}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 border border-border flex items-center gap-1 hover:bg-gray-100">
+                              <span>{t.name}</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${color}`}>{status}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
                   {/* Games */}
                   {md.games.length > 0 && (
                     <div className="space-y-1">
                       {md.games.map((game) => (
                         <div key={game.id} className={`flex items-center gap-2 text-xs ${!game.isPrincipal ? "opacity-60 pl-2 border-l-2 border-dashed border-gray-300" : ""}`}>
-                          <span className="text-muted w-24 truncate">{game.category.name}{!game.isPrincipal && <span className="text-[8px] ml-1 text-amber-600">(extra)</span>}</span>
+                          <span className="text-muted w-24 truncate">{game.category.name}{!game.isPrincipal && <span className="text-[8px] ml-1 text-amber-600">(friendly)</span>}</span>
                           <span className={`flex-1 font-medium ${game.winner?.id === game.team1.id ? "text-green-600" : ""}`}>{game.team1.name}</span>
                           <span className="text-muted">vs</span>
                           <span className={`flex-1 font-medium text-right ${game.winner?.id === game.team2.id ? "text-green-600" : ""}`}>{game.team2.name}</span>
+                          {/* Principal/Friendly toggle (canEdit only, blocked once winner set) */}
+                          {canEdit && !game.winner && (
+                            <button
+                              onClick={async () => {
+                                const r = await fetch(`/api/leagues/${id}/match-days/${md.id}/games/${game.id}`, {
+                                  method: "PATCH", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ isPrincipal: !game.isPrincipal }),
+                                });
+                                if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+                                fetchLeague();
+                              }}
+                              title={game.isPrincipal ? "Make friendly" : "Make principal"}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-foreground"
+                            >{game.isPrincipal ? "→ friendly" : "→ principal"}</button>
+                          )}
                           {/* Winner selector */}
                           <select value={game.winner?.id || ""} onChange={(e) => setGameWinner(md.id, game.id, e.target.value || null)}
                             className="text-[10px] border border-border rounded px-1 py-0.5 w-20">
@@ -1618,6 +1680,12 @@ export default function LeagueDetailPage() {
       {/* ── Teams Tab ── */}
       {tab === "teams" && (
         <div className="space-y-3">
+          {lastRemovedName && (
+            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+              <span>✓</span>
+              <span className="truncate">Removed <span className="font-medium">{lastRemovedName}</span></span>
+            </div>
+          )}
           {league.teams.length > 0 && (() => {
             const allCollapsed = league.teams.every((t) => collapsedTeams.has(t.id));
             return (
@@ -1700,8 +1768,9 @@ export default function LeagueDetailPage() {
                   .map((tp) => {
                   const isLeader = team.captain?.id === tp.playerId;
                   const isDeputy = team.viceCaptain?.id === tp.playerId;
+                  const removing = removingPlayerId === tp.playerId;
                   return (
-                  <div key={tp.id} className="flex items-center gap-2 py-1">
+                  <div key={tp.id} className={`flex items-center gap-2 py-1 transition-opacity ${removing ? "opacity-50 line-through" : ""}`}>
                     <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">
@@ -1716,7 +1785,17 @@ export default function LeagueDetailPage() {
                       </span>
                     )}
                     <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
-                    {canEdit && <button onClick={() => removePlayerFromTeam(team.id, tp.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>}
+                    {canEdit && (
+                      removing ? (
+                        <span className="w-3.5 h-3.5 border-2 border-danger border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <button
+                          onClick={() => removePlayerFromTeam(team.id, tp.playerId, tp.player.name)}
+                          className="text-xs text-danger px-1 hover:underline"
+                          aria-label={`Remove ${tp.player.name}`}
+                        >✕</button>
+                      )
+                    )}
                   </div>
                   );
                 })}

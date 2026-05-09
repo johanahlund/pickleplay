@@ -3,13 +3,14 @@
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 
-type ViewRole = "admin" | "club" | "event" | "user";
+type ViewRole = "admin" | "club" | "league" | "event" | "user";
 
 const ROLE_LEVELS: Record<ViewRole, number> = {
   user: 0,
   event: 1,
-  club: 2,
-  admin: 3,
+  league: 2,
+  club: 3,
+  admin: 4,
 };
 
 /** Check if the current viewRole meets the minimum required level */
@@ -51,6 +52,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 const ROLES: { value: ViewRole; label: string; icon: string }[] = [
   { value: "admin", label: "Admin", icon: "★" },
   { value: "club", label: "Club", icon: "🏠" },
+  { value: "league", label: "League", icon: "🏆" },
   { value: "event", label: "Event", icon: "📋" },
   { value: "user", label: "User", icon: "👤" },
 ];

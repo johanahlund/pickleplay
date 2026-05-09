@@ -44,6 +44,10 @@ export async function GET(
                 },
               },
               event: { select: { id: true, name: true, date: true, status: true } },
+              // Status only — slot details come from /lineups endpoint (visibility-controlled)
+              lineups: {
+                select: { id: true, teamId: true, status: true, unlockRequestedById: true },
+              },
             },
           },
         },
