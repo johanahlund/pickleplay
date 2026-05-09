@@ -726,15 +726,18 @@ export default function LeagueDetailPage() {
   const [league, setLeague] = useState<League | null>(null);
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
-  // Initial tab can be set via ?tab=rounds in the URL — used when navigating
-  // back to a specific league tab (e.g. from a league-attached event).
+  // Tab can be set via ?tab=rounds in the URL — used when navigating back
+  // to a specific league tab (e.g. from a league-attached event). Listen for
+  // search-param changes too: client-side navigation doesn't re-mount this
+  // page, so the initial useState wouldn't fire on a later ?tab=rounds.
   const searchParams = useSearchParams();
-  const initialTab = (() => {
+  const tabFromUrl = (() => {
     const t = searchParams.get("tab");
     if (t === "overview" || t === "standings" || t === "rounds" || t === "matches" || t === "teams") return t as Tab;
-    return "overview" as Tab;
+    return null;
   })();
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(tabFromUrl ?? "overview");
+  useEffect(() => { if (tabFromUrl) setTab(tabFromUrl); }, [tabFromUrl]);
   const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam" | "addPlayer" | "requests">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
