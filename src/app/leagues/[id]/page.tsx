@@ -175,6 +175,60 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove }: TeamRosterPro
   );
 }
 
+function AddRoundEventForm({
+  teams, defaultDate, onAdd,
+}: {
+  teams: { id: string; name: string }[];
+  defaultDate: string | null;
+  onAdd: (team1Id: string, team2Id: string, hostTeamId: string, date: string | null) => void | Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [t1, setT1] = useState("");
+  const [t2, setT2] = useState("");
+  const [host, setHost] = useState("");
+  const [date, setDate] = useState("");
+
+  const reset = () => { setT1(""); setT2(""); setHost(""); setDate(""); };
+  const close = () => { reset(); setOpen(false); };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="w-full px-3 py-2 text-xs font-medium text-primary border-t border-border hover:bg-primary/5"
+      >+ Add event</button>
+    );
+  }
+  return (
+    <div className="px-3 py-3 border-t border-border bg-gray-50 space-y-2">
+      <div className="flex gap-2">
+        <select value={t1} onChange={(e) => { setT1(e.target.value); if (!host) setHost(e.target.value); }}
+          className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+          <option value="">Home team…</option>
+          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <span className="self-center text-muted text-sm">vs</span>
+        <select value={t2} onChange={(e) => setT2(e.target.value)}
+          className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
+          <option value="">Away team…</option>
+          {teams.filter((t) => t.id !== t1).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+        placeholder={defaultDate ? new Date(defaultDate).toLocaleDateString() : ""}
+        className="w-full border border-border rounded-lg px-2 py-1.5 text-sm" />
+      <div className="flex gap-2">
+        <button
+          disabled={!t1 || !t2 || t1 === t2}
+          onClick={async () => { await onAdd(t1, t2, host || t1, date || (defaultDate ?? null)); close(); }}
+          className="flex-1 bg-action-dark text-white py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+        >Add event</button>
+        <button onClick={close}
+          className="flex-1 bg-gray-200 py-1.5 rounded-lg text-xs font-medium">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 export default function LeagueDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -245,8 +299,6 @@ export default function LeagueDetailPage() {
   const [newRoundName, setNewRoundName] = useState("");
   const [newRoundStart, setNewRoundStart] = useState("");
   const [newRoundEnd, setNewRoundEnd] = useState("");
-  const [newRoundTeam1, setNewRoundTeam1] = useState("");
-  const [newRoundTeam2, setNewRoundTeam2] = useState("");
 
   // Add player to team state (modal)
   const [addPlayerTeam, setAddPlayerTeam] = useState<LeagueTeam | null>(null);
@@ -753,7 +805,6 @@ export default function LeagueDetailPage() {
   };
 
   const addRound = async () => {
-    const events = newRoundTeam1 && newRoundTeam2 ? [{ teamIds: [newRoundTeam1, newRoundTeam2], hostTeamId: newRoundTeam1, date: newRoundStart || undefined }] : [];
     await fetch(`/api/leagues/${id}/rounds`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -762,10 +813,36 @@ export default function LeagueDetailPage() {
         name: newRoundName.trim() || undefined,
         startDate: newRoundStart || undefined,
         endDate: newRoundEnd || undefined,
-        events,
       }),
     });
-    setShowAddRound(false); setNewRoundName(""); setNewRoundStart(""); setNewRoundEnd(""); setNewRoundTeam1(""); setNewRoundTeam2("");
+    setShowAddRound(false); setNewRoundName(""); setNewRoundStart(""); setNewRoundEnd("");
+    fetchLeague(); fetchStandings();
+  };
+
+  const deleteRound = async (roundId: string, label: string) => {
+    const ok = await confirm({
+      title: "Delete round?",
+      message: `Delete ${label}? All events, lineups, and games inside this round will be deleted.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await fetch(`/api/leagues/${id}/rounds`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roundId }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+    fetchLeague(); fetchStandings();
+  };
+
+  const addEventToRound = async (roundId: string, team1Id: string, team2Id: string, hostTeamId: string | null, date: string | null) => {
+    const r = await fetch(`/api/leagues/${id}/rounds/${roundId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamIds: [team1Id, team2Id], hostTeamId: hostTeamId || team1Id, date: date || undefined }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
     fetchLeague(); fetchStandings();
   };
 
@@ -2023,11 +2100,24 @@ export default function LeagueDetailPage() {
         <div className="space-y-3">
           {league.rounds.map((round) => (
             <div key={round.id} className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between">
-                <span className="text-sm font-semibold">{round.name || `Round ${round.roundNumber}`}</span>
+              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-semibold">{round.name || `Round ${round.roundNumber}`}</span>
+                  {(round.startDate || round.endDate) && (
+                    <span className="text-[11px] text-muted ml-2">
+                      {round.startDate ? new Date(round.startDate).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"}
+                      {round.endDate ? ` → ${new Date(round.endDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                   round.status === "completed" ? "bg-green-100 text-green-700" : round.status === "in_progress" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-muted"
                 }`}>{round.status}</span>
+                {canEdit && (
+                  <button onClick={() => deleteRound(round.id, round.name || `Round ${round.roundNumber}`)}
+                    aria-label="Delete round"
+                    className="text-xs text-danger hover:bg-red-50 rounded px-1.5 py-0.5">✕</button>
+                )}
               </div>
               {round.events.map((ev) => (
                 <div key={ev.id} className="px-3 py-3 border-b border-border last:border-0">
@@ -2142,6 +2232,13 @@ export default function LeagueDetailPage() {
                   </div>
                 </div>
               ))}
+              {canEdit && league.teams.length >= 2 && (
+                <AddRoundEventForm
+                  teams={league.teams.map((t) => ({ id: t.id, name: t.name }))}
+                  defaultDate={round.startDate}
+                  onAdd={(t1, t2, host, date) => addEventToRound(round.id, t1, t2, host, date)}
+                />
+              )}
             </div>
           ))}
 
@@ -2162,7 +2259,7 @@ export default function LeagueDetailPage() {
                 <div className="flex-1">
                   <label className="block text-xs text-muted mb-1">Name</label>
                   <input type="text" value={newRoundName} onChange={(e) => setNewRoundName(e.target.value)}
-                    placeholder={`Jornada ${newRoundNumber}`}
+                    placeholder={`Round ${newRoundNumber}`}
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
@@ -2179,27 +2276,9 @@ export default function LeagueDetailPage() {
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
                 </div>
               </div>
-              {league.teams.length >= 2 && (
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs text-muted mb-1">Home Team</label>
-                    <select value={newRoundTeam1} onChange={(e) => setNewRoundTeam1(e.target.value)}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm">
-                      <option value="">Select...</option>
-                      {league.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <span className="self-end pb-2 text-muted">vs</span>
-                  <div className="flex-1">
-                    <label className="block text-xs text-muted mb-1">Away Team</label>
-                    <select value={newRoundTeam2} onChange={(e) => setNewRoundTeam2(e.target.value)}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm">
-                      <option value="">Select...</option>
-                      {league.teams.filter((t) => t.id !== newRoundTeam1).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
+              <p className="text-[11px] text-muted">
+                Create the round first, then add events (team vs team match-days) one by one.
+              </p>
               <div className="flex gap-2">
                 <button onClick={addRound} disabled={!newRoundNumber}
                   className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">Add Round</button>
