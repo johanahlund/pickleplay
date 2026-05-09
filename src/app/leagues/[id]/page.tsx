@@ -2685,8 +2685,8 @@ export default function LeagueDetailPage() {
             </div>
           ))}
 
-          {/* Add round */}
-          {!showAddRound ? (
+          {/* Add round — managers only */}
+          {canEdit && (!showAddRound ? (
             <button onClick={() => setShowAddRound(true)}
               className="w-full py-2.5 rounded-xl text-sm font-medium text-primary border border-primary/30 hover:bg-primary/5">
               + Add Round
@@ -2707,7 +2707,7 @@ export default function LeagueDetailPage() {
               onSubmit={(v) => saveRound("add", v)}
               onCancel={() => setShowAddRound(false)}
             />
-          )}
+          ))}
         </div>
       )}
 
