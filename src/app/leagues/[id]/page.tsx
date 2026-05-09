@@ -507,14 +507,16 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       </div>
 
       <div>
-        <label className="block text-xs text-muted mb-1">Visibility</label>
+        <label className="block text-xs text-muted mb-1">Status</label>
         <select value={status} onChange={(e) => setStatus(e.target.value as RoundFormValues["status"])}
-          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
+          className="w-32 border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
           <option value="setup">Setup</option>
           <option value="active">Active</option>
         </select>
         <p className="text-[11px] text-muted mt-1">
-          Setup = only league admins can see. Active = visible to everyone, with phase (Scheduled / In progress / Completed) derived from dates.
+          {status === "setup"
+            ? "Only league admins can see this round."
+            : "Visible to everyone. Phase (Scheduled / In progress / Completed) is derived from the dates."}
         </p>
       </div>
 
