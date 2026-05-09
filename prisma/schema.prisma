@@ -68,6 +68,7 @@ model Player {
   unlockRequestedLineups LeagueLineup[] @relation("lineupUnlockRequester")
   lineupSlotsAsP1   LeagueLineupSlot[] @relation("lineupSlotPlayer1")
   lineupSlotsAsP2   LeagueLineupSlot[] @relation("lineupSlotPlayer2")
+  uploadedLeagueDocuments LeagueDocument[] @relation("leagueDocumentUploader")
 }
 
 model Club {
@@ -495,7 +496,8 @@ model League {
   season      String?  // "2025", "Spring 2026"
   status      String   @default("draft") // draft, active, completed
   config      Json?    // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
-  rulesPdfUrl String?  // optional PDF (rules, regulations, schedule, etc.)
+  rulesPdfUrl  String?  // optional PDF (rules, regulations, schedule, etc.)
+  rulesPdfName String?  // original filename, for display
   clubId      String?  // Organizing club (required at creation; optional for legacy rows)
   createdById String?  // League Director
   deputyId    String?  // Deputy Director
@@ -508,6 +510,7 @@ model League {
   rounds     LeagueRound[]
   categories LeagueCategory[]
   helpers    LeagueHelper[]
+  documents  LeagueDocument[]
 
   @@index([clubId])
 }
@@ -669,6 +672,23 @@ model LeagueLineup {
 
   @@unique([matchDayId, teamId])
   @@index([matchDayId])
+}
+
+// ── League documents (rules, schedule, posters, etc.) ──
+model LeagueDocument {
+  id             String   @id @default(cuid())
+  leagueId       String
+  url            String
+  name           String   // original filename
+  mimeType       String
+  sizeBytes      Int
+  uploadedById   String?
+  uploadedAt     DateTime @default(now())
+
+  league       League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  uploadedBy   Player? @relation("leagueDocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([leagueId])
 }
 
 model LeagueLineupSlot {

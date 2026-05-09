@@ -39,8 +39,11 @@ export async function POST(
     contentType: "application/pdf",
   });
 
-  await prisma.league.update({ where: { id }, data: { rulesPdfUrl: blob.url } });
-  return NextResponse.json({ url: blob.url });
+  await prisma.league.update({
+    where: { id },
+    data: { rulesPdfUrl: blob.url, rulesPdfName: file.name || null },
+  });
+  return NextResponse.json({ url: blob.url, name: file.name });
 }
 
 // DELETE: remove the rules PDF.
@@ -59,6 +62,6 @@ export async function DELETE(
   if (league.rulesPdfUrl) {
     try { await del(league.rulesPdfUrl); } catch { /* ignore */ }
   }
-  await prisma.league.update({ where: { id }, data: { rulesPdfUrl: null } });
+  await prisma.league.update({ where: { id }, data: { rulesPdfUrl: null, rulesPdfName: null } });
   return NextResponse.json({ ok: true });
 }

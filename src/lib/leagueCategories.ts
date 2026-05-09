@@ -2,7 +2,11 @@ export const CATEGORY_FORMATS = ["doubles", "singles"] as const;
 export const CATEGORY_GENDERS = ["male", "female", "mix", "open"] as const;
 export const CATEGORY_AGE_GROUPS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"] as const;
 export const CATEGORY_SCORING_FORMATS = ["1x11", "3x11", "1x15", "1xR15", "1x21"] as const;
-export const CATEGORY_WIN_BY = ["1", "2", "2_gp18", "2_gp21"] as const;
+export const CATEGORY_WIN_BY = [
+  "1", "2",
+  "2_gp18", "2_gp21",
+  "cap13", "cap15", "cap17", "cap18", "cap23", "cap25",
+] as const;
 export const CATEGORY_STATUSES = ["draft", "active"] as const;
 
 export type CategoryFormat = (typeof CATEGORY_FORMATS)[number];

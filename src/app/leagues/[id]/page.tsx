@@ -46,6 +46,8 @@ interface League {
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
   config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   rulesPdfUrl?: string | null;
+  rulesPdfName?: string | null;
+  documents?: { id: string; url: string; name: string; mimeType: string; sizeBytes: number }[];
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
   helpers: LeagueHelperEntry[];
@@ -147,6 +149,7 @@ export default function LeagueDetailPage() {
   const [editMaxPoints, setEditMaxPoints] = useState("3");
   const [editMinMatchDays, setEditMinMatchDays] = useState("2");
   const [editMaxMatchesPerEvent, setEditMaxMatchesPerEvent] = useState("");
+  const [editAllowCrossCategory, setEditAllowCrossCategory] = useState(true);
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -229,6 +232,7 @@ export default function LeagueDetailPage() {
     setEditMaxPoints(String(league.config?.maxPointsPerMatchDay ?? 3));
     setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
     setEditMaxMatchesPerEvent(league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "");
+    setEditAllowCrossCategory(league.config?.allowCrossCategoryPlay !== false);
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -253,6 +257,7 @@ export default function LeagueDetailPage() {
           maxPointsPerMatchDay: parseInt(editMaxPoints, 10) || 3,
           minMatchDaysForPlayoff: editMinMatchDays.trim() === "" ? 0 : parseInt(editMinMatchDays, 10) || 0,
           maxMatchesPerEvent: editMaxMatchesPerEvent.trim() === "" ? null : parseInt(editMaxMatchesPerEvent, 10) || null,
+          allowCrossCategoryPlay: editAllowCrossCategory,
         },
         deputyId: editDeputyId || null,
       }),
@@ -610,39 +615,42 @@ export default function LeagueDetailPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">Rules / Description PDF <span className="opacity-70 font-normal">(optional)</span></label>
-            {league.rulesPdfUrl ? (
-              <div className="flex items-center gap-2">
-                <a href={league.rulesPdfUrl} target="_blank" rel="noopener noreferrer" className="flex-1 text-sm text-action font-medium hover:underline truncate">📄 View current PDF</a>
-                <label className="text-xs text-muted px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 cursor-pointer">
-                  Replace
-                  <input type="file" accept="application/pdf" className="hidden" onChange={async (e) => {
-                    const f = e.target.files?.[0]; if (!f) return;
+            <label className="block text-xs text-muted mb-1">Documents <span className="opacity-70 font-normal">(rules, schedule, posters · max 5 · PDF/JPG/PNG, 10MB)</span></label>
+            <div className="space-y-1.5">
+              {(league.documents || []).map((d) => {
+                const isImg = d.mimeType.startsWith("image/");
+                return (
+                  <div key={d.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border">
+                    <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-center gap-2 text-sm hover:underline">
+                      <span>{isImg ? "🖼️" : "📄"}</span>
+                      <span className="truncate font-medium text-action">{d.name}</span>
+                      <span className="text-[10px] text-muted shrink-0">{Math.round(d.sizeBytes / 1024)} KB</span>
+                    </a>
+                    <button type="button" onClick={async (e) => {
+                      e.stopPropagation();
+                      const ok = await confirm({ title: "Remove document", message: `Remove "${d.name}"?`, danger: true, confirmText: "Remove" });
+                      if (!ok) return;
+                      const r = await fetch(`/api/leagues/${id}/documents/${d.id}`, { method: "DELETE" });
+                      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || "Failed to remove"); return; }
+                      fetchLeague();
+                    }} className="text-danger text-sm w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center" aria-label="Remove">✕</button>
+                  </div>
+                );
+              })}
+              {(league.documents?.length || 0) < 5 && (
+                <label className="block w-full text-center px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted hover:bg-gray-50 cursor-pointer">
+                  + Upload document
+                  <input type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) { return; }
+                    e.target.value = "";
                     const fd = new FormData(); fd.append("file", f);
-                    const r = await fetch(`/api/leagues/${id}/rules-pdf`, { method: "POST", body: fd });
-                    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Upload failed"); return; }
+                    const r = await fetch(`/api/leagues/${id}/documents`, { method: "POST", body: fd });
+                    if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || "Upload failed"); return; }
                     fetchLeague();
                   }} />
                 </label>
-                <button type="button" onClick={async () => {
-                  const ok = await confirm({ title: "Remove PDF", message: "Remove the rules PDF?", danger: true, confirmText: "Remove" });
-                  if (!ok) return;
-                  await fetch(`/api/leagues/${id}/rules-pdf`, { method: "DELETE" });
-                  fetchLeague();
-                }} className="text-xs text-danger px-2 py-1 rounded hover:bg-red-50">Remove</button>
-              </div>
-            ) : (
-              <label className="block w-full text-center px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted hover:bg-gray-50 cursor-pointer">
-                + Upload PDF
-                <input type="file" accept="application/pdf" className="hidden" onChange={async (e) => {
-                  const f = e.target.files?.[0]; if (!f) return;
-                  const fd = new FormData(); fd.append("file", f);
-                  const r = await fetch(`/api/leagues/${id}/rules-pdf`, { method: "POST", body: fd });
-                  if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Upload failed"); return; }
-                  fetchLeague();
-                }} />
-              </label>
-            )}
+              )}
+            </div>
           </div>
           {editFooter(saveInfo, "")}
         </div>
@@ -680,6 +688,15 @@ export default function LeagueDetailPage() {
                 className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
               <p className="text-[10px] text-muted mt-1">Minimum match days a player must have appeared in to be eligible for the playoff/Grande Final.</p>
             </div>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={editAllowCrossCategory}
+                onChange={(e) => { setEditAllowCrossCategory(e.target.checked); setDirty(true); }}
+                className="rounded" />
+              <span className="text-sm font-medium">Allow cross-category play</span>
+            </label>
+            <p className="text-[10px] text-muted mt-1">If unchecked, a player can only appear in slots of a single category per match-day.</p>
           </div>
           {editFooter(saveInfo, "")}
         </div>
@@ -1288,7 +1305,13 @@ export default function LeagueDetailPage() {
               {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
             </div>
             <div className="text-sm space-y-1">
-              <p><span className="text-xs text-muted">Max roster </span><span className="font-medium">{league.config?.maxRoster || "—"}</span><span className="text-xs text-muted"> · Max pts/day </span><span className="font-medium">{league.config?.maxPointsPerMatchDay || "—"}</span><span className="text-xs text-muted"> · Min match days for playoff </span><span className="font-medium">{league.config?.minMatchDaysForPlayoff ?? 2}</span></p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <div><span className="text-xs text-muted">Max roster: </span><span className="font-medium">{league.config?.maxRoster ?? "—"}</span></div>
+                <div><span className="text-xs text-muted">Max pts / match day: </span><span className="font-medium">{league.config?.maxPointsPerMatchDay ?? "—"}</span></div>
+                <div><span className="text-xs text-muted">Max league matches / event: </span><span className="font-medium">{league.config?.maxMatchesPerEvent ?? "—"}</span></div>
+                <div><span className="text-xs text-muted">Min match days for playoff: </span><span className="font-medium">{league.config?.minMatchDaysForPlayoff ?? 2}</span></div>
+                <div className="col-span-2"><span className="text-xs text-muted">Cross-category play: </span><span className="font-medium">{league.config?.allowCrossCategoryPlay === false ? "Not allowed" : "Allowed"}</span></div>
+              </div>
             </div>
           </div>
 

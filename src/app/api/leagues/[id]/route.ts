@@ -20,6 +20,7 @@ export async function GET(
       deputy: { select: { id: true, name: true } },
       helpers: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true } } } },
       categories: { orderBy: { sortOrder: "asc" } },
+      documents: { orderBy: { uploadedAt: "asc" } },
       teams: {
         include: {
           club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
