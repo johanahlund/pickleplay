@@ -78,6 +78,10 @@ type Tab = "overview" | "standings" | "rounds" | "matches" | "teams";
 
 // Shared option lists for category fields. Used by the league category
 // editor and the per-round override form.
+//
+// TODO: move age groups + skill levels (and ideally scoring formats / win-by
+// rules) into back-office tables so admins can configure them per-region or
+// per-tenant without code changes. For now they're hard-coded.
 const AGE_OPTS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"];
 const SKILL_OPTS = ["", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0", "5.5", "6.0"];
 const FORMAT_OPTS = [
@@ -369,10 +373,11 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   const [useCategoriesOverride, setUseCategoriesOverride] = useState(!!initial.categoriesOverride);
   const [catOverrides, setCatOverrides] = useState<Record<string, CatOverrideForm>>(initialCatMap);
   const [customCats, setCustomCats] = useState<CustomCat[]>(initialCustomCats);
-
-  // Re-initialise on parent changes
-  useEffect(() => { setCatOverrides(initialCatMap); }, [initialCatMap]);
-  useEffect(() => { setCustomCats(initialCustomCats); }, [initialCustomCats]);
+  // NOTE: don't mirror props → state via useEffect. The league page polls
+  // every 30s, which makes `initial` a new object reference each cycle.
+  // A mirror effect would clobber the user's in-flight edits with the latest
+  // server snapshot. Form state is initialised once on mount (when the user
+  // opens add/edit) and stays put until they save or cancel.
 
   const handleSave = async () => {
     let configOverride: RoundFormValues["configOverride"] = null;
@@ -384,7 +389,9 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       if (!isNaN(mm) && maxMatches !== "") c.maxMatchesPerEvent = mm;
       if (crossCat === "allow") c.allowCrossCategoryPlay = true;
       else if (crossCat === "deny") c.allowCrossCategoryPlay = false;
-      if (Object.keys(c).length > 0) configOverride = c;
+      // Always send the object (even if empty) when the toggle is on, so the
+      // checkbox state survives a save+reopen even before any field is set.
+      configOverride = c;
     }
 
     let categoriesOverride: RoundFormValues["categoriesOverride"] = null;
