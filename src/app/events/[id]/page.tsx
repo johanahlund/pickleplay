@@ -3376,73 +3376,37 @@ export default function EventDetailPage() {
           </Link>
         );
       })()}
-      {/* League event sign-up (per-event opt-in with category preferences) —
-          visible to roster players when the event is league-attached. */}
+      {/* League event sign-up CTA — roster players are taken to a dedicated
+          sign-up page (/events/[id]/sign-up), mirroring the league sign-up
+          UX. The page handles availability + per-category preferences. */}
       {event.round && userId && (() => {
         const teams = event.round!.league.teams || [];
         const isOnRoster = teams.some((t) => t.players.some((p) => p.playerId === userId));
         if (!isOnRoster) return null;
-        const cats = event.round!.league.categories || [];
         const myEp = event.players.find((ep) => ep.player.id === userId);
+        const hasSignedUp = !!myEp;
         const isAvailable = !myEp || myEp.status !== "unavailable";
-        const myPrefs = (myEp?.signupPreferences ?? {}) as Record<string, { level: "prefer" | "ok" | "no"; note?: string }>;
-
-        const setPref = async (catId: string, level: "prefer" | "ok" | "no") => {
-          const next: Record<string, { level: "prefer" | "ok" | "no" }> = {};
-          for (const c of cats) {
-            if (c.id === catId) next[c.id] = { level };
-            else if (myPrefs[c.id]) next[c.id] = { level: myPrefs[c.id].level };
-            else next[c.id] = { level: "ok" };
-          }
-          await fetch(`/api/events/${id}/signup-prefs`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "registered", preferences: next }),
-          });
-          fetchEvent();
-        };
-        const setStatus = async (s: "registered" | "unavailable") => {
-          await fetch(`/api/events/${id}/signup-prefs`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: s, preferences: myPrefs }),
-          });
-          fetchEvent();
-        };
-
         return (
-          <div className="bg-card rounded-xl border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-base font-bold">Your sign-up</p>
-              <div className="flex gap-1">
-                <button onClick={() => setStatus("registered")}
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${isAvailable ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
-                >Available</button>
-                <button onClick={() => setStatus("unavailable")}
-                  className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${!isAvailable ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
-                >Can't play</button>
-              </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-2">
+            <div className="text-sm text-emerald-900 flex-1 min-w-0">
+              {!hasSignedUp ? (
+                <span>Sign up for this match-day to tell your captain which categories you&apos;d like to play.</span>
+              ) : isAvailable ? (
+                <>
+                  <div><strong>You&apos;re signed up.</strong></div>
+                  <div className="text-[11px]">Update your category preferences any time.</div>
+                </>
+              ) : (
+                <>
+                  <div><strong>Marked as not available.</strong></div>
+                  <div className="text-[11px]">Tap Edit to change.</div>
+                </>
+              )}
             </div>
-            {isAvailable && cats.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[11px] text-muted">Tell your captain which categories you'd like to play.</p>
-                {cats.map((c) => {
-                  const lvl = myPrefs[c.id]?.level || "ok";
-                  return (
-                    <div key={c.id} className="flex items-center gap-2">
-                      <span className="text-sm flex-1 truncate">{c.name}</span>
-                      <div className="flex gap-1">
-                        {(["prefer", "ok", "no"] as const).map((opt) => (
-                          <button key={opt} onClick={() => setPref(c.id, opt)}
-                            className={`text-[10px] px-2 py-0.5 rounded font-medium ${
-                              lvl === opt ? (opt === "prefer" ? "bg-emerald-500 text-white" : opt === "no" ? "bg-rose-500 text-white" : "bg-black text-white") : "bg-gray-100 text-muted"
-                            }`}
-                          >{opt === "prefer" ? "Prefer" : opt === "ok" ? "YES" : "NO"}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <Link href={`/events/${id}/sign-up`}
+              className="bg-action text-white text-sm font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap">
+              {hasSignedUp ? "Edit" : "Sign up"}
+            </Link>
           </div>
         );
       })()}
