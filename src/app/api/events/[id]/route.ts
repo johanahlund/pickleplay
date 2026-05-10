@@ -36,7 +36,7 @@ export async function GET(
         include: {
           league: {
             select: {
-              id: true, name: true, season: true, createdById: true, deputyId: true,
+              id: true, name: true, shortName: true, season: true, createdById: true, deputyId: true,
               categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
               // For visibility checks: anyone on a team in the league should
               // be able to see the league-attached event regardless of its status.
