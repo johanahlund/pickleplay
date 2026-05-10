@@ -30,6 +30,13 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/api/")) return;
+  // Never cache HTML navigation responses — they're routes that may 404
+  // mid-compile in dev or change under us in prod. Always fetch fresh,
+  // and only fall back to the offline cache if the network fails.
+  const isNav = event.request.mode === "navigate"
+    || event.request.destination === "document"
+    || (event.request.headers.get("accept") || "").includes("text/html");
+  if (isNav) return;
 
   event.respondWith(
     fetch(event.request)
