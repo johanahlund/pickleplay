@@ -75,7 +75,11 @@ interface LeagueRoundLink {
     helpers?: { playerId: string }[];
   };
 }
-interface LeagueEventTeamLink { teamId: string; team: { id: string; name: string; logoUrl: string | null } }
+interface LeagueEventTeamLink {
+  teamId: string;
+  lineupReady?: boolean;
+  team: { id: string; name: string; logoUrl: string | null };
+}
 
 interface EventHelper {
   playerId: string;
@@ -2341,6 +2345,60 @@ export default function EventDetailPage() {
                   </div>
                 );
               })}
+            </div>
+          );
+        })() : event.round && (event.leagueTeams?.length ?? 0) === 2 ? (() => {
+          // League event: render participants in two columns by team. Hide
+          // the opposing team's column until BOTH teams mark "lineup ready",
+          // unless the viewer is an organizer/admin.
+          const allLeagueTeams = event.round!.league.teams || [];
+          const ets = event.leagueTeams || [];
+          const canSeeAll = isAdmin || canManage;
+          const myTeamId = allLeagueTeams.find((t) =>
+            ets.some((et) => et.teamId === t.id)
+            && t.players.some((p) => p.playerId === userId),
+          )?.id ?? null;
+          const bothReady = ets.every((et) => et.lineupReady);
+          const teamColumn = (et: LeagueEventTeamLink) => {
+            const fullTeam = allLeagueTeams.find((t) => t.id === et.teamId);
+            const rosterIds = new Set((fullTeam?.players ?? []).map((p) => p.playerId));
+            const isMyTeam = et.teamId === myTeamId;
+            const hidden = !canSeeAll && !bothReady && !isMyTeam;
+            const eps = event.players
+              .filter((ep) => rosterIds.has(ep.player.id))
+              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
+              .sort((a, b) => a.player.name.localeCompare(b.player.name));
+            return (
+              <div key={et.teamId} className="min-w-0">
+                <div className="text-[11px] font-bold text-foreground px-1 py-1 flex items-center gap-1">
+                  {et.team.name}
+                  {et.lineupReady && <span className="text-emerald-600 text-[10px]">✓ ready</span>}
+                </div>
+                {hidden ? (
+                  <p className="text-[11px] text-muted italic px-1 py-2">
+                    {eps.length} signed up — names revealed once both teams mark lineup ready.
+                  </p>
+                ) : eps.length === 0 ? (
+                  <p className="text-[11px] text-muted italic px-1 py-2">No sign-ups yet.</p>
+                ) : (
+                  <div className="space-y-0">
+                    {eps.map((ep) => (
+                      <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
+                        showContact={isAdmin || ep.player.id === userId}
+                        isSelf={ep.player.id === userId}
+                        skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
+                        onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
+                        onCheckIn={ep.status === "registered" ? () => checkInPlayer(ep.player.id) : undefined}
+                        onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          };
+          return (
+            <div className="grid grid-cols-2 gap-2">
+              {ets.map((et) => teamColumn(et))}
             </div>
           );
         })() : (

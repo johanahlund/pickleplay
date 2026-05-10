@@ -638,6 +638,12 @@ model LeagueEventTeam {
   eventId String
   teamId  String
   points  Int    @default(0)
+  // Captain marks "Done picking" once their lineup is final. The opposing
+  // team's player assignments stay hidden until BOTH teams set this true,
+  // mirroring the old reveal-on-submit flow but per match-day.
+  lineupReady     Boolean   @default(false)
+  lineupReadyAt   DateTime?
+  lineupReadyById String?
 
   event Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   team  LeagueTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)

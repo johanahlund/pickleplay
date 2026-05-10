@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 type Preference = "prefer" | "ok" | "no";
@@ -22,8 +22,15 @@ function categoryMatchesGender(catGender: string, playerGender: string | null | 
 export default function EventSignUpPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
+  // ?for=<playerId> → captain or organizer is signing up someone else (e.g.
+  // a teammate without the app). Empty/missing = self-signup.
+  const onBehalfOf = searchParams.get("for");
+  const targetId = onBehalfOf || userId;
+  const isOnBehalf = !!onBehalfOf && onBehalfOf !== userId;
+  const [targetName, setTargetName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,7 +61,7 @@ export default function EventSignUpPage() {
   const load = useCallback(async () => {
     const [evR, meR] = await Promise.all([
       fetch(`/api/events/${id}`),
-      userId ? fetch(`/api/players/${userId}`) : Promise.resolve(null),
+      targetId ? fetch(`/api/players/${targetId}`) : Promise.resolve(null),
     ]);
     if (!evR.ok) { router.push(`/events/${id}`); return; }
     const ev = await evR.json();
@@ -71,23 +78,23 @@ export default function EventSignUpPage() {
     setRoundName(ev.round.name || `Round ${ev.round.roundNumber}`);
     setCategories((ev.round.league.categories || []) as Category[]);
 
-    // Find which (if any) of the event's playing teams the viewer is on.
+    // Find which (if any) of the event's playing teams the target is on.
     // Sign-up is gated to rostered players on one of the playing teams.
     type LeagueTeamLite = { id: string; name: string; players: { playerId: string }[] };
     const allTeams: LeagueTeamLite[] = ev.round.league.teams || [];
     const playingTeamIds: string[] = (ev.leagueTeams || []).map((et: { teamId: string }) => et.teamId);
-    const myTeam = allTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === userId));
-    setMyTeamName(myTeam?.name ?? null);
+    const targetTeam = allTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === targetId));
+    setMyTeamName(targetTeam?.name ?? null);
 
-    // Existing EventPlayer for this user — pre-fill intent + prefs.
+    // Existing EventPlayer for the target — pre-fill intent + prefs.
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
-    const myEp: EP | undefined = (ev.players || []).find((ep: EP) => ep.player.id === userId);
-    if (myEp) {
-      const prefs = myEp.signupPreferences && typeof myEp.signupPreferences === "object"
-        ? myEp.signupPreferences as Record<string, { level: Preference; note?: string }>
+    const targetEp: EP | undefined = (ev.players || []).find((ep: EP) => ep.player.id === targetId);
+    if (targetEp) {
+      const prefs = targetEp.signupPreferences && typeof targetEp.signupPreferences === "object"
+        ? targetEp.signupPreferences as Record<string, { level: Preference; note?: string }>
         : {};
       const hasAnyPlay = Object.values(prefs).some((p) => p.level === "prefer" || p.level === "ok");
-      if (myEp.status === "unavailable") setIntent("unavailable");
+      if (targetEp.status === "unavailable") setIntent("unavailable");
       else if (Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
       else setIntent("playing");
       setPreferences(prefs);
@@ -96,10 +103,11 @@ export default function EventSignUpPage() {
     if (meR && meR.ok) {
       const me = await meR.json();
       setPlayerGender(me.gender || null);
+      setTargetName(me.name || null);
     }
 
     setLoading(false);
-  }, [id, router, userId]);
+  }, [id, router, targetId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -145,7 +153,7 @@ export default function EventSignUpPage() {
     }
     const r = await fetch(`/api/events/${id}/signup-prefs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(isOnBehalf ? { ...payload, playerId: onBehalfOf } : payload),
     });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
@@ -187,12 +195,20 @@ export default function EventSignUpPage() {
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
         <h2 className="text-lg font-bold">
-          Sign up{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}
+          {isOnBehalf
+            ? <>Sign up <span className="text-action">{targetName || "player"}</span></>
+            : <>Sign up{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}</>}
         </h2>
         <p className="text-[11px] text-muted">
           {leagueName} · {roundName}
           {eventDate && <> · {new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</>}
+          {isOnBehalf && myTeamName && <> · {myTeamName}</>}
         </p>
+        {isOnBehalf && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            You&apos;re signing up <strong>{targetName || "this player"}</strong> on their behalf.
+          </p>
+        )}
         {errorMsg && (
           <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{errorMsg}</div>
         )}

@@ -49,7 +49,13 @@ export async function GET(
           events: {
             select: {
               id: true, name: true, date: true, status: true, hostTeamId: true,
-              leagueTeams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
+              leagueTeams: {
+                select: {
+                  teamId: true, points: true,
+                  lineupReady: true, lineupReadyAt: true, lineupReadyById: true,
+                  team: { select: { id: true, name: true, logoUrl: true, captainId: true, viceCaptainId: true } },
+                },
+              },
               leagueGames: {
                 select: {
                   id: true, categoryId: true, slotNumber: true, kind: true,
@@ -127,6 +133,56 @@ export async function GET(
   // being configured by the league admin and shouldn't show to players.
   if (!isOrganizer && !isHelper) {
     view = { ...view, rounds: view.rounds.filter((r) => r.status !== "setup") };
+  }
+
+  // Lineup secrecy: until BOTH teams in a match-day event mark themselves
+  // "lineup ready", each team only sees its own players in leagueGames.
+  // Organizers/helpers/admin always see both. The viewer sees a row's
+  // players only if (a) they're on that game's team's roster, or (b) both
+  // teams have flipped lineupReady=true. We keep `team1Wants`/`team2Wants`
+  // visible — only the player identities are hidden.
+  if (!isOrganizer && !isHelper) {
+    // Build a map of (teamId → does the viewer belong to that team?). A
+    // viewer "belongs" if they're a player on the roster, captain, or vice.
+    const myTeamIds = new Set<string>();
+    for (const t of view.teams) {
+      const isMine = t.captain?.id === user.id
+        || t.viceCaptain?.id === user.id
+        || t.players.some((tp) => tp.player.id === user.id);
+      if (isMine) myTeamIds.add(t.id);
+    }
+    view = {
+      ...view,
+      rounds: view.rounds.map((r) => ({
+        ...r,
+        events: r.events.map((ev) => {
+          const bothReady = ev.leagueTeams.length === 2
+            && ev.leagueTeams.every((lt) => lt.lineupReady);
+          if (bothReady) return ev;
+          return {
+            ...ev,
+            leagueGames: ev.leagueGames.map((g) => ({
+              ...g,
+              gamePlayers: g.gamePlayers.filter((gp) => {
+                // Keep players whose team the viewer belongs to. Need to
+                // tie the gp back to either team1 or team2 by roster
+                // membership, which we don't have inline — so: if the
+                // viewer is on EITHER of the two playing teams, look up
+                // that team's roster and only keep gp's whose playerId is
+                // on the viewer's team's roster.
+                const viewerTeam = view.teams.find((t) =>
+                  myTeamIds.has(t.id)
+                  && (t.id === g.team1Id || t.id === g.team2Id),
+                );
+                if (!viewerTeam) return false;
+                const onMyTeam = viewerTeam.players.some((tp) => tp.player.id === gp.playerId);
+                return onMyTeam;
+              }),
+            })),
+          };
+        }),
+      })),
+    };
   }
 
   const allowed = await canSeeEmails(user.id, user.role);

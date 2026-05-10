@@ -226,6 +226,26 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
+  // ─── set_ready ───────────────────────────────────────────────
+  // body: { action: "set_ready", ready: boolean }
+  // Captain marks their team's lineup as final. Opponent's gamePlayers stay
+  // hidden in API responses until BOTH teams flip this true.
+  if (body.action === "set_ready") {
+    if (ctx.captainTeamId === null) {
+      return NextResponse.json({ error: "Only captains can mark a lineup ready." }, { status: 400 });
+    }
+    const ready = !!body.ready;
+    await prisma.leagueEventTeam.update({
+      where: { eventId_teamId: { eventId, teamId: ctx.captainTeamId } },
+      data: {
+        lineupReady: ready,
+        lineupReadyAt: ready ? new Date() : null,
+        lineupReadyById: ready ? user.id : null,
+      },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   // ─── set_kind ────────────────────────────────────────────────
   // body: { action: "set_kind", gameId, kind: "principal"|"league"|"extra" }
   // Server enforces: at most one principal per category in this event.

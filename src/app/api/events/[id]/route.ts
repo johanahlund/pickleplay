@@ -45,7 +45,13 @@ export async function GET(
           },
         },
       },
-      leagueTeams: { include: { team: { select: { id: true, name: true, logoUrl: true } } } },
+      leagueTeams: {
+        select: {
+          teamId: true, points: true,
+          lineupReady: true, lineupReadyAt: true,
+          team: { select: { id: true, name: true, logoUrl: true } },
+        },
+      },
       pairs: {
         include: {
           player1: { select: { id: true, name: true, emoji: true, photoUrl: true, rating: true, gender: true } },

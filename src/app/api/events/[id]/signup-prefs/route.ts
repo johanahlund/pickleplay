@@ -7,12 +7,16 @@ import { NextResponse } from "next/server";
 // Body:
 //   {
 //     status?: "registered" | "unavailable",  // default "registered"
-//     preferences?: { [categoryId]: { level: "prefer"|"ok"|"no", note?: string } }
+//     preferences?: { [categoryId]: { level: "prefer"|"ok"|"no", note?: string } },
+//     playerId?: string  // captain-on-behalf override (see below)
 //   }
 //
-// Validates that the event is league-attached AND the caller is on a team
-// in that league (i.e. on the roster — only roster players can sign up).
-// Upserts an EventPlayer row for the caller; replaces signupPreferences.
+// Validates that the event is league-attached AND that EITHER:
+//   (a) the caller is on a team in that league (signing up themselves), OR
+//   (b) the caller is captain/vice of the team that rosters `playerId`
+//       (or league director/deputy/admin) — for "sign up on behalf" flows
+//       when a player doesn't have the app or hasn't signed up yet.
+// Upserts an EventPlayer row for the target; replaces signupPreferences.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -22,6 +26,9 @@ export async function POST(
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
   const { id: eventId } = await params;
+  const body = await req.json().catch(() => ({}));
+  const overrideId = typeof body.playerId === "string" && body.playerId.length > 0 ? body.playerId : null;
+  const targetId = overrideId ?? user.id;
 
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -31,8 +38,15 @@ export async function POST(
         select: {
           league: {
             select: {
-              id: true,
-              teams: { select: { players: { where: { playerId: user.id }, select: { teamId: true } } } },
+              id: true, createdById: true, deputyId: true,
+              // Pull every team's captain/vice + the target's roster row, so
+              // we can authorize on-behalf signups without a second query.
+              teams: {
+                select: {
+                  id: true, captainId: true, viceCaptainId: true,
+                  players: { where: { playerId: targetId }, select: { teamId: true } },
+                },
+              },
               categories: { select: { id: true, status: true }, orderBy: { sortOrder: "asc" } },
             },
           },
@@ -46,13 +60,21 @@ export async function POST(
     return NextResponse.json({ error: "Sign-up preferences are only for league events" }, { status: 400 });
   }
 
-  // Verify caller is on a team in this league.
-  const onTeam = event.round.league.teams.some((t) => t.players.length > 0);
-  if (!onTeam) {
-    return NextResponse.json({ error: "You are not on a team in this league" }, { status: 403 });
+  const targetTeam = event.round.league.teams.find((t) => t.players.length > 0);
+  if (!targetTeam) {
+    return NextResponse.json({ error: "Target player is not on a team in this league" }, { status: 403 });
+  }
+  if (overrideId) {
+    // On-behalf: caller must be captain/vice of target's team, or organizer.
+    const isOrganizer = user.role === "admin"
+      || event.round.league.createdById === user.id
+      || event.round.league.deputyId === user.id;
+    const isTeamLeader = targetTeam.captainId === user.id || targetTeam.viceCaptainId === user.id;
+    if (!isOrganizer && !isTeamLeader) {
+      return NextResponse.json({ error: "Only the player's captain/vice or a league organizer can sign them up." }, { status: 403 });
+    }
   }
 
-  const body = await req.json().catch(() => ({}));
   const status = body.status === "unavailable" ? "unavailable" : "registered";
   const rawPrefs = body.preferences;
 
@@ -76,9 +98,9 @@ export async function POST(
   // is just the entry-point class.)
   const defaultClassId = event.classes[0]?.id ?? null;
 
-  // Upsert EventPlayer
+  // Upsert EventPlayer for the target.
   const existing = await prisma.eventPlayer.findFirst({
-    where: { eventId, playerId: user.id },
+    where: { eventId, playerId: targetId },
   });
   if (existing) {
     await prisma.eventPlayer.update({
@@ -88,7 +110,7 @@ export async function POST(
   } else {
     await prisma.eventPlayer.create({
       data: {
-        eventId, playerId: user.id, classId: defaultClassId,
+        eventId, playerId: targetId, classId: defaultClassId,
         status, signupPreferences: cleanPrefs,
       },
     });
