@@ -1071,9 +1071,13 @@ export default function LeagueDetailPage() {
             </div>
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
               {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => (
-                <div key={t} className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize text-center ${
-                  t === "overview" ? "bg-white text-foreground shadow-sm" : "text-muted"
-                }`}>{t}</div>
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize text-center transition-all ${
+                    tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
+                  }`}
+                >{t}</button>
               ))}
             </div>
             <div className={`${frameClass} p-4 animate-pulse`}>
