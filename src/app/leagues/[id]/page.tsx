@@ -793,9 +793,22 @@ export default function LeagueDetailPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  const [league, setLeague] = useState<League | null>(null);
+  // Hydrate from sessionStorage so a back-nav (or re-entry from a sub-page)
+  // shows the league instantly while the latest data is fetched in the
+  // background. Cleared on hard reload — only intended to skip the
+  // visible loading state during normal in-app navigation.
+  const cacheKey = typeof id === "string" ? `league-cache:${id}` : null;
+  const [league, setLeague] = useState<League | null>(() => {
+    if (typeof window === "undefined" || !cacheKey) return null;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      return raw ? (JSON.parse(raw) as League) : null;
+    } catch { return null; }
+  });
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
-  const [loading, setLoading] = useState(true);
+  // If we hydrated from cache, the page already has data to render —
+  // don't flash the loading spinner. Background fetch happens immediately.
+  const [loading, setLoading] = useState(() => league === null);
   // Tab can be set via ?tab=rounds in the URL — used when navigating back
   // to a specific league tab (e.g. from a league-attached event). Listen for
   // search-param changes too: client-side navigation doesn't re-mount this
@@ -967,6 +980,11 @@ export default function LeagueDetailPage() {
     const r = await fetch(`/api/leagues/${id}`);
     if (!r.ok) { console.error("League fetch failed", r.status, await r.text().catch(() => "")); router.push("/leagues"); return; }
     const data = await r.json();
+    // Cache for instant render on back-nav. Best-effort; silently skips
+    // if storage is unavailable or quota-exceeded.
+    if (cacheKey) {
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* ignore */ }
+    }
     setLeague((prev) => {
       // First load: collapse all teams by default. Subsequent polls don't
       // change collapse state (preserves whatever the user has open).
