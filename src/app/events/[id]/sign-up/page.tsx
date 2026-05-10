@@ -79,11 +79,20 @@ export default function EventSignUpPage() {
 
     // Find which (if any) of the event's playing teams the target is on.
     // Sign-up is gated to rostered players on one of the playing teams.
-    type LeagueTeamLite = { id: string; name: string; players: { playerId: string }[] };
+    type LeagueRosterPlayer = { playerId: string; participationPrefs?: Record<string, { level: Preference; note?: string }> | null };
+    type LeagueTeamLite = { id: string; name: string; players: LeagueRosterPlayer[] };
     const allTeams: LeagueTeamLite[] = ev.round.league.teams || [];
     const playingTeamIds: string[] = (ev.leagueTeams || []).map((et: { teamId: string }) => et.teamId);
     const targetTeam = allTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === targetId));
     setMyTeamName(targetTeam?.name ?? null);
+
+    // Default category prefs from the player's league sign-up
+    // (LeagueParticipationRequest.preferences). Used when no per-event
+    // EventPlayer exists yet, so the form opens already personalised.
+    const targetRosterEntry = targetTeam?.players.find((p) => p.playerId === targetId);
+    const leaguePrefs = targetRosterEntry?.participationPrefs && typeof targetRosterEntry.participationPrefs === "object"
+      ? targetRosterEntry.participationPrefs as Record<string, { level: Preference; note?: string }>
+      : null;
 
     // Existing EventPlayer for the target — pre-fill intent + prefs.
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
@@ -106,6 +115,11 @@ export default function EventSignUpPage() {
       else if (sentinel === "attending" || Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
       else setIntent("playing");
       setPreferences(prefs);
+    } else if (leaguePrefs) {
+      // First-time event sign-up: seed from league-level preferences and
+      // assume "Liga play" intent. Captain/player can adjust freely.
+      setIntent("playing");
+      setPreferences(leaguePrefs);
     }
 
     if (meR && meR.ok) {

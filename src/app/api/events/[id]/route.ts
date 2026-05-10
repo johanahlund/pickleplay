@@ -104,6 +104,47 @@ export async function GET(
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
   }
+  // Attach league-time category preferences (from LeagueParticipationRequest)
+  // to each rostered team player so the event sign-up page can use them as
+  // defaults. Visibility mirrors the participation-requests endpoint:
+  //   - everyone sees their own
+  //   - captain/vice see their team's roster
+  //   - organizers/helpers/admin see everything
+  if (event.round?.league) {
+    const league = event.round.league;
+    const isAdminUser = user.role === "admin";
+    const isOrganizer = isAdminUser
+      || league.createdById === user.id
+      || league.deputyId === user.id
+      || league.helpers.some((h: { playerId: string }) => h.playerId === user.id);
+    const myCaptainTeamIds = new Set(
+      league.teams
+        .filter((t: { captainId: string | null; viceCaptainId: string | null }) => t.captainId === user.id || t.viceCaptainId === user.id)
+        .map((t: { id: string }) => t.id),
+    );
+    const reqs = await prisma.leagueParticipationRequest.findMany({
+      where: { leagueId: league.id, status: "accepted" },
+      select: { playerId: true, preferredTeamId: true, preferences: true },
+    });
+    type PrefMap = Record<string, unknown>;
+    const prefByPlayer = new Map<string, PrefMap>();
+    for (const r of reqs) {
+      if (r.preferences) prefByPlayer.set(r.playerId, r.preferences as PrefMap);
+    }
+    type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl: string | null; gender: string | null } };
+    const eventLike = event as unknown as { round: { league: { teams: { id: string; players: (RosterPlayer & { participationPrefs?: PrefMap | null })[] }[] } } };
+    for (const t of eventLike.round.league.teams) {
+      for (const tp of t.players) {
+        const prefs = prefByPlayer.get(tp.playerId);
+        if (!prefs) continue;
+        const visible = isOrganizer
+          || tp.playerId === user.id
+          || myCaptainTeamIds.has(t.id);
+        if (visible) tp.participationPrefs = prefs;
+      }
+    }
+  }
+
   const allowEmail = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowEmail ? event : stripEmailsDeep(event));
 }
