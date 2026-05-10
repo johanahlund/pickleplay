@@ -1054,6 +1054,19 @@ export default function ClubDetailPage() {
                 </div>
               )}
 
+              {(() => {
+                const owner = club.members.find((m) => m.role === "owner");
+                if (!owner) return null;
+                return (
+                  <div className="pt-2 border-t border-border">
+                    <label className="block text-sm font-medium text-muted mb-1">Owner</label>
+                    <div className="flex items-center gap-2 text-sm">
+                      <PlayerAvatar name={owner.player.name} photoUrl={owner.player.photoUrl} size="xs" />
+                      <span className="font-medium">{owner.player.name}</span>
+                    </div>
+                  </div>
+                );
+              })()}
               {isOwner && (() => {
                 const eligibleMembers = club.members.filter((m) => m.playerId !== userId && m.role !== "owner");
                 return (
@@ -1197,6 +1210,12 @@ export default function ClubDetailPage() {
               {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg">{club.name}</h3>
+                {(() => {
+                  const owner = club.members.find((m) => m.role === "owner");
+                  return owner ? (
+                    <div className="text-[11px] text-muted">Owner: <span className="text-foreground font-medium">{owner.player.name}</span></div>
+                  ) : null;
+                })()}
                 {myMembership ? (
                   <span className="text-xs">
                     <span className="text-green-600 font-medium">✓ Member</span>
