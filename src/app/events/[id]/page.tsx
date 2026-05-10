@@ -2126,7 +2126,10 @@ export default function EventDetailPage() {
             ))}
           </div>
         </div>
-        {canManage ? (() => {
+        {/* Skill-level grouping is for non-league managed events. League
+            events always render the 2-column-by-team view (in the next
+            branch) regardless of the viewer's role. */}
+        {canManage && !(event.round && (event.leagueTeams?.length ?? 0) === 2) ? (() => {
           const filtered = event.players.filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter));
           const groups = new Map<number | "unset", typeof filtered>();
           for (const ep of filtered) {
@@ -2445,7 +2448,7 @@ export default function EventDetailPage() {
                       return (
                         <div key={ep.player.id} className="flex items-center gap-1.5 px-1 py-1 rounded">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className={`flex-1 min-w-0 text-xs truncate ${isMe ? "text-action font-bold" : "font-medium"} ${ix === "unavailable" ? "line-through text-muted" : ""}`}>
+                          <span className={`flex-1 min-w-0 text-xs leading-tight break-words ${isMe ? "text-action font-bold" : "font-medium"} ${ix === "unavailable" ? "line-through text-muted" : ""}`}>
                             {ep.player.name}
                           </span>
                           {ep.player.gender && (
@@ -2472,100 +2475,112 @@ export default function EventDetailPage() {
                     })}
                   </div>
                 )}
-                {canAddToTeam && rosterUnsigned.length > 0 && (() => {
-                  const teamSelected = rosterUnsigned.filter((tp) => rosterAddSelected.has(tp.playerId));
-                  const allSelected = teamSelected.length === rosterUnsigned.length;
-                  const toggleAll = () => {
-                    setRosterAddSelected((prev) => {
-                      const next = new Set(prev);
-                      if (allSelected) {
-                        rosterUnsigned.forEach((tp) => next.delete(tp.playerId));
-                      } else {
-                        rosterUnsigned.forEach((tp) => next.add(tp.playerId));
-                      }
-                      return next;
-                    });
-                  };
-                  const togglePlayer = (pid: string) => {
-                    setRosterAddSelected((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(pid)) next.delete(pid);
-                      else next.add(pid);
-                      return next;
-                    });
-                  };
-                  const onAddSelected = async () => {
-                    if (teamSelected.length === 0) return;
-                    setRosterAddSaving(true);
-                    const r = await fetch(`/api/events/${event.id}/signup-prefs`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ playerIds: teamSelected.map((tp) => tp.playerId) }),
-                    });
-                    setRosterAddSaving(false);
-                    if (!r.ok) {
-                      const d = await r.json().catch(() => ({}));
-                      await alertDialog(d.error || "Failed to add players", "Error");
-                      return;
-                    }
-                    setRosterAddSelected((prev) => {
-                      const next = new Set(prev);
-                      teamSelected.forEach((tp) => next.delete(tp.playerId));
-                      return next;
-                    });
-                    await fetchEvent();
-                  };
-                  return (
-                    <details className="mt-1.5 px-1" open={teamSelected.length > 0 || undefined}>
-                      <summary className="text-[11px] text-action font-medium cursor-pointer flex items-center justify-between gap-2">
-                        <span>+ Add player ({rosterUnsigned.length})</span>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.preventDefault(); toggleAll(); }}
-                          className="text-[10px] text-muted hover:text-action"
-                        >{allSelected ? "Clear all" : "Select all"}</button>
-                      </summary>
-                      <div className="mt-1 space-y-0.5">
-                        {rosterUnsigned.map((tp) => {
-                          const selected = rosterAddSelected.has(tp.playerId);
-                          return (
-                            <button
-                              key={tp.playerId}
-                              type="button"
-                              onClick={() => togglePlayer(tp.playerId)}
-                              className={`w-full flex items-center gap-1.5 px-1.5 py-1 rounded text-left border ${selected ? "border-action bg-action/10" : "border-transparent hover:bg-gray-50"}`}
-                            >
-                              <span className={`shrink-0 w-3.5 h-3.5 rounded border ${selected ? "bg-action border-action text-white text-[9px] flex items-center justify-center" : "border-border"}`}>
-                                {selected ? "✓" : ""}
-                              </span>
-                              <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
-                              <span className="text-[11px] truncate flex-1">{tp.player.name}</span>
-                              {tp.player.gender && <span className={`text-[9px] ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
-                              {(tp.player as { hasAccount?: boolean }).hasAccount === false && (
-                                <span title="Unclaimed account" className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded-full font-medium">⚠</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {teamSelected.length > 0 && (
-                        <button
-                          type="button"
-                          disabled={rosterAddSaving}
-                          onClick={onAddSelected}
-                          className="mt-2 w-full bg-action text-white text-xs font-semibold py-1.5 rounded-lg disabled:opacity-50"
-                        >{rosterAddSaving ? "Adding…" : `Add ${teamSelected.length} to event`}</button>
-                      )}
-                    </details>
-                  );
-                })()}
               </div>
             );
           };
+          // Full-width add-picker rendered BELOW the 2-column grid so player
+          // names can wrap freely. One picker per team the viewer can add to.
+          const teamAddPicker = (et: LeagueEventTeamLink) => {
+            const fullTeam = allLeagueTeams.find((t) => t.id === et.teamId);
+            const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
+            const canAddToTeam = isCaptainHere || canManage;
+            if (!canAddToTeam) return null;
+            const signedUpIds = new Set(event.players.map((p) => p.player.id));
+            type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl?: string | null; gender?: string | null; hasAccount?: boolean } };
+            const rosterUnsigned = ((fullTeam?.players ?? []) as RosterPlayer[])
+              .filter((tp) => !signedUpIds.has(tp.playerId))
+              .sort((a, b) => a.player.name.localeCompare(b.player.name));
+            if (rosterUnsigned.length === 0) return null;
+            const teamSelected = rosterUnsigned.filter((tp) => rosterAddSelected.has(tp.playerId));
+            const allSelected = teamSelected.length === rosterUnsigned.length;
+            const toggleAll = () => {
+              setRosterAddSelected((prev) => {
+                const next = new Set(prev);
+                if (allSelected) rosterUnsigned.forEach((tp) => next.delete(tp.playerId));
+                else rosterUnsigned.forEach((tp) => next.add(tp.playerId));
+                return next;
+              });
+            };
+            const togglePlayer = (pid: string) => {
+              setRosterAddSelected((prev) => {
+                const next = new Set(prev);
+                if (next.has(pid)) next.delete(pid);
+                else next.add(pid);
+                return next;
+              });
+            };
+            const onAddSelected = async () => {
+              if (teamSelected.length === 0) return;
+              setRosterAddSaving(true);
+              const r = await fetch(`/api/events/${event.id}/signup-prefs`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ playerIds: teamSelected.map((tp) => tp.playerId) }),
+              });
+              setRosterAddSaving(false);
+              if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                await alertDialog(d.error || "Failed to add players", "Error");
+                return;
+              }
+              setRosterAddSelected((prev) => {
+                const next = new Set(prev);
+                teamSelected.forEach((tp) => next.delete(tp.playerId));
+                return next;
+              });
+              await fetchEvent();
+            };
+            return (
+              <details key={`add-${et.teamId}`} className="mt-2 px-1" open={teamSelected.length > 0 || undefined}>
+                <summary className="text-xs text-action font-medium cursor-pointer flex items-center justify-between gap-2">
+                  <span>+ Add player to {et.team.name} ({rosterUnsigned.length})</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); toggleAll(); }}
+                    className="text-[11px] text-muted hover:text-action"
+                  >{allSelected ? "Clear all" : "Select all"}</button>
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {rosterUnsigned.map((tp) => {
+                    const selected = rosterAddSelected.has(tp.playerId);
+                    return (
+                      <button
+                        key={tp.playerId}
+                        type="button"
+                        onClick={() => togglePlayer(tp.playerId)}
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left border ${selected ? "border-action bg-action/10" : "border-border hover:bg-gray-50"}`}
+                      >
+                        <span className={`shrink-0 w-4 h-4 rounded border ${selected ? "bg-action border-action text-white text-[10px] flex items-center justify-center" : "border-border"}`}>
+                          {selected ? "✓" : ""}
+                        </span>
+                        <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+                        <span className="text-sm flex-1">{tp.player.name}</span>
+                        {tp.player.gender && <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
+                        {tp.player.hasAccount === false && (
+                          <span title="Unclaimed account" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚠ unclaimed</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {teamSelected.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={rosterAddSaving}
+                    onClick={onAddSelected}
+                    className="mt-2 w-full bg-action text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-50"
+                  >{rosterAddSaving ? "Adding…" : `Add ${teamSelected.length} to event`}</button>
+                )}
+              </details>
+            );
+          };
           return (
-            <div className="grid grid-cols-2 gap-2">
-              {ets.map((et) => teamColumn(et))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {ets.map((et) => teamColumn(et))}
+              </div>
+              {ets.map((et) => teamAddPicker(et))}
+            </>
           );
         })() : (
           <div className="space-y-0">
