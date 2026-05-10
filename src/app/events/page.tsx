@@ -9,6 +9,8 @@ import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { setPreview } from "@/lib/entityPreview";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { usePollingRefresh } from "@/lib/hooks";
 
 interface Event {
   id: string;
@@ -62,6 +64,7 @@ function EventsPage() {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const { viewRole } = useViewRole();
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin" && hasRole(viewRole, "admin");
+  const { confirm: confirmDialog } = useConfirm();
 
   // Cache the events list in sessionStorage so navigating back from a
   // detail page renders the list instantly. The list is still refreshed
@@ -128,14 +131,8 @@ function EventsPage() {
     });
   }, [userId, legacyClubFilter, clubsLoaded]);
 
-  useEffect(() => {
-    fetchEvents();
-    const interval = setInterval(fetchEvents, 30000);
-    const onFocus = () => fetchEvents();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) fetchEvents(); });
-    return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchEvents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  usePollingRefresh(fetchEvents, 30000);
 
   // Save last page
   useEffect(() => {
@@ -153,7 +150,13 @@ function EventsPage() {
   }, [loading, scrolledToToday]);
 
   const deleteEvent = async (id: string) => {
-    if (!confirm("Delete this event and all its matches?")) return;
+    const ok = await confirmDialog({
+      title: "Delete event?",
+      message: "All matches will also be deleted. This cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     setEvents((prev) => prev.filter((e) => e.id !== id));
     fetch(`/api/events/${id}`, { method: "DELETE" });
   };

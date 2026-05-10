@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useHideBottomNav } from "@/lib/hooks";
 
 const DEFAULT_CATEGORIES = [
   { name: "Men's Doubles", format: "doubles", gender: "male", scoringFormat: "3x15", winBy: "2" },
@@ -15,16 +17,13 @@ interface MyClub { id: string; name: string; emoji: string; myRole: string }
 
 export default function NewLeaguePage() {
   const router = useRouter();
+  const { alert: alertDialog } = useConfirm();
   const { data: session, status: sessionStatus } = useSession();
   const userRole = (session?.user as { role?: string } | undefined)?.role;
   const canCreateLeagues = !!(session?.user as { canCreateLeagues?: boolean } | undefined)?.canCreateLeagues;
   const allowed = userRole === "admin" || canCreateLeagues;
 
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -76,7 +75,7 @@ export default function NewLeaguePage() {
     } else {
       setCreating(false);
       const d = await r.json().catch(() => ({}));
-      alert(d.error || "Failed to create league");
+      await alertDialog(d.error || "Failed to create league");
     }
   };
 

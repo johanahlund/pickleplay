@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useHideBottomNav } from "@/lib/hooks";
 import { suggestWaitingAction } from "@/lib/solver/waitingSuggestion";
 import { ScorePicker } from "@/components/ScorePicker";
 import { useSession } from "next-auth/react";
@@ -167,14 +168,7 @@ export default function PairingConfigPage() {
       return n;
     });
 
-  // Focused flow: hide the bottom nav on this page.
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    if (nav) nav.classList.add("hidden");
-    return () => {
-      if (nav) nav.classList.remove("hidden");
-    };
-  }, []);
+  useHideBottomNav();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const userRole = (session?.user as { role?: string } | undefined)?.role;

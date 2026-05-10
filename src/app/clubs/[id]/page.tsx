@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -11,9 +11,13 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { getPreview, setPreview } from "@/lib/entityPreview";
+import { useHideBottomNav } from "@/lib/hooks";
 
 // ── Long press to delete ──
-function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void; confirmMessage: string }) {
+// `onDelete` is responsible for confirming via useConfirm before mutating;
+// this component just triggers it after a 600ms hold (mobile) or hover-Delete
+// click (desktop).
+function LongPressDelete({ children, canDelete, onDelete }: { children: React.ReactNode; canDelete: boolean; onDelete: () => void }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moved = useRef(false);
   const [pressing, setPressing] = useState(false);
@@ -26,7 +30,7 @@ function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { ch
       if (!moved.current) {
         setPressing(false);
         if (navigator.vibrate) navigator.vibrate(50);
-        if (confirm(confirmMessage)) onDelete();
+        onDelete();
       }
     }, 600);
   };
@@ -52,7 +56,7 @@ function LongPressDelete({ children, canDelete, onDelete, confirmMessage }: { ch
       {/* Desktop hover delete button */}
       {canDelete && (
         <button
-          onClick={(e) => { e.stopPropagation(); if (confirm(confirmMessage)) onDelete(); }}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="absolute top-2 right-2 hidden group-hover/lp:block text-xs px-2 py-1 rounded-lg bg-red-50 text-danger hover:bg-red-100 opacity-0 group-hover/lp:opacity-100 transition-opacity shadow-sm"
         >
           Delete
@@ -130,6 +134,8 @@ const ROLE_COLORS: Record<string, string> = {
   member: "bg-gray-100 text-muted",
 };
 
+// `onChange` should already include any confirmation step — this pill
+// just opens the dropdown and forwards the selected role.
 function RolePill({ role, canChange, onChange }: { role: string; canChange: boolean; onChange: (role: string) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -156,9 +162,7 @@ function RolePill({ role, canChange, onChange }: { role: string; canChange: bool
             <button key={r} onClick={(e) => {
               e.stopPropagation();
               if (r === role) { setOpen(false); return; }
-              if (r === "owner" ? confirm("Transfer ownership? You will become admin.") : confirm(`Change role to ${r}?`)) {
-                onChange(r);
-              }
+              onChange(r);
               setOpen(false);
             }}
               className={`w-full text-left px-3 py-1.5 text-xs capitalize hover:bg-gray-50 ${role === r ? "font-bold" : ""}`}>
@@ -322,29 +326,16 @@ export default function ClubDetailPage() {
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const t = params.get("tab");
-      if (t && ["feed", "events", "members", "rankings"].includes(t)) return t as Tab;
-    }
-    return "feed";
-  });
-
-  // Sync tab from URL on every render (covers soft navigation from header tabs)
-  useEffect(() => {
-    const check = () => {
-      const params = new URLSearchParams(window.location.search);
-      const t = params.get("tab");
-      if (t && ["feed", "events", "members", "rankings"].includes(t)) {
-        setTab((prev) => prev !== t ? t as Tab : prev);
-      }
-    };
-    check();
-    // Also listen for popstate (back/forward)
-    window.addEventListener("popstate", check);
-    return () => window.removeEventListener("popstate", check);
-  });
+  // Tab is URL-synced via useSearchParams. setTab writes via
+  // history.replaceState; the effect below reflects URL → state on
+  // soft navigation (back/forward, header tab links).
+  const searchParams = useSearchParams();
+  const tabFromUrl = (() => {
+    const t = searchParams.get("tab");
+    return t && ["feed", "events", "members", "rankings"].includes(t) ? (t as Tab) : "feed";
+  })();
+  const [tab, setTab] = useState<Tab>(tabFromUrl);
+  useEffect(() => { setTab(tabFromUrl); }, [tabFromUrl]);
   const [events, setEvents] = useState<EventInfo[]>([]);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -356,13 +347,7 @@ export default function ClubDetailPage() {
   const [editing, setEditing] = useState(false);
   const [clubDirty, setClubDirty] = useState(false);
 
-  // Hide bottom nav during edit
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    if (editing) nav?.classList.add("hidden");
-    else nav?.classList.remove("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, [editing]);
+  useHideBottomNav(editing);
   const [editName, setEditName] = useState("");
   const [editShortName, setEditShortName] = useState("");
   const [editEmoji, setEditEmoji] = useState("");
@@ -482,6 +467,13 @@ export default function ClubDetailPage() {
   };
 
   const updateRole = async (playerId: string, role: string) => {
+    const ok = await confirmDialog({
+      title: role === "owner" ? "Transfer ownership?" : `Change role to ${role}?`,
+      message: role === "owner" ? "You will become admin." : "",
+      confirmText: role === "owner" ? "Transfer" : "Change",
+      danger: role === "owner",
+    });
+    if (!ok) return;
     await fetch(`/api/clubs/${id}/members`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId, role }) });
     fetchClub();
   };
@@ -528,7 +520,13 @@ export default function ClubDetailPage() {
   };
 
   const deleteClub = async () => {
-    if (!confirm("Delete this club? This cannot be undone.")) return;
+    const ok = await confirmDialog({
+      title: "Delete club?",
+      message: "This cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/clubs/${id}`, { method: "DELETE" });
     router.push("/clubs");
   };
@@ -710,11 +708,26 @@ export default function ClubDetailPage() {
   };
 
   const deletePost = async (postId: string) => {
+    const post = posts.find((p) => p.id === postId);
+    const ok = await confirmDialog({
+      title: "Delete post?",
+      message: post ? `${post.author.name}'s post${post.comments.length > 0 ? ` and ${post.comments.length} comment${post.comments.length !== 1 ? "s" : ""}` : ""}. This cannot be undone.` : "This cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/clubs/${id}/posts/${postId}`, { method: "DELETE" });
     fetchPosts();
   };
 
   const deleteComment = async (postId: string, commentId: string) => {
+    const ok = await confirmDialog({
+      title: "Delete comment?",
+      message: "This cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/clubs/${id}/posts/${postId}/comments`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -1297,8 +1310,7 @@ export default function ClubDetailPage() {
             posts.map((post) => {
               const canDeletePost = post.author.id === userId || canManage;
               return (
-                <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}
-                  confirmMessage={`Delete this entire post by ${post.author.name}?\n\n"${post.content.slice(0, 80)}${post.content.length > 80 ? "..." : ""}"\n\n${post.comments.length > 0 ? `This will also delete ${post.comments.length} comment${post.comments.length !== 1 ? "s" : ""}.` : ""}This cannot be undone.`}>
+                <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}>
                   <div className="bg-card rounded-xl border border-border p-3 space-y-2">
                     {/* Post header */}
                     <div className="flex items-center gap-2">
@@ -1318,8 +1330,7 @@ export default function ClubDetailPage() {
                         {(expandedPost === post.id ? post.comments : post.comments.slice(-2)).map((c) => {
                           const canDeleteComment = c.author.id === userId || canManage;
                           return (
-                            <LongPressDelete key={c.id} canDelete={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}
-                              confirmMessage={`Delete this comment by ${c.author.name}?\n\n"${c.content.slice(0, 80)}${c.content.length > 80 ? "..." : ""}"`}>
+                            <LongPressDelete key={c.id} canDelete={canDeleteComment} onDelete={() => deleteComment(post.id, c.id)}>
                               <div className="flex items-start gap-2">
                                 <PlayerAvatar name={c.author.name} photoUrl={c.author.photoUrl} size="xs" />
                                 <div className="flex-1 min-w-0">
@@ -1474,7 +1485,7 @@ export default function ClubDetailPage() {
                   const url = `${window.location.origin}/clubs/join/${invite.token}`;
                   if (navigator.clipboard) {
                     await navigator.clipboard.writeText(url);
-                    alert("Invite link copied!");
+                    await alertDialog("Invite link copied!");
                   } else {
                     prompt("Copy this invite link:", url);
                   }

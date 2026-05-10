@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { AppHeader } from "@/components/AppHeader";
+import { useHideBottomNav } from "@/lib/hooks";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -51,12 +53,7 @@ export default function EventSignUpPage() {
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [savedView, setSavedView] = useState(false);
 
-  // Hide bottom nav while in this edit-style flow
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   const load = useCallback(async () => {
     const [evR, meR] = await Promise.all([
@@ -172,26 +169,29 @@ export default function EventSignUpPage() {
         ? <>The captain knows you&apos;re coming but not playing league matches this match-day.</>
         : <>The captain knows you can&apos;t make it.</>;
     return (
-      <div className="space-y-2">
-        <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-          <button onClick={() => router.push(`/events/${id}`)} className="text-sm text-action font-medium">← Back to event</button>
+      <>
+        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to event", onClick: () => router.push(`/events/${id}`) }} />
+        <div className="space-y-2">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
+            <p className="font-semibold text-emerald-900">
+              ✓ {intentLabel}{myTeamName ? <> for <span className="font-bold">{myTeamName}</span></> : null}
+            </p>
+            <p className="text-emerald-800">{intentBody}</p>
+            <button onClick={() => router.push(`/events/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
+          </div>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
-          <p className="font-semibold text-emerald-900">
-            ✓ {intentLabel}{myTeamName ? <> for <span className="font-bold">{myTeamName}</span></> : null}
-          </p>
-          <p className="text-emerald-800">{intentBody}</p>
-          <button onClick={() => router.push(`/events/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
-        </div>
-      </div>
+      </>
     );
   }
 
   return (
+    <>
+      <AppHeader
+        variant="hero-sub"
+        title={isOnBehalf ? `Sign up ${targetName || "player"}` : myTeamName ? `Sign up · ${myTeamName}` : "Sign up"}
+        back={{ label: "Back to event", onClick: () => router.push(`/events/${id}`) }}
+      />
     <div className="space-y-2">
-      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-        <button onClick={() => router.push(`/events/${id}`)} className="text-sm text-action font-medium">← Back</button>
-      </div>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
         <h2 className="text-lg font-bold">
@@ -281,5 +281,6 @@ export default function EventSignUpPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -4,10 +4,18 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
+import { usePollingRefresh } from "@/lib/hooks";
 
 const APP_VERSION = "5.3.0";
-const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
+// Routes whose pages render their own header chrome (AppHeader hero or
+// hero-sub). startsWith match — /clubs/join also covers /clubs/join/<token>.
+const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset", "/clubs/join"];
+// Any /events/<id>/anything path. The detail page mounts AppHeader hero;
+// nested sub-pages (sign-up, pairing) mount hero-sub themselves.
 const EVENT_DETAIL_RE = /^\/events\/[^/]+(\/.*)?$/;
+// /leagues/<id>/<sub>/* — sub-pages (sign-up, events, lineup) mount their
+// own hero-sub. /leagues/<id> itself still uses the global LightHeader.
+const LEAGUE_NESTED_RE = /^\/leagues\/[^/]+\/[^/].*$/;
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -151,26 +159,26 @@ export function Header() {
 
   const isAuthPage = HIDDEN_PATHS.some((p) => pathname.startsWith(p));
 
-  // Poll for unread notifications. Also listens for a "notifications:refresh"
-  // window event so the alerts page (or anywhere else that mutates alerts)
-  // can force-refresh the badge immediately, instead of waiting for the
-  // next 30s tick.
+  // Notifications poll — pause when tab is hidden, refresh on focus.
+  // Also listens for a "notifications:refresh" window event so the alerts
+  // page (or anywhere else that mutates alerts) can force-refresh the
+  // badge immediately, instead of waiting for the next tick.
+  const checkNotifications = useCallback(() => {
+    if (!session?.user) return;
+    fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
+      if (Array.isArray(data)) {
+        setNotifications(data);
+        setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
+      }
+    }).catch(() => {});
+  }, [session?.user]);
+  useEffect(() => { checkNotifications(); }, [checkNotifications]);
+  usePollingRefresh(checkNotifications, 30000, !!session?.user);
   useEffect(() => {
     if (!session?.user) return;
-    const check = () => {
-      fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
-        if (Array.isArray(data)) {
-          setNotifications(data);
-          setUnreadCount(data.filter((n: { read: boolean }) => !n.read).length);
-        }
-      }).catch(() => {});
-    };
-    check();
-    const interval = setInterval(check, 30000);
-    const onRefresh = () => check();
+    const onRefresh = () => checkNotifications();
     window.addEventListener("notifications:refresh", onRefresh);
     return () => {
-      clearInterval(interval);
       window.removeEventListener("notifications:refresh", onRefresh);
     };
   }, [session?.user]);
@@ -226,7 +234,7 @@ export function Header() {
   // Build user summary for the avatar
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
-  const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname);
+  const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname) || LEAGUE_NESTED_RE.test(pathname);
 
   // Reset main padding + header height var when header is hidden
   useEffect(() => {

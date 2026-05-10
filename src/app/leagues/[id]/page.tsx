@@ -10,6 +10,8 @@ import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
+import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
+import { PenIcon } from "@/components/PenIcon";
 
 interface LeaguePreview {
   id: string;
@@ -759,7 +761,7 @@ export default function LeagueDetailPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
-  const { confirm } = useConfirm();
+  const { confirm, alert: alertDialog } = useConfirm();
   const userId = (session?.user as { id?: string })?.id;
   const userRole = (session?.user as { role?: string })?.role;
 
@@ -922,21 +924,9 @@ export default function LeagueDetailPage() {
 
   useEffect(() => { fetchLeague(); fetchStandings(); }, [fetchLeague, fetchStandings]);
 
-  // Poll the league every 30s while the tab is visible so roster changes
-  // (e.g. someone leaving a team) and request updates show up without a
-  // manual refresh. Pauses while the tab is hidden to avoid background work.
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (timer) return;
-      timer = setInterval(() => { fetchLeague(); }, 30_000);
-    };
-    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
-    const onVis = () => { document.visibilityState === "visible" ? start() : stop(); };
-    if (document.visibilityState === "visible") start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => { document.removeEventListener("visibilitychange", onVis); stop(); };
-  }, [fetchLeague]);
+  // Poll the league every 30s so roster changes and request updates show
+  // up without a manual refresh. Auto-pauses while the tab is hidden.
+  usePollingRefresh(fetchLeague, 30000);
 
   const fetchLeagueMatches = useCallback(async () => {
     const r = await fetch(`/api/leagues/${id}/matches`);
@@ -967,13 +957,7 @@ export default function LeagueDetailPage() {
     };
   }, [editSection, fetchParticipationRequests]);
 
-  // Hide bottom nav when in edit views
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    if (editSection) nav?.classList.add("hidden");
-    else nav?.classList.remove("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, [editSection]);
+  useHideBottomNav(!!editSection);
 
   const fetchPlayers = async () => { if (allPlayers.length) return; const r = await fetch("/api/players"); if (r.ok) setAllPlayers(await r.json()); };
   const fetchClubs = async () => { if (allClubs.length) return; const r = await fetch("/api/clubs/browse"); if (r.ok) setAllClubs(await r.json()); };
@@ -1081,7 +1065,7 @@ export default function LeagueDetailPage() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || "Failed to save league");
+      await alertDialog(d.error || "Failed to save league");
       return;
     }
     setEditSection("");
@@ -1133,7 +1117,7 @@ export default function LeagueDetailPage() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || `Failed to save category (${r.status})`);
+      await alertDialog(d.error || `Failed to save category (${r.status})`);
       throw new Error(d.error || "save failed");
     }
   };
@@ -1172,7 +1156,7 @@ export default function LeagueDetailPage() {
       await fetchLeague();
     } else {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || "Failed to add category");
+      await alertDialog(d.error || "Failed to add category");
     }
   };
 
@@ -1307,7 +1291,7 @@ export default function LeagueDetailPage() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || `Failed to add player (${r.status})`);
+      await alertDialog(d.error || `Failed to add player (${r.status})`);
       return false;
     }
     fetchLeague();
@@ -1331,7 +1315,7 @@ export default function LeagueDetailPage() {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        alert(d.error || `Failed to remove player (${r.status})`);
+        await alertDialog(d.error || `Failed to remove player (${r.status})`);
         return;
       }
       await fetchLeague();
@@ -1358,7 +1342,7 @@ export default function LeagueDetailPage() {
     const r = await fetch(url, { method: mode === "edit" ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || "Failed");
+      await alertDialog(d.error || "Failed");
       return;
     }
     if (mode === "add") setShowAddRound(false);
@@ -1609,7 +1593,7 @@ export default function LeagueDetailPage() {
               <p className="text-xs text-muted">{cat.format} · {genderLabel(cat.gender)}{cat.ageGroup !== "open" ? ` · ${cat.ageGroup}` : ""} · {scoringLabel(cat.scoringFormat)} · win by {cat.winBy}{cat.maxPerEvent != null ? ` · max ${cat.maxPerEvent}/event` : ""}</p>
             </div>
             {cat.status === "draft" && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">Draft</span>}
-            <span className="text-muted shrink-0"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>
+            <span className="text-muted shrink-0"><PenIcon /></span>
           </div>
         ))}
         <button onClick={() => { setNewCatFormat("doubles"); setNewCatGender("open"); setNewCatAge("open"); setNewCatSkillMin(""); setNewCatSkillMax(""); setNewCatScoring("3x11"); setNewCatWinBy("2"); setDirty(false); setEditSection("newCat"); }}
@@ -2285,7 +2269,7 @@ export default function LeagueDetailPage() {
             })()}
             {canEdit && (
               <span className="text-muted">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                <PenIcon />
               </span>
             )}
           </div>
@@ -2353,7 +2337,7 @@ export default function LeagueDetailPage() {
               const r = await fetch(`/api/leagues/${id}/participation-requests/${reqId}`, { method: "DELETE" });
               if (!r.ok) {
                 const d = await r.json().catch(() => ({}));
-                alert(d.error || "Failed to cancel");
+                await alertDialog(d.error || "Failed to cancel");
                 return;
               }
               fetchLeague();
@@ -2431,7 +2415,7 @@ export default function LeagueDetailPage() {
                   router.push(`/events/${data.eventId}`);
                 } else {
                   const err = await r.json().catch(() => ({ error: "Failed" }));
-                  alert(err.error || "Failed to create playoff");
+                  await alertDialog(err.error || "Failed to create playoff");
                 }
               }}
               className="w-full bg-action-dark text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
@@ -2445,7 +2429,7 @@ export default function LeagueDetailPage() {
             className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">League Format</h3>
-              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+              {canEdit && <span className="text-muted"><PenIcon /></span>}
             </div>
             <div className="text-sm space-y-1">
               <div className="grid grid-cols-2 gap-x-3 gap-y-1">
@@ -2463,7 +2447,7 @@ export default function LeagueDetailPage() {
             className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Management</h3>
-              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+              {canEdit && <span className="text-muted"><PenIcon /></span>}
             </div>
             <div>
               <p className="text-sm">
@@ -2486,7 +2470,7 @@ export default function LeagueDetailPage() {
             className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Categories ({league.categories.length})</h3>
-              {canEdit && <span className="text-muted"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></span>}
+              {canEdit && <span className="text-muted"><PenIcon /></span>}
             </div>
             <div className="space-y-1">
               {league.categories.map((cat) => (
@@ -3081,7 +3065,7 @@ export default function LeagueDetailPage() {
                   <div className="flex flex-col items-end justify-between shrink-0 self-stretch py-0.5 gap-1">
                     {canEditTeam ? (
                       <span onClick={(e) => { e.stopPropagation(); openTeamEdit(team); }} className="text-muted hover:text-foreground p-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                        <PenIcon />
                       </span>
                     ) : <span />}
                     {canAddToTeam && (

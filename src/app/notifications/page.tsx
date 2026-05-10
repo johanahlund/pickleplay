@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface Notification {
   id: string;
@@ -29,6 +30,7 @@ function timeAgo(iso: string) {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { alert: alertDialog } = useConfirm();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,7 +106,7 @@ export default function NotificationsPage() {
     setActingId(null);
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      alert(d.error || "Failed");
+      await alertDialog(d.error || "Failed");
       return;
     }
     // The request is resolved — drop the alert.

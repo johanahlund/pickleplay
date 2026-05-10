@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { setPreview } from "@/lib/entityPreview";
+import { useHideBottomNav } from "@/lib/hooks";
 
 /**
  * Streamlined event creation wizard.
@@ -40,11 +41,7 @@ export default function NewEventPage() {
   const router = useRouter();
   const { alert } = useConfirm();
 
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   // Seed from sessionStorage so repeated visits to the wizard render
   // the club list on first paint. Fresh data is still fetched below and

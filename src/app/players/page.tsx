@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useHideBottomNav } from "@/lib/hooks";
 
 interface PlayerClub {
   id: string;
@@ -50,19 +52,14 @@ function shortLeagueName(name: string): string {
 
 export default function PlayersPage() {
   const { data: session } = useSession();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
 
-  // Hide bottom nav during edit
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    if (editingId) nav?.classList.add("hidden");
-    else nav?.classList.remove("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, [editingId]);
+  useHideBottomNav(!!editingId);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -87,7 +84,13 @@ export default function PlayersPage() {
 
 
   const voidPlayer = async (id: string, playerName: string) => {
-    if (!confirm(`Are you sure you want to remove ${playerName}? If they have match history, they'll be voided (hidden but data preserved).`)) return;
+    const ok = await confirmDialog({
+      title: `Remove ${playerName}?`,
+      message: "If they have match history they'll be voided (hidden, data preserved).",
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/players/${id}/void`, { method: "POST" });
     fetchPlayers();
   };
@@ -123,7 +126,7 @@ export default function PlayersPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to generate invite");
+        await alertDialog(data.error || "Failed to generate invite");
         return;
       }
 
@@ -160,7 +163,7 @@ export default function PlayersPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to generate reset link");
+        await alertDialog(data.error || "Failed to generate reset link");
         return;
       }
 
@@ -190,7 +193,13 @@ export default function PlayersPage() {
   const toggleLeagueCreator = async (player: Player) => {
     const next = !player.canCreateLeagues;
     const verb = next ? "grant" : "revoke";
-    if (!confirm(`${verb === "grant" ? "Grant" : "Revoke"} league-creation permission for ${player.name}?`)) return;
+    const ok = await confirmDialog({
+      title: `${verb === "grant" ? "Grant" : "Revoke"} league-creation?`,
+      message: `For ${player.name}.`,
+      confirmText: verb === "grant" ? "Grant" : "Revoke",
+      danger: verb === "revoke",
+    });
+    if (!ok) return;
     const res = await fetch(`/api/players/${player.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -198,17 +207,23 @@ export default function PlayersPage() {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      alert(data.error || `Failed to ${verb}`);
+      await alertDialog(data.error || `Failed to ${verb}`);
       return;
     }
     fetchPlayers();
   };
 
   const resetRating = async (player: Player) => {
-    if (!confirm(`Are you sure you want to reset ${player.name}'s rating to 1000 and clear W/L record?`)) return;
+    const ok = await confirmDialog({
+      title: `Reset ${player.name}'s rating?`,
+      message: "Sets rating to 1000 and clears W/L.",
+      confirmText: "Reset",
+      danger: true,
+    });
+    if (!ok) return;
     const res = await fetch(`/api/players/${player.id}/reset-rating`, { method: "POST" });
     if (!res.ok) {
-      alert("Failed to reset rating");
+      await alertDialog("Failed to reset rating");
       return;
     }
     fetchPlayers();

@@ -46,8 +46,8 @@ interface AppHeaderProps {
   /** Status pill in the hero variant (top-right of the title block). */
   status?: HeaderStatus;
 
-  /** Back link: label + href. Omit to hide. */
-  back?: { label: string; href: string; onClick?: () => void };
+  /** Back link: label plus either href or onClick. Omit to hide. */
+  back?: { label: string; href?: string; onClick?: () => void };
 
   /** Primary action rendered in the header's right slot (hero-sub only). */
   action?: {
@@ -99,7 +99,7 @@ function BackChevron({
   color,
   onClick,
 }: {
-  href: string;
+  href?: string;
   label: string;
   color: string;
   onClick?: () => void;
@@ -133,7 +133,7 @@ function BackChevron({
     cursor: "pointer",
   };
 
-  if (onClick) {
+  if (onClick || !href) {
     return (
       <button type="button" onClick={onClick} style={sharedStyle}>
         {inner}

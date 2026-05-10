@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useHideBottomNav } from "@/lib/hooks";
 
 interface MyClub {
   id: string;
@@ -18,11 +19,7 @@ export default function NewPlayerPage() {
   const { data: session } = useSession();
   const { alert } = useConfirm();
 
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   const [name, setName] = useState("");
   const [gender, setGender] = useState<string | null>(null);

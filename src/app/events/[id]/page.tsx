@@ -8,6 +8,8 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
+import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
+import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -384,19 +386,19 @@ export default function EventDetailPage() {
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
 
-  // Notification count for the hero header (mirrors Header.tsx polling)
+  // Notification count for the hero header (mirrors Header.tsx polling).
   const [heroUnread, setHeroUnread] = useState(0);
-  useEffect(() => {
+  const checkUnread = useCallback(async () => {
     if (!session?.user) return;
-    const check = () => {
-      fetch("/api/notifications").then((r) => r.ok ? r.json() : []).then((data) => {
-        if (Array.isArray(data)) setHeroUnread(data.filter((n: { read: boolean }) => !n.read).length);
-      }).catch(() => {});
-    };
-    check();
-    const iv = setInterval(check, 30000);
-    return () => clearInterval(iv);
+    try {
+      const r = await fetch("/api/notifications");
+      if (!r.ok) return;
+      const data = await r.json();
+      if (Array.isArray(data)) setHeroUnread(data.filter((n: { read: boolean }) => !n.read).length);
+    } catch { /* ignore */ }
   }, [session?.user]);
+  useEffect(() => { checkUnread(); }, [checkUnread]);
+  usePollingRefresh(checkUnread, 30000, !!session?.user);
 
   // Remember last visited page + read referrer
   useEffect(() => {
@@ -472,14 +474,8 @@ export default function EventDetailPage() {
   const [numRounds, setNumRounds] = useState(1);
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
 
-  // Hide bottom nav on ALL edit/add pages — clean focused view
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    const hide = activeSection !== "overview" || showAddPlayer || bulkSelectMode;
-    if (hide) nav?.classList.add("hidden");
-    else nav?.classList.remove("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, [activeSection, showAddPlayer, bulkSelectMode]);
+  // Hide bottom nav on edit/add sub-flows — keep the overview tidy.
+  useHideBottomNav(activeSection !== "overview" || showAddPlayer || bulkSelectMode);
 
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
@@ -701,7 +697,7 @@ export default function EventDetailPage() {
     const r = await fetch(`/api/events/${id}/signup`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json();
-      alert(data.error || "Cannot leave event");
+      await alertDialog(data.error || "Cannot leave event");
       return;
     }
     await fetchEvent();
@@ -1180,7 +1176,7 @@ export default function EventDetailPage() {
     }
   };
 
-  const penIcon = <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>;
+  const penIcon = <PenIcon />;
   const location = event.locationId
     ? event.club?.locations?.find((l) => l.id === event.locationId) || event.club?.locations?.[0]
     : event.club?.locations?.[0];
@@ -1261,11 +1257,14 @@ export default function EventDetailPage() {
             return true;
           })
           .map((s) => (
-            <button key={s} className="flex-1 text-center" onClick={() => {
+            <button key={s} className="flex-1 text-center" onClick={async () => {
               if (s === activeSection) return;
               if (hasEdits && saveSections.has(activeSection)) {
-                if (confirm("You have unsaved changes. Save them?")) {
-                  saveEditEvent().then(() => { startEditEvent(); setActiveSection(s as typeof activeSection); });
+                const save = await confirmDialog({ title: "Unsaved changes", message: "Save them before switching section?", confirmText: "Save", cancelText: "Discard" });
+                if (save) {
+                  await saveEditEvent();
+                  startEditEvent();
+                  setActiveSection(s as typeof activeSection);
                 } else {
                   startEditEvent(); setActiveSection(s as typeof activeSection);
                 }
@@ -1296,10 +1295,12 @@ export default function EventDetailPage() {
             Save
           </button>
         ) : (
-          <button onClick={() => {
+          <button onClick={async () => {
             if (hasEdits && saveSections.has(activeSection)) {
-              if (confirm("You have unsaved changes. Save them?")) {
-                saveEditEvent().then(() => setActiveSection("overview"));
+              const save = await confirmDialog({ title: "Unsaved changes", message: "Save them before leaving the section?", confirmText: "Save", cancelText: "Discard" });
+              if (save) {
+                await saveEditEvent();
+                setActiveSection("overview");
               } else {
                 setActiveSection("overview");
               }

@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { AppHeader } from "@/components/AppHeader";
+import { useHideBottomNav } from "@/lib/hooks";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -40,12 +42,7 @@ export default function LeagueSignUpPage() {
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [existingRequestStatus, setExistingRequestStatus] = useState<string | null>(null);
 
-  // Hide bottom nav while in this edit-style flow
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   const load = useCallback(async () => {
     const [leagueR, requestsR, meR] = await Promise.all([
@@ -128,24 +125,24 @@ export default function LeagueSignUpPage() {
   if (existingRequestStatus === "pending") {
     const chosenTeam = teams.find((t) => t.id === preferredTeamId);
     return (
-      <div className="space-y-2">
-        <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-          <button onClick={() => router.push(`/leagues/${id}`)} className="text-sm text-action font-medium">← Back to league</button>
+      <>
+        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
+        <div className="space-y-2">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
+            <p className="font-semibold text-emerald-900">
+              {chosenTeam
+                ? <>✓ You&apos;re signed up for team <span className="font-bold">{chosenTeam.name}</span></>
+                : <>✓ You&apos;re signed up as a free agent</>}
+            </p>
+            <p className="text-emerald-800">
+              {chosenTeam
+                ? <>Waiting for the team captain (or league director) to confirm.</>
+                : <>Waiting for any team captain (or the league director) to pick you up.</>}
+            </p>
+            <button onClick={() => router.push(`/leagues/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
+          </div>
         </div>
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
-          <p className="font-semibold text-emerald-900">
-            {chosenTeam
-              ? <>✓ You&apos;re signed up for team <span className="font-bold">{chosenTeam.name}</span></>
-              : <>✓ You&apos;re signed up as a free agent</>}
-          </p>
-          <p className="text-emerald-800">
-            {chosenTeam
-              ? <>Waiting for the team captain (or league director) to confirm.</>
-              : <>Waiting for any team captain (or the league director) to pick you up.</>}
-          </p>
-          <button onClick={() => router.push(`/leagues/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
-        </div>
-      </div>
+      </>
     );
   }
 
@@ -153,10 +150,9 @@ export default function LeagueSignUpPage() {
   const registrationClosed = !loading && leagueStatus !== "open" && leagueStatus !== "registration";
 
   return (
+    <>
+      <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
     <div className="space-y-2">
-      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-        <button onClick={() => router.push(`/leagues/${id}`)} className="text-sm text-action font-medium">← Back</button>
-      </div>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-3">
         <h2 className="text-lg font-bold">Sign up{leagueName ? ` — ${leagueName}` : ""}</h2>
@@ -222,5 +218,6 @@ export default function LeagueSignUpPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

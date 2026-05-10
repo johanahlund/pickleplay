@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { AppHeader } from "@/components/AppHeader";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { resolveRoundCategories, type LeagueCategoryShape } from "@/lib/leagueRound";
 
 interface PlayerLite { id: string; name: string; photoUrl?: string | null; gender?: string | null; duprRating?: number | null }
@@ -30,6 +33,7 @@ export default function LineupBuilderPage() {
   const { id, eventId, teamId } = useParams() as { id: string; eventId: string; teamId: string };
   const router = useRouter();
   const { data: session } = useSession();
+  const { confirm: confirmDialog } = useConfirm();
   const userId = (session?.user as { id?: string })?.id;
   const userRole = (session?.user as { role?: string })?.role;
 
@@ -59,12 +63,7 @@ export default function LineupBuilderPage() {
   const isTeamLeader = !!userId && team && (team.captainId === userId || team.viceCaptainId === userId);
   const canEdit = isOrganizer || isTeamLeader;
 
-  // Hide bottom nav while editing.
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    nav?.classList.add("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, []);
+  useHideBottomNav();
 
   const loadAll = useCallback(async () => {
     const [leagueR, eventR] = await Promise.all([
@@ -117,29 +116,9 @@ export default function LineupBuilderPage() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Background poll so each team sees the opponent's picks as they happen.
-  // Skip ticks while a save is in flight or the picker is open — we don't
-  // want to reconcile mid-action and clobber what the user is doing.
-  const savingRef = useRef(saving);
-  const pickerRef = useRef(picker);
-  useEffect(() => { savingRef.current = saving; }, [saving]);
-  useEffect(() => { pickerRef.current = picker; }, [picker]);
-  useEffect(() => {
-    if (loading) return;
-    const tick = () => {
-      if (document.hidden) return;
-      if (savingRef.current) return;
-      if (pickerRef.current) return;
-      loadAll();
-    };
-    const interval = setInterval(tick, 15000);
-    const onVis = () => { if (!document.hidden) tick(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [loading, loadAll]);
+  // Poll so each team sees the opponent's picks live. Pauses while a
+  // save is in flight or the picker is open so we don't clobber mid-edit.
+  usePollingRefresh(loadAll, 15000, !loading && !saving && !picker);
 
   // Determine which side our team is on. Canonical mapping = sort by id;
   // server uses the same rule, so first id alphabetically is team1.
@@ -211,7 +190,12 @@ export default function LineupBuilderPage() {
   const toggleSlot = async (categoryId: string, slotNumber: number, want: boolean) => {
     const g = gameByKey.get(`${categoryId}:${slotNumber}`);
     if (!want && g && ourPlayersForGame(g).length > 0) {
-      const ok = window.confirm("This slot has assigned players. Untick anyway?");
+      const ok = await confirmDialog({
+        title: "Untick this match?",
+        message: "It has assigned players. They'll be cleared.",
+        confirmText: "Untick",
+        danger: true,
+      });
       if (!ok) return;
       // Server still blocks until players are removed. Walk them off first.
       await post({ action: "assign_players", gameId: g.id, playerIds: [] });
@@ -361,30 +345,35 @@ export default function LineupBuilderPage() {
   if (loading) return <div className="text-sm text-muted py-8 text-center">Loading lineup…</div>;
   if (!team || !canEdit) {
     return (
-      <div className="space-y-2">
-        <button onClick={back} className="text-sm text-action font-medium">← Back</button>
-        <div className="bg-card rounded-xl border border-border p-4 text-sm">
-          You don&apos;t have permission to edit this team&apos;s lineup.
+      <>
+        <AppHeader variant="hero-sub" title="Lineup" back={{ label: "Back", onClick: back }} />
+        <div className="space-y-2">
+          <div className="bg-card rounded-xl border border-border p-4 text-sm">
+            You don&apos;t have permission to edit this team&apos;s lineup.
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
+    <>
+      <AppHeader
+        variant="hero-sub"
+        title={`Lineup — ${team.name}`}
+        meta={opponentTeam ? `vs ${opponentTeam.name}` : undefined}
+        back={{ label: "Back to event", onClick: back }}
+      />
     <div className="space-y-2">
-      <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2">
-        <button onClick={back} className="text-sm text-action font-medium">← Back to event</button>
-      </div>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
-        {leagueName && <div className="text-[11px] text-muted uppercase tracking-wide">{leagueName}</div>}
-        <h2 className="text-lg font-bold">Lineup — {team.name}</h2>
-        <div className="text-xs text-muted">
-          vs {opponentTeam?.name || "—"}
-          {eventDate && (
-            <span> · {new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</span>
-          )}
-        </div>
+        {(leagueName || eventDate) && (
+          <div className="text-[11px] text-muted">
+            {leagueName}
+            {leagueName && eventDate && " · "}
+            {eventDate && new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+          </div>
+        )}
 
         {/* Done picking — per-team flag. Until both teams flip true, each
             team only sees its own players in the rows below. */}
@@ -584,14 +573,22 @@ export default function LineupBuilderPage() {
           const su = signups.find((s) => s.playerId === pid);
           if (!su) {
             const playerName = pools.roster.find((p) => p.id === pid)?.name || "This player";
-            const ok = window.confirm(`${playerName} hasn't signed up. Open their sign-up form (you'll fill it in on their behalf)?`);
+            const ok = await confirmDialog({
+              title: `${playerName} hasn't signed up`,
+              message: "Open their sign-up form? You'll fill it in on their behalf.",
+              confirmText: "Open",
+            });
             if (!ok) return;
             router.push(`/events/${eventId}/sign-up?for=${pid}`);
             return;
           }
           if (su.status === "unavailable") {
             const playerName = pools.roster.find((p) => p.id === pid)?.name || "This player";
-            const ok = window.confirm(`${playerName} marked themselves unavailable. Add anyway?`);
+            const ok = await confirmDialog({
+              title: `${playerName} is unavailable`,
+              message: "They marked themselves out for this event. Add anyway?",
+              confirmText: "Add",
+            });
             if (!ok) return;
           }
           await assignPlayers(g.id, next);
@@ -653,5 +650,6 @@ export default function LineupBuilderPage() {
         );
       })()}
     </div>
+    </>
   );
 }

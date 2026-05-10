@@ -173,8 +173,10 @@ export default function ClubsPage() {
         <div className="flex gap-2">
           {isLoggedIn && (
             <button onClick={() => setShowCreate(!showCreate)}
-              className="text-primary text-sm font-medium">
-              {showCreate ? "Cancel" : "+ New Club"}
+              className={showCreate
+                ? "text-muted text-sm font-medium px-3 py-2"
+                : "bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"}>
+              {showCreate ? "Cancel" : "+ Club"}
             </button>
           )}
         </div>

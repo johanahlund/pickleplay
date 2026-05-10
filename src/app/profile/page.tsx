@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { useHideBottomNav } from "@/lib/hooks";
 
 interface RatingData {
   player: { id: string; name: string; emoji: string };
@@ -30,13 +31,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
 
-  // Hide bottom nav during edit
-  useEffect(() => {
-    const nav = document.querySelector("nav.fixed.bottom-0");
-    if (editing) nav?.classList.add("hidden");
-    else nav?.classList.remove("hidden");
-    return () => { nav?.classList.remove("hidden"); };
-  }, [editing]);
+  useHideBottomNav(editing);
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editGender, setEditGender] = useState<string | null>(null);
