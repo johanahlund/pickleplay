@@ -155,10 +155,18 @@ export default function EventSignUpPage() {
     });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
+    if (isOnBehalf) {
+      // Captain workflow — skip the celebratory card and drop them
+      // straight back into the participants section. Use sessionStorage
+      // to surface a small toast on the event page if/when we add one.
+      router.push(`/events/${id}#participants`);
+      return;
+    }
     setSavedView(true);
   };
 
   if (savedView) {
+    // On-behalf saves never reach this — they navigate back immediately.
     const intentLabel = intent === "playing"
       ? "You're signed up to this event"
       : intent === "attending"
