@@ -798,17 +798,25 @@ export default function LeagueDetailPage() {
   // background. Cleared on hard reload — only intended to skip the
   // visible loading state during normal in-app navigation.
   const cacheKey = typeof id === "string" ? `league-cache:${id}` : null;
-  const [league, setLeague] = useState<League | null>(() => {
-    if (typeof window === "undefined" || !cacheKey) return null;
+  // Always start with null on the server AND on the client's initial render
+  // — anything else triggers a hydration mismatch. The cache is read in a
+  // useEffect below, so the page still renders instantly from sessionStorage
+  // after mount without a network round-trip.
+  const [league, setLeague] = useState<League | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined" || !cacheKey) return;
     try {
       const raw = sessionStorage.getItem(cacheKey);
-      return raw ? (JSON.parse(raw) as League) : null;
-    } catch { return null; }
-  });
+      if (raw) {
+        const cached = JSON.parse(raw) as League;
+        setLeague(cached);
+        setLoading(false);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
-  // If we hydrated from cache, the page already has data to render —
-  // don't flash the loading spinner. Background fetch happens immediately.
-  const [loading, setLoading] = useState(() => league === null);
+  const [loading, setLoading] = useState(true);
   // Tab can be set via ?tab=rounds in the URL — used when navigating back
   // to a specific league tab (e.g. from a league-attached event). Listen for
   // search-param changes too: client-side navigation doesn't re-mount this
@@ -858,16 +866,22 @@ export default function LeagueDetailPage() {
 
   // Team edit state (used for both add and edit)
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null); // null = creating new
-  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(() => {
-    // Default-collapse all teams on first render. Honours ?expandTeam=<id>
-    // from the back-nav URL. Re-derived on subsequent polls only via the
-    // explicit setCollapsedTeams below; user toggles aren't disturbed.
-    if (!league || !Array.isArray(league.teams)) return new Set();
-    const skip = typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("expandTeam")
-      : null;
-    return new Set(league.teams.map((t) => t.id).filter((tid) => tid !== skip));
-  });
+  // Empty on initial render; populated after hydration to default-collapse
+  // every team (honouring ?expandTeam=<id>). See effect below.
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  // Run once after mount when league has data: collapse all teams except
+  // the one called out by ?expandTeam in the URL.
+  useEffect(() => {
+    if (!league || !Array.isArray(league.teams) || league.teams.length === 0) return;
+    setCollapsedTeams((prev) => {
+      // Only initialise once: if we've already populated, don't re-collapse
+      // (preserves the user's expand/collapse state across polls).
+      if (prev.size > 0) return prev;
+      const skip = expandTeamFromUrl;
+      return new Set(league.teams.map((t) => t.id).filter((tid) => tid !== skip));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league?.id]);
 
   // When returning from the per-player prefs editor with ?expandTeam, make
   // sure that team is open. When ?focus is set, scroll to it after the
