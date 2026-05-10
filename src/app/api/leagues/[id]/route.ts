@@ -227,7 +227,7 @@ export async function PATCH(
   if (body.name !== undefined) data.name = String(body.name).trim();
   if (body.shortName !== undefined) {
     const v = body.shortName ? String(body.shortName).trim() : "";
-    data.shortName = v ? v.slice(0, 16) : null;
+    data.shortName = v ? v.slice(0, 25) : null;
   }
   if (body.description !== undefined) data.description = body.description ? String(body.description).trim() : null;
   if (body.season !== undefined) data.season = body.season ? String(body.season).trim() : null;

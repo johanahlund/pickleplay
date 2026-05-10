@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { leagueShortName } from "@/lib/leagueDisplay";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -54,6 +55,9 @@ export default function EventSignUpPage() {
   const [intent, setIntent] = useState<"playing" | "social" | "attending" | "unavailable">("playing");
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [savedView, setSavedView] = useState(false);
+  // Tracks whether the target already had an EventPlayer when the page
+  // loaded — used to switch the success card from "Signed up" to "Updated".
+  const [wasExistingSignup, setWasExistingSignup] = useState(false);
 
   useHideBottomNav();
 
@@ -73,7 +77,7 @@ export default function EventSignUpPage() {
 
     setEventName(ev.name);
     setEventDate(ev.date ?? null);
-    setLeagueName(ev.round.league.shortName || ev.round.league.name);
+    setLeagueName(leagueShortName(ev.round.league));
     setRoundName(ev.round.name || `Round ${ev.round.roundNumber}`);
     setCategories((ev.round.league.categories || []) as Category[]);
 
@@ -98,6 +102,7 @@ export default function EventSignUpPage() {
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
     const targetEp: EP | undefined = (ev.players || []).find((ep: EP) => ep.player.id === targetId);
     if (targetEp) {
+      setWasExistingSignup(true);
       const rawPrefs = targetEp.signupPreferences && typeof targetEp.signupPreferences === "object"
         ? targetEp.signupPreferences as Record<string, { level: Preference; note?: string } | string>
         : {};
@@ -195,16 +200,24 @@ export default function EventSignUpPage() {
 
   if (savedView) {
     // On-behalf saves never reach this — they navigate back immediately.
-    const intentLabel = intent === "playing"
-      ? "You're signed up to this event"
-      : intent === "attending"
-        ? "You're coming but not playing league matches"
-        : "Marked as not available";
-    const intentBody = intent === "playing"
-      ? <>The captain will pick the lineup from everyone signed up — your preferences guide the choice but don&apos;t guarantee a slot.</>
-      : intent === "attending"
-        ? <>The captain knows you&apos;re coming but not playing league matches this match-day.</>
-        : <>The captain knows you can&apos;t make it.</>;
+    const intentLabel = wasExistingSignup
+      ? (intent === "playing"
+          ? "Sign-up updated"
+          : intent === "attending"
+            ? "Updated — coming but not playing league matches"
+            : "Updated — marked as not available")
+      : (intent === "playing"
+          ? "You're signed up to this event"
+          : intent === "attending"
+            ? "You're coming but not playing league matches"
+            : "Marked as not available");
+    const intentBody = wasExistingSignup
+      ? <>Your preferences have been saved.</>
+      : intent === "playing"
+        ? <>The captain will pick the lineup from everyone signed up — your preferences guide the choice but don&apos;t guarantee a slot.</>
+        : intent === "attending"
+          ? <>The captain knows you&apos;re coming but not playing league matches this match-day.</>
+          : <>The captain knows you can&apos;t make it.</>;
     return (
       <>
         <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to event", onClick: () => router.push(`/events/${id}`) }} />

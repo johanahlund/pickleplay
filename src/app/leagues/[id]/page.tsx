@@ -1533,9 +1533,9 @@ export default function LeagueDetailPage() {
               className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
-            <label className="block text-xs text-muted mb-1">Short name <span className="text-muted font-normal">(used in headers/back links)</span></label>
-            <input type="text" value={editShortName} onChange={(e) => { setEditShortName(e.target.value.slice(0, 16)); setDirty(true); }}
-              maxLength={16}
+            <label className="block text-xs text-muted mb-1">Short name <span className="text-muted font-normal">(≤25 chars, used in headers/back links; defaults to first 25 chars of name)</span></label>
+            <input type="text" value={editShortName} onChange={(e) => { setEditShortName(e.target.value.slice(0, 25)); setDirty(true); }}
+              maxLength={25}
               placeholder="e.g. I Liga Centro"
               className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
           </div>

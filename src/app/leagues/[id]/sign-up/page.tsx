@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { leagueShortName } from "@/lib/leagueDisplay";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -67,7 +68,7 @@ export default function LeagueSignUpPage() {
     ]);
     if (!leagueR.ok) { router.push(backHref); return; }
     const league = await leagueR.json();
-    setLeagueName(league.shortName || league.name);
+    setLeagueName(leagueShortName(league));
     setLeagueStatus(league.status);
     setCategories((league.categories || []).filter((c: Category) => c.status !== "draft"));
     setTeams(league.teams || []);

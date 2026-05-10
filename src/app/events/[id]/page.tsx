@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
+import { leagueShortName } from "@/lib/leagueDisplay";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -1221,7 +1222,7 @@ export default function EventDetailPage() {
   // league's Rounds tab. Send them back there instead of the global events
   // list so navigation matches the entry point.
   const backLink = event.round
-    ? { label: event.round.league.shortName || event.round.league.name, href: `/leagues/${event.round.league.id}?tab=rounds` }
+    ? { label: leagueShortName(event.round.league), href: `/leagues/${event.round.league.id}?tab=rounds` }
     : { label: "Events", href: "/events" };
   // For league events the stored event.name is the long
   // "{league.name}: {teams} — {round}" string — too long for a hero title.
@@ -3267,9 +3268,7 @@ export default function EventDetailPage() {
   if (event.competitionMode && activeSection === "players") {
     // Two-row back label for league events: short league name on row 1,
     // teams + round on row 2. Falls back to event.name for non-league.
-    const backLabel = event.round
-      ? (event.round.league.shortName || event.round.league.name)
-      : event.name;
+    const backLabel = event.round ? leagueShortName(event.round.league) : event.name;
     const backSubtitle = event.round
       ? (() => {
           const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
@@ -3681,7 +3680,7 @@ export default function EventDetailPage() {
               <span>🏆</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-emerald-900 truncate">
-                  {(r.league.shortName || r.league.name)}{r.league.season ? ` · ${r.league.season}` : ""}
+                  {leagueShortName(r.league)}{r.league.season ? ` · ${r.league.season}` : ""}
                 </div>
                 <div className="text-[11px] text-emerald-700 truncate">
                   {r.name || `Round ${r.roundNumber}`}{teamNames ? ` · ${teamNames}` : ""}

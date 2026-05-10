@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { resolveRoundCategories, type LeagueCategoryShape } from "@/lib/leagueRound";
 import { frameClass } from "@/components/Card";
+import { leagueShortName } from "@/lib/leagueDisplay";
 
 interface PlayerLite { id: string; name: string; photoUrl?: string | null; gender?: string | null; duprRating?: number | null }
 interface Category extends LeagueCategoryShape { id: string }
@@ -83,7 +84,7 @@ export default function LineupBuilderPage() {
       .filter((c): c is Category => !!c.id && c.status !== "draft");
     setCategories(effectiveCategories);
     setLeagueOrg({ createdById: league.createdBy?.id || null, deputyId: league.deputy?.id || null });
-    setLeagueName(league.shortName || league.name || "");
+    setLeagueName(leagueShortName(league));
 
     const t = (league.teams || []).find((x: { id: string }) => x.id === teamId);
     if (t) {
