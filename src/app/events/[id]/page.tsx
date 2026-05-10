@@ -38,6 +38,7 @@ interface Player {
   role?: string;
   gender?: string | null;
   phone?: string | null;
+  hasAccount?: boolean;
 }
 
 interface MatchPlayer {
@@ -2452,6 +2453,9 @@ export default function EventDetailPage() {
                               {ep.player.gender === "F" ? "♀" : "♂"}
                             </span>
                           )}
+                          {ep.player.hasAccount === false && canAddToTeam && (
+                            <span title="Unclaimed account" className="text-[9px] shrink-0 bg-amber-100 text-amber-700 px-1 rounded-full font-medium">⚠</span>
+                          )}
                           <span className="text-[11px] shrink-0" title={ix === "playing" ? "Liga play" : ix === "social" ? "Social play" : ix === "attending" ? "Just attending" : "Can't come"}>
                             {ixIcon}
                           </span>
@@ -2537,6 +2541,9 @@ export default function EventDetailPage() {
                               <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
                               <span className="text-[11px] truncate flex-1">{tp.player.name}</span>
                               {tp.player.gender && <span className={`text-[9px] ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
+                              {(tp.player as { hasAccount?: boolean }).hasAccount === false && (
+                                <span title="Unclaimed account" className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded-full font-medium">⚠</span>
+                              )}
                             </button>
                           );
                         })}

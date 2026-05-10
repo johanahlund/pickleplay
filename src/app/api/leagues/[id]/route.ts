@@ -39,7 +39,7 @@ export async function GET(
           club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
           captain: { select: { id: true, name: true, email: true, photoUrl: true } },
           viceCaptain: { select: { id: true, name: true, email: true, photoUrl: true } },
-          players: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true, rating: true, gender: true } } } },
+          players: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true, rating: true, gender: true, passwordHash: true } } } },
           _count: { select: { players: true } },
         },
       },
@@ -184,6 +184,22 @@ export async function GET(
       })),
     };
   }
+
+  // Derive `hasAccount` per roster player and strip the raw passwordHash
+  // before sending. Used by the UI to flag unclaimed players for admins.
+  view = {
+    ...view,
+    teams: view.teams.map((t) => ({
+      ...t,
+      players: t.players.map((tp) => {
+        const p = tp.player as { passwordHash?: string | null } & Record<string, unknown>;
+        const hasAccount = !!p.passwordHash;
+        const { passwordHash: _stripped, ...rest } = p;
+        void _stripped;
+        return { ...tp, player: { ...rest, hasAccount } };
+      }),
+    })),
+  } as unknown as typeof view;
 
   const allowed = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowed ? view : stripEmailsDeep(view));

@@ -17,7 +17,8 @@ export async function GET(
     include: {
       classes: true,
       sessions: { orderBy: { date: "asc" } },
-      players: { include: { player: { select: safePlayerSelect } } },
+      // safePlayerSelect plus passwordHash so we can derive `hasAccount`.
+      players: { include: { player: { select: { ...safePlayerSelect, passwordHash: true } } } },
       matches: {
         include: {
           players: { include: { player: { select: safePlayerSelect } } },
@@ -46,7 +47,7 @@ export async function GET(
                   // column can render roster names + the captain's
                   // "+ Add player" picker can list teammates who haven't
                   // signed up yet.
-                  players: { select: { playerId: true, player: { select: { id: true, name: true, photoUrl: true, gender: true } } } },
+                  players: { select: { playerId: true, player: { select: { id: true, name: true, photoUrl: true, gender: true, passwordHash: true } } } },
                 },
               },
               helpers: { select: { playerId: true } },
@@ -144,6 +145,23 @@ export async function GET(
       }
     }
   }
+
+  // Derive `hasAccount` and strip raw passwordHash from any player payload
+  // we just included. Cheap recursive walk; never mutates the original
+  // record types since the cast is at the response boundary.
+  const stripPasswordHash = (obj: unknown): unknown => {
+    if (!obj || typeof obj !== "object") return obj;
+    if (Array.isArray(obj)) return obj.map(stripPasswordHash);
+    const o = obj as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(o, "passwordHash")) {
+      const hasAccount = !!o.passwordHash;
+      delete o.passwordHash;
+      o.hasAccount = hasAccount;
+    }
+    for (const k of Object.keys(o)) o[k] = stripPasswordHash(o[k]);
+    return o;
+  };
+  stripPasswordHash(event);
 
   const allowEmail = await canSeeEmails(user.id, user.role);
   return NextResponse.json(allowEmail ? event : stripEmailsDeep(event));

@@ -24,7 +24,7 @@ interface LeaguePreview {
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
 }
 
-interface Player { id: string; name: string; email?: string | null; photoUrl?: string | null; rating: number; gender?: string | null }
+interface Player { id: string; name: string; email?: string | null; photoUrl?: string | null; rating: number; gender?: string | null; hasAccount?: boolean }
 interface LeagueTeam {
   id: string; name: string; slogan?: string | null;
   logoUrl: string | null; photoUrl?: string | null;
@@ -240,6 +240,13 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs }: 
               <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
                 {tp.player.gender === "F" ? "♀" : "♂"}
               </span>
+            )}
+            {/* Unclaimed flag — shown to anyone who can see the roster, since
+                it's not really sensitive (just "this player hasn't signed up
+                to the app yet"). The visibility gate on the roster itself
+                already restricts who sees rosters at all. */}
+            {tp.player.hasAccount === false && (
+              <span title="Unclaimed account" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚠ unclaimed</span>
             )}
             <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
             {onEditPrefs && !removing && (
