@@ -46,8 +46,10 @@ interface AppHeaderProps {
   /** Status pill in the hero variant (top-right of the title block). */
   status?: HeaderStatus;
 
-  /** Back link: label plus either href or onClick. Omit to hide. */
-  back?: { label: string; href?: string; onClick?: () => void };
+  /** Back link: label (line 1) plus optional subtitle (line 2 — used by
+   * deeply-nested sub-pages to show the league/round on top of the
+   * specific match). */
+  back?: { label: string; href?: string; onClick?: () => void; subtitle?: string };
 
   /** Primary action rendered in the header's right slot (hero-sub only). */
   action?: {
@@ -96,17 +98,19 @@ export default AppHeader;
 function BackChevron({
   href,
   label,
+  subtitle,
   color,
   onClick,
 }: {
   href?: string;
   label: string;
+  subtitle?: string;
   color: string;
   onClick?: () => void;
 }) {
   const inner = (
     <>
-      <svg width={10} height={16} viewBox="0 0 10 16" style={{ marginTop: 1 }}>
+      <svg width={10} height={16} viewBox="0 0 10 16" style={{ marginTop: 1, flexShrink: 0 }}>
         <path
           d="M8 2 L2 8 L8 14"
           fill="none"
@@ -116,12 +120,19 @@ function BackChevron({
           strokeLinejoin="round"
         />
       </svg>
-      {label}
+      {subtitle ? (
+        <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, textAlign: "left" }}>
+          <span>{label}</span>
+          <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>{subtitle}</span>
+        </span>
+      ) : (
+        <span>{label}</span>
+      )}
     </>
   );
   const sharedStyle: React.CSSProperties = {
     display: "inline-flex",
-    alignItems: "center",
+    alignItems: subtitle ? "flex-start" : "center",
     gap: 4,
     fontSize: 15,
     fontWeight: 500,
@@ -131,6 +142,7 @@ function BackChevron({
     border: "none",
     padding: 0,
     cursor: "pointer",
+    textAlign: "left",
   };
 
   if (onClick || !href) {
@@ -564,7 +576,7 @@ function HeroSubHeader({
       </div>
       {back && (
         <div style={{ padding: "2px 16px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="#d9f99d" />
+          <BackChevron href={back.href} label={back.label} subtitle={back.subtitle} onClick={back.onClick} color="#d9f99d" />
           {meta && (
             <span style={{ fontSize: 18, fontWeight: 700, color: "#fff", letterSpacing: "-0.01em" }}>{meta}</span>
           )}

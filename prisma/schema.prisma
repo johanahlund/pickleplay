@@ -515,6 +515,7 @@ model ClubComment {
 model League {
   id           String   @id @default(cuid())
   name         String
+  shortName    String? // ≤10 chars, used in pills/badges/headers; falls back to name when null
   description  String?
   season       String? // "2025", "Spring 2026"
   // Status drives visibility:

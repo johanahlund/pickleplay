@@ -65,7 +65,7 @@ interface LeagueRound {
 }
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
 interface League {
-  id: string; name: string; description: string | null; season: string | null; status: string;
+  id: string; name: string; shortName?: string | null; description: string | null; season: string | null; status: string;
   visibility?: "public" | "participants";
   clubId?: string | null;
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
@@ -952,6 +952,7 @@ export default function LeagueDetailPage() {
   // Edit state
   const [dirty, setDirty] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editShortName, setEditShortName] = useState("");
   const [editLeagueClubId, setEditLeagueClubId] = useState("");
   const [editVisibility, setEditVisibility] = useState<"public" | "participants">("public");
   const [editDescription, setEditDescription] = useState("");
@@ -1118,6 +1119,7 @@ export default function LeagueDetailPage() {
 
   const startEditInfo = () => {
     setEditName(league.name);
+    setEditShortName(league.shortName ?? "");
     setEditDescription(league.description || "");
     setEditSeason(league.season || "");
     setEditStatus(normalizeLeagueStatus(league.status));
@@ -1142,6 +1144,7 @@ export default function LeagueDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: editName.trim(),
+        shortName: editShortName.trim() || null,
         description: editDescription.trim() || null,
         season: editSeason.trim() || null,
         status: editStatus,
@@ -1527,6 +1530,13 @@ export default function LeagueDetailPage() {
           <div>
             <label className="block text-xs text-muted mb-1">Name</label>
             <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setDirty(true); }}
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Short name <span className="text-muted font-normal">(used in headers/back links)</span></label>
+            <input type="text" value={editShortName} onChange={(e) => { setEditShortName(e.target.value.slice(0, 16)); setDirty(true); }}
+              maxLength={16}
+              placeholder="e.g. I Liga Centro"
               className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>

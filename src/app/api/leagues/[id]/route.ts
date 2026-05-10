@@ -225,6 +225,10 @@ export async function PATCH(
 
   const data: Record<string, unknown> = {};
   if (body.name !== undefined) data.name = String(body.name).trim();
+  if (body.shortName !== undefined) {
+    const v = body.shortName ? String(body.shortName).trim() : "";
+    data.shortName = v ? v.slice(0, 16) : null;
+  }
   if (body.description !== undefined) data.description = body.description ? String(body.description).trim() : null;
   if (body.season !== undefined) data.season = body.season ? String(body.season).trim() : null;
   if (body.status !== undefined) {

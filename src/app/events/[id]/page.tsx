@@ -73,7 +73,7 @@ interface Match {
 interface LeagueRoundLink {
   id: string; roundNumber: number; name: string | null;
   league: {
-    id: string; name: string; season: string | null;
+    id: string; name: string; shortName?: string | null; season: string | null;
     createdById: string | null; deputyId: string | null;
     categories?: { id: string; name: string; format: string; gender: string }[];
     teams?: {
@@ -1212,7 +1212,7 @@ export default function EventDetailPage() {
   // league's Rounds tab. Send them back there instead of the global events
   // list so navigation matches the entry point.
   const backLink = event.round
-    ? { label: event.round.league.name, href: `/leagues/${event.round.league.id}?tab=rounds` }
+    ? { label: event.round.league.shortName || event.round.league.name, href: `/leagues/${event.round.league.id}?tab=rounds` }
     : { label: "Events", href: "/events" };
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
@@ -3216,11 +3216,23 @@ export default function EventDetailPage() {
 
   // Competition mode: Players section without section bar
   if (event.competitionMode && activeSection === "players") {
+    // Two-row back label for league events: short league name on row 1,
+    // teams + round on row 2. Falls back to event.name for non-league.
+    const backLabel = event.round
+      ? (event.round.league.shortName || event.round.league.name)
+      : event.name;
+    const backSubtitle = event.round
+      ? (() => {
+          const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+          const roundLabel = event.round.name || `Round ${event.round.roundNumber}`;
+          return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
+        })()
+      : undefined;
     return (
       <div className="-mx-4">
         <AppHeader
           variant="hero-sub"
-          back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
+          back={{ label: backLabel, subtitle: backSubtitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
           meta="Players"
           action={canManage ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } } : undefined}
         />
