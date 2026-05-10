@@ -46,11 +46,12 @@ export default function EventSignUpPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [playerGender, setPlayerGender] = useState<string | null>(null);
   const [myTeamName, setMyTeamName] = useState<string | null>(null); // set if rostered on a playing team
-  // Three intents (UI tri-state). Backend stores:
-  //   playing      → status="registered", signupPreferences set
-  //   attending    → status="registered", signupPreferences = {} (no league play)
-  //   unavailable  → status="unavailable", signupPreferences kept for context
-  const [intent, setIntent] = useState<"playing" | "attending" | "unavailable">("playing");
+  // Four intents (UI quad-state). Backend stores:
+  //   playing      → status="registered", category prefs set
+  //   social       → status="registered", _intent="social" sentinel in prefs
+  //   attending    → status="registered", _intent="attending" sentinel in prefs
+  //   unavailable  → status="unavailable", prefs kept for context
+  const [intent, setIntent] = useState<"playing" | "social" | "attending" | "unavailable">("playing");
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [savedView, setSavedView] = useState(false);
 
@@ -88,12 +89,21 @@ export default function EventSignUpPage() {
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
     const targetEp: EP | undefined = (ev.players || []).find((ep: EP) => ep.player.id === targetId);
     if (targetEp) {
-      const prefs = targetEp.signupPreferences && typeof targetEp.signupPreferences === "object"
-        ? targetEp.signupPreferences as Record<string, { level: Preference; note?: string }>
+      const rawPrefs = targetEp.signupPreferences && typeof targetEp.signupPreferences === "object"
+        ? targetEp.signupPreferences as Record<string, { level: Preference; note?: string } | string>
         : {};
+      // _intent is a reserved sentinel — strip before using prefs as
+      // category map. Stored as a plain string for forward compat.
+      const sentinel = typeof rawPrefs._intent === "string" ? rawPrefs._intent : null;
+      const prefs: Record<string, { level: Preference; note?: string }> = {};
+      for (const [k, v] of Object.entries(rawPrefs)) {
+        if (k === "_intent") continue;
+        if (v && typeof v === "object" && "level" in v) prefs[k] = v as { level: Preference; note?: string };
+      }
       const hasAnyPlay = Object.values(prefs).some((p) => p.level === "prefer" || p.level === "ok");
       if (targetEp.status === "unavailable") setIntent("unavailable");
-      else if (Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
+      else if (sentinel === "social") setIntent("social");
+      else if (sentinel === "attending" || Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
       else setIntent("playing");
       setPreferences(prefs);
     }
@@ -133,7 +143,9 @@ export default function EventSignUpPage() {
   const submit = async () => {
     setSaving(true);
     setErrorMsg(null);
-    let payload: { status: "registered" | "unavailable"; preferences: Record<string, { level: Preference; note?: string }> };
+    // Server stores `_intent` as a sentinel inside signupPreferences so
+    // we can distinguish "social" from "attending" without a schema change.
+    let payload: { status: "registered" | "unavailable"; preferences: Record<string, unknown> };
     if (intent === "playing") {
       // Default any visible category the user didn't tap to "ok" so the
       // captain sees a complete picture.
@@ -143,11 +155,13 @@ export default function EventSignUpPage() {
         completePrefs[c.id] = preferences[c.id] ?? { level: "ok" };
       }
       payload = { status: "registered", preferences: completePrefs };
+    } else if (intent === "social") {
+      // Coming to play casual matches but not the league lineup.
+      payload = { status: "registered", preferences: { _intent: "social" } };
     } else if (intent === "attending") {
-      // Attending only — no league play. Keep any prior notes by sending {}.
-      payload = { status: "registered", preferences: {} };
+      payload = { status: "registered", preferences: { _intent: "attending" } };
     } else {
-      payload = { status: "unavailable", preferences };
+      payload = { status: "unavailable", preferences: { ...preferences } };
     }
     const r = await fetch(`/api/events/${id}/signup-prefs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -228,20 +242,26 @@ export default function EventSignUpPage() {
 
         {myTeamName && (
           <div>
-            <label className="block text-xs text-muted mb-1">What are you doing?</label>
-            <div className="grid grid-cols-3 gap-1">
+            <label className="block text-xs text-muted mb-1">{isOnBehalf ? "How will they participate?" : "How will you participate?"}</label>
+            <div className="grid grid-cols-2 gap-1">
               <button onClick={() => setIntent("playing")}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "playing" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
-              >Playing</button>
+              >🏆 Liga play</button>
+              <button onClick={() => setIntent("social")}
+                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "social" ? "bg-blue-500 text-white" : "bg-gray-100 text-muted"}`}
+              >🎾 Social play</button>
               <button onClick={() => setIntent("attending")}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "attending" ? "bg-emerald-500 text-white" : "bg-gray-100 text-muted"}`}
-              >Just attending</button>
+              >👋 Just attending</button>
               <button onClick={() => setIntent("unavailable")}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "unavailable" ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
               >Can&apos;t come</button>
             </div>
+            {intent === "social" && (
+              <p className="text-[11px] text-muted mt-2">Coming to play casual matches — not eligible for league lineup.</p>
+            )}
             {intent === "attending" && (
-              <p className="text-[11px] text-muted mt-2">You&apos;ll be counted as coming but not playing any league matches.</p>
+              <p className="text-[11px] text-muted mt-2">{isOnBehalf ? "They'll be counted as coming but not playing matches." : "You'll be counted as coming but not playing matches."}</p>
             )}
           </div>
         )}

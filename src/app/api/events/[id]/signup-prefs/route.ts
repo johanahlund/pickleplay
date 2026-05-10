@@ -78,17 +78,26 @@ export async function POST(
   const status = body.status === "unavailable" ? "unavailable" : "registered";
   const rawPrefs = body.preferences;
 
-  // Sanitize preferences: only known categories, valid levels, trimmed notes.
+  // Sanitize preferences: only known categories, valid levels, trimmed
+  // notes. Plus an `_intent` sentinel ("social" | "attending") for the
+  // tri-state-without-categories flows; the rest of the app reads it
+  // alongside the per-category map.
   const validCatIds = new Set(event.round.league.categories.filter((c) => c.status !== "draft").map((c) => c.id));
-  const cleanPrefs: Record<string, { level: "prefer" | "ok" | "no"; note?: string }> = {};
+  const cleanPrefs: Record<string, { level: "prefer" | "ok" | "no"; note?: string } | string> = {};
   if (rawPrefs && typeof rawPrefs === "object") {
-    for (const [catId, val] of Object.entries(rawPrefs as Record<string, unknown>)) {
-      if (!validCatIds.has(catId)) continue;
+    for (const [key, val] of Object.entries(rawPrefs as Record<string, unknown>)) {
+      if (key === "_intent") {
+        if (typeof val === "string" && (val === "social" || val === "attending" || val === "playing")) {
+          cleanPrefs._intent = val;
+        }
+        continue;
+      }
+      if (!validCatIds.has(key)) continue;
       if (!val || typeof val !== "object") continue;
       const v = val as { level?: unknown; note?: unknown };
       if (v.level !== "prefer" && v.level !== "ok" && v.level !== "no") continue;
       const note = typeof v.note === "string" ? v.note.trim() : undefined;
-      cleanPrefs[catId] = { level: v.level, ...(note ? { note } : {}) };
+      cleanPrefs[key] = { level: v.level, ...(note ? { note } : {}) };
     }
   }
 

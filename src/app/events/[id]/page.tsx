@@ -2408,16 +2408,37 @@ export default function EventDetailPage() {
                 ) : eps.length === 0 ? (
                   <p className="text-[11px] text-muted italic px-1 py-2">No sign-ups yet.</p>
                 ) : (
-                  <div className="space-y-0">
-                    {eps.map((ep) => (
-                      <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
-                        showContact={isAdmin || ep.player.id === userId}
-                        isSelf={ep.player.id === userId}
-                        skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
-                        onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
-                        onCheckIn={ep.status === "registered" ? () => checkInPlayer(ep.player.id) : undefined}
-                        onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
-                    ))}
+                  <div className="space-y-0.5">
+                    {eps.map((ep) => {
+                      // Derive intent from status + signupPreferences sentinel.
+                      const prefs = (ep.signupPreferences || {}) as Record<string, { level?: string } | string | undefined>;
+                      const sentinel = typeof prefs._intent === "string" ? prefs._intent : null;
+                      const hasAnyPlay = Object.entries(prefs).some(([k, v]) => k !== "_intent" && typeof v === "object" && v !== null && (v.level === "prefer" || v.level === "ok"));
+                      const ix: "playing" | "social" | "attending" | "unavailable" =
+                        ep.status === "unavailable" ? "unavailable"
+                          : sentinel === "social" ? "social"
+                          : sentinel === "attending" ? "attending"
+                          : hasAnyPlay ? "playing"
+                          : "attending";
+                      const ixIcon = ix === "playing" ? "🏆" : ix === "social" ? "🎾" : ix === "attending" ? "👋" : "❌";
+                      const isMe = ep.player.id === userId;
+                      return (
+                        <div key={ep.player.id} className="flex items-center gap-1.5 px-1 py-1 rounded">
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className={`flex-1 min-w-0 text-xs truncate ${isMe ? "text-action font-bold" : "font-medium"} ${ix === "unavailable" ? "line-through text-muted" : ""}`}>
+                            {ep.player.name}
+                          </span>
+                          {ep.player.gender && (
+                            <span className={`text-[10px] shrink-0 ${ep.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                              {ep.player.gender === "F" ? "♀" : "♂"}
+                            </span>
+                          )}
+                          <span className="text-[11px] shrink-0" title={ix === "playing" ? "Liga play" : ix === "social" ? "Social play" : ix === "attending" ? "Just attending" : "Can't come"}>
+                            {ixIcon}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
                 {canAddToTeam && rosterUnsigned.length > 0 && (
@@ -3407,7 +3428,7 @@ export default function EventDetailPage() {
         <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
         {/* Total players */}
-        <div className={` overflow-hidden`}>
+        <div className={`${frameClass} overflow-hidden`}>
           <button onClick={() => setActiveSection("players")} className={rowClass}>
             <span className="text-base font-bold text-foreground">Players</span>
             <span className="text-sm font-medium">{uniquePlayerIds.size} signed up</span>
@@ -3447,7 +3468,7 @@ export default function EventDetailPage() {
         )}
 
         {/* Ranking */}
-        <div className={` overflow-hidden`}>
+        <div className={`${frameClass} overflow-hidden`}>
           <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
             <span className="text-base font-bold text-foreground">Ranking</span>
             <span className="flex-1 text-right">
@@ -3601,7 +3622,7 @@ export default function EventDetailPage() {
 
       {/* Event Data — name, date, time, status (managers only) */}
       {canManage && (
-        <div className={` overflow-hidden`}>
+        <div className={`${frameClass} overflow-hidden`}>
           <div onClick={() => { startEditEvent(); setActiveSection("when"); }} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Event Data</span>
             <span className="flex-1 text-right">
@@ -3622,7 +3643,7 @@ export default function EventDetailPage() {
       {/* Format — managers only. Hidden for league events: format/scoring
           come from the league categories, set per-class. */}
       {canManage && !event.round && (
-        <div className={` overflow-hidden`}>
+        <div className={`${frameClass} overflow-hidden`}>
           <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Format</span>
             <span className="flex-1 text-right">
@@ -3638,7 +3659,7 @@ export default function EventDetailPage() {
 
       {/* Players & Pairs — relabel "Participants" for league events since
           rosters can include attend-only signups, not just match players. */}
-      <div className={` overflow-hidden`}>
+      <div className={`${frameClass} overflow-hidden`}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
           <span className="text-base font-bold text-foreground">{event.round ? "Participants" : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
@@ -3685,7 +3706,7 @@ export default function EventDetailPage() {
       {/* Pairing — managers only. Hidden for league events: pairings are
           driven by the lineup builder, not the auto-pairing engine. */}
       {canManage && !event.round && (
-        <div className={` overflow-hidden`}>
+        <div className={`${frameClass} overflow-hidden`}>
           <div onClick={() => router.push(`/events/${id}/pairing`)} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Pairing</span>
             <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
@@ -3698,7 +3719,7 @@ export default function EventDetailPage() {
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
       {/* Matches */}
-      <div className={` overflow-hidden`}>
+      <div className={`${frameClass} overflow-hidden`}>
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
           <span className="text-sm font-medium">
