@@ -9,6 +9,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 import { getPreview, setPreview } from "@/lib/entityPreview";
+import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
 
 interface LeaguePreview {
   id: string;
@@ -979,12 +980,14 @@ export default function LeagueDetailPage() {
 
   if (loading || !league) {
     const showPreview = mounted && preview;
-    const statusPill = (s: string) =>
-      s === "active" ? "bg-green-100 text-green-700" :
-      s === "complete" ? "bg-gray-100 text-muted" :
-      s === "registration" ? "bg-amber-100 text-amber-700" :
-      s === "forming" ? "bg-orange-100 text-orange-700" :
-      "bg-blue-100 text-blue-700";
+    const statusPill = (s: string) => {
+      const norm = normalizeLeagueStatus(s);
+      return norm === "active" ? "bg-green-100 text-green-700" :
+        norm === "complete" ? "bg-gray-100 text-muted" :
+        norm === "open" ? "bg-amber-100 text-amber-700" :
+        norm === "closed" ? "bg-orange-100 text-orange-700" :
+        "bg-blue-100 text-blue-700";
+    };
     return (
       <div className="space-y-4">
         <Link href="/leagues" className="text-sm text-action">&larr; Leagues</Link>
@@ -996,7 +999,7 @@ export default function LeagueDetailPage() {
                   <h2 className="text-xl font-bold">{preview.name}</h2>
                   <span className="text-sm text-muted">Season {preview.season || "—"}</span>
                 </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${statusPill(preview.status)}`}>{preview.status === "forming" ? "registration closed" : preview.status === "registration" ? "registration open" : preview.status}</span>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${statusPill(preview.status)}`}>{leagueDisplayLabel(preview.status)}</span>
               </div>
               {preview.description && <p className="text-sm text-muted mt-1">{preview.description}</p>}
             </div>
@@ -1038,7 +1041,7 @@ export default function LeagueDetailPage() {
     setEditName(league.name);
     setEditDescription(league.description || "");
     setEditSeason(league.season || "");
-    setEditStatus(league.status);
+    setEditStatus(normalizeLeagueStatus(league.status));
     setEditLeagueClubId(league.club?.id || league.clubId || "");
     setEditVisibility(league.visibility === "participants" ? "participants" : "public");
     setEditMaxRoster(String(league.config?.maxRoster ?? 14));
@@ -1463,8 +1466,8 @@ export default function LeagueDetailPage() {
               <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setDirty(true); }}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm">
                 <option value="setup">Setup</option>
-                <option value="registration">Registration open</option>
-                <option value="forming">Registration closed</option>
+                <option value="open">Registration open</option>
+                <option value="closed">Registration closed</option>
                 <option value="active">Active</option>
                 <option value="complete">Complete</option>
               </select>
@@ -2271,9 +2274,15 @@ export default function LeagueDetailPage() {
             <span className="text-sm text-muted">Season {league.season || "—"}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-              league.status === "active" ? "bg-green-100 text-green-700" : league.status === "complete" ? "bg-gray-100 text-muted" : league.status === "registration" ? "bg-amber-100 text-amber-700" : league.status === "forming" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
-            }`}>{league.status === "forming" ? "registration closed" : league.status === "registration" ? "registration open" : league.status}</span>
+            {(() => {
+              const norm = normalizeLeagueStatus(league.status);
+              const cls = norm === "active" ? "bg-green-100 text-green-700"
+                : norm === "complete" ? "bg-gray-100 text-muted"
+                : norm === "open" ? "bg-amber-100 text-amber-700"
+                : norm === "closed" ? "bg-orange-100 text-orange-700"
+                : "bg-blue-100 text-blue-700";
+              return <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cls}`}>{leagueDisplayLabel(league.status)}</span>;
+            })()}
             {canEdit && (
               <span className="text-muted">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -2308,7 +2317,7 @@ export default function LeagueDetailPage() {
           {/* Sign-up CTA — visible during registration. Three states:
               not signed up, pending request, or accepted (on team). */}
           {(() => {
-            if (league.status !== "registration") return null;
+            if (normalizeLeagueStatus(league.status) !== "open") return null;
             if (!userId) return null;
             const onTeam = allTeamPlayerIds.has(userId);
             const myReq = (league.participationRequests || []).find((r) => r.playerId === userId);
@@ -2720,7 +2729,7 @@ export default function LeagueDetailPage() {
                       </div>
                       <div className="text-[11px] text-muted">
                         {ev.date && new Date(ev.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-                        <span className="ml-2 capitalize">· {ev.status === "draft" ? "setup" : ev.status}</span>
+                        <span className="ml-2">· {eventDisplayLabel(ev)}</span>
                       </div>
                     </Link>
                     {isMyMatch && (
@@ -2948,7 +2957,7 @@ export default function LeagueDetailPage() {
               <span className="truncate">Removed <span className="font-medium">{lastRemovedName}</span></span>
             </div>
           )}
-          {(isAppAdmin || isDirector || isDeputy) && league.teams.length > 0 && (league.status === "registration" || league.status === "forming") && (
+          {(() => { const ns = normalizeLeagueStatus(league.status); return (isAppAdmin || isDirector || isDeputy) && league.teams.length > 0 && (ns === "open" || ns === "closed"); })() && (
             <div className="text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-2 border bg-blue-50 border-blue-200 text-blue-800">
               <span>Rosters become visible when the league goes Active.</span>
               <button onClick={async () => {

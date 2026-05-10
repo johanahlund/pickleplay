@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
 import { getPreview, setPreview } from "@/lib/entityPreview";
+import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
@@ -794,7 +795,7 @@ export default function EventDetailPage() {
     if (!event) return;
     setHasEdits(false);
     setEditName(event.name);
-    setEditStatus(event.status);
+    setEditStatus(normalizeEventStatus(event.status));
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
     setEditTime(toTimeInput(event.date));
@@ -1388,18 +1389,23 @@ export default function EventDetailPage() {
           )}
         </div>
       )}
-      {/* Event status */}
+      {/* Event status. For league events, status auto-advances when both
+          captains lock their lineups — the dropdown is still here so the
+          league admin can override (e.g. demote back to "closed"). */}
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Status</label>
         <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
           <option value="setup">Setup — only organizers can see</option>
-          <option value="visible">Visible — everyone can see, no signup</option>
-          <option value="open">Open — players can sign up</option>
-          <option value="closed">Closed — no more signups</option>
-          <option value="active">Active — event is running</option>
-          <option value="completed">Done — event finished</option>
+          <option value="open">Registration open — players can sign up</option>
+          <option value="closed">Registration closed — captains finalising lineup</option>
+          <option value="active">Active — lineups revealed, event running</option>
         </select>
+        {event.round && (
+          <p className="text-[11px] text-muted mt-1">
+            League events flip to <strong>Active</strong> automatically when both teams mark lineup ready.
+          </p>
+        )}
       </div>
       {/* Competition toggle — local state + Save/Cancel flow */}
       <div className="border-t border-border pt-3">
@@ -2364,9 +2370,22 @@ export default function EventDetailPage() {
             const rosterIds = new Set((fullTeam?.players ?? []).map((p) => p.playerId));
             const isMyTeam = et.teamId === myTeamId;
             const hidden = !canSeeAll && !bothReady && !isMyTeam;
+            // Captain/vice of THIS team can sign up teammates regardless of
+            // viewRole — useful when a player doesn't have the app or hasn't
+            // signed up yet. Organizers (canManage) get the same power.
+            const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
+            const canAddToTeam = isCaptainHere || canManage;
             const eps = event.players
               .filter((ep) => rosterIds.has(ep.player.id))
               .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
+              .sort((a, b) => a.player.name.localeCompare(b.player.name));
+            // Roster players who haven't signed up yet — eligible for the
+            // "+ Add" picker. Note: these are full team rosters from the
+            // league API; we expose name/photo via fullTeam.players.player.
+            const signedUpIds = new Set(event.players.map((p) => p.player.id));
+            type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl?: string | null; gender?: string | null } };
+            const rosterUnsigned = ((fullTeam?.players ?? []) as RosterPlayer[])
+              .filter((tp) => !signedUpIds.has(tp.playerId))
               .sort((a, b) => a.player.name.localeCompare(b.player.name));
             return (
               <div key={et.teamId} className="min-w-0">
@@ -2392,6 +2411,27 @@ export default function EventDetailPage() {
                         onPause={() => togglePausePlayer(ep.player.id)} onRemove={() => removePlayer(ep.player.id, ep.player.name)} />
                     ))}
                   </div>
+                )}
+                {canAddToTeam && rosterUnsigned.length > 0 && (
+                  <details className="mt-1.5 px-1">
+                    <summary className="text-[11px] text-action font-medium cursor-pointer">
+                      + Add player ({rosterUnsigned.length})
+                    </summary>
+                    <div className="mt-1 space-y-0.5">
+                      {rosterUnsigned.map((tp) => (
+                        <button
+                          key={tp.playerId}
+                          type="button"
+                          onClick={() => router.push(`/events/${event.id}/sign-up?for=${tp.playerId}`)}
+                          className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-gray-50 text-left"
+                        >
+                          <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+                          <span className="text-[11px] truncate">{tp.player.name}</span>
+                          {tp.player.gender && <span className={`text-[9px] ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
                 )}
               </div>
             );
@@ -3561,8 +3601,8 @@ export default function EventDetailPage() {
                 {" · "}
                 {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
               </span>
-              <span className="block text-[10px] text-muted capitalize">
-                {event.status === "draft" ? "setup" : event.status}
+              <span className="block text-[10px] text-muted">
+                {eventDisplayLabel(event)}
               </span>
             </span>
             <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>

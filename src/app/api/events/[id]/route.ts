@@ -69,7 +69,8 @@ export async function GET(
   // playoff events count league participants (team captains/vice/players,
   // helpers, organizers) as insiders so they can see their own match-day
   // even before an organizer flips the event status.
-  const isSetup = event.status === "setup" || event.status === "draft";
+  // Visible/draft are pre-migration aliases for setup.
+  const isSetup = event.status === "setup" || event.status === "draft" || event.status === "visible";
   const needsInsiderView = event.visibility === "hidden" || isSetup;
   if (needsInsiderView) {
     const isAdmin = user.role === "admin";
@@ -148,7 +149,15 @@ export async function PATCH(
   }
   if (openSignup !== undefined) eventData.openSignup = !!openSignup;
   if (visibility !== undefined) eventData.visibility = visibility;
-  if (body.status !== undefined) eventData.status = body.status;
+  if (body.status !== undefined) {
+    // Stored values: setup | open | closed | active. Legacy aliases (visible,
+    // draft, completed) are normalised on the way in.
+    const allowed = new Set(["setup", "open", "closed", "active", "visible", "draft", "completed"]);
+    if (!allowed.has(body.status)) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    eventData.status = body.status === "visible" || body.status === "draft" ? "setup"
+      : body.status === "completed" ? "active"
+      : body.status;
+  }
   if (body.locationId !== undefined) eventData.locationId = body.locationId;
   if (body.createdById !== undefined) {
     // Only event owner, club owner, or app admin can transfer ownership

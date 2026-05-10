@@ -211,7 +211,12 @@ export async function PATCH(
   if (body.name !== undefined) data.name = String(body.name).trim();
   if (body.description !== undefined) data.description = body.description ? String(body.description).trim() : null;
   if (body.season !== undefined) data.season = body.season ? String(body.season).trim() : null;
-  if (body.status !== undefined) data.status = body.status;
+  if (body.status !== undefined) {
+    // Accept the new short values and normalise legacy aliases on the way in.
+    const allowed = new Set(["setup", "open", "closed", "active", "complete", "registration", "forming"]);
+    if (!allowed.has(body.status)) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    data.status = body.status === "registration" ? "open" : body.status === "forming" ? "closed" : body.status;
+  }
   if (body.config !== undefined) data.config = body.config;
   if (body.deputyId !== undefined) data.deputyId = body.deputyId || null;
   if (body.createdById !== undefined) data.createdById = body.createdById;

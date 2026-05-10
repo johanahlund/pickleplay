@@ -176,7 +176,16 @@ model Event {
   name       String
   date       DateTime  @default(now())
   endDate    DateTime?
-  status     String    @default("setup") // setup, visible, open, closed, active, completed (legacy: "draft" still recognized)
+  // Stored: setup | open | closed | active.
+  //   setup  — organizer configuring; hidden from non-managers
+  //   open   — registration accepted (display: "Registration open")
+  //   closed — registration stopped, captains finalising lineups (display: "Registration closed")
+  //   active — for league events: both teams flipped lineupReady, lineups
+  //            revealed; for non-league events: organizer flipped manually.
+  //            Display phase derived from start/end dates: Scheduled →
+  //            In progress → Completed.
+  // Legacy values still tolerated on read: visible, completed, draft.
+  status     String    @default("setup")
   numCourts  Int       @default(2)
   openSignup Boolean   @default(true) // kept for backwards compat
   visibility String    @default("visible") // kept for backwards compat
@@ -514,7 +523,11 @@ model League {
   //   forming      — public; self-signup CLOSED; captains/admins still add players
   //   active       — public; rosters are visible to everyone (teams locked)
   //   complete     — public; archived
-  status       String   @default("setup") // setup | registration | forming | active | complete
+  // Stored: setup | open | closed | active | complete.
+  //   open   — registration accepted (display: "Registration open")
+  //   closed — registration stopped, captains finalising rosters (display: "Registration closed")
+  // Legacy values still tolerated on read: registration → open, forming → closed.
+  status       String   @default("setup")
   config       Json? // { maxRoster, bestOfN, maxPointsPerMatchDay, scoringRules }
   rulesPdfUrl  String? // optional PDF (rules, regulations, schedule, etc.)
   rulesPdfName String? // original filename, for display

@@ -149,7 +149,8 @@ export default function LeagueSignUpPage() {
     );
   }
 
-  const registrationClosed = !loading && leagueStatus !== "registration";
+  // Accept legacy "registration" alongside the new "open".
+  const registrationClosed = !loading && leagueStatus !== "open" && leagueStatus !== "registration";
 
   return (
     <div className="space-y-2">

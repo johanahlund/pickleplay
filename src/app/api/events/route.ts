@@ -11,19 +11,10 @@ export async function GET() {
   const userId = (session.user as { id?: string }).id;
   const userRole = (session.user as { role?: string }).role;
 
-  // Lazy auto-complete: events that ended >24h ago but are still "active"
-  // get flipped to "completed" before the read. One bulk update — cheap.
-  const completedCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  await prisma.event.updateMany({
-    where: {
-      status: "active",
-      OR: [
-        { endDate: { lt: completedCutoff } },
-        { endDate: null, date: { lt: completedCutoff } },
-      ],
-    },
-    data: { status: "completed" },
-  });
+  // The "completed" phase is now derived from start/end dates whenever
+  // stored status === "active" — no bulk update needed. Kept here as a
+  // historical note: the old code flipped status="active" → "completed"
+  // for events past their end date.
 
   const events = await prisma.event.findMany({
     orderBy: { createdAt: "desc" },

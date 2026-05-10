@@ -87,6 +87,24 @@ export async function POST(
   const ctx = await loadEventContext(leagueId, eventId, user.id, isAppAdmin);
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
 
+  // Captain-side edits (toggle_slot, assign_players, set_kind) are blocked
+  // when the captain's own team has flipped lineupReady=true. They must
+  // re-open (set_ready false) before changing anything. set_ready itself
+  // is always allowed — that's the escape hatch.
+  const captainEdits = ["toggle_slot", "assign_players", "set_kind"];
+  if (ctx.captainTeamId !== null && captainEdits.includes(body.action)) {
+    const myEt = await prisma.leagueEventTeam.findUnique({
+      where: { eventId_teamId: { eventId, teamId: ctx.captainTeamId } },
+      select: { lineupReady: true },
+    });
+    if (myEt?.lineupReady) {
+      return NextResponse.json(
+        { error: "Your team's lineup is locked. Tap Re-open to edit it." },
+        { status: 400 },
+      );
+    }
+  }
+
   // ─── toggle_slot ─────────────────────────────────────────────
   // body: { action: "toggle_slot", categoryId, slotNumber, want: boolean }
   // The acting team is ctx.captainTeamId (or first team for organizer).
@@ -228,8 +246,11 @@ export async function POST(
 
   // ─── set_ready ───────────────────────────────────────────────
   // body: { action: "set_ready", ready: boolean }
-  // Captain marks their team's lineup as final. Opponent's gamePlayers stay
-  // hidden in API responses until BOTH teams flip this true.
+  // Captain locks/unlocks their team's lineup. Opponent's gamePlayers stay
+  // hidden in API responses until BOTH teams flip ready=true. As a side
+  // effect: when both teams are ready the event auto-advances to "active";
+  // if either team un-readys while the event is "active" it rolls back to
+  // "closed".
   if (body.action === "set_ready") {
     if (ctx.captainTeamId === null) {
       return NextResponse.json({ error: "Only captains can mark a lineup ready." }, { status: 400 });
@@ -243,6 +264,22 @@ export async function POST(
         lineupReadyById: ready ? user.id : null,
       },
     });
+
+    // Re-evaluate both teams' ready state and auto-flip event status.
+    const ets = await prisma.leagueEventTeam.findMany({
+      where: { eventId },
+      select: { lineupReady: true },
+    });
+    const bothReady = ets.length === 2 && ets.every((et) => et.lineupReady);
+    const ev = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    if (bothReady && ev?.status !== "active") {
+      await prisma.event.update({ where: { id: eventId }, data: { status: "active" } });
+    } else if (!bothReady && ev?.status === "active") {
+      await prisma.event.update({ where: { id: eventId }, data: { status: "closed" } });
+    }
     return NextResponse.json({ ok: true });
   }
 

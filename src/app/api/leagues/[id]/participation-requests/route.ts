@@ -69,7 +69,8 @@ export async function POST(
     select: { id: true, status: true, teams: { select: { id: true, players: { where: { playerId: user.id }, select: { id: true } } } } },
   });
   if (!league) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (league.status !== "registration") {
+  // Accept legacy "registration" alongside the new "open".
+  if (league.status !== "open" && league.status !== "registration") {
     return NextResponse.json({ error: "Registration is not open" }, { status: 400 });
   }
   // If the player is already on a team in this league, no request allowed

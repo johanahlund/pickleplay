@@ -311,6 +311,9 @@ export default function LineupBuilderPage() {
   // teams have set lineupReady (or for league organizers/admin via the
   // server, who get full data anyway).
   const bothReady = !!(team && opponentTeam && readyByTeam[team.id] && readyByTeam[opponentTeam.id]);
+  // Captain edits are locked once their own team has flipped ready=true.
+  // The "Re-open" button stays available so they can unlock and edit again.
+  const ourLocked = !!(team && readyByTeam[team.id]);
 
   // Player pools for the picker. Recommended = signup with prefer/ok for
   // this category (own team). All sign-ups (own) = anyone on our roster who
@@ -353,7 +356,7 @@ export default function LineupBuilderPage() {
     };
   };
 
-  const back = () => router.push(`/leagues/${id}?tab=rounds`);
+  const back = () => router.push(`/events/${eventId}`);
 
   if (loading) return <div className="text-sm text-muted py-8 text-center">Loading lineup…</div>;
   if (!team || !canEdit) {
@@ -370,7 +373,7 @@ export default function LineupBuilderPage() {
   return (
     <div className="space-y-2">
       <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2">
-        <button onClick={back} className="text-sm text-action font-medium">← Back to Rounds</button>
+        <button onClick={back} className="text-sm text-action font-medium">← Back to event</button>
       </div>
 
       <div className="bg-card rounded-xl border border-border p-4 space-y-2">
@@ -448,7 +451,7 @@ export default function LineupBuilderPage() {
               <div className="text-sm font-semibold">{cat.name}</div>
               <div className="flex items-baseline gap-2">
                 <div className="text-[11px] text-muted">{cat.format} · max {max}</div>
-                {canAddMore && (
+                {canAddMore && !ourLocked && (
                   <button
                     type="button"
                     disabled={saving}
@@ -475,7 +478,7 @@ export default function LineupBuilderPage() {
                       <input
                         type="checkbox"
                         checked={ourWants}
-                        disabled={saving || locked}
+                        disabled={saving || locked || ourLocked}
                         onChange={(e) => toggleSlot(cat.id, slotNum, e.target.checked)}
                       />
                       <span className="text-xs font-medium">Match {slotNum}</span>
@@ -500,7 +503,7 @@ export default function LineupBuilderPage() {
                           <button
                             key={k}
                             type="button"
-                            disabled={saving || locked || (k === "principal" && isPrincipal && principalCount > 1)}
+                            disabled={saving || locked || ourLocked || (k === "principal" && isPrincipal && principalCount > 1)}
                             onClick={() => setKind(g.id, k)}
                             className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                               g.kind === k
@@ -524,9 +527,9 @@ export default function LineupBuilderPage() {
                         ))}
                         <button
                           type="button"
-                          disabled={saving || locked}
+                          disabled={saving || locked || ourLocked}
                           onClick={() => setPicker({ categoryId: cat.id, slotNumber: slotNum, which: ourPlayers.length === 0 || !isDoubles(cat) ? 1 : 2 })}
-                          className="text-xs text-action font-medium px-2 py-1 rounded-full border border-dashed border-action/40 hover:bg-action/5"
+                          className="text-xs text-action font-medium px-2 py-1 rounded-full border border-dashed border-action/40 hover:bg-action/5 disabled:opacity-50"
                         >
                           {ourPlayers.length === 0 ? "+ Pick" : isDoubles(cat) && ourPlayers.length < 2 ? "+ Partner" : "Change"}
                         </button>
