@@ -35,10 +35,11 @@ export default function LeagueSignUpPage() {
   const onBehalfOf = searchParams.get("for");
   const isOnBehalf = !!onBehalfOf && onBehalfOf !== userId;
   // Optional ?team=<teamId> remembers which team's roster we came from so
-  // the back link returns to it expanded + focused.
+  // the back link returns to it expanded + with the edited player row
+  // scrolled into view + briefly highlighted.
   const fromTeamId = searchParams.get("team");
   const backHref = fromTeamId
-    ? `/leagues/${id}?tab=teams&expandTeam=${fromTeamId}&focus=${fromTeamId}`
+    ? `/leagues/${id}?tab=teams&expandTeam=${fromTeamId}&focus=${fromTeamId}${onBehalfOf ? `&focusPlayer=${onBehalfOf}` : ""}`
     : `/leagues/${id}`;
   const [targetName, setTargetName] = useState<string | null>(null);
 

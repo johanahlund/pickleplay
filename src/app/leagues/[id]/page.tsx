@@ -166,9 +166,10 @@ interface TeamRosterProps {
   removingPlayerId: string | null;
   onRemove: (playerId: string, playerName: string) => void;
   onEditPrefs?: (playerId: string) => void;
+  focusedPlayerId?: string | null;
 }
 
-function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs }: TeamRosterProps) {
+function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, focusedPlayerId }: TeamRosterProps) {
   const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
   const [nameQuery, setNameQuery] = useState("");
 
@@ -226,8 +227,12 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs }: 
         const isLeader = team.captain?.id === tp.playerId;
         const isDeputy = team.viceCaptain?.id === tp.playerId;
         const removing = removingPlayerId === tp.playerId;
+        const focused = focusedPlayerId === tp.playerId;
         return (
-          <div key={tp.id} className={`flex items-center gap-2 py-1 transition-opacity ${removing ? "opacity-50 line-through" : ""}`}>
+          <div key={tp.id}
+            id={`player-row-${tp.playerId}`}
+            className={`flex items-center gap-2 py-1 transition-all rounded-lg ${removing ? "opacity-50 line-through" : ""} ${focused ? "ring-2 ring-action shadow-sm bg-action/5 px-1" : ""}`}
+          >
             <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">
@@ -803,12 +808,15 @@ export default function LeagueDetailPage() {
   })();
   const [tab, setTab] = useState<Tab>(tabFromUrl ?? "overview");
   useEffect(() => { if (tabFromUrl) setTab(tabFromUrl); }, [tabFromUrl]);
-  // ?expandTeam=<id> + ?focus=<id> — used by the league sign-up "back" link
-  // when returning from editing a teammate's prefs. Expand that team's
-  // roster and scroll it into view, then briefly highlight.
+  // ?expandTeam=<id> + ?focus=<id> + ?focusPlayer=<id> — used by the
+  // league sign-up "back" link when returning from editing a teammate's
+  // prefs. Expand that team's roster, scroll the specific player row
+  // (or fall back to the team wrapper) into view, and briefly highlight.
   const expandTeamFromUrl = searchParams.get("expandTeam");
   const focusTeamFromUrl = searchParams.get("focus");
+  const focusPlayerFromUrl = searchParams.get("focusPlayer");
   const [focusedTeamId, setFocusedTeamId] = useState<string | null>(null);
+  const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
   const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam" | "addPlayer" | "requests">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -853,15 +861,23 @@ export default function LeagueDetailPage() {
     });
   }, [expandTeamFromUrl]);
   useEffect(() => {
-    if (!focusTeamFromUrl) return;
-    setFocusedTeamId(focusTeamFromUrl);
+    if (!focusTeamFromUrl && !focusPlayerFromUrl) return;
+    if (focusTeamFromUrl) setFocusedTeamId(focusTeamFromUrl);
+    if (focusPlayerFromUrl) setFocusedPlayerId(focusPlayerFromUrl);
     const t = setTimeout(() => {
-      const el = document.getElementById(`team-${focusTeamFromUrl}`);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-    const clear = setTimeout(() => setFocusedTeamId(null), 2200);
+      // Prefer scrolling to the specific player row when we have one;
+      // fall back to the team wrapper otherwise.
+      const target = focusPlayerFromUrl
+        ? document.getElementById(`player-row-${focusPlayerFromUrl}`)
+        : (focusTeamFromUrl ? document.getElementById(`team-${focusTeamFromUrl}`) : null);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    const clear = setTimeout(() => {
+      setFocusedTeamId(null);
+      setFocusedPlayerId(null);
+    }, 2400);
     return () => { clearTimeout(t); clearTimeout(clear); };
-  }, [focusTeamFromUrl]);
+  }, [focusTeamFromUrl, focusPlayerFromUrl]);
   const [editTeamName, setEditTeamName] = useState("");
   const [editTeamSlogan, setEditTeamSlogan] = useState("");
   const [editTeamClubId, setEditTeamClubId] = useState("");
@@ -3128,6 +3144,7 @@ export default function LeagueDetailPage() {
                   removingPlayerId={removingPlayerId}
                   onRemove={(playerId, playerName) => removePlayerFromTeam(team.id, playerId, playerName)}
                   onEditPrefs={canAddToTeam ? (playerId) => router.push(`/leagues/${id}/sign-up?for=${playerId}&team=${team.id}`) : undefined}
+                  focusedPlayerId={focusedPlayerId}
                 />
               )}
             </div>
