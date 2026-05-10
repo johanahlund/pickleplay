@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 interface MyClub {
   id: string;
@@ -78,7 +79,7 @@ export default function NewPlayerPage() {
 
       <h2 className="text-xl font-bold">Add Player</h2>
 
-      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div className={`${frameClass} p-4 space-y-3`}>
         <div>
           <label className="block text-sm font-medium text-muted mb-1">Name</label>
           <input

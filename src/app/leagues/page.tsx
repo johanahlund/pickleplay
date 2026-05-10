@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { setPreview } from "@/lib/entityPreview";
-import { leagueDisplayLabel, normalizeLeagueStatus } from "@/lib/statusDisplay";
+import { leagueDisplayLabel } from "@/lib/statusDisplay";
+import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { ClubBadge } from "@/components/ClubBadge";
 
 interface League {
@@ -63,15 +64,7 @@ export default function LeaguesPage() {
                   {league.season && <span className="text-xs text-muted">{league.season}</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  {(() => {
-                    const norm = normalizeLeagueStatus(league.status);
-                    const cls = norm === "active" ? "bg-green-100 text-green-700"
-                      : norm === "complete" ? "bg-gray-100 text-muted"
-                      : norm === "open" ? "bg-amber-100 text-amber-700"
-                      : norm === "closed" ? "bg-orange-100 text-orange-700"
-                      : "bg-blue-100 text-blue-700";
-                    return <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cls}`}>{leagueDisplayLabel(league.status)}</span>;
-                  })()}
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
                   <span className="text-xl text-muted">›</span>
                 </div>
               </div>

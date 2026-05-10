@@ -3,6 +3,7 @@
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { frameClass } from "@/components/Card";
 
 export default function RegisterPage() {
   const { data: session, status } = useSession();
@@ -72,7 +73,7 @@ export default function RegisterPage() {
         <p className="text-muted text-sm mt-1">Join Rally to start tracking your games</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-card rounded-xl border border-border p-4 space-y-4">
+      <form onSubmit={handleSubmit} className={`${frameClass} p-4 space-y-4`}>
         {error && (
           <div className="bg-red-50 text-danger text-sm px-3 py-2 rounded-lg">
             {error}

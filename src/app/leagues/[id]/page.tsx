@@ -10,8 +10,10 @@ import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
+import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
+import { frameClass } from "@/components/Card";
 
 interface LeaguePreview {
   id: string;
@@ -482,7 +484,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex gap-3">
         <div className="w-20">
           <label className="block text-xs text-muted mb-1">Round #</label>
@@ -964,14 +966,6 @@ export default function LeagueDetailPage() {
 
   if (loading || !league) {
     const showPreview = mounted && preview;
-    const statusPill = (s: string) => {
-      const norm = normalizeLeagueStatus(s);
-      return norm === "active" ? "bg-green-100 text-green-700" :
-        norm === "complete" ? "bg-gray-100 text-muted" :
-        norm === "open" ? "bg-amber-100 text-amber-700" :
-        norm === "closed" ? "bg-orange-100 text-orange-700" :
-        "bg-blue-100 text-blue-700";
-    };
     return (
       <div className="space-y-4">
         <Link href="/leagues" className="text-sm text-action">&larr; Leagues</Link>
@@ -983,7 +977,7 @@ export default function LeagueDetailPage() {
                   <h2 className="text-xl font-bold">{preview.name}</h2>
                   <span className="text-sm text-muted">Season {preview.season || "—"}</span>
                 </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${statusPill(preview.status)}`}>{leagueDisplayLabel(preview.status)}</span>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${leagueStatusBadgeClass(preview.status)}`}>{leagueDisplayLabel(preview.status)}</span>
               </div>
               {preview.description && <p className="text-sm text-muted mt-1">{preview.description}</p>}
             </div>
@@ -994,7 +988,7 @@ export default function LeagueDetailPage() {
                 }`}>{t}</div>
               ))}
             </div>
-            <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
+            <div className={`${frameClass} p-4 animate-pulse`}>
               <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
               <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
               <div className="h-3 bg-gray-200 rounded w-1/2" />
@@ -1427,7 +1421,7 @@ export default function LeagueDetailPage() {
     return (
       <div className="space-y-2">
         {editBackLink("")}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Edit League Info</h3>
           <div>
             <label className="block text-xs text-muted mb-1">Name</label>
@@ -1527,7 +1521,7 @@ export default function LeagueDetailPage() {
     return (
       <div className="space-y-2">
         {editBackLink("")}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Edit League Format</h3>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1587,7 +1581,7 @@ export default function LeagueDetailPage() {
         <h3 className="text-sm font-semibold px-1">Categories</h3>
         {league.categories.map((cat, idx) => (
           <div key={cat.id} onClick={() => { setEditCats(league.categories.map((c) => ({ ...c }))); setEditCatIdx(idx); setDirty(false); setEditSection("editCat"); }}
-            className="bg-card rounded-xl border border-border p-3 flex items-center gap-2 active:opacity-70 cursor-pointer">
+            className={`${frameClass} p-3 flex items-center gap-2 active:opacity-70 cursor-pointer`}>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">{cat.name}</p>
               <p className="text-xs text-muted">{cat.format} · {genderLabel(cat.gender)}{cat.ageGroup !== "open" ? ` · ${cat.ageGroup}` : ""} · {scoringLabel(cat.scoringFormat)} · win by {cat.winBy}{cat.maxPerEvent != null ? ` · max ${cat.maxPerEvent}/event` : ""}</p>
@@ -1624,7 +1618,7 @@ export default function LeagueDetailPage() {
     return (
       <div className="space-y-2">
         {editBackLink("categories", "← Categories")}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">{cat.name}</h3>
             <button onClick={() => updateCat("status", cat.status === "draft" ? "active" : "draft")}
@@ -1673,7 +1667,7 @@ export default function LeagueDetailPage() {
     return (
       <div className="space-y-2">
         {editBackLink("categories", "← Categories")}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">New Category</h3>
           <div><label className="block text-xs text-muted mb-1">Format</label><select value={newCatFormat} onChange={(e) => setNewCatFormat(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="doubles">Doubles</option><option value="singles">Singles</option></select></div>
           <div><label className="block text-xs text-muted mb-1">Gender</label><select value={newCatGender} onChange={(e) => setNewCatGender(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm"><option value="open">Open</option><option value="male">Men</option><option value="female">Women</option><option value="mix">Mixed</option></select></div>
@@ -1713,7 +1707,7 @@ export default function LeagueDetailPage() {
     return (
       <div className="space-y-2">
         {editBackLink("")}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">{editingTeamId ? "Edit Team" : "Add Team"}</h3>
 
           <div>
@@ -1872,7 +1866,7 @@ export default function LeagueDetailPage() {
       <div className="space-y-2">
         {editBackLink("")}
         {/* Directors */}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Directors</h3>
 
           {/* Director */}
@@ -1954,7 +1948,7 @@ export default function LeagueDetailPage() {
         </div>
 
         {/* Helpers */}
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Helpers ({league.helpers?.length || 0})</h3>
           <div className="space-y-1">
             {league.helpers?.map((h) => (
@@ -2106,18 +2100,18 @@ export default function LeagueDetailPage() {
       <div className="space-y-2">
         {editBackLink("")}
         {requestsLoading && (
-          <div className="bg-card rounded-xl border border-border p-4">
+          <div className={`${frameClass} p-4`}>
             <p className="text-xs text-muted">Loading…</p>
           </div>
         )}
         {!requestsLoading && groups.length === 0 && (
-          <div className="bg-card rounded-xl border border-border p-4">
+          <div className={`${frameClass} p-4`}>
             <h3 className="text-sm font-semibold">Participation requests</h3>
             <p className="text-xs text-muted mt-1">No pending requests</p>
           </div>
         )}
         {groups.map((g) => (
-          <div key={g.key} className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div key={g.key} className={`${frameClass} p-4 space-y-3`}>
             <h3 className="text-sm font-semibold">
               Participation requests · {g.teamName ?? "Free agents (no team picked)"}
             </h3>
@@ -2152,7 +2146,7 @@ export default function LeagueDetailPage() {
             ← {team.name} <span className="text-xs text-muted font-normal">({league.name})</span>
           </button>
         </div>
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Add Player to {team.name}</h3>
           {teamClubId && (
             <div className="flex gap-1">
@@ -2258,15 +2252,7 @@ export default function LeagueDetailPage() {
             <span className="text-sm text-muted">Season {league.season || "—"}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {(() => {
-              const norm = normalizeLeagueStatus(league.status);
-              const cls = norm === "active" ? "bg-green-100 text-green-700"
-                : norm === "complete" ? "bg-gray-100 text-muted"
-                : norm === "open" ? "bg-amber-100 text-amber-700"
-                : norm === "closed" ? "bg-orange-100 text-orange-700"
-                : "bg-blue-100 text-blue-700";
-              return <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${cls}`}>{leagueDisplayLabel(league.status)}</span>;
-            })()}
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
             {canEdit && (
               <span className="text-muted">
                 <PenIcon />
@@ -2486,7 +2472,7 @@ export default function LeagueDetailPage() {
 
           {/* Rounds preview */}
           <div onClick={() => setTab("rounds")}
-            className="bg-card rounded-xl border border-border p-4 space-y-2 active:opacity-70 cursor-pointer">
+            className={`${frameClass} p-4 space-y-2 active:opacity-70 cursor-pointer`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Rounds ({league.rounds.length})</h3>
               <span className="text-xs text-muted">View all ›</span>
@@ -2509,7 +2495,7 @@ export default function LeagueDetailPage() {
 
           {/* Documents */}
           {(league.documents?.length || 0) > 0 && (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-1.5">
+            <div className={`${frameClass} p-4 space-y-1.5`}>
               <h3 className="text-sm font-semibold mb-1">Documents</h3>
               {league.documents!.map((d) => {
                 const isImg = d.mimeType.startsWith("image/");
@@ -2542,7 +2528,7 @@ export default function LeagueDetailPage() {
       {tab === "standings" && standings && (
         <div className="space-y-4">
           {/* General standings */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={`${frameClass} overflow-hidden`}>
             <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">General Standings</div>
             <table className="w-full text-sm">
               <thead>
@@ -2578,7 +2564,7 @@ export default function LeagueDetailPage() {
 
           {/* Playoff eligibility */}
           {canEdit && (
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className={`${frameClass} overflow-hidden`}>
               <button onClick={() => { if (!eligibility) fetchEligibility(); else setEligibility(null); }}
                 className="w-full text-left text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium hover:bg-gray-50">
                 {eligibility ? "▾" : "▸"} Playoff Eligibility (min {(league.config as Record<string, number> | null)?.minMatchDaysForPlayoff ?? 2} match days)
@@ -2600,7 +2586,7 @@ export default function LeagueDetailPage() {
 
           {/* Category standings */}
           {standings.categories.map((cat) => (
-            <div key={cat.id} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={cat.id} className={`${frameClass} overflow-hidden`}>
               <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">{cat.name}</div>
               <table className="w-full text-sm">
                 <thead>
@@ -2631,7 +2617,7 @@ export default function LeagueDetailPage() {
       {tab === "rounds" && (
         <div className="space-y-3">
           {league.rounds.map((round) => (
-            <div key={round.id} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={round.id} className={`${frameClass} overflow-hidden`}>
               <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-semibold">{round.name || `Round ${round.roundNumber}`}</span>
@@ -2996,7 +2982,7 @@ export default function LeagueDetailPage() {
           // managers can additionally rename and change captain/vice/club.
           const canEditTeam = canEdit || isTeamLeader;
           return (
-            <div key={team.id} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={team.id} className={`${frameClass} overflow-hidden`}>
               {team.photoUrl && (
                 <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
               )}

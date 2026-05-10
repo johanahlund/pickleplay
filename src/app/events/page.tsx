@@ -11,6 +11,9 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { setPreview } from "@/lib/entityPreview";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { usePollingRefresh } from "@/lib/hooks";
+import { eventDisplayLabel } from "@/lib/statusDisplay";
+import { eventStatusBadgeClass } from "@/lib/statusBadge";
+import { frameClass } from "@/components/Card";
 
 interface Event {
   id: string;
@@ -159,15 +162,6 @@ function EventsPage() {
     if (!ok) return;
     setEvents((prev) => prev.filter((e) => e.id !== id));
     fetch(`/api/events/${id}`, { method: "DELETE" });
-  };
-
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "setup": case "draft": return "bg-blue-100 text-blue-700";
-      case "active": return "bg-green-100 text-green-700";
-      case "completed": return "bg-gray-100 text-gray-600";
-      default: return "bg-gray-100 text-gray-600";
-    }
   };
 
   const matchesDateFilter = (dateStr: string, filter: string) => {
@@ -320,7 +314,7 @@ function EventsPage() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="bg-card rounded-xl border border-border p-3 space-y-3">
+        <div className={`${frameClass} p-3 space-y-3`}>
           {/* Club filter */}
           {userClubs.length > 0 && (
             <div>
@@ -461,8 +455,8 @@ function EventsPage() {
                       ) : (
                         <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
                       )}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 capitalize ${statusBadge(event.status)}`}>
-                        {event.status === "draft" ? "setup" : event.status}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${eventStatusBadgeClass(event)}`}>
+                        {eventDisplayLabel(event)}
                       </span>
                     </div>
                     {/* Time + DUPR */}

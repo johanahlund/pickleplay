@@ -12,17 +12,20 @@
 
 import type { ComponentPropsWithoutRef } from "react";
 
-export const frameClass =
-  "bg-card rounded-xl border border-border overflow-hidden";
+// Matches the existing convention used across ~30 hand-rolled cards.
+// `overflow-hidden` is opt-in — pass `<Card overflowHidden>` if you need
+// it, or add `overflow-hidden` to className.
+export const frameClass = "bg-card rounded-xl border border-border";
 
-export const rowClass =
-  "flex items-center justify-between gap-2 px-3 py-3";
+export const rowClass = "flex items-center justify-between gap-2 px-3 py-3";
 
 export function Card({
   className = "",
+  overflowHidden = false,
   ...rest
-}: ComponentPropsWithoutRef<"div">) {
-  return <div className={`${frameClass} ${className}`} {...rest} />;
+}: ComponentPropsWithoutRef<"div"> & { overflowHidden?: boolean }) {
+  const cls = `${frameClass}${overflowHidden ? " overflow-hidden" : ""} ${className}`.trim();
+  return <div className={cls} {...rest} />;
 }
 
 export function CardRow({

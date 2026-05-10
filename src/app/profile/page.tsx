@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 interface RatingData {
   player: { id: string; name: string; emoji: string };
@@ -176,17 +177,17 @@ export default function ProfilePage() {
 
       {/* Rating cards */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="bg-card rounded-xl border border-border p-3 text-center">
+        <div className={`${frameClass} p-3 text-center`}>
           <div className="text-2xl font-bold text-foreground">{Math.round(ratings?.legacy.rating || 1000)}</div>
           <div className="text-[10px] text-muted">App Rating</div>
         </div>
-        <div className="bg-card rounded-xl border border-border p-3 text-center">
+        <div className={`${frameClass} p-3 text-center`}>
           <div className="text-2xl font-bold text-foreground">
             {ratings?.global.rating ? `${ratings.global.confidence < 4 ? "~" : ""}${Math.round(ratings.global.rating)}` : "—"}
           </div>
           <div className="text-[10px] text-muted">Global</div>
         </div>
-        <div className="bg-card rounded-xl border border-border p-3 text-center">
+        <div className={`${frameClass} p-3 text-center`}>
           <div className="text-2xl font-bold text-foreground">{ratings?.dupr.rating || "—"}</div>
           <div className="text-[10px] text-muted">DUPR</div>
         </div>
@@ -194,19 +195,19 @@ export default function ProfilePage() {
 
       {/* Quick stats */}
       <div className="grid grid-cols-4 gap-2">
-        <div className="bg-card rounded-xl border border-border p-2 text-center">
+        <div className={`${frameClass} p-2 text-center`}>
           <div className="text-lg font-bold">{totalMatches}</div>
           <div className="text-[9px] text-muted">Matches</div>
         </div>
-        <div className="bg-card rounded-xl border border-border p-2 text-center">
+        <div className={`${frameClass} p-2 text-center`}>
           <div className="text-lg font-bold">{winRate}%</div>
           <div className="text-[9px] text-muted">Win Rate</div>
         </div>
-        <div className="bg-card rounded-xl border border-border p-2 text-center">
+        <div className={`${frameClass} p-2 text-center`}>
           <div className="text-lg font-bold">{totalWins}</div>
           <div className="text-[9px] text-muted">Wins</div>
         </div>
-        <div className="bg-card rounded-xl border border-border p-2 text-center">
+        <div className={`${frameClass} p-2 text-center`}>
           <div className="text-lg font-bold text-foreground">
             {streak > 0 ? `${streakType}${streak}` : "—"}
           </div>
@@ -216,7 +217,7 @@ export default function ProfilePage() {
 
       {/* Club ratings */}
       {ratings && ratings.clubs.length > 0 && (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+        <div className={`${frameClass} p-4 space-y-2`}>
           <h3 className="text-sm font-semibold">Club Ratings</h3>
           {ratings.clubs.map((c) => (
             <div key={c.clubId} className="flex items-center gap-2 py-1.5">

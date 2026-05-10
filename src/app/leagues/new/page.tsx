@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 const DEFAULT_CATEGORIES = [
   { name: "Men's Doubles", format: "doubles", gender: "male", scoringFormat: "3x15", winBy: "2" },
@@ -94,7 +95,7 @@ export default function NewLeaguePage() {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Create League</h2>
-        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+        <div className={`${frameClass} p-4 space-y-2`}>
           <p className="text-sm">You don&apos;t have permission to create leagues.</p>
           <p className="text-xs text-muted">Ask an app admin to grant you league-creation permission.</p>
         </div>
@@ -106,7 +107,7 @@ export default function NewLeaguePage() {
     <div className="space-y-4">
       <h2 className="text-xl font-bold">Create League</h2>
 
-      <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+      <div className={`${frameClass} p-4 space-y-4`}>
         <div>
           <label className="block text-sm font-medium text-muted mb-1">Organizing Club <span className="text-muted/70 font-normal">(optional)</span></label>
           <select value={clubId} onChange={(e) => setClubId(e.target.value)}

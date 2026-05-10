@@ -8,6 +8,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { resolveRoundCategories, type LeagueCategoryShape } from "@/lib/leagueRound";
+import { frameClass } from "@/components/Card";
 
 interface PlayerLite { id: string; name: string; photoUrl?: string | null; gender?: string | null; duprRating?: number | null }
 interface Category extends LeagueCategoryShape { id: string }
@@ -348,7 +349,7 @@ export default function LineupBuilderPage() {
       <>
         <AppHeader variant="hero-sub" title="Lineup" back={{ label: "Back", onClick: back }} />
         <div className="space-y-2">
-          <div className="bg-card rounded-xl border border-border p-4 text-sm">
+          <div className={`${frameClass} p-4 text-sm`}>
             You don&apos;t have permission to edit this team&apos;s lineup.
           </div>
         </div>
@@ -366,7 +367,7 @@ export default function LineupBuilderPage() {
       />
     <div className="space-y-2">
 
-      <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+      <div className={`${frameClass} p-4 space-y-2`}>
         {(leagueName || eventDate) && (
           <div className="text-[11px] text-muted">
             {leagueName}
@@ -435,7 +436,7 @@ export default function LineupBuilderPage() {
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
 
         return (
-          <div key={cat.id} className="bg-card rounded-xl border border-border p-3 space-y-2">
+          <div key={cat.id} className={`${frameClass} p-3 space-y-2`}>
             <div className="flex items-baseline justify-between gap-2">
               <div className="text-sm font-semibold">{cat.name}</div>
               <div className="flex items-baseline gap-2">

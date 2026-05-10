@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { frameClass } from "@/components/Card";
 
 interface Player {
   id: string;
@@ -110,7 +111,7 @@ export default function LeaderboardPage() {
             {unranked.map((p) => (
               <div
                 key={p.id}
-                className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-60"
+                className={`${frameClass} p-3 flex items-center gap-3 opacity-60`}
               >
                 <span className="text-2xl w-10 text-center">-</span>
                 <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />

@@ -10,6 +10,7 @@ import { suggestWaitingAction } from "@/lib/solver/waitingSuggestion";
 import { ScorePicker } from "@/components/ScorePicker";
 import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
+import { frameClass } from "@/components/Card";
 
 // ── Types mirroring src/lib/solver/types.ts ──────────────────────────────
 
@@ -649,13 +650,13 @@ export default function PairingConfigPage() {
         meta="Pairing"
       />
       <div className="px-4 space-y-4">
-        <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
+        <div className={`${frameClass} p-3 animate-pulse`}>
           <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
           <div className="h-3 bg-gray-200 rounded w-1/2" />
         </div>
         <div className="space-y-2">
           <div className="h-4 bg-gray-100 rounded w-24" />
-          <div className="bg-card rounded-xl border border-border p-3 animate-pulse">
+          <div className={`${frameClass} p-3 animate-pulse`}>
             <div className="grid grid-cols-3 gap-2">
               <div className="h-8 bg-gray-200 rounded" />
               <div className="h-8 bg-gray-200 rounded" />
@@ -738,7 +739,7 @@ export default function PairingConfigPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className={`${frameClass} p-3`}>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-semibold text-foreground mb-1">Team 1 {t1 > 0 && `(${t1})`}</label>
@@ -805,7 +806,7 @@ export default function PairingConfigPage() {
           </button>
         </div>
         <p className="text-xs text-muted">Lock two players together so the solver always keeps them on the same team.</p>
-        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+        <div className={`${frameClass} p-4 space-y-2`}>
           <div className="flex justify-end">
             <LockAdder players={lockClassPlayers} existingLocks={locks} onAdd={handleAddLock} />
           </div>
@@ -866,7 +867,7 @@ export default function PairingConfigPage() {
             {collapsed.has("s-mode") && <span className="text-[10px] text-muted">{modeLabel}</span>}
           </button>
           {!collapsed.has("s-mode") && (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+            <div className={`${frameClass} p-4 space-y-3 mt-1`}>
               <SegPicker label="Base mode" value={settings.base}
                 onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
                 options={[
@@ -930,7 +931,7 @@ export default function PairingConfigPage() {
               {collapsed.has("s-constraints") && <span className="text-[10px] text-muted">{constraintLabel}</span>}
             </button>
             {!collapsed.has("s-constraints") && (
-              <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+              <div className={`${frameClass} p-4 space-y-3 mt-1`}>
                 {settings.base !== "swiss" && (
                   <WindowPicker label="Skill window" help="How close in skill level must players be?"
                     value={settings.skillWindow} onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))} />
@@ -970,7 +971,7 @@ export default function PairingConfigPage() {
               const max = analysis.feasibility.maxCleanRounds;
               const simulated = analysis.feasibility.simulatedRounds;
               return (
-                <div className="bg-card rounded-xl border border-border p-4 space-y-3 mt-1">
+                <div className={`${frameClass} p-4 space-y-3 mt-1`}>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="text-xs"><div className="font-medium">{active} active</div>
                       <div className="text-muted">{analysis.pool.genderCounts.M}M · {analysis.pool.genderCounts.F}F{analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}</div></div>
@@ -1131,7 +1132,7 @@ export default function PairingConfigPage() {
       <div className="px-4 space-y-4">
       {/* Class picker */}
       {event.classes.length > 1 && (
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className={`${frameClass} p-3`}>
           <label className="block text-xs text-muted mb-1">Class</label>
           <select
             value={classId}
@@ -1197,7 +1198,7 @@ export default function PairingConfigPage() {
         )}
       </div>
       {!collapsed.has("players") && (
-      <div className="bg-card rounded-xl border border-border px-4 pt-3 pb-4 space-y-2">
+      <div className={`${frameClass} px-4 pt-3 pb-4 space-y-2`}>
         {classPlayers.length === 0 ? (
           <p className="text-xs text-muted">No players registered in this class yet.</p>
         ) : (
@@ -1319,7 +1320,7 @@ export default function PairingConfigPage() {
       </button>
       {!collapsed.has("actions") && (<>
       {/* Actions row */}
-      <div className="bg-card rounded-xl border border-border p-2.5 space-y-2">
+      <div className={`${frameClass} p-2.5 space-y-2`}>
         <div className="flex gap-2 items-center">
           <button
             onClick={handleGenerate}

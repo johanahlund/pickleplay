@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { frameClass } from "@/components/Card";
 
 interface ClubInfo {
   club: { id: string; name: string; emoji: string; _count: { members: number } };
@@ -78,7 +79,7 @@ export default function JoinClubPage() {
         <p className="text-sm text-muted">{info.club._count.members} member{info.club._count.members !== 1 ? "s" : ""}</p>
       </div>
 
-      <div className="bg-card rounded-xl border border-border p-6 text-center space-y-4">
+      <div className={`${frameClass} p-6 text-center space-y-4`}>
         <p className="text-sm text-muted">You&apos;ve been invited to join this club</p>
 
         {joined ? (

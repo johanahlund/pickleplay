@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { setPreview } from "@/lib/entityPreview";
+import { frameClass } from "@/components/Card";
 
 interface ClubLocation {
   id: string;
@@ -183,7 +184,7 @@ export default function ClubsPage() {
       </div>
 
       {showCreate && (
-        <form onSubmit={createClub} className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <form onSubmit={createClub} className={`${frameClass} p-4 space-y-3`}>
           <div>
             <label className="block text-sm font-medium text-muted mb-1">Club Name</label>
             <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
@@ -325,7 +326,7 @@ export default function ClubsPage() {
       ) : (
         <div className="space-y-2">
           {clubs.map((club) => (
-            <div key={club.id} className="bg-card rounded-xl border border-border overflow-hidden">
+            <div key={club.id} className={`${frameClass} overflow-hidden`}>
               <Link
                 href={`/clubs/${club.id}`}
                 onClick={() => setPreview("club", club.id, club)}
@@ -411,7 +412,7 @@ export default function ClubsPage() {
                   const isPending = requestedClubIds.has(club.id);
                   const isRequesting = requesting === club.id;
                   return (
-                    <div key={club.id} className="bg-card rounded-xl border border-border overflow-hidden">
+                    <div key={club.id} className={`${frameClass} overflow-hidden`}>
                       <div className="flex items-center gap-3 p-4">
                         {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" /> : <span className="text-2xl">{club.emoji}</span>}
                         <div className="flex-1 min-w-0">

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 /**
  * Streamlined event creation wizard.
@@ -204,7 +205,7 @@ export default function NewEventPage() {
       <div className="space-y-4">
         <Link href="/events" className="text-sm text-action">&larr; Events</Link>
         <h2 className="text-xl font-bold">Create Event</h2>
-        <div className="bg-card rounded-xl border border-border p-4 animate-pulse space-y-3">
+        <div className={`${frameClass} p-4 animate-pulse space-y-3`}>
           <div className="h-4 bg-gray-200 rounded w-1/3" />
           <div className="h-3 bg-gray-200 rounded w-1/2" />
           <div className="h-3 bg-gray-200 rounded w-2/5" />
@@ -219,7 +220,7 @@ export default function NewEventPage() {
       <div className="space-y-4">
         <Link href="/events" className="text-sm text-action">&larr; Events</Link>
         <h2 className="text-xl font-bold">Create Event</h2>
-        <div className="bg-card rounded-xl border border-border p-4">
+        <div className={`${frameClass} p-4`}>
           <p className="text-sm">You need to be a member of at least one club to create an event.</p>
           <p className="text-xs text-muted mt-2">
             Go to the Clubs page to create or join one.
@@ -342,7 +343,7 @@ export default function NewEventPage() {
             </div>
           </div>
 
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className={`${frameClass} p-4 space-y-3`}>
             <div>
               <label className="block text-sm font-medium text-muted mb-1">Event name</label>
               <input

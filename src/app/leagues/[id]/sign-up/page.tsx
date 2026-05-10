@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -154,7 +155,7 @@ export default function LeagueSignUpPage() {
       <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
     <div className="space-y-2">
 
-      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div className={`${frameClass} p-4 space-y-3`}>
         <h2 className="text-lg font-bold">Sign up{leagueName ? ` — ${leagueName}` : ""}</h2>
         {errorMsg && (
           <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{errorMsg}</div>
@@ -179,7 +180,7 @@ export default function LeagueSignUpPage() {
         const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
         if (!loading && visibleCategories.length === 0) return null;
         return (
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className={`${frameClass} p-4 space-y-3`}>
             <h3 className="text-sm font-semibold">Category preferences</h3>
             {loading ? (
               <div className="text-xs text-muted py-2">Loading categories…</div>
@@ -210,7 +211,7 @@ export default function LeagueSignUpPage() {
       })()}
 
       {!registrationClosed && (
-        <div className="bg-card rounded-xl border border-border p-3 sticky bottom-2">
+        <div className={`${frameClass} p-3 sticky bottom-2`}>
           <button onClick={submit} disabled={saving || loading}
             className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">
             {saving ? "Signing up…" : "Sign up"}

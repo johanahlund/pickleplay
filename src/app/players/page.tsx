@@ -8,6 +8,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 interface PlayerClub {
   id: string;
@@ -303,7 +304,7 @@ export default function PlayersPage() {
           {filteredPlayers.map((p) => (
             <div
               key={p.id}
-              className="bg-card rounded-xl border border-border p-3"
+              className={`${frameClass} p-3`}
             >
               {editingId === p.id ? (
                 <div className="space-y-3">

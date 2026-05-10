@@ -24,6 +24,7 @@ import { RallyTracker } from "@/components/RallyTracker";
 import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
+import { frameClass } from "@/components/Card";
 
 interface Player {
   id: string;
@@ -1117,12 +1118,12 @@ export default function EventDetailPage() {
         </div>
         {/* Content skeleton */}
         <div className="px-4 pt-4 space-y-3">
-          <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
+          <div className={`${frameClass} p-4 animate-pulse`}>
             <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-1/2" />
           </div>
-          <div className="bg-card rounded-xl border border-border p-4 animate-pulse">
+          <div className={`${frameClass} p-4 animate-pulse`}>
             <div className="h-3 bg-gray-200 rounded w-1/4 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-3/4" />
           </div>
@@ -1329,7 +1330,7 @@ export default function EventDetailPage() {
   ) : null;
 
   const renderWhen = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
         <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setHasEdits(true); }}
@@ -1437,7 +1438,7 @@ export default function EventDetailPage() {
 
   // ── Section: Format (doubles/singles + scoring + ranking) ──
   const renderScoring = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <select value={editFormat} onChange={(e) => { setEditFormat(e.target.value); setHasEdits(true); }}
         className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
         <option value="doubles">Doubles</option>
@@ -1511,7 +1512,7 @@ export default function EventDetailPage() {
   ];
 
   const renderPairing = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <Link
         href={`/events/${id}/pairing`}
         className="block bg-primary/5 border border-primary/30 rounded-lg px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
@@ -1578,7 +1579,7 @@ export default function EventDetailPage() {
 
   // ── Section: Ranking ──
   const renderRanking = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <p className="text-xs text-muted">Do matches count towards app player rankings?</p>
       <div className="flex gap-2">
         {[
@@ -1773,7 +1774,7 @@ export default function EventDetailPage() {
 
         {/* Generation Method */}
         {canManage && (
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className={`${frameClass} p-4 space-y-3`}>
             <h4 className="text-sm font-semibold">Generation Method</h4>
             <div className="flex gap-2">
               {([["rating", "Rating"], ["level", "Skill"], ["random", "Random"], ["manual", "Manual"]] as const).map(([val, label]) => (
@@ -2905,7 +2906,7 @@ export default function EventDetailPage() {
   const renderManual = () => (
     <div className="space-y-3">
       {/* Court card */}
-      <div className="bg-card rounded-xl border border-border p-3">
+      <div className={`${frameClass} p-3`}>
         <div className="flex items-center gap-3">
         <span className="text-sm font-semibold text-muted">Court</span>
         <div className="flex gap-1.5">
@@ -2920,7 +2921,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Players card */}
-      <div className="bg-card rounded-xl border border-border p-3">
+      <div className={`${frameClass} p-3`}>
         <div className="grid grid-cols-2 gap-3">
           {(() => {
             const manualMC = new Map<string, number>();
@@ -2962,7 +2963,7 @@ export default function EventDetailPage() {
         </div>
       </div>
       {/* Match settings card */}
-      <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+      <div className={`${frameClass} p-3 space-y-2`}>
         {/* Format + Win by */}
         <div className="flex gap-2">
           <div className="w-[55%]">
@@ -3014,7 +3015,7 @@ export default function EventDetailPage() {
 
       {/* League linkage toggle — only for new matches in league-attached events */}
       {event.round && !editingManualMatchId && (
-        <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+        <div className={`${frameClass} p-3 space-y-2`}>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -3314,7 +3315,7 @@ export default function EventDetailPage() {
         {activeSection === "competition" && event && (
           <div className="space-y-3">
             {/* Ranking — always shown */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+            <div className={`${frameClass} p-4 space-y-3`}>
               <p className="text-xs text-muted">Do matches count towards app player rankings?</p>
               <div className="flex gap-2">
                 {[
@@ -3382,8 +3383,9 @@ export default function EventDetailPage() {
   const rankingLabel = (v: string) =>
     ({ ranked: "Ranked", approval: "Approval", none: "Not counted" }[v] || v);
 
+  // Tappable list-row inside a Card. Distinct from Card's stock rowClass —
+  // this one has bottom-borders, hover/active states, full width.
   const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
-  const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
   const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
   const scoringDisplay = scoringFormatLabel(event.scoringFormat || "1x11");
@@ -3399,7 +3401,7 @@ export default function EventDetailPage() {
         <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
         {/* Total players */}
-        <div className={frameClass}>
+        <div className={` overflow-hidden`}>
           <button onClick={() => setActiveSection("players")} className={rowClass}>
             <span className="text-base font-bold text-foreground">Players</span>
             <span className="text-sm font-medium">{uniquePlayerIds.size} signed up</span>
@@ -3439,7 +3441,7 @@ export default function EventDetailPage() {
         )}
 
         {/* Ranking */}
-        <div className={frameClass}>
+        <div className={` overflow-hidden`}>
           <button onClick={() => { startEditEvent(); setActiveSection("competition"); }} className={rowClass}>
             <span className="text-base font-bold text-foreground">Ranking</span>
             <span className="flex-1 text-right">
@@ -3593,7 +3595,7 @@ export default function EventDetailPage() {
 
       {/* Event Data — name, date, time, status (managers only) */}
       {canManage && (
-        <div className={frameClass}>
+        <div className={` overflow-hidden`}>
           <div onClick={() => { startEditEvent(); setActiveSection("when"); }} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Event Data</span>
             <span className="flex-1 text-right">
@@ -3614,7 +3616,7 @@ export default function EventDetailPage() {
       {/* Format — managers only. Hidden for league events: format/scoring
           come from the league categories, set per-class. */}
       {canManage && !event.round && (
-        <div className={frameClass}>
+        <div className={` overflow-hidden`}>
           <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Format</span>
             <span className="flex-1 text-right">
@@ -3630,7 +3632,7 @@ export default function EventDetailPage() {
 
       {/* Players & Pairs — relabel "Participants" for league events since
           rosters can include attend-only signups, not just match players. */}
-      <div className={frameClass}>
+      <div className={` overflow-hidden`}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
           <span className="text-base font-bold text-foreground">{event.round ? "Participants" : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
@@ -3677,7 +3679,7 @@ export default function EventDetailPage() {
       {/* Pairing — managers only. Hidden for league events: pairings are
           driven by the lineup builder, not the auto-pairing engine. */}
       {canManage && !event.round && (
-        <div className={frameClass}>
+        <div className={` overflow-hidden`}>
           <div onClick={() => router.push(`/events/${id}/pairing`)} className={rowClass} style={{ cursor: "pointer" }}>
             <span className="text-base font-bold text-foreground">Pairing</span>
             <span className="text-sm font-medium flex-1 text-right">{pairingLabel(event.pairingMode)}</span>
@@ -3690,7 +3692,7 @@ export default function EventDetailPage() {
       <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
       {/* Matches */}
-      <div className={frameClass}>
+      <div className={` overflow-hidden`}>
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
           <span className="text-sm font-medium">

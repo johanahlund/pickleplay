@@ -3,6 +3,7 @@
 import { signIn, useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
+import { frameClass } from "@/components/Card";
 
 export default function ResetPasswordPage() {
   const params = useParams();
@@ -95,7 +96,7 @@ export default function ResetPasswordPage() {
 
       <form
         onSubmit={handleSubmit}
-        className="bg-card rounded-xl border border-border p-4 space-y-4"
+        className={`${frameClass} p-4 space-y-4`}
       >
         {error && (
           <div className="bg-red-50 text-danger text-sm px-3 py-2 rounded-lg">

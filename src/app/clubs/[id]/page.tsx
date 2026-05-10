@@ -12,6 +12,7 @@ import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 // ── Long press to delete ──
 // `onDelete` is responsible for confirming via useConfirm before mutating;
@@ -640,7 +641,7 @@ export default function ClubDetailPage() {
       return (
         <div className="space-y-3 animate-in fade-in duration-200">
           <Link href="/clubs" className="text-sm text-action">&larr; Clubs</Link>
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={`${frameClass} overflow-hidden`}>
             {clubPreview.coverUrl && (
               <div className="h-32 w-full bg-gray-100">
                 <img src={clubPreview.coverUrl} alt="" className="w-full h-full object-cover" />
@@ -672,7 +673,7 @@ export default function ClubDetailPage() {
               )}
             </div>
           </div>
-          <div className="bg-card rounded-xl border border-border p-6 animate-pulse">
+          <div className={`${frameClass} p-6 animate-pulse`}>
             <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-1/2" />
@@ -802,7 +803,7 @@ export default function ClubDetailPage() {
             className="text-sm text-action font-medium"
           >← Members <span className="text-xs text-muted font-normal">({club.name})</span></button>
         </div>
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Add Member to {club.name}</h3>
           <div className="flex gap-1">
             <button onClick={() => setAddMemberGender("all")}
@@ -894,7 +895,7 @@ export default function ClubDetailPage() {
       {showInfo && (
         <div className="space-y-4">
           {editing ? (
-            <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+            <div className={`${frameClass} p-4 space-y-3`}>
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">Club Name</label>
                 <input
@@ -1124,7 +1125,7 @@ export default function ClubDetailPage() {
               })()}
             </div>
           ) : (
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className={`${frameClass} overflow-hidden`}>
               {club.coverUrl && (
                 <div className="h-32 w-full bg-gray-100">
                   <img src={club.coverUrl} alt="" className="w-full h-full object-cover" />
@@ -1190,7 +1191,7 @@ export default function ClubDetailPage() {
       {tab === "feed" && !showInfo && (
         <div className="space-y-3">
           {/* Club overview */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className={`${frameClass} overflow-hidden`}>
             <div className="flex items-center gap-3 px-3 py-2.5 bg-white">
               {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
               <div className="flex-1 min-w-0">
@@ -1283,7 +1284,7 @@ export default function ClubDetailPage() {
             </button>
           )}
           {/* New post */}
-          <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+          <div className={`${frameClass} p-3 space-y-2`}>
             <textarea
               value={newPostContent}
               onChange={(e) => setNewPostContent(e.target.value)}
@@ -1311,7 +1312,7 @@ export default function ClubDetailPage() {
               const canDeletePost = post.author.id === userId || canManage;
               return (
                 <LongPressDelete key={post.id} canDelete={canDeletePost} onDelete={() => deletePost(post.id)}>
-                  <div className="bg-card rounded-xl border border-border p-3 space-y-2">
+                  <div className={`${frameClass} p-3 space-y-2`}>
                     {/* Post header */}
                     <div className="flex items-center gap-2">
                       <PlayerAvatar name={post.author.name} photoUrl={post.author.photoUrl} size="sm" />
@@ -1575,7 +1576,7 @@ export default function ClubDetailPage() {
             <>
               <h3 className="text-xs font-medium text-muted mt-4">Unranked ({filteredUnranked.length})</h3>
               {filteredUnranked.map((p) => (
-                <div key={p.id} className="bg-card rounded-xl border border-border p-3 flex items-center gap-3 opacity-50">
+                <div key={p.id} className={`${frameClass} p-3 flex items-center gap-3 opacity-50`}>
                   <span className="text-xl w-8 text-center">-</span>
                   <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
                   <span className="font-medium text-sm flex-1">{p.name}</span>

@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
+import { frameClass } from "@/components/Card";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -193,7 +194,7 @@ export default function EventSignUpPage() {
       />
     <div className="space-y-2">
 
-      <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+      <div className={`${frameClass} p-4 space-y-2`}>
         <h2 className="text-lg font-bold">
           {isOnBehalf
             ? <>Sign up <span className="text-action">{targetName || "player"}</span></>
@@ -242,7 +243,7 @@ export default function EventSignUpPage() {
         const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
         if (!loading && visibleCategories.length === 0) return null;
         return (
-          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+          <div className={`${frameClass} p-4 space-y-3`}>
             <h3 className="text-sm font-semibold">Category preferences</h3>
             {loading ? (
               <div className="text-xs text-muted py-2">Loading categories…</div>
@@ -273,7 +274,7 @@ export default function EventSignUpPage() {
       })()}
 
       {myTeamName && (
-        <div className="bg-card rounded-xl border border-border p-3 sticky bottom-2">
+        <div className={`${frameClass} p-3 sticky bottom-2`}>
           <button onClick={submit} disabled={saving || loading}
             className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">
             {saving ? "Saving…" : "Save sign-up"}

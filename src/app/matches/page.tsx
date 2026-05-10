@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 import { ClubBadge } from "@/components/ClubBadge";
+import { frameClass } from "@/components/Card";
 
 interface PlayerInfo { id: string; name: string; emoji: string; photoUrl?: string | null }
 interface MatchPlayer { id: string; playerId: string; team: number; score: number; player: PlayerInfo }
@@ -192,7 +193,7 @@ function MatchesPage() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="bg-card rounded-xl border border-border p-3 space-y-3">
+        <div className={`${frameClass} p-3 space-y-3`}>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-xs font-medium text-muted mb-1">Played With</label>
