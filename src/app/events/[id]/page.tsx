@@ -2422,6 +2422,20 @@ export default function EventDetailPage() {
                           : "attending";
                       const ixIcon = ix === "playing" ? "🏆" : ix === "social" ? "🎾" : ix === "attending" ? "👋" : "❌";
                       const isMe = ep.player.id === userId;
+                      // Captain/vice of THIS team, event manager, or admin can
+                      // un-sign-up a player. Self can also remove their own
+                      // sign-up (matches the swipe-to-remove on the legacy row).
+                      const canRemove = canAddToTeam || isMe;
+                      const onRemove = async () => {
+                        const ok = await confirmDialog({
+                          title: `Remove ${ep.player.name}?`,
+                          message: `Cancel ${isMe ? "your" : "their"} sign-up for this event.`,
+                          confirmText: "Remove",
+                          danger: true,
+                        });
+                        if (!ok) return;
+                        await removePlayer(ep.player.id, ep.player.name);
+                      };
                       return (
                         <div key={ep.player.id} className="flex items-center gap-1.5 px-1 py-1 rounded">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
@@ -2436,6 +2450,14 @@ export default function EventDetailPage() {
                           <span className="text-[11px] shrink-0" title={ix === "playing" ? "Liga play" : ix === "social" ? "Social play" : ix === "attending" ? "Just attending" : "Can't come"}>
                             {ixIcon}
                           </span>
+                          {canRemove && (
+                            <button
+                              type="button"
+                              onClick={onRemove}
+                              aria-label="Remove sign-up"
+                              className="text-muted hover:text-danger text-xs shrink-0 px-1"
+                            >✕</button>
+                          )}
                         </div>
                       );
                     })}
