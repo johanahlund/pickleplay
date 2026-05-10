@@ -104,3 +104,75 @@ export async function POST(
   });
   return NextResponse.json(created);
 }
+
+// PATCH: captain/vice (or organizer) edits a teammate's preferences on
+// their behalf. Body: { playerId, preferences, preferredTeamId? }.
+// If no participation request exists yet (e.g. the player was added
+// directly to the team), one is created in "accepted" status.
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let user;
+  try { user = await requireAuth(); } catch { return NextResponse.json({ error: "Login required" }, { status: 401 }); }
+  const { id } = await params;
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  const targetId = typeof body.playerId === "string" && body.playerId.length > 0 ? body.playerId : null;
+  if (!targetId) return NextResponse.json({ error: "playerId required" }, { status: 400 });
+
+  const league = await prisma.league.findUnique({
+    where: { id },
+    select: {
+      id: true, createdById: true, deputyId: true,
+      teams: {
+        select: {
+          id: true, captainId: true, viceCaptainId: true,
+          players: { where: { playerId: targetId }, select: { teamId: true } },
+        },
+      },
+      helpers: { select: { playerId: true } },
+    },
+  });
+  if (!league) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const isOrganizer = user.role === "admin"
+    || league.createdById === user.id
+    || league.deputyId === user.id
+    || league.helpers.some((h) => h.playerId === user.id);
+  const targetTeam = league.teams.find((t) => t.players.length > 0);
+  if (!targetTeam) return NextResponse.json({ error: "Player is not on a team in this league" }, { status: 404 });
+  const isCaptainOfTarget = targetTeam.captainId === user.id || targetTeam.viceCaptainId === user.id;
+  if (!isOrganizer && !isCaptainOfTarget) {
+    return NextResponse.json({ error: "Only the player's captain/vice or a league organizer can edit their preferences." }, { status: 403 });
+  }
+
+  const preferences = body.preferences ?? null;
+  const preferredTeamId = body.preferredTeamId !== undefined
+    ? (body.preferredTeamId || null)
+    : targetTeam.id;
+
+  const existing = await prisma.leagueParticipationRequest.findUnique({
+    where: { leagueId_playerId: { leagueId: id, playerId: targetId } },
+  });
+  if (existing) {
+    const updated = await prisma.leagueParticipationRequest.update({
+      where: { id: existing.id },
+      data: { preferences, preferredTeamId },
+    });
+    return NextResponse.json(updated);
+  }
+  // No prior request — create one in "accepted" status (since the player
+  // is already on the team) so future event sign-ups can read it.
+  const created = await prisma.leagueParticipationRequest.create({
+    data: {
+      leagueId: id, playerId: targetId,
+      preferredTeamId, preferences,
+      status: "accepted",
+      respondedById: user.id,
+      respondedAt: new Date(),
+    },
+  });
+  return NextResponse.json(created);
+}

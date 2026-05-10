@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
@@ -27,8 +27,14 @@ function categoryMatchesGender(catGender: string, playerGender: string | null | 
 export default function LeagueSignUpPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const userId = (session?.user as { id?: string } | undefined)?.id;
+  // ?for=<playerId> → captain/vice (or league organizer) is editing a
+  // teammate's league preferences. Saves via PATCH instead of POST.
+  const onBehalfOf = searchParams.get("for");
+  const isOnBehalf = !!onBehalfOf && onBehalfOf !== userId;
+  const [targetName, setTargetName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,11 +51,12 @@ export default function LeagueSignUpPage() {
 
   useHideBottomNav();
 
+  const targetId = onBehalfOf || userId;
   const load = useCallback(async () => {
     const [leagueR, requestsR, meR] = await Promise.all([
       fetch(`/api/leagues/${id}`),
       fetch(`/api/leagues/${id}/participation-requests`),
-      userId ? fetch(`/api/players/${userId}`) : Promise.resolve(null),
+      targetId ? fetch(`/api/players/${targetId}`) : Promise.resolve(null),
     ]);
     if (!leagueR.ok) { router.push(`/leagues/${id}`); return; }
     const league = await leagueR.json();
@@ -61,20 +68,22 @@ export default function LeagueSignUpPage() {
     if (meR && meR.ok) {
       const me = await meR.json();
       setPlayerGender(me.gender || null);
+      setTargetName(me.name || null);
     }
 
-    if (requestsR.ok && userId) {
+    if (requestsR.ok && targetId) {
       const reqs = await requestsR.json();
-      const mine = Array.isArray(reqs) ? reqs.find((r: { playerId: string; preferredTeamId: string | null; preferences: Record<string, { level: Preference; note?: string }> | null; status: string }) => r.playerId === userId) : null;
-      if (mine && (mine.status === "pending" || mine.status === "accepted")) {
-        setPreferredTeamId(mine.preferredTeamId || "");
-        if (mine.preferences && typeof mine.preferences === "object") {
-          setPreferences(mine.preferences);
+      const theirs = Array.isArray(reqs) ? reqs.find((r: { playerId: string; preferredTeamId: string | null; preferences: Record<string, { level: Preference; note?: string }> | null; status: string }) => r.playerId === targetId) : null;
+      if (theirs && (theirs.status === "pending" || theirs.status === "accepted")) {
+        setPreferredTeamId(theirs.preferredTeamId || "");
+        if (theirs.preferences && typeof theirs.preferences === "object") {
+          setPreferences(theirs.preferences);
         }
+        setExistingRequestStatus(theirs.status);
       }
     }
     setLoading(false);
-  }, [id, router, userId]);
+  }, [id, router, targetId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -112,14 +121,21 @@ export default function LeagueSignUpPage() {
       completePrefs[c.id] = existing ?? { level: "ok" };
     }
     const r = await fetch(`/api/leagues/${id}/participation-requests`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: isOnBehalf ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         preferredTeamId: preferredTeamId || null,
         preferences: completePrefs,
+        ...(isOnBehalf ? { playerId: onBehalfOf } : {}),
       }),
     });
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
+    if (isOnBehalf) {
+      // Captain edited a teammate's prefs — back to league, no celebration card.
+      router.push(`/leagues/${id}`);
+      return;
+    }
     setExistingRequestStatus("pending");
   };
 
@@ -148,15 +164,26 @@ export default function LeagueSignUpPage() {
   }
 
   // Accept legacy "registration" alongside the new "open".
-  const registrationClosed = !loading && leagueStatus !== "open" && leagueStatus !== "registration";
+  // Captain editing a teammate's prefs is allowed regardless of league
+  // status — registration-closed only blocks self sign-up.
+  const registrationClosed = !isOnBehalf && !loading && leagueStatus !== "open" && leagueStatus !== "registration";
 
   return (
     <>
-      <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
+      <AppHeader variant="hero-sub" title={isOnBehalf ? `Edit prefs · ${targetName || "Player"}` : "Sign-up"} back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
     <div className="space-y-2">
 
       <div className={`${frameClass} p-4 space-y-3`}>
-        <h2 className="text-lg font-bold">Sign up{leagueName ? ` — ${leagueName}` : ""}</h2>
+        <h2 className="text-lg font-bold">
+          {isOnBehalf
+            ? <>Edit league preferences · <span className="text-action">{targetName || "Player"}</span></>
+            : <>Sign up{leagueName ? ` — ${leagueName}` : ""}</>}
+        </h2>
+        {isOnBehalf && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            You&apos;re editing <strong>{targetName || "this player"}</strong>&apos;s league preferences on their behalf.
+          </p>
+        )}
         {errorMsg && (
           <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{errorMsg}</div>
         )}

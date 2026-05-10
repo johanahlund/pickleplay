@@ -165,9 +165,10 @@ interface TeamRosterProps {
   canEdit: boolean;
   removingPlayerId: string | null;
   onRemove: (playerId: string, playerName: string) => void;
+  onEditPrefs?: (playerId: string) => void;
 }
 
-function TeamRoster({ team, canEdit, removingPlayerId, onRemove }: TeamRosterProps) {
+function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs }: TeamRosterProps) {
   const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
   const [nameQuery, setNameQuery] = useState("");
 
@@ -241,6 +242,13 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove }: TeamRosterPro
               </span>
             )}
             <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
+            {onEditPrefs && !removing && (
+              <button
+                onClick={() => onEditPrefs(tp.playerId)}
+                className="text-muted hover:text-action px-1"
+                aria-label={`Edit league preferences for ${tp.player.name}`}
+              ><PenIcon /></button>
+            )}
             {canEdit && (
               removing ? (
                 <span className="w-3.5 h-3.5 border-2 border-danger border-t-transparent rounded-full animate-spin" />
@@ -3069,6 +3077,7 @@ export default function LeagueDetailPage() {
                   canEdit={canEdit}
                   removingPlayerId={removingPlayerId}
                   onRemove={(playerId, playerName) => removePlayerFromTeam(team.id, playerId, playerName)}
+                  onEditPrefs={canAddToTeam ? (playerId) => router.push(`/leagues/${id}/sign-up?for=${playerId}`) : undefined}
                 />
               )}
             </div>
