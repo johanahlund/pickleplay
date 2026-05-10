@@ -216,8 +216,21 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  // Transferring director or assigning deputy is owner-only.
-  const ownerOnly = body.createdById !== undefined || body.deputyId !== undefined;
+  // Transferring director / assigning deputy / changing club is owner-only.
+  // We only escalate to owner-required when the value is actually CHANGING —
+  // saving other fields shouldn't fail just because the form rebroadcasts
+  // the existing director/deputy/club ids.
+  let ownerOnly = false;
+  if (body.createdById !== undefined || body.deputyId !== undefined) {
+    const current = await prisma.league.findUnique({
+      where: { id },
+      select: { createdById: true, deputyId: true },
+    });
+    if (current) {
+      if (body.createdById !== undefined && body.createdById !== current.createdById) ownerOnly = true;
+      if (body.deputyId !== undefined && (body.deputyId || null) !== current.deputyId) ownerOnly = true;
+    }
+  }
   try {
     if (ownerOnly) await requireLeagueOwner(id);
     else await requireLeagueManager(id);
@@ -241,12 +254,15 @@ export async function PATCH(
   if (body.deputyId !== undefined) data.deputyId = body.deputyId || null;
   if (body.createdById !== undefined) data.createdById = body.createdById;
   if (body.clubId !== undefined) {
-    if (body.clubId) {
-      try { await requireClubOwner(String(body.clubId)); } catch (e) { return authErrorResponse(e); }
-      data.clubId = String(body.clubId);
-    } else {
-      data.clubId = null;
+    // Only re-validate club ownership when the clubId is actually changing.
+    // Saving other fields shouldn't require club-owner role just because
+    // the form rebroadcasts the unchanged clubId.
+    const incoming = body.clubId ? String(body.clubId) : null;
+    const current = await prisma.league.findUnique({ where: { id }, select: { clubId: true } });
+    if (incoming && incoming !== current?.clubId) {
+      try { await requireClubOwner(incoming); } catch (e) { return authErrorResponse(e); }
     }
+    data.clubId = incoming;
   }
   if (body.visibility !== undefined) {
     if (body.visibility !== "public" && body.visibility !== "participants") {
