@@ -796,6 +796,12 @@ export default function LeagueDetailPage() {
   })();
   const [tab, setTab] = useState<Tab>(tabFromUrl ?? "overview");
   useEffect(() => { if (tabFromUrl) setTab(tabFromUrl); }, [tabFromUrl]);
+  // ?expandTeam=<id> + ?focus=<id> — used by the league sign-up "back" link
+  // when returning from editing a teammate's prefs. Expand that team's
+  // roster and scroll it into view, then briefly highlight.
+  const expandTeamFromUrl = searchParams.get("expandTeam");
+  const focusTeamFromUrl = searchParams.get("focus");
+  const [focusedTeamId, setFocusedTeamId] = useState<string | null>(null);
   const [editSection, setEditSection] = useState<"" | "info" | "format" | "categories" | "editCat" | "newCat" | "management" | "editTeam" | "addPlayer" | "requests">("");
   const [editCatIdx, setEditCatIdx] = useState(0);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -825,6 +831,30 @@ export default function LeagueDetailPage() {
   // Team edit state (used for both add and edit)
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null); // null = creating new
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+
+  // When returning from the per-player prefs editor with ?expandTeam, make
+  // sure that team is open. When ?focus is set, scroll to it after the
+  // teams list renders, then clear so a manual collapse later doesn't snap
+  // back. Highlight effect is handled by `focusedTeamId` on the row.
+  useEffect(() => {
+    if (!expandTeamFromUrl) return;
+    setCollapsedTeams((prev) => {
+      if (!prev.has(expandTeamFromUrl)) return prev;
+      const next = new Set(prev);
+      next.delete(expandTeamFromUrl);
+      return next;
+    });
+  }, [expandTeamFromUrl]);
+  useEffect(() => {
+    if (!focusTeamFromUrl) return;
+    setFocusedTeamId(focusTeamFromUrl);
+    const t = setTimeout(() => {
+      const el = document.getElementById(`team-${focusTeamFromUrl}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    const clear = setTimeout(() => setFocusedTeamId(null), 2200);
+    return () => { clearTimeout(t); clearTimeout(clear); };
+  }, [focusTeamFromUrl]);
   const [editTeamName, setEditTeamName] = useState("");
   const [editTeamSlogan, setEditTeamSlogan] = useState("");
   const [editTeamClubId, setEditTeamClubId] = useState("");
@@ -2990,7 +3020,11 @@ export default function LeagueDetailPage() {
           // managers can additionally rename and change captain/vice/club.
           const canEditTeam = canEdit || isTeamLeader;
           return (
-            <div key={team.id} className={`${frameClass} overflow-hidden`}>
+            <div
+              key={team.id}
+              id={`team-${team.id}`}
+              className={`${frameClass} overflow-hidden transition-all ${focusedTeamId === team.id ? "ring-2 ring-action shadow-md" : ""}`}
+            >
               {team.photoUrl && (
                 <img src={team.photoUrl} alt="" className="w-full max-h-40 object-cover" />
               )}
@@ -3077,7 +3111,7 @@ export default function LeagueDetailPage() {
                   canEdit={canEdit}
                   removingPlayerId={removingPlayerId}
                   onRemove={(playerId, playerName) => removePlayerFromTeam(team.id, playerId, playerName)}
-                  onEditPrefs={canAddToTeam ? (playerId) => router.push(`/leagues/${id}/sign-up?for=${playerId}`) : undefined}
+                  onEditPrefs={canAddToTeam ? (playerId) => router.push(`/leagues/${id}/sign-up?for=${playerId}&team=${team.id}`) : undefined}
                 />
               )}
             </div>

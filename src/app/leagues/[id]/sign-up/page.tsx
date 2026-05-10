@@ -34,6 +34,12 @@ export default function LeagueSignUpPage() {
   // teammate's league preferences. Saves via PATCH instead of POST.
   const onBehalfOf = searchParams.get("for");
   const isOnBehalf = !!onBehalfOf && onBehalfOf !== userId;
+  // Optional ?team=<teamId> remembers which team's roster we came from so
+  // the back link returns to it expanded + focused.
+  const fromTeamId = searchParams.get("team");
+  const backHref = fromTeamId
+    ? `/leagues/${id}?tab=teams&expandTeam=${fromTeamId}&focus=${fromTeamId}`
+    : `/leagues/${id}`;
   const [targetName, setTargetName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -58,7 +64,7 @@ export default function LeagueSignUpPage() {
       fetch(`/api/leagues/${id}/participation-requests`),
       targetId ? fetch(`/api/players/${targetId}`) : Promise.resolve(null),
     ]);
-    if (!leagueR.ok) { router.push(`/leagues/${id}`); return; }
+    if (!leagueR.ok) { router.push(backHref); return; }
     const league = await leagueR.json();
     setLeagueName(league.name);
     setLeagueStatus(league.status);
@@ -133,7 +139,7 @@ export default function LeagueSignUpPage() {
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
     if (isOnBehalf) {
       // Captain edited a teammate's prefs — back to league, no celebration card.
-      router.push(`/leagues/${id}`);
+      router.push(backHref);
       return;
     }
     setExistingRequestStatus("pending");
@@ -143,7 +149,7 @@ export default function LeagueSignUpPage() {
     const chosenTeam = teams.find((t) => t.id === preferredTeamId);
     return (
       <>
-        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
+        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(backHref) }} />
         <div className="space-y-2">
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
             <p className="font-semibold text-emerald-900">
@@ -156,7 +162,7 @@ export default function LeagueSignUpPage() {
                 ? <>Waiting for the team captain (or league director) to confirm.</>
                 : <>Waiting for any team captain (or the league director) to pick you up.</>}
             </p>
-            <button onClick={() => router.push(`/leagues/${id}`)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
+            <button onClick={() => router.push(backHref)} className="text-sm text-emerald-700 font-medium hover:underline">Done</button>
           </div>
         </div>
       </>
@@ -170,7 +176,7 @@ export default function LeagueSignUpPage() {
 
   return (
     <>
-      <AppHeader variant="hero-sub" title={isOnBehalf ? `Edit prefs · ${targetName || "Player"}` : "Sign-up"} back={{ label: "Back to league", onClick: () => router.push(`/leagues/${id}`) }} />
+      <AppHeader variant="hero-sub" title={isOnBehalf ? `Edit prefs · ${targetName || "Player"}` : "Sign-up"} back={{ label: "Back to league", onClick: () => router.push(backHref) }} />
     <div className="space-y-2">
 
       <div className={`${frameClass} p-4 space-y-3`}>

@@ -173,7 +173,14 @@ export async function POST(
     await tx.leagueTeamPlayer.create({ data: { teamId: targetTeamId, playerId: ctx.request.playerId } });
     await tx.leagueParticipationRequest.update({
       where: { id: reqId },
-      data: { status: "accepted", respondedById: ctx.user.id, respondedAt: new Date() },
+      data: {
+        status: "accepted",
+        // Snap preferredTeamId to the team the captain actually picked, so
+        // event sign-up reads stay aligned with the player's roster team.
+        preferredTeamId: targetTeamId,
+        respondedById: ctx.user.id,
+        respondedAt: new Date(),
+      },
     });
   });
 
