@@ -444,6 +444,11 @@ export default function EventDetailPage() {
   const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  // Multi-select state for the captain's "+ Add player" picker on the
+  // league participants list. Player ids only — keyed by team is unnecessary
+  // since playerIds are globally unique.
+  const [rosterAddSelected, setRosterAddSelected] = useState<Set<string>>(new Set());
+  const [rosterAddSaving, setRosterAddSaving] = useState(false);
   const [bulkGenderFilter, setBulkGenderFilter] = useState<string | null>(null);
   const [bulkSearch, setBulkSearch] = useState("");
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -2463,27 +2468,90 @@ export default function EventDetailPage() {
                     })}
                   </div>
                 )}
-                {canAddToTeam && rosterUnsigned.length > 0 && (
-                  <details className="mt-1.5 px-1">
-                    <summary className="text-[11px] text-action font-medium cursor-pointer">
-                      + Add player ({rosterUnsigned.length})
-                    </summary>
-                    <div className="mt-1 space-y-0.5">
-                      {rosterUnsigned.map((tp) => (
+                {canAddToTeam && rosterUnsigned.length > 0 && (() => {
+                  const teamSelected = rosterUnsigned.filter((tp) => rosterAddSelected.has(tp.playerId));
+                  const allSelected = teamSelected.length === rosterUnsigned.length;
+                  const toggleAll = () => {
+                    setRosterAddSelected((prev) => {
+                      const next = new Set(prev);
+                      if (allSelected) {
+                        rosterUnsigned.forEach((tp) => next.delete(tp.playerId));
+                      } else {
+                        rosterUnsigned.forEach((tp) => next.add(tp.playerId));
+                      }
+                      return next;
+                    });
+                  };
+                  const togglePlayer = (pid: string) => {
+                    setRosterAddSelected((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(pid)) next.delete(pid);
+                      else next.add(pid);
+                      return next;
+                    });
+                  };
+                  const onAddSelected = async () => {
+                    if (teamSelected.length === 0) return;
+                    setRosterAddSaving(true);
+                    const r = await fetch(`/api/events/${event.id}/signup-prefs`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ playerIds: teamSelected.map((tp) => tp.playerId) }),
+                    });
+                    setRosterAddSaving(false);
+                    if (!r.ok) {
+                      const d = await r.json().catch(() => ({}));
+                      await alertDialog(d.error || "Failed to add players", "Error");
+                      return;
+                    }
+                    setRosterAddSelected((prev) => {
+                      const next = new Set(prev);
+                      teamSelected.forEach((tp) => next.delete(tp.playerId));
+                      return next;
+                    });
+                    await fetchEvent();
+                  };
+                  return (
+                    <details className="mt-1.5 px-1" open={teamSelected.length > 0 || undefined}>
+                      <summary className="text-[11px] text-action font-medium cursor-pointer flex items-center justify-between gap-2">
+                        <span>+ Add player ({rosterUnsigned.length})</span>
                         <button
-                          key={tp.playerId}
                           type="button"
-                          onClick={() => router.push(`/events/${event.id}/sign-up?for=${tp.playerId}`)}
-                          className="w-full flex items-center gap-1.5 px-1.5 py-1 rounded hover:bg-gray-50 text-left"
-                        >
-                          <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
-                          <span className="text-[11px] truncate">{tp.player.name}</span>
-                          {tp.player.gender && <span className={`text-[9px] ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </details>
-                )}
+                          onClick={(e) => { e.preventDefault(); toggleAll(); }}
+                          className="text-[10px] text-muted hover:text-action"
+                        >{allSelected ? "Clear all" : "Select all"}</button>
+                      </summary>
+                      <div className="mt-1 space-y-0.5">
+                        {rosterUnsigned.map((tp) => {
+                          const selected = rosterAddSelected.has(tp.playerId);
+                          return (
+                            <button
+                              key={tp.playerId}
+                              type="button"
+                              onClick={() => togglePlayer(tp.playerId)}
+                              className={`w-full flex items-center gap-1.5 px-1.5 py-1 rounded text-left border ${selected ? "border-action bg-action/10" : "border-transparent hover:bg-gray-50"}`}
+                            >
+                              <span className={`shrink-0 w-3.5 h-3.5 rounded border ${selected ? "bg-action border-action text-white text-[9px] flex items-center justify-center" : "border-border"}`}>
+                                {selected ? "✓" : ""}
+                              </span>
+                              <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+                              <span className="text-[11px] truncate flex-1">{tp.player.name}</span>
+                              {tp.player.gender && <span className={`text-[9px] ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {teamSelected.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={rosterAddSaving}
+                          onClick={onAddSelected}
+                          className="mt-2 w-full bg-action text-white text-xs font-semibold py-1.5 rounded-lg disabled:opacity-50"
+                        >{rosterAddSaving ? "Adding…" : `Add ${teamSelected.length} to event`}</button>
+                      )}
+                    </details>
+                  );
+                })()}
               </div>
             );
           };

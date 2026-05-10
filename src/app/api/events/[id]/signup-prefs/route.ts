@@ -27,6 +27,102 @@ export async function POST(
   }
   const { id: eventId } = await params;
   const body = await req.json().catch(() => ({}));
+
+  // ── Bulk add path ────────────────────────────────────────────
+  // Body: { playerIds: string[] }
+  // Captain/organizer adds many teammates at once. Each upserted
+  // EventPlayer reuses the player's LeagueParticipationRequest
+  // preferences (intent="playing"). No category prefs in the body —
+  // they come from the league sign-up.
+  if (Array.isArray(body.playerIds) && body.playerIds.length > 0) {
+    const playerIds = body.playerIds.filter((x: unknown): x is string => typeof x === "string" && x.length > 0);
+    const ev = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        roundId: true,
+        round: {
+          select: {
+            league: {
+              select: {
+                id: true, createdById: true, deputyId: true,
+                teams: {
+                  select: {
+                    id: true, captainId: true, viceCaptainId: true,
+                    players: { select: { playerId: true } },
+                  },
+                },
+                categories: { select: { id: true, status: true } },
+              },
+            },
+          },
+        },
+        classes: { select: { id: true, isDefault: true }, orderBy: { isDefault: "desc" } },
+      },
+    });
+    if (!ev || !ev.roundId || !ev.round) {
+      return NextResponse.json({ error: "Bulk signup is only for league events" }, { status: 400 });
+    }
+    const league = ev.round.league;
+    const isOrganizer = user.role === "admin" || league.createdById === user.id || league.deputyId === user.id;
+    // Build (playerId → teamId) so we can verify captain/vice authority.
+    const playerToTeam = new Map<string, string>();
+    for (const t of league.teams) {
+      for (const p of t.players) playerToTeam.set(p.playerId, t.id);
+    }
+    const myCaptainTeamIds = new Set(
+      league.teams
+        .filter((t) => t.captainId === user.id || t.viceCaptainId === user.id)
+        .map((t) => t.id),
+    );
+    if (!isOrganizer) {
+      const unauth = playerIds.filter((pid: string) => {
+        const tid = playerToTeam.get(pid);
+        return !tid || !myCaptainTeamIds.has(tid);
+      });
+      if (unauth.length > 0) {
+        return NextResponse.json({ error: "Some players aren't on a team you captain." }, { status: 403 });
+      }
+    }
+    // Pull each target's LeagueParticipationRequest prefs as the default.
+    const reqs = await prisma.leagueParticipationRequest.findMany({
+      where: { leagueId: league.id, playerId: { in: playerIds }, status: "accepted" },
+      select: { playerId: true, preferences: true },
+    });
+    const prefByPlayer = new Map<string, Record<string, { level: "prefer" | "ok" | "no"; note?: string }>>();
+    const validCatIds = new Set(league.categories.filter((c) => c.status !== "draft").map((c) => c.id));
+    for (const r of reqs) {
+      if (!r.preferences || typeof r.preferences !== "object") continue;
+      const clean: Record<string, { level: "prefer" | "ok" | "no"; note?: string }> = {};
+      for (const [catId, val] of Object.entries(r.preferences as Record<string, unknown>)) {
+        if (!validCatIds.has(catId)) continue;
+        if (!val || typeof val !== "object") continue;
+        const v = val as { level?: unknown; note?: unknown };
+        if (v.level !== "prefer" && v.level !== "ok" && v.level !== "no") continue;
+        const note = typeof v.note === "string" ? v.note.trim() : undefined;
+        clean[catId] = { level: v.level, ...(note ? { note } : {}) };
+      }
+      prefByPlayer.set(r.playerId, clean);
+    }
+    const defaultClassId = ev.classes[0]?.id ?? null;
+    let added = 0;
+    for (const pid of playerIds) {
+      const prefs = prefByPlayer.get(pid) ?? {};
+      const existing = await prisma.eventPlayer.findFirst({ where: { eventId, playerId: pid } });
+      if (existing) {
+        await prisma.eventPlayer.update({
+          where: { id: existing.id },
+          data: { status: "registered", signupPreferences: prefs },
+        });
+      } else {
+        await prisma.eventPlayer.create({
+          data: { eventId, playerId: pid, classId: defaultClassId, status: "registered", signupPreferences: prefs },
+        });
+      }
+      added++;
+    }
+    return NextResponse.json({ ok: true, added });
+  }
+
   const overrideId = typeof body.playerId === "string" && body.playerId.length > 0 ? body.playerId : null;
   const targetId = overrideId ?? user.id;
 
