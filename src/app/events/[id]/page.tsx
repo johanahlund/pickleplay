@@ -75,7 +75,13 @@ interface LeagueRoundLink {
     id: string; name: string; season: string | null;
     createdById: string | null; deputyId: string | null;
     categories?: { id: string; name: string; format: string; gender: string }[];
-    teams?: { id: string; name: string; captainId: string | null; viceCaptainId: string | null; players: { playerId: string }[] }[];
+    teams?: {
+      id: string;
+      name: string;
+      captainId: string | null;
+      viceCaptainId: string | null;
+      players: { playerId: string; player: { id: string; name: string; photoUrl: string | null; gender: string | null } }[];
+    }[];
     helpers?: { playerId: string }[];
   };
 }
