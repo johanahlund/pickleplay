@@ -46,16 +46,20 @@ async function loadEventContext(leagueId: string, eventId: string, userId: strin
   }
   const [team1, team2] = teams;
 
+  // Prefer captain/vice ownership over organizer status: a person who is
+  // both league director AND a team captain (common in small leagues) needs
+  // the captain path so they can toggle slots for their team. Organizer-only
+  // fallback is for non-captain admins who'd otherwise be locked out.
+  const ownsTeam1 = team1.captainId === userId || team1.viceCaptainId === userId;
+  const ownsTeam2 = team2.captainId === userId || team2.viceCaptainId === userId;
+  if (ownsTeam1) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team1.id };
+  if (ownsTeam2) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team2.id };
   const isOrganizer = isAppAdmin
     || event.round?.league.createdById === userId
     || event.round?.league.deputyId === userId;
   if (isOrganizer) {
     return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: null };
   }
-  const ownsTeam1 = team1.captainId === userId || team1.viceCaptainId === userId;
-  const ownsTeam2 = team2.captainId === userId || team2.viceCaptainId === userId;
-  if (ownsTeam1) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team1.id };
-  if (ownsTeam2) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team2.id };
   return { error: "Not a captain or organizer", status: 403 };
 }
 
@@ -109,14 +113,20 @@ export async function POST(
         const updated = await prisma.leagueGame.update({ where: { id: existing.id }, data });
         return NextResponse.json(updated);
       }
+      // First slot in this category = principal by default. Captains can
+      // demote/swap via set_kind. If a principal already exists in the
+      // category (e.g. someone added slot 2 as principal manually), the
+      // new game stays "league".
+      const principalCount = await prisma.leagueGame.count({
+        where: { eventId, categoryId, kind: "principal" },
+      });
+      const kind = principalCount === 0 ? "principal" : "league";
       const created = await prisma.leagueGame.create({
         data: {
           eventId, categoryId, slotNumber,
           team1Id: ctx.team1Id, team2Id: ctx.team2Id,
           team1Wants: isTeam1Side, team2Wants: !isTeam1Side,
-          // Default kind = "league". Promotion to "principal" happens
-          // explicitly via set_kind, or auto on first scored game in cat.
-          kind: "league",
+          kind,
         },
       });
       return NextResponse.json(created);

@@ -3465,6 +3465,31 @@ export default function EventDetailPage() {
         );
       })()}
 
+      {/* Captain/vice "Build lineup" CTA — visible to captains or vice of
+          either of the two playing teams (or to league organizers). Routes
+          to the slot/checkbox grid where they declare which matches their
+          team will play and assign players. */}
+      {event.round && userId && (() => {
+        const allLeagueTeams = event.round!.league.teams || [];
+        const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
+        const myCaptainTeam = allLeagueTeams
+          .filter((t) => playingTeamIds.includes(t.id))
+          .find((t) => t.captainId === userId || t.viceCaptainId === userId);
+        if (!myCaptainTeam) return null;
+        return (
+          <Link
+            href={`/leagues/${event.round!.league.id}/events/${event.id}/lineup/${myCaptainTeam.id}`}
+            className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between gap-2 hover:bg-blue-100"
+          >
+            <div className="text-sm text-blue-900">
+              <div><strong>Build lineup</strong> for {myCaptainTeam.name}</div>
+              <div className="text-[11px] text-muted">Tick the matches your team wants to play, then assign players.</div>
+            </div>
+            <span className="text-blue-700 text-lg">→</span>
+          </Link>
+        );
+      })()}
+
       {canManage && managerCard}
 
       {/* Event Data — name, date, time, status (managers only) */}

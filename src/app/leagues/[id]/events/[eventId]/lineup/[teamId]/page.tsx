@@ -149,6 +149,26 @@ export default function LineupBuilderPage() {
     return true;
   };
 
+  // Same as `post` but does not await loadAll() — caller has already done an
+  // optimistic update locally. We re-sync silently in the background.
+  const postOptimistic = async (body: Record<string, unknown>, rollback: () => void) => {
+    setErrorMsg(null);
+    const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setErrorMsg(d.error || "Failed");
+      rollback();
+      return;
+    }
+    // Reconcile with server truth (real ids, opp's wants, etc.) — but the
+    // checkbox itself has already flipped, so the user feels no latency.
+    await loadAll();
+  };
+
   const toggleSlot = async (categoryId: string, slotNumber: number, want: boolean) => {
     const g = gameByKey.get(`${categoryId}:${slotNumber}`);
     if (!want && g && ourPlayersForGame(g).length > 0) {
@@ -157,33 +177,117 @@ export default function LineupBuilderPage() {
       // Server still blocks until players are removed. Walk them off first.
       await post({ action: "assign_players", gameId: g.id, playerIds: [] });
     }
-    await post({ action: "toggle_slot", categoryId, slotNumber, want });
+    if (ourSide === null) return;
+    const wantsField: "team1Wants" | "team2Wants" = ourSide === 1 ? "team1Wants" : "team2Wants";
+    const otherWantsField: "team1Wants" | "team2Wants" = ourSide === 1 ? "team2Wants" : "team1Wants";
+    const opponentTeamId = ourSide === 1 ? team!.id : opponentTeam?.id || "";
+    void opponentTeamId;
+
+    // Snapshot for rollback.
+    const snapshot = games;
+    setGames((prev) => {
+      const existing = prev.find((x) => x.categoryId === categoryId && x.slotNumber === slotNumber);
+      if (want) {
+        if (existing) {
+          return prev.map((x) => x === existing ? { ...x, [wantsField]: true } : x);
+        }
+        // Lazy-create a placeholder so the UI flips immediately. The real
+        // id arrives on reconcile (loadAll), then this synthetic row is
+        // replaced by the server's row — we keep keys stable by category+slot.
+        const t1 = team!.id.localeCompare(opponentTeam?.id || "") < 0 ? team!.id : (opponentTeam?.id || "");
+        const t2 = t1 === team!.id ? (opponentTeam?.id || "") : team!.id;
+        // Mirror the server: first slot in a category becomes principal.
+        const hasPrincipal = prev.some((x) => x.categoryId === categoryId && x.kind === "principal");
+        const synthetic: Game = {
+          id: `pending-${categoryId}-${slotNumber}`,
+          categoryId, slotNumber,
+          team1Id: t1, team2Id: t2,
+          team1Wants: ourSide === 1, team2Wants: ourSide === 2,
+          kind: hasPrincipal ? "league" : "principal",
+          winnerId: null, gamePlayers: [],
+        };
+        return [...prev, synthetic];
+      }
+      // Untick: clear our flag; if the other team also doesn't want, drop the row.
+      if (!existing) return prev;
+      const otherWants = existing[otherWantsField];
+      if (!otherWants) return prev.filter((x) => x !== existing);
+      return prev.map((x) => x === existing ? { ...x, [wantsField]: false } : x);
+    });
+    await postOptimistic(
+      { action: "toggle_slot", categoryId, slotNumber, want },
+      () => setGames(snapshot),
+    );
   };
 
   const assignPlayers = async (gameId: string, playerIds: string[]) => {
-    await post({ action: "assign_players", gameId, playerIds });
+    // Optimistic: replace our team's players locally, leave opponent rows.
+    const snapshot = games;
+    const rosterIds = new Set(roster.map((p) => p.id));
+    setGames((prev) => prev.map((g) => {
+      if (g.id !== gameId) return g;
+      const oppPlayers = g.gamePlayers.filter((gp) => !rosterIds.has(gp.playerId));
+      const ourPlayers = playerIds.map((pid) => {
+        const known = roster.find((p) => p.id === pid);
+        return { playerId: pid, player: { id: pid, name: known?.name ?? "…" } };
+      });
+      return { ...g, gamePlayers: [...oppPlayers, ...ourPlayers] };
+    }));
+    await postOptimistic(
+      { action: "assign_players", gameId, playerIds },
+      () => setGames(snapshot),
+    );
   };
 
   const setKind = async (gameId: string, kind: "principal" | "league" | "extra") => {
-    await post({ action: "set_kind", gameId, kind });
+    // Optimistic: flip the badge instantly. If promoting to principal,
+    // demote any other principal in the same category.
+    const target = games.find((g) => g.id === gameId);
+    if (!target) return;
+    const snapshot = games;
+    setGames((prev) => prev.map((g) => {
+      if (g.id === gameId) return { ...g, kind };
+      if (kind === "principal" && g.categoryId === target.categoryId && g.kind === "principal") {
+        return { ...g, kind: "league" };
+      }
+      return g;
+    }));
+    await postOptimistic(
+      { action: "set_kind", gameId, kind },
+      () => setGames(snapshot),
+    );
   };
 
   // Player pools for the picker. Recommended = signup with prefer/ok for this
   // category. All sign-ups = anyone signed up regardless of category prefs.
   // Roster = team players (even non-signups).
+  // All pools are filtered to players whose gender matches the category:
+  //   male → "M", female → "F", mix/open → everyone (incl. unknown gender).
   const buildPools = (cat: Category) => {
+    const matchesGender = (g: string | null | undefined) => {
+      if (cat.gender === "male") return g === "M";
+      if (cat.gender === "female") return g === "F";
+      return true;
+    };
     const rosterById = new Map(roster.map((p) => [p.id, p]));
     const recommended: PlayerLite[] = [];
     const allSignups: PlayerLite[] = [];
     for (const s of signups) {
       const onRoster = rosterById.has(s.playerId);
       if (!onRoster) continue; // only show our roster's signups
+      if (!matchesGender(s.player.gender)) continue;
       const pl: PlayerLite = { ...s.player, gender: s.player.gender ?? null };
       allSignups.push(pl);
       const pref = s.signupPreferences?.[cat.id]?.level;
       if (pref === "prefer" || pref === "ok") recommended.push(pl);
     }
-    return { recommended, allSignups, roster };
+    const filteredRoster = roster.filter((p) => matchesGender(p.gender));
+    const byName = (a: PlayerLite, b: PlayerLite) => a.name.localeCompare(b.name);
+    return {
+      recommended: recommended.sort(byName),
+      allSignups: allSignups.sort(byName),
+      roster: filteredRoster.sort(byName),
+    };
   };
 
   const back = () => router.push(`/leagues/${id}?tab=rounds`);
