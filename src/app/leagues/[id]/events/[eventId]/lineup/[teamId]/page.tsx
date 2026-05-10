@@ -436,9 +436,9 @@ export default function LineupBuilderPage() {
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
 
         return (
-          <div key={cat.id} className={`${frameClass} p-3 space-y-2`}>
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-sm font-semibold">{cat.name}</div>
+          <div key={cat.id} className={`${frameClass} shadow-sm p-3 space-y-2 border-l-4 border-l-action/60`}>
+            <div className="flex items-baseline justify-between gap-2 pb-1.5 border-b border-border/70 -mx-3 px-3">
+              <div className="text-base font-bold">{cat.name}</div>
               <div className="flex items-baseline gap-2">
                 <div className="text-[11px] text-muted">{cat.format} · max {max}</div>
                 {canAddMore && !ourLocked && (
@@ -462,7 +462,18 @@ export default function LineupBuilderPage() {
               const isPrincipal = g?.kind === "principal";
 
               return (
-                <div key={slotNum} className={`border rounded-lg p-2 ${isPrincipal ? "border-emerald-300 bg-emerald-50/40" : "border-border"}`}>
+                <div key={slotNum} className={`relative border rounded-lg p-2 ${isPrincipal ? "border-emerald-300 bg-emerald-50/40" : "border-border"}`}>
+                  {/* Hide an empty extra row the captain added but didn't tick.
+                      Top-right red ✕, only when the row hasn't been ticked yet
+                      (rows with a game must be unticked to remove). */}
+                  {!ourWants && !g && slotNum > 1 && (
+                    <button
+                      type="button"
+                      aria-label="Hide this match row"
+                      onClick={() => setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.max(0, (prev[cat.id] || 0) - 1) }))}
+                      className="absolute top-1 right-1 text-danger hover:bg-red-50 rounded w-5 h-5 flex items-center justify-center text-xs leading-none"
+                    >✕</button>
+                  )}
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2">
                       <input
@@ -472,20 +483,6 @@ export default function LineupBuilderPage() {
                         onChange={(e) => toggleSlot(cat.id, slotNum, e.target.checked)}
                       />
                       <span className="text-xs font-medium">Match {slotNum}</span>
-                      {/* Hide an empty extra row the captain added but didn't tick.
-                          Won't appear for slot 1 (always shown) or rows with a
-                          game (use untick to remove those instead). */}
-                      {!g && slotNum > 1 && (
-                        <button
-                          type="button"
-                          aria-label="Hide this match row"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.max(0, (prev[cat.id] || 0) - 1) }));
-                          }}
-                          className="text-muted hover:text-danger text-xs ml-1"
-                        >✕</button>
-                      )}
                     </label>
                     {g && (
                       <div className="flex items-center gap-1.5">

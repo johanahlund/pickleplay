@@ -443,6 +443,10 @@ export default function EventDetailPage() {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
+  // For league events: filter the participants list by which team they're on.
+  // null = both teams. "home" = host team (first leagueTeam if no hostTeamId).
+  // "away" = the other team.
+  const [playerTeamFilter, setPlayerTeamFilter] = useState<"home" | "away" | null>(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   // Multi-select state for the captain's "+ Add player" picker on the
@@ -706,7 +710,12 @@ export default function EventDetailPage() {
   };
 
   const unsignFromEvent = async () => {
-    if (!await confirmDialog({ message: "Leave this event?" })) return;
+    if (!await confirmDialog({
+      title: "Leave event?",
+      message: "Do you no longer want to participate in this event?",
+      confirmText: "Leave event",
+      danger: true,
+    })) return;
     const r = await fetch(`/api/events/${id}/signup`, { method: "DELETE" });
     if (!r.ok) {
       const data = await r.json();
@@ -2103,7 +2112,7 @@ export default function EventDetailPage() {
         {session?.user && !canManage && event.openSignup && (
           <div className="flex justify-end">
             {event.players.some((ep) => ep.player.id === (session.user as { id: string }).id) ? (
-              <button onClick={unsignFromEvent} className="text-xs text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave</button>
+              <button onClick={unsignFromEvent} className="text-xs text-danger px-3 py-1.5 rounded hover:bg-red-50">Leave event</button>
             ) : (
               <button onClick={signupForEvent} className="text-sm bg-action text-white px-4 py-1.5 rounded-lg font-medium">Join</button>
             )}
@@ -2113,13 +2122,29 @@ export default function EventDetailPage() {
           {event.players.length > 6 && (
             <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base flex-1" />
           )}
+          {/* Home/Away toggle — only meaningful on league events with 2 teams.
+              Click toggles in/out (no "Both" pill needed; deselected = both). */}
+          {event.round && (event.leagueTeams?.length ?? 0) === 2 && (
+            <div className="flex gap-1 shrink-0">
+              {(["home", "away"] as const).map((side) => (
+                <button key={side}
+                  onClick={() => setPlayerTeamFilter((prev) => prev === side ? null : side)}
+                  title={side === "home" ? "Home only" : "Away only"}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    playerTeamFilter === side ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}>{side === "home" ? "🏠" : "✈️"}</button>
+              ))}
+            </div>
+          )}
+          {/* Gender toggle — click to filter to that gender, click again to clear.
+              No "All" button: deselected = all. */}
           <div className="flex gap-1 shrink-0">
             {[
-              { value: null, label: "All" },
-              { value: "M", label: "♂" },
-              { value: "F", label: "♀" },
+              { value: "M" as const, label: "♂" },
+              { value: "F" as const, label: "♀" },
             ].map((g) => (
-              <button key={g.label} onClick={() => setPlayerGenderFilter(g.value)}
+              <button key={g.label}
+                onClick={() => setPlayerGenderFilter((prev) => prev === g.value ? null : g.value)}
                 className={`px-2 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   playerGenderFilter === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"
                 }`}>{g.label}</button>
@@ -2387,11 +2412,14 @@ export default function EventDetailPage() {
             const rosterIds = new Set((fullTeam?.players ?? []).map((p) => p.playerId));
             const isMyTeam = et.teamId === myTeamId;
             const hidden = !canSeeAll && !bothReady && !isMyTeam;
-            // Captain/vice of THIS team can sign up teammates regardless of
-            // viewRole — useful when a player doesn't have the app or hasn't
-            // signed up yet. Organizers (canManage) get the same power.
+            // Adding to a team's roster is restricted to: captain/vice of
+            // THIS team, league director/deputy, or app admin. Event-level
+            // managers (event owner / event helpers) deliberately can't
+            // add players to either team's roster — only league-level
+            // people can manage rosters across teams.
             const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
-            const canAddToTeam = isCaptainHere || canManage;
+            const isLeagueAdmin = !!isLeagueOrganizerOfEvent;
+            const canAddToTeam = isCaptainHere || isLeagueAdmin || isAdmin;
             const eps = event.players
               .filter((ep) => rosterIds.has(ep.player.id))
               .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
@@ -2483,7 +2511,8 @@ export default function EventDetailPage() {
           const teamAddPicker = (et: LeagueEventTeamLink) => {
             const fullTeam = allLeagueTeams.find((t) => t.id === et.teamId);
             const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
-            const canAddToTeam = isCaptainHere || canManage;
+            const isLeagueAdmin = !!isLeagueOrganizerOfEvent;
+            const canAddToTeam = isCaptainHere || isLeagueAdmin || isAdmin;
             if (!canAddToTeam) return null;
             const signedUpIds = new Set(event.players.map((p) => p.player.id));
             type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl?: string | null; gender?: string | null; hasAccount?: boolean } };
@@ -2574,12 +2603,21 @@ export default function EventDetailPage() {
               </details>
             );
           };
+          // Determine home/away. Host team (event.hostTeamId) is home;
+          // otherwise the first leagueTeam is treated as home.
+          const homeTeamId = event.hostTeamId || ets[0]?.teamId;
+          const awayTeamId = ets.find((et) => et.teamId !== homeTeamId)?.teamId;
+          const visibleEts = playerTeamFilter === "home"
+            ? ets.filter((et) => et.teamId === homeTeamId)
+            : playerTeamFilter === "away"
+            ? ets.filter((et) => et.teamId === awayTeamId)
+            : ets;
           return (
             <>
-              <div className="grid grid-cols-2 gap-2">
-                {ets.map((et) => teamColumn(et))}
+              <div className={visibleEts.length === 1 ? "" : "grid grid-cols-2 gap-2"}>
+                {visibleEts.map((et) => teamColumn(et))}
               </div>
-              {ets.map((et) => teamAddPicker(et))}
+              {visibleEts.map((et) => teamAddPicker(et))}
             </>
           );
         })() : (
