@@ -951,7 +951,16 @@ export default function LeagueDetailPage() {
     const r = await fetch(`/api/leagues/${id}`);
     if (!r.ok) { console.error("League fetch failed", r.status, await r.text().catch(() => "")); router.push("/leagues"); return; }
     const data = await r.json();
-    setLeague(data);
+    setLeague((prev) => {
+      // First load: collapse all teams by default. Subsequent polls don't
+      // change collapse state (preserves whatever the user has open).
+      if (prev === null && Array.isArray(data?.teams) && data.teams.length > 0) {
+        const allIds: string[] = (data.teams as { id: string }[]).map((t) => t.id);
+        const skip = expandTeamFromUrl;
+        setCollapsedTeams(new Set(allIds.filter((tid) => tid !== skip)));
+      }
+      return data;
+    });
     setLoading(false);
     // Refresh preview cache so the next visit renders header instantly with current data.
     if (typeof id === "string") {
