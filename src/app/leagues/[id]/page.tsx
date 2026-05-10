@@ -858,7 +858,16 @@ export default function LeagueDetailPage() {
 
   // Team edit state (used for both add and edit)
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null); // null = creating new
-  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(() => {
+    // Default-collapse all teams on first render. Honours ?expandTeam=<id>
+    // from the back-nav URL. Re-derived on subsequent polls only via the
+    // explicit setCollapsedTeams below; user toggles aren't disturbed.
+    if (!league || !Array.isArray(league.teams)) return new Set();
+    const skip = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("expandTeam")
+      : null;
+    return new Set(league.teams.map((t) => t.id).filter((tid) => tid !== skip));
+  });
 
   // When returning from the per-player prefs editor with ?expandTeam, make
   // sure that team is open. When ?focus is set, scroll to it after the
