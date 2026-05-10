@@ -50,7 +50,21 @@ export async function POST(
     return NextResponse.json({ error: `Roster full (max ${maxRoster})` }, { status: 400 });
   }
 
-  await prisma.leagueTeamPlayer.create({ data: { teamId, playerId } });
+  // Create the roster row + ensure a matching ParticipationRequest exists
+  // so future event sign-ups can read the player's league prefs.
+  await prisma.$transaction(async (tx) => {
+    await tx.leagueTeamPlayer.create({ data: { teamId, playerId } });
+    await tx.leagueParticipationRequest.upsert({
+      where: { leagueId_playerId: { leagueId: id, playerId } },
+      create: {
+        leagueId: id, playerId,
+        preferredTeamId: teamId,
+        status: "accepted",
+        respondedAt: new Date(),
+      },
+      update: { preferredTeamId: teamId, status: "accepted" },
+    });
+  });
   return NextResponse.json({ ok: true });
 }
 
