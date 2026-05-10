@@ -1218,7 +1218,7 @@ export default function EventDetailPage() {
 
   const managerCard = (
     <div onClick={() => { if (canManage) { fetchAllPlayers(); setActiveSection("admins"); } }}
-      className={`bg-card rounded-xl border border-border p-3 flex items-center gap-2 ${canManage ? "active:opacity-70 cursor-pointer" : ""}`}>
+      className={`${frameClass} p-3 flex items-center gap-2 ${canManage ? "active:opacity-70 cursor-pointer" : ""}`}>
       <div className="flex-1 min-w-0">
         <p className="text-base font-bold text-foreground">Event Manager</p>
         <p className="text-sm font-medium truncate">
@@ -3419,7 +3419,7 @@ export default function EventDetailPage() {
           const phaseStr = phaseLabel[phase] || phase;
           return (
             <button key={cls.id} onClick={() => { fetchEvent(); setActiveSection("competition"); setSelectedClassId(cls.id); }}
-              className="w-full bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors text-left">
+              className={`w-full ${frameClass} p-4 active:bg-gray-50 transition-colors text-left`}>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">{cls.name}</span>
                 <span className="text-[10px] text-muted font-medium bg-gray-100 px-2 py-0.5 rounded-full">{phaseStr}</span>

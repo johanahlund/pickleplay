@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { frameClass } from "@/components/Card";
 
 interface SpeakerModeProps {
   eventId: string;
@@ -207,7 +208,7 @@ export function SpeakerMode({ eventId, userId, userName, isManager }: SpeakerMod
 
   // Manager view — compact one-line
   return (
-    <div className="flex items-center gap-2 bg-card rounded-xl border border-border px-3 py-2">
+    <div className={`flex items-center gap-2 ${frameClass} px-3 py-2`}>
       <span className="text-lg">🔊</span>
       <span className="text-xs text-muted flex-1">
         {speakerUserId

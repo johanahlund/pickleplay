@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { PlayerSelector } from "./PlayerSelector";
 import { PairRequests } from "./PairRequests";
+import { frameClass } from "@/components/Card";
 
 interface Player {
   id: string;
@@ -113,7 +114,7 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
   if (loading) return <div className="text-xs text-muted py-2">Loading players...</div>;
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">
           {format === "doubles" ? "Teams" : "Players"} ({players.length})

@@ -1222,7 +1222,7 @@ export default function LeagueDetailPage() {
 
   const saveTeamEdit = async () => {
     const name = editTeamName.trim();
-    if (!name) { alert("Team name required"); return; }
+    if (!name) { await alertDialog("Team name required"); return; }
     let teamId = editingTeamId;
     // Captains can edit name + slogan + photos. Only league managers can
     // change captain/vice or relink the club.
@@ -1240,7 +1240,7 @@ export default function LeagueDetailPage() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed to save team"); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed to save team"); return; }
     } else {
       // Creation always requires manager fields.
       body.name = name;
@@ -1251,7 +1251,7 @@ export default function LeagueDetailPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed to create team"); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed to create team"); return; }
       const created = await r.json();
       teamId = created.id;
     }
@@ -1357,7 +1357,7 @@ export default function LeagueDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roundId }),
     });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
     fetchLeague(); fetchStandings();
   };
 
@@ -1367,7 +1367,7 @@ export default function LeagueDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teamIds: [team1Id, team2Id], hostTeamId: hostTeamId || team1Id, date: date || undefined }),
     });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
     fetchLeague(); fetchStandings();
   };
 
@@ -1384,7 +1384,7 @@ export default function LeagueDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ eventId }),
     });
-    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
     fetchLeague(); fetchStandings();
   };
 
@@ -1490,7 +1490,7 @@ export default function LeagueDetailPage() {
                       const ok = await confirm({ title: "Remove document", message: `Remove "${d.name}"?`, danger: true, confirmText: "Remove" });
                       if (!ok) return;
                       const r = await fetch(`/api/leagues/${id}/documents/${d.id}`, { method: "DELETE" });
-                      if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || "Failed to remove"); return; }
+                      if (!r.ok) { const j = await r.json().catch(() => ({})); await alertDialog(j.error || "Failed to remove"); return; }
                       fetchLeague();
                     }} className="text-danger text-sm w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center" aria-label="Remove">✕</button>
                   </div>
@@ -1504,7 +1504,7 @@ export default function LeagueDetailPage() {
                     e.target.value = "";
                     const fd = new FormData(); fd.append("file", f);
                     const r = await fetch(`/api/leagues/${id}/documents`, { method: "POST", body: fd });
-                    if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || "Upload failed"); return; }
+                    if (!r.ok) { const j = await r.json().catch(() => ({})); await alertDialog(j.error || "Upload failed"); return; }
                     fetchLeague();
                   }} />
                 </label>
@@ -2005,7 +2005,7 @@ export default function LeagueDetailPage() {
         body: JSON.stringify({ action, teamId }),
       });
       setRequestActionId(null);
-      if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
       await Promise.all([fetchParticipationRequests(), fetchLeague()]);
     };
 
@@ -2412,7 +2412,7 @@ export default function LeagueDetailPage() {
 
           {/* League Format card */}
           <div onClick={() => { if (canEdit) { startEditInfo(); setEditSection("format"); } }}
-            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            className={`${frameClass} p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">League Format</h3>
               {canEdit && <span className="text-muted"><PenIcon /></span>}
@@ -2430,7 +2430,7 @@ export default function LeagueDetailPage() {
 
           {/* Management card */}
           <div onClick={() => { if (canEdit) { fetchPlayers(); startEditInfo(); setEditSection("management"); } }}
-            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            className={`${frameClass} p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Management</h3>
               {canEdit && <span className="text-muted"><PenIcon /></span>}
@@ -2453,7 +2453,7 @@ export default function LeagueDetailPage() {
 
           {/* Categories card */}
           <div onClick={() => { if (canEdit) startEditCategories(); }}
-            className={`bg-card rounded-xl border border-border p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
+            className={`${frameClass} p-4 space-y-2 ${canEdit ? "active:opacity-70 cursor-pointer" : ""}`}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Categories ({league.categories.length})</h3>
               {canEdit && <span className="text-muted"><PenIcon /></span>}
@@ -2937,7 +2937,7 @@ export default function LeagueDetailPage() {
                   method: "PATCH", headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ status: "active" }),
                 });
-                if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); return; }
+                if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
                 fetchLeague();
               }} className="bg-action text-white px-3 py-1 rounded-lg font-medium text-xs whitespace-nowrap">Go Active</button>
             </div>

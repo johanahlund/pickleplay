@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface Player {
   id: string;
@@ -30,6 +31,7 @@ interface PairRequestsProps {
 
 export function PairRequests({ eventId, classId, format, players, existingPairPlayerIds, canManage, onPairCreated }: PairRequestsProps) {
   const { data: session } = useSession();
+  const { confirm: confirmDialog } = useConfirm();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [requests, setRequests] = useState<PairRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,8 +81,13 @@ export function PairRequests({ eventId, classId, format, players, existingPairPl
             <span className="text-sm"><span className="font-bold text-action">{me.name}</span> <span className="text-muted">&</span> <span className="font-medium">{partner.name}</span></span>
             <span className="flex-1" />
             <button onClick={async () => {
-              if (!confirm(`Unpair from ${partner.name}?`)) return;
-              if (!confirm(`Are you really sure? You will need to find a new partner.`)) return;
+              const ok = await confirmDialog({
+                title: `Unpair from ${partner.name}?`,
+                message: "You will need to find a new partner.",
+                confirmText: "Unpair",
+                danger: true,
+              });
+              if (!ok) return;
               const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

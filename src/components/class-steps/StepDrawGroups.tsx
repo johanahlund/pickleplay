@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CompetitionConfig } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface PairPlayer {
   id: string;
@@ -148,7 +149,7 @@ export function StepDrawGroups({ eventId, classId, config, pairs, matches, canMa
   // No groups drawn yet
   if (groupLabels.length === 0) {
     return (
-      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div className={`${frameClass} p-4 space-y-3`}>
         <p className="text-sm text-muted text-center">Groups not yet drawn. Seed pairs into groups to begin.</p>
         {pairs.length < config.numGroups * 2 && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
@@ -219,7 +220,7 @@ export function StepDrawGroups({ eventId, classId, config, pairs, matches, canMa
       {groupLabels.map((label) => {
         const standings = getGroupStandings(label);
         return (
-          <div key={label} className="bg-card rounded-xl border border-border overflow-hidden">
+          <div key={label} className={`${frameClass} overflow-hidden`}>
             <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-border">
               <h4 className="font-bold text-sm">Group {label}</h4>
               <button onClick={() => {

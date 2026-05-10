@@ -1,6 +1,7 @@
 "use client";
 
 import { CompetitionConfig } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface StepGroupsProps {
   config: CompetitionConfig;
@@ -65,7 +66,7 @@ export function StepGroups({ config, cls, maxTeams, registeredTeams, canManage, 
   const n = config.numGroups;
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+    <div className={`${frameClass} p-4 space-y-4`}>
       <div>
         <label className="block text-xs text-muted mb-1">Groups</label>
         <div className="flex gap-3">

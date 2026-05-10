@@ -6,6 +6,7 @@ import {
   getBracketStages,
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface StepUpperBracketProps {
   config: CompetitionConfig;
@@ -19,14 +20,14 @@ export function StepUpperBracket({ config, canManage, updateConfig }: StepUpperB
 
   if (stages.length === 0) {
     return (
-      <div className="bg-card rounded-xl border border-border p-4">
+      <div className={`${frameClass} p-4`}>
         <p className="text-sm text-muted text-center">No main bracket stages yet. Increase teams advancing or add wildcards.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+    <div className={`${frameClass} p-4 space-y-4`}>
       <div>
         <label className="block text-xs text-muted mb-1">Upper bracket match format</label>
         <p className="text-[10px] text-muted mb-2">{numAdvancing} teams advancing to main bracket</p>

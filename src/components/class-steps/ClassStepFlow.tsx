@@ -19,6 +19,8 @@ import { StepLowerBracket } from "./StepLowerBracket";
 import { StepPlayers } from "./StepPlayers";
 import { StepDrawGroups } from "./StepDrawGroups";
 import { StepManageBracket } from "./StepManageBracket";
+import { frameClass } from "@/components/Card";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface PairPlayer {
   id: string;
@@ -117,6 +119,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
   classGender: string;
   userId?: string | null;
 }) {
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const { data: eventData } = useSWR(`/api/events/${eventId}`, (url: string) => fetch(url).then((r) => r.ok ? r.json() : null), { revalidateOnFocus: true, dedupingInterval: 2000 });
   const { data: reqData } = useSWR(
     format === "doubles" ? `/api/events/${eventId}/classes/${classId}/pair-request` : null,
@@ -155,12 +158,12 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        alert(d.error || `Request failed (${r.status})`);
+        await alertDialog(d.error || `Request failed (${r.status})`);
       } else {
-        alert("Request sent!");
+        await alertDialog("Request sent!");
       }
     } catch (e) {
-      alert(`Network error: ${e}`);
+      await alertDialog(`Network error: ${e}`);
     }
     globalMutate(`/api/events/${eventId}/classes/${classId}/pair-request`);
   };
@@ -196,7 +199,7 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
         <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
         {genderViolation && (
           <button
-            onClick={(e) => { e.stopPropagation(); alert(classGender === "mix" ? "Mixed class requires one male and one female player" : `This player's gender doesn't match the ${classGender} class`); }}
+            onClick={(e) => { e.stopPropagation(); void alertDialog(classGender === "mix" ? "Mixed class requires one male and one female player" : `This player's gender doesn't match the ${classGender} class`); }}
             className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 text-white rounded-full flex items-center justify-center text-[8px] font-bold leading-none"
             title="Gender mismatch"
           >⚠</button>
@@ -265,14 +268,14 @@ function ClassPlayersInline({ eventId, classId, format, classGender, userId }: {
                     return myReq ? (
                       <div className="text-right mt-1">
                         <button onClick={async () => {
-                          if (!confirm("Unpair?")) return;
-                          if (!confirm("Are you really sure? You will need to find a new partner.")) return;
+                          const ok = await confirmDialog({ title: "Unpair?", message: "You will need to find a new partner.", confirmText: "Unpair", danger: true });
+                          if (!ok) return;
                           const r = await fetch(`/api/events/${eventId}/classes/${classId}/pair-request`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action: "unpair", requestId: myReq.id }),
                           });
                           if (r.ok) { globalMutate(`/api/events/${eventId}`); }
-                          else { const d = await r.json().catch(() => ({})); alert(d.error || "Cannot unpair"); }
+                          else { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Cannot unpair"); }
                         }} className="text-[10px] text-danger hover:underline">Unpair</button>
                       </div>
                     ) : null;
@@ -458,9 +461,9 @@ export function ClassStepFlow({
     }
   };
 
+  // Tappable list-row inside a Card (events-detail style with bottom borders).
   const rowClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors w-full";
   const rowStaticClass = "flex justify-between items-center py-2.5 px-3 border-b border-border last:border-b-0 w-full";
-  const frameClass = "bg-card rounded-xl border border-border overflow-hidden";
   const frameTitleClass = "text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium";
 
   const groupMatches = classMatches.filter((m) => m.groupLabel);
@@ -801,7 +804,7 @@ export function ClassStepFlow({
 
       {/* Court time estimation — admin only */}
       {canManage && courtTime && (
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className={`${frameClass} p-3`}>
           <div className="text-[10px] text-muted uppercase tracking-wider font-medium mb-1.5">Estimated Court Time ({numCourts} court{numCourts !== 1 ? "s" : ""})</div>
           <div className="space-y-0.5 text-xs">
             <div className="flex justify-between">

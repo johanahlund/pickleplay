@@ -7,6 +7,7 @@ import { setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel } from "@/lib/statusDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { ClubBadge } from "@/components/ClubBadge";
+import { frameClass } from "@/components/Card";
 
 interface League {
   id: string;
@@ -57,7 +58,7 @@ export default function LeaguesPage() {
                 id: league.id, name: league.name, description: league.description,
                 season: league.season, status: league.status, club: league.club ?? null,
               })}
-              className="block bg-card rounded-xl border border-border p-4 active:bg-gray-50 transition-colors">
+              className={`block ${frameClass} p-4 active:bg-gray-50 transition-colors`}>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-lg">{league.name}</h3>

@@ -6,6 +6,7 @@ import {
   getBracketStages,
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface StepLowerBracketProps {
   config: CompetitionConfig;
@@ -19,14 +20,14 @@ export function StepLowerBracket({ config, canManage, updateConfig }: StepLowerB
 
   if (stages.length === 0) {
     return (
-      <div className="bg-card rounded-xl border border-border p-4">
+      <div className={`${frameClass} p-4`}>
         <p className="text-sm text-muted text-center">No consolation stages. Adjust consolation advancement.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+    <div className={`${frameClass} p-4 space-y-4`}>
       <div>
         <label className="block text-xs text-muted mb-1">Lower bracket match format</label>
         <p className="text-[10px] text-muted mb-2">{numLower} teams in consolation</p>

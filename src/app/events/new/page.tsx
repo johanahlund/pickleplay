@@ -251,7 +251,7 @@ export default function NewEventPage() {
                     setNumCourts(c.locations[0].numCourts);
                   }
                 }}
-                className="w-full bg-card rounded-xl border border-border p-4 text-left hover:border-action transition-colors"
+                className={`w-full ${frameClass} p-4 text-left hover:border-action transition-colors`}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{c.emoji}</span>
@@ -298,7 +298,7 @@ export default function NewEventPage() {
                   setLocationId(l.id);
                   setNumCourts(courts);
                 }}
-                className="w-full bg-card rounded-xl border border-border p-4 text-left hover:border-action transition-colors"
+                className={`w-full ${frameClass} p-4 text-left hover:border-action transition-colors`}
               >
                 <div className="flex items-center justify-between">
                   <div>

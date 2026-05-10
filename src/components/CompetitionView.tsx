@@ -8,6 +8,7 @@ import {
   getBracketStages,
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface PairPlayer {
   id: string;
@@ -118,7 +119,7 @@ export function CompetitionView({
   if (!competitionMode) {
     if (!canManage) return null;
     return (
-      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+      <div className={`${frameClass} p-4 space-y-3`}>
         <h3 className="text-lg font-bold">Competition Mode</h3>
         <p className="text-sm text-muted">
           Run a Groups → Elimination tournament. Pairs are divided into groups
@@ -226,7 +227,7 @@ export function CompetitionView({
 
   // ── Config editor ──
   const renderConfig = () => (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold">Competition Settings</h3>
         {canManage && !editingConfig && (
@@ -469,7 +470,7 @@ export function CompetitionView({
   const renderGroups = () => (
     <div className="space-y-3">
       {groupLabels.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className={`${frameClass} p-4 space-y-3`}>
           <p className="text-sm text-muted text-center">Groups not yet drawn. Seed pairs into groups to begin.</p>
           {canManage && (
             <button onClick={() => api("/competition/groups", { action: "seed" })}
@@ -532,7 +533,7 @@ export function CompetitionView({
           {groupLabels.map((label) => {
             const standings = getGroupStandings(label);
             return (
-              <div key={label} className="bg-card rounded-xl border border-border overflow-hidden">
+              <div key={label} className={`${frameClass} overflow-hidden`}>
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-border">
                   <h4 className="font-bold text-sm">Group {label}</h4>
                   <button onClick={() => {

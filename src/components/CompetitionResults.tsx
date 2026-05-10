@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { frameClass } from "@/components/Card";
 
 interface Result {
   id: string;
@@ -60,7 +61,7 @@ export function CompetitionResults({ eventId, classes, players, canManage }: Com
   if (loading) return <p className="text-xs text-muted py-2">Loading results...</p>;
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Results</h4>
         {canManage && (

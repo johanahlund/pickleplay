@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { PlayerSelector } from "../PlayerSelector";
 import { PlayerAvatar } from "../PlayerAvatar";
+import { frameClass } from "@/components/Card";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface Player {
   id: string;
@@ -43,6 +45,7 @@ interface StepPlayersProps {
 }
 
 export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersProps) {
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const [players, setPlayers] = useState<{ playerId: string; player: Player }[]>([]);
   const [pairs, setPairs] = useState<EventPair[]>([]);
   const [requests, setRequests] = useState<PairRequest[]>([]);
@@ -86,7 +89,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
     });
     if (!r.ok) {
       const data = await r.json().catch(() => ({ error: "Failed to remove" }));
-      alert(data.error || "Cannot remove player");
+      await alertDialog(data.error || "Cannot remove player");
       return;
     }
     fetchData();
@@ -115,7 +118,8 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   };
 
   const unpair = async (pairId: string) => {
-    if (!confirm("Remove this pair?")) return;
+    const ok = await confirmDialog({ title: "Remove this pair?", message: "", confirmText: "Remove", danger: true });
+    if (!ok) return;
     // Optimistic: remove pair immediately
     setPairs((prev) => prev.filter((p) => p.id !== pairId));
     // Await API so data is saved before user navigates away
@@ -157,7 +161,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
   return (
     <div className="space-y-3">
       {/* Summary */}
-      <div className="bg-card rounded-xl border border-border p-4">
+      <div className={`${frameClass} p-4`}>
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">
             {players.length} player{players.length !== 1 ? "s" : ""}
@@ -175,7 +179,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
 
       {/* Existing pairs */}
       {isDoubles && pairs.length > 0 && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className={`${frameClass} overflow-hidden`}>
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Pairs</div>
           {pairs.map((pair) => {
             const p1Violation = cls.gender === "mix"
@@ -238,7 +242,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
 
       {/* Unpaired players */}
       {isDoubles && unpairedPlayers.length > 0 && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className={`${frameClass} overflow-hidden`}>
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">
             Unpaired Players
             {canManage && pairSelection.size === 0 && <span className="text-action ml-1 normal-case">(select two to pair)</span>}
@@ -314,7 +318,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
 
       {/* All players (singles or full list) */}
       {!isDoubles && players.length > 0 && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className={`${frameClass} overflow-hidden`}>
           <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">Players</div>
           {players.map((ep) => {
             const genderWarn = (cls.gender === "male" && ep.player.gender === "F") || (cls.gender === "female" && ep.player.gender === "M");
@@ -338,7 +342,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
 
       {/* Add player (manager) */}
       {showAdd && canManage && (
-        <div className="bg-card rounded-xl border border-border p-4 space-y-2">
+        <div className={`${frameClass} p-4 space-y-2`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted">Add players to this class</span>
             <button onClick={() => setShowAdd(false)} className="text-xs text-muted">Done</button>

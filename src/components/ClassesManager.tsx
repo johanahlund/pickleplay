@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { frameClass } from "@/components/Card";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface EventClass {
   id: string;
@@ -54,6 +56,7 @@ function classLabel(cls: EventClass): string {
 }
 
 export function ClassesManager({ eventId, classes, canManage, onRefresh, onClassSelect }: ClassesManagerProps) {
+  const { confirm: confirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newFormat, setNewFormat] = useState("doubles");
@@ -103,7 +106,13 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh, onClass
   };
 
   const deleteClass = async (classId: string, className: string) => {
-    if (!confirm(`Delete class "${className}"? Players and matches in this class will be unlinked.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete class "${className}"?`,
+      message: "Players and matches in this class will be unlinked.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/events/${eventId}/classes`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -122,7 +131,7 @@ export function ClassesManager({ eventId, classes, canManage, onRefresh, onClass
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Event Classes</h4>
         {canManage && !showAdd && (

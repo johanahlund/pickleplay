@@ -1,5 +1,7 @@
 "use client";
 
+import { frameClass } from "@/components/Card";
+
 interface StepCategoryProps {
   cls: {
     name: string;
@@ -57,7 +59,7 @@ export function StepCategory({ cls, canManage, updateField }: StepCategoryProps)
 
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+    <div className={`${frameClass} p-4 space-y-4`}>
       {/* Status */}
       <div>
         <label className="block text-xs text-muted mb-1">Status</label>

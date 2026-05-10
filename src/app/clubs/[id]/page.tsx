@@ -12,6 +12,7 @@ import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav } from "@/lib/hooks";
+import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
 
 // ── Long press to delete ──
@@ -930,7 +931,7 @@ export default function ClubDetailPage() {
                       fd.append("type", "logo");
                       const r = await fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd });
                       if (r.ok) fetchClub();
-                      else alert("Upload failed");
+                      else await alertDialog("Upload failed");
                     }} />
                   </label>
                 </div>
@@ -951,7 +952,7 @@ export default function ClubDetailPage() {
                       fd.append("type", "cover");
                       const r = await fetch(`/api/clubs/${club.id}/photo`, { method: "POST", body: fd });
                       if (r.ok) fetchClub();
-                      else alert("Upload failed");
+                      else await alertDialog("Upload failed");
                     }} />
                   </label>
                 </div>
@@ -1208,8 +1209,8 @@ export default function ClubDetailPage() {
                     ) : (
                       <button onClick={async () => {
                         const r = await fetch(`/api/clubs/${id}/join-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-                        if (r.ok) { alert("Join request sent!"); fetchClub(); }
-                        else { const d = await r.json().catch(() => ({})); alert(d.error || "Failed"); }
+                        if (r.ok) { await alertDialog("Join request sent!"); fetchClub(); }
+                        else { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); }
                       }} className="text-[10px] bg-action text-white px-2 py-0.5 rounded-full font-medium hover:bg-action-dark transition-colors">
                         Request to Join
                       </button>
@@ -1219,7 +1220,7 @@ export default function ClubDetailPage() {
               </div>
               {canManage && (
                 <button onClick={() => { setShowInfo(true); startEditing(); }} className="text-muted hover:text-foreground p-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  <PenIcon />
                 </button>
               )}
             </div>
@@ -1245,7 +1246,7 @@ export default function ClubDetailPage() {
 
           {/* Clickable sections */}
           <div className="space-y-1.5">
-            <div className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3">
+            <div className={`w-full ${frameClass} p-3 flex items-center gap-3`}>
               <Link href={`/events?club=${id}`} className="flex items-center gap-3 flex-1 active:opacity-70">
                 <span className="text-xl">📅</span>
                 <span className="text-sm font-semibold flex-1 text-left">Club Events</span>
@@ -1257,14 +1258,14 @@ export default function ClubDetailPage() {
               )}
             </div>
             <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
-              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
+              className={`w-full ${frameClass} p-3 flex items-center gap-3 active:bg-gray-50 transition-colors`}>
               <span className="text-xl">👥</span>
               <span className="text-sm font-semibold flex-1 text-left">Club Members</span>
               <span className="text-xs text-muted">{club.members.length}</span>
               <span className="text-muted">›</span>
             </button>
             <button onClick={() => { setTab("rankings"); window.history.replaceState(null, "", `?tab=rankings`); }}
-              className="w-full bg-card rounded-xl border border-border p-3 flex items-center gap-3 active:bg-gray-50 transition-colors">
+              className={`w-full ${frameClass} p-3 flex items-center gap-3 active:bg-gray-50 transition-colors`}>
               <span className="text-xl">🏆</span>
               <span className="text-sm font-semibold flex-1 text-left">Club Rankings</span>
               <span className="text-xs text-muted">{rankings.ranked.length} ranked</span>

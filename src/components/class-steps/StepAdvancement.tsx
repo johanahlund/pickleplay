@@ -1,6 +1,7 @@
 "use client";
 
 import { CompetitionConfig } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface StepAdvancementProps {
   config: CompetitionConfig;
@@ -26,7 +27,7 @@ export function StepAdvancement({ config, canManage, updateConfig }: StepAdvance
   const lowerByes = lowerBracketSize - lowerTeams;
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+    <div className={`${frameClass} p-4 space-y-4`}>
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="block text-xs text-muted mb-1">Advance to main bracket</label>

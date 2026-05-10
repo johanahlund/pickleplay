@@ -4,6 +4,7 @@ import {
   MATCH_FORMATS,
   BRACKET_STAGE_LABELS,
 } from "@/lib/competition/types";
+import { frameClass } from "@/components/Card";
 
 interface PairPlayer {
   id: string;
@@ -42,7 +43,7 @@ export function StepManageBracket({ bracket, matches, numCourts }: StepManageBra
 
   if (bracketMatches.length === 0) {
     return (
-      <div className="bg-card rounded-xl border border-border p-4">
+      <div className={`${frameClass} p-4`}>
         <p className="text-sm text-muted text-center">
           {bracket === "upper" ? "Main bracket" : "Consolation"} not started yet. Complete group stage and advance first.
         </p>

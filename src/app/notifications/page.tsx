@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { frameClass } from "@/components/Card";
 
 interface Notification {
   id: string;
@@ -150,7 +151,7 @@ export default function NotificationsPage() {
             return (
               <div key={n.id}
                 onClick={() => { if (!n.read) markRead(n.id); }}
-                className={`bg-card rounded-xl border border-border p-3 ${n.read ? "opacity-70" : ""} cursor-default`}
+                className={`${frameClass} p-3 ${n.read ? "opacity-70" : ""} cursor-default`}
               >
                 <div className="flex items-start gap-2">
                   {!n.read && <span className="mt-1.5 w-2 h-2 rounded-full bg-action shrink-0" />}

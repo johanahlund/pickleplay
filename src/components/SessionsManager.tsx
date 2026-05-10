@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { frameClass } from "@/components/Card";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface Session {
   id: string;
@@ -20,6 +22,7 @@ interface SessionsManagerProps {
 }
 
 export function SessionsManager({ eventId, sessions, canManage, onRefresh }: SessionsManagerProps) {
+  const { confirm: confirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDate, setNewDate] = useState("");
@@ -47,7 +50,13 @@ export function SessionsManager({ eventId, sessions, canManage, onRefresh }: Ses
   };
 
   const deleteSession = async (sessionId: string, name: string) => {
-    if (!confirm(`Delete session "${name}"? Matches will be unlinked (not deleted).`)) return;
+    const ok = await confirmDialog({
+      title: `Delete session "${name}"?`,
+      message: "Matches will be unlinked (not deleted).",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     await fetch(`/api/events/${eventId}/sessions`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -57,7 +66,7 @@ export function SessionsManager({ eventId, sessions, canManage, onRefresh }: Ses
   };
 
   return (
-    <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+    <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Sessions</h4>
         {canManage && !showAdd && (
