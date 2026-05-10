@@ -61,6 +61,7 @@ export async function GET(
                   id: true, categoryId: true, slotNumber: true, kind: true,
                   team1Id: true, team2Id: true, team1Wants: true, team2Wants: true,
                   matchId: true, winnerId: true,
+                  scheduledAt: true, courtNum: true,
                   category: { select: { id: true, name: true } },
                   team1: { select: { id: true, name: true } },
                   team2: { select: { id: true, name: true } },

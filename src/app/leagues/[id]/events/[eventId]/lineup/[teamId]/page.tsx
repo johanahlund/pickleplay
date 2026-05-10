@@ -19,6 +19,8 @@ interface Game {
   team1Wants: boolean; team2Wants: boolean;
   kind: "principal" | "league" | "extra";
   winnerId: string | null;
+  scheduledAt?: string | null;
+  courtNum?: number | null;
   gamePlayers: { playerId: string; player: { id: string; name: string } }[];
 }
 interface Signup {
@@ -45,6 +47,7 @@ export default function LineupBuilderPage() {
 
   const [team, setTeam] = useState<{ id: string; name: string; captainId: string | null; viceCaptainId: string | null } | null>(null);
   const [opponentTeam, setOpponentTeam] = useState<{ id: string; name: string } | null>(null);
+  const [hostTeamId, setHostTeamId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [leagueOrg, setLeagueOrg] = useState<{ createdById: string | null; deputyId: string | null }>({ createdById: null, deputyId: null });
   const [leagueName, setLeagueName] = useState<string>("");
@@ -94,6 +97,7 @@ export default function LineupBuilderPage() {
 
     const ev = (round?.events || []).find((e: { id: string }) => e.id === eventId);
     setEventDate(ev?.date ?? null);
+    setHostTeamId(ev?.hostTeamId ?? null);
     const opp = ev?.leagueTeams?.find((lt: { teamId: string }) => lt.teamId !== teamId);
     setOpponentTeam(opp ? { id: opp.team.id, name: opp.team.name } : null);
     const ready: Record<string, boolean> = {};
@@ -293,10 +297,36 @@ export default function LineupBuilderPage() {
     );
   };
 
+  // Schedule update — PATCH directly (not the action-dispatched POST).
+  // Optimistic: flip locally, fetch in background.
+  const setSchedule = async (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
+    const snapshot = games;
+    setGames((prev) => prev.map((g) => g.id === gameId ? { ...g, ...patch } : g));
+    setSaving(true);
+    setErrorMsg(null);
+    const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${gameId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    setSaving(false);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setErrorMsg(d.error || "Failed");
+      setGames(snapshot);
+      return;
+    }
+    await loadAll();
+  };
+
   // Whether opponent rosters/sign-ups are revealed. We reveal once both
   // teams have set lineupReady (or for league organizers/admin via the
   // server, who get full data anyway).
   const bothReady = !!(team && opponentTeam && readyByTeam[team.id] && readyByTeam[opponentTeam.id]);
+  // Only the home team's captain/vice (or a league organizer / app admin)
+  // may set scheduledAt + courtNum on each game.
+  const isHostCaptain = !!(team && hostTeamId === team.id && isTeamLeader);
+  const canSchedule = isHostCaptain || isOrganizer;
   // Captain edits are locked once their own team has flipped ready=true.
   // The "Re-open" button stays available so they can unlock and edit again.
   const ourLocked = !!(team && readyByTeam[team.id]);
@@ -505,6 +535,52 @@ export default function LineupBuilderPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Schedule (host-team captain only). Time + court inputs.
+                      Read-only chip for everyone else. */}
+                  {g && (canSchedule ? (
+                    <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
+                      <label className="text-muted">Start</label>
+                      <input
+                        type="time"
+                        disabled={saving || !!g.winnerId}
+                        defaultValue={g.scheduledAt ? new Date(g.scheduledAt).toTimeString().slice(0, 5) : ""}
+                        onBlur={(e) => {
+                          const hhmm = e.target.value;
+                          if (!hhmm) {
+                            if (g.scheduledAt) setSchedule(g.id, { scheduledAt: null });
+                            return;
+                          }
+                          // Combine the time-of-day with the event's calendar
+                          // date. (HTML <input type="time"> only gives HH:MM.)
+                          const base = eventDate ? new Date(eventDate) : new Date();
+                          const [hh, mm] = hhmm.split(":").map((s) => parseInt(s, 10));
+                          base.setHours(hh, mm, 0, 0);
+                          const iso = base.toISOString();
+                          if (iso !== g.scheduledAt) setSchedule(g.id, { scheduledAt: iso });
+                        }}
+                        className="border border-border rounded px-1.5 py-0.5 text-[11px]"
+                      />
+                      <label className="text-muted">Court</label>
+                      <input
+                        type="number"
+                        min={1}
+                        disabled={saving || !!g.winnerId}
+                        defaultValue={g.courtNum ?? ""}
+                        onBlur={(e) => {
+                          const raw = e.target.value;
+                          const n = raw === "" ? null : parseInt(raw, 10);
+                          if (n !== (g.courtNum ?? null)) setSchedule(g.id, { courtNum: n });
+                        }}
+                        className="w-12 border border-border rounded px-1.5 py-0.5 text-[11px]"
+                      />
+                    </div>
+                  ) : (g.scheduledAt || g.courtNum) ? (
+                    <div className="mt-2 text-[11px] text-muted flex items-center gap-2">
+                      {g.scheduledAt && <span>⏰ {new Date(g.scheduledAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
+                      {g.courtNum != null && <span>· Court {g.courtNum}</span>}
+                    </div>
+                  ) : null)}
 
                   {ourWants && g && (
                     <div className="mt-2 space-y-1">

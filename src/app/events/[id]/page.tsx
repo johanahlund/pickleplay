@@ -66,7 +66,7 @@ interface Match {
   classId?: string | null;
   scorerId?: string | null;
   scorer?: { id: string; name: string; photoUrl?: string | null } | null;
-  leagueGame?: { id: string; kind: "principal" | "league" | "extra"; slotNumber: number; category: { id: string; name: string } } | null;
+  leagueGame?: { id: string; kind: "principal" | "league" | "extra"; slotNumber: number; scheduledAt?: string | null; courtNum?: number | null; category: { id: string; name: string } } | null;
 }
 
 // In the new model the Event itself is the match-day. `round` is on Event,
@@ -2667,6 +2667,18 @@ export default function EventDetailPage() {
   const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesLeagueFilter);
   const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesLeagueFilter);
   const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesLeagueFilter);
+  // Sort key for league matches: scheduled time (set by the host captain on
+  // the lineup builder) → court → fallback to round/court for non-league.
+  const matchSortKey = (m: Match): [number, number, number] => {
+    const ts = m.leagueGame?.scheduledAt ? new Date(m.leagueGame.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+    const court = m.leagueGame?.courtNum ?? m.courtNum;
+    return [ts, court, m.round];
+  };
+  const matchCmp = (a: Match, b: Match) => {
+    const [at, ac, ar] = matchSortKey(a);
+    const [bt, bc, br] = matchSortKey(b);
+    return (at - bt) || (ac - bc) || (ar - br);
+  };
   const freeCourts = Array.from({ length: event.numCourts }, (_, i) => i + 1)
     .filter((c) => !activeMatches.some((m) => m.courtNum === c) && !pendingMatches.some((m) => m.courtNum === c && m.players.length >= 2));
 
@@ -2913,7 +2925,7 @@ export default function EventDetailPage() {
         {activeMatches.length > 0 && (
           <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
             <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" /><span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span></div>
-            <div className="space-y-2">{activeMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+            <div className="space-y-2">{[...activeMatches].sort(matchCmp).map(renderMatchCard)}</div>
           </div>
         )}
 
@@ -2921,7 +2933,7 @@ export default function EventDetailPage() {
         {pausedMatches.length > 0 && (
           <div className="bg-amber-50 -mx-4 px-4 py-3 border-y border-amber-200">
             <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span></div>
-            <div className="space-y-2">{pausedMatches.sort((a, b) => a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+            <div className="space-y-2">{[...pausedMatches].sort(matchCmp).map(renderMatchCard)}</div>
           </div>
         )}
 
@@ -2929,7 +2941,7 @@ export default function EventDetailPage() {
         {pendingMatches.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2"><span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span></div>
-            <div className="space-y-2">{pendingMatches.sort((a, b) => a.round - b.round || a.courtNum - b.courtNum).map(renderMatchCard)}</div>
+            <div className="space-y-2">{[...pendingMatches].sort(matchCmp).map(renderMatchCard)}</div>
           </div>
         )}
 

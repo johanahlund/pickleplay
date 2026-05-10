@@ -47,7 +47,17 @@ export async function PATCH(
 
   const game = await prisma.leagueGame.findUnique({
     where: { id: gameId },
-    select: { eventId: true, categoryId: true, winnerId: true },
+    select: {
+      eventId: true, categoryId: true, winnerId: true,
+      event: {
+        select: {
+          hostTeamId: true,
+          round: { select: { league: { select: { createdById: true, deputyId: true } } } },
+        },
+      },
+      team1: { select: { captainId: true, viceCaptainId: true } },
+      team2: { select: { captainId: true, viceCaptainId: true } },
+    },
   });
   if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
   if (game.eventId !== eventId) {
@@ -70,6 +80,34 @@ export async function PATCH(
     }
     data.kind = body.kind;
   }
+
+  // Schedule fields: only the host team's captain/vice or a league
+  // organizer (or app admin) may set them. The away team can't.
+  if (body.scheduledAt !== undefined || body.courtNum !== undefined) {
+    const user = await requireAuth();
+    const isAppAdmin = user.role === "admin";
+    const league = game.event.round?.league;
+    const isLeagueAdmin = !!league && (league.createdById === user.id || league.deputyId === user.id);
+    const hostTeamId = game.event.hostTeamId;
+    const hostTeam = hostTeamId === null ? null
+      : hostTeamId === undefined ? null
+      : (await prisma.leagueTeam.findUnique({ where: { id: hostTeamId }, select: { captainId: true, viceCaptainId: true } }));
+    const isHostCaptain = !!hostTeam && (hostTeam.captainId === user.id || hostTeam.viceCaptainId === user.id);
+    if (!isAppAdmin && !isLeagueAdmin && !isHostCaptain) {
+      return NextResponse.json({ error: "Only the home team's captain/vice or a league organizer can schedule this match." }, { status: 403 });
+    }
+    if (body.scheduledAt !== undefined) {
+      data.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+    }
+    if (body.courtNum !== undefined) {
+      const n = body.courtNum === null || body.courtNum === "" ? null : Number(body.courtNum);
+      if (n !== null && (Number.isNaN(n) || n < 1)) {
+        return NextResponse.json({ error: "Invalid courtNum" }, { status: 400 });
+      }
+      data.courtNum = n;
+    }
+  }
+
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const updated = await prisma.leagueGame.update({ where: { id: gameId }, data });

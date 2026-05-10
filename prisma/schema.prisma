@@ -686,6 +686,12 @@ model LeagueGame {
   // players (LeagueGamePlayer rows) for this game.
   team1Wants Boolean @default(false)
   team2Wants Boolean @default(false)
+  // Schedule (set by the home team's captain or a league organizer):
+  //   scheduledAt — wall-clock start time for this match
+  //   courtNum    — court assignment within the venue
+  // Both optional; the round-event matches view sorts by them.
+  scheduledAt DateTime?
+  courtNum    Int?
 
   event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   category    LeagueCategory     @relation(fields: [categoryId], references: [id])

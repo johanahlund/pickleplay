@@ -25,7 +25,7 @@ export async function GET(
           scorer: { select: { id: true, name: true, photoUrl: true } },
           // League-game link, if this match is the scoring of a league game.
           // `kind` drives the Principal/League/Extra badge in the match card.
-          leagueGame: { select: { id: true, kind: true, slotNumber: true, category: { select: { id: true, name: true } } } },
+          leagueGame: { select: { id: true, kind: true, slotNumber: true, scheduledAt: true, courtNum: true, category: { select: { id: true, name: true } } } },
         },
         orderBy: [{ round: "asc" }, { courtNum: "asc" }],
       },
