@@ -73,7 +73,7 @@ export default function EventSignUpPage() {
 
     setEventName(ev.name);
     setEventDate(ev.date ?? null);
-    setLeagueName(ev.round.league.name);
+    setLeagueName(ev.round.league.shortName || ev.round.league.name);
     setRoundName(ev.round.name || `Round ${ev.round.roundNumber}`);
     setCategories((ev.round.league.categories || []) as Category[]);
 

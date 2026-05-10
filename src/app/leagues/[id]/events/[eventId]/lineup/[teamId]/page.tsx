@@ -83,7 +83,7 @@ export default function LineupBuilderPage() {
       .filter((c): c is Category => !!c.id && c.status !== "draft");
     setCategories(effectiveCategories);
     setLeagueOrg({ createdById: league.createdBy?.id || null, deputyId: league.deputy?.id || null });
-    setLeagueName(league.name || "");
+    setLeagueName(league.shortName || league.name || "");
 
     const t = (league.teams || []).find((x: { id: string }) => x.id === teamId);
     if (t) {

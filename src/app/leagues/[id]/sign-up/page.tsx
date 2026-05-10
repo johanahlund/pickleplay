@@ -67,7 +67,7 @@ export default function LeagueSignUpPage() {
     ]);
     if (!leagueR.ok) { router.push(backHref); return; }
     const league = await leagueR.json();
-    setLeagueName(league.name);
+    setLeagueName(league.shortName || league.name);
     setLeagueStatus(league.status);
     setCategories((league.categories || []).filter((c: Category) => c.status !== "draft"));
     setTeams(league.teams || []);

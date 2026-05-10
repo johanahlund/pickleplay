@@ -3670,7 +3670,7 @@ export default function EventDetailPage() {
               <span>🏆</span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-emerald-900 truncate">
-                  {r.league.name}{r.league.season ? ` · ${r.league.season}` : ""}
+                  {(r.league.shortName || r.league.name)}{r.league.season ? ` · ${r.league.season}` : ""}
                 </div>
                 <div className="text-[11px] text-emerald-700 truncate">
                   {r.name || `Round ${r.roundNumber}`}{teamNames ? ` · ${teamNames}` : ""}
