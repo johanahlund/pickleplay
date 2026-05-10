@@ -1223,12 +1223,23 @@ export default function EventDetailPage() {
   const backLink = event.round
     ? { label: event.round.league.shortName || event.round.league.name, href: `/leagues/${event.round.league.id}?tab=rounds` }
     : { label: "Events", href: "/events" };
+  // For league events the stored event.name is the long
+  // "{league.name}: {teams} — {round}" string — too long for a hero title.
+  // The league is already in the back chevron, so the title only needs
+  // the match-day-specific bit (teams + round).
+  const heroTitle = event.round
+    ? (() => {
+        const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+        const roundLabel = event.round.name || `Round ${event.round.roundNumber}`;
+        return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
+      })()
+    : event.name;
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
       <AppHeader
         variant="hero"
         back={backLink}
-        title={event.name}
+        title={heroTitle}
         meta={heroMeta}
         status={heroStatus}
         notifications={heroUnread}
