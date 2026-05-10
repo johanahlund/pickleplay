@@ -149,7 +149,7 @@ export default function LeagueSignUpPage() {
     const chosenTeam = teams.find((t) => t.id === preferredTeamId);
     return (
       <>
-        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to league", onClick: () => router.push(backHref) }} />
+        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: fromTeamId ? "Back to team" : "Back to league", onClick: () => router.push(backHref) }} />
         <div className="space-y-2">
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
             <p className="font-semibold text-emerald-900">
@@ -176,7 +176,7 @@ export default function LeagueSignUpPage() {
 
   return (
     <>
-      <AppHeader variant="hero-sub" title={isOnBehalf ? `Edit prefs · ${targetName || "Player"}` : "Sign-up"} back={{ label: "Back to league", onClick: () => router.push(backHref) }} />
+      <AppHeader variant="hero-sub" title={isOnBehalf ? `Edit prefs · ${targetName || "Player"}` : "Sign-up"} back={{ label: fromTeamId ? "Back to team" : "Back to league", onClick: () => router.push(backHref) }} />
     <div className="space-y-2">
 
       <div className={`${frameClass} p-4 space-y-3`}>
