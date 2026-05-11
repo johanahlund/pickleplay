@@ -169,6 +169,10 @@ export async function POST(
         controller.enqueue(encoder.encode(`: ${label}\n\n`));
       };
 
+      // Pad the initial frame: some proxies/runtimes wait for ~2KB
+      // before flushing the first chunk. A long comment line guarantees
+      // the response starts streaming immediately.
+      controller.enqueue(encoder.encode(`: ${"keep-alive-pad ".repeat(140)}\n\n`));
       sendPing("starting");
 
       // Accumulate text deltas server-side so we can persist the full
@@ -270,9 +274,12 @@ export async function POST(
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
+      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
+      // Defeat proxy / runtime buffering. X-Accel-Buffering is honored
+      // by Vercel's edge layer and any nginx-style proxies in front.
+      "X-Accel-Buffering": "no",
     },
   });
 }

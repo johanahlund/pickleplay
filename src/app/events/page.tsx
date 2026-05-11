@@ -292,38 +292,45 @@ function EventsPage() {
       </div>
 
       {/* Filter rows. None selected = no constraint. Multi-select on
-          club pills (OR-filter). Type pills are single-select. */}
+          club pills (OR-filter). Type pills are single-select.
+          Labels ("My clubs:" / "Type:") sit on the left so the first
+          chip in each row aligns vertically. */}
       {!showFilters && (
         <div className="space-y-1.5">
-          {/* Row 1: My clubs pills + My Events button (right) */}
+          {/* Row 0: search input (full width, matches date select height) */}
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search events..."
+            className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-white"
+          />
+          {/* Row 1: "My clubs:" label + pills + My Events button (right) */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            {userClubs.length > 0 && (
-              <>
-                <span className="text-xs text-muted shrink-0">My clubs:</span>
-                {userClubs.map((c) => {
-                  const selected = selectedClubIds.has(c.id);
-                  return (
-                    <button key={c.id}
-                      onClick={() => toggleClub(c.id)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
-                        selected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                      }`}
-                    >
-                      <ClubBadge logoUrl={c.logoUrl} size={14} />
-                      {(c.shortName?.trim() || c.name.slice(0, 10))}
-                    </button>
-                  );
-                })}
-              </>
-            )}
+            <span className="text-xs text-muted shrink-0 w-16">My clubs:</span>
+            {userClubs.map((c) => {
+              const selected = selectedClubIds.has(c.id);
+              return (
+                <button key={c.id}
+                  onClick={() => toggleClub(c.id)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
+                    selected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                  }`}
+                >
+                  <ClubBadge logoUrl={c.logoUrl} size={14} />
+                  {(c.shortName?.trim() || c.name.slice(0, 10))}
+                </button>
+              );
+            })}
             <button onClick={() => setMyEventsOnly(!myEventsOnly)}
               className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ml-auto ${
                 myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
               }`}
             >👤 My Events</button>
           </div>
-          {/* Row 2: Type pills + Date select (right) */}
+          {/* Row 2: "Type:" label + type pills + Date select (right) */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-muted shrink-0 w-16">Type:</span>
             {([
               { value: "events", label: "🎾 Social" },
               { value: "competitions", label: "🏆 Competition" },
@@ -339,7 +346,7 @@ function EventsPage() {
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="ml-auto text-xs border border-border rounded-full px-2 py-1 bg-white"
+              className="ml-auto text-xs border border-border rounded-lg px-2 py-1.5 bg-white"
             >
               <option value="all">All dates</option>
               <option value="past7">Past 7 days</option>
@@ -348,10 +355,6 @@ function EventsPage() {
               <option value="next7">Next 7 days</option>
               <option value="next30">Next 30 days</option>
             </select>
-            <button onClick={() => setShowFilters(true)}
-              className="text-xs text-muted hover:text-foreground px-2 py-1"
-              title="More filters"
-            >☰</button>
           </div>
           {activeFilters.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap pt-0.5">

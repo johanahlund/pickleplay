@@ -175,8 +175,13 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
       }
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
-      const msg = e instanceof Error ? e.message : "Request failed";
-      setError(msg);
+      const raw = e instanceof Error ? e.message : "Request failed";
+      // Safari's generic fetch failure is "Load failed"; Chrome's is
+      // "Failed to fetch". Translate both into something actionable.
+      const friendly = /load failed|failed to fetch|networkerror/i.test(raw)
+        ? "Connection lost. The server may be slow or restarting — please try again."
+        : raw;
+      setError(friendly);
       // Drop the empty assistant placeholder.
       setMessages((prev) => {
         const copy = prev.slice();
