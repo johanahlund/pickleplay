@@ -49,6 +49,16 @@ export async function GET(
           events: {
             select: {
               id: true, name: true, date: true, status: true, hostTeamId: true,
+              // Cross-team lineup-reveal latch. Once true the opponent's
+              // gamePlayers stay visible forever, even if a team un-toggles
+              // its own lineupReady. Used by the visibility filter below.
+              lineupTotalLocked: true,
+              // Per-event signup state so the rounds list can show
+              // whether THIS user is already signed up (signupPreferences
+              // is JSON — kept tiny so the payload stays light).
+              players: {
+                select: { playerId: true, status: true, signupPreferences: true },
+              },
               leagueTeams: {
                 select: {
                   teamId: true, points: true,
@@ -157,9 +167,18 @@ export async function GET(
       rounds: view.rounds.map((r) => ({
         ...r,
         events: r.events.map((ev) => {
-          const bothReady = ev.leagueTeams.length === 2
-            && ev.leagueTeams.every((lt) => lt.lineupReady);
-          if (bothReady) return ev;
+          // Reveal cross-team gamePlayers based on the LATCHED
+          // lineupTotalLocked field, NOT the live "both currently
+          // ready" check. Once the latch fires it stays — a team can
+          // un-toggle their own lineupReady to request a joint edit,
+          // and the opponent will still see what they had previously
+          // committed. Pre-latch we keep the legacy "both ready =
+          // reveal" so any historical events without the new column
+          // still work as before.
+          const revealed = ev.lineupTotalLocked === true
+            || (ev.leagueTeams.length === 2
+              && ev.leagueTeams.every((lt) => lt.lineupReady));
+          if (revealed) return ev;
           return {
             ...ev,
             leagueGames: ev.leagueGames.map((g) => ({

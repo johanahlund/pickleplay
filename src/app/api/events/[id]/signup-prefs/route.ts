@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { syncPlayerToSocial } from "@/lib/socialEventSync";
 
 // POST: roster player opts in to a league-attached event with category preferences.
 //
@@ -29,13 +30,27 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
 
   // ── Bulk add path ────────────────────────────────────────────
-  // Body: { playerIds: string[] }
-  // Captain/organizer adds many teammates at once. Each upserted
-  // EventPlayer reuses the player's LeagueParticipationRequest
-  // preferences (intent="playing"). No category prefs in the body —
-  // they come from the league sign-up.
+  // Body shape (additive):
+  //   { playerIds: string[], intent?: "social" | "attending" }
+  //
+  // Two flavours:
+  //   - intent === "social" | "attending"  → "guest" add: any captain
+  //     (of any team in the league) / organizer / app admin can sign up
+  //     ANY player as social or attending. Roster check is skipped; the
+  //     player isn't on a team so they can't be picked for the lineup,
+  //     but they appear in the participants list. signupPreferences
+  //     becomes `{ _intent: <intent> }`.
+  //   - default (no intent)                → "roster" add: captain
+  //     picks up their own teammates with intent="playing", category
+  //     prefs sourced from the player's LeagueParticipationRequest.
   if (Array.isArray(body.playerIds) && body.playerIds.length > 0) {
     const playerIds = body.playerIds.filter((x: unknown): x is string => typeof x === "string" && x.length > 0);
+    const guestIntent: "social" | "attending" | null =
+      body.intent === "social" || body.intent === "attending" ? body.intent : null;
+    // Optional team affinity for guests — when the team captain adds a
+    // non-roster guest, this tags them so the participants UI can place
+    // them in the right team column. Validated below.
+    const guestTeamIdRaw = typeof body.teamId === "string" && body.teamId.length > 0 ? body.teamId : null;
     const ev = await prisma.event.findUnique({
       where: { id: eventId },
       select: {
@@ -74,6 +89,53 @@ export async function POST(
         .filter((t) => t.captainId === user.id || t.viceCaptainId === user.id)
         .map((t) => t.id),
     );
+    if (guestIntent) {
+      // Guest path: caller must be a captain of SOME team in this league
+      // or an organizer/admin. No per-player roster check.
+      if (!isOrganizer && myCaptainTeamIds.size === 0) {
+        return NextResponse.json({ error: "Only captains, league organizers or admins can add guests." }, { status: 403 });
+      }
+      // Validate the guest's team affinity if provided. Must be a real team
+      // in this league. Captains can only attach to a team they captain
+      // (unless organizer/admin).
+      let guestTeamId: string | null = null;
+      if (guestTeamIdRaw) {
+        const team = league.teams.find((t) => t.id === guestTeamIdRaw);
+        if (!team) {
+          return NextResponse.json({ error: "Guest's team is not in this league." }, { status: 400 });
+        }
+        if (!isOrganizer && !myCaptainTeamIds.has(team.id)) {
+          return NextResponse.json({ error: "You can only add guests to a team you captain." }, { status: 403 });
+        }
+        guestTeamId = team.id;
+      }
+      const defaultClassId = ev.classes[0]?.id ?? null;
+      const guestPrefs: Record<string, string> = { _intent: guestIntent };
+      if (guestTeamId) guestPrefs._guestTeamId = guestTeamId;
+      let added = 0;
+      for (const pid of playerIds) {
+        const existing = await prisma.eventPlayer.findFirst({ where: { eventId, playerId: pid } });
+        if (existing) {
+          // Don't downgrade a "playing" sign-up — only overwrite when the
+          // existing row is also a guest/unset (no per-category prefs).
+          const prevPrefs = (existing.signupPreferences as Record<string, unknown> | null) ?? {};
+          const hasCatPref = Object.entries(prevPrefs).some(([k, v]) => k !== "_intent" && k !== "_guestTeamId" && v && typeof v === "object");
+          if (hasCatPref) continue; // skip — they're already in a playing flow
+          await prisma.eventPlayer.update({
+            where: { id: existing.id },
+            data: { status: "registered", signupPreferences: guestPrefs },
+          });
+        } else {
+          await prisma.eventPlayer.create({
+            data: { eventId, playerId: pid, classId: defaultClassId, status: "registered", signupPreferences: guestPrefs },
+          });
+        }
+        // Mirror to linked social event (no-op when none).
+        await syncPlayerToSocial(eventId, pid, "registered", guestPrefs);
+        added++;
+      }
+      return NextResponse.json({ ok: true, added, mode: "guest", intent: guestIntent, teamId: guestTeamId });
+    }
     if (!isOrganizer) {
       const unauth = playerIds.filter((pid: string) => {
         const tid = playerToTeam.get(pid);
@@ -118,6 +180,9 @@ export async function POST(
           data: { eventId, playerId: pid, classId: defaultClassId, status: "registered", signupPreferences: prefs },
         });
       }
+      // Mirror to linked social event — bulk roster adds default to
+      // intent=playing so all qualify when a social side exists.
+      await syncPlayerToSocial(eventId, pid, "registered", prefs);
       added++;
     }
     return NextResponse.json({ ok: true, added });
@@ -220,6 +285,10 @@ export async function POST(
       },
     });
   }
+  // Mirror to linked social event — auto-add/remove based on the
+  // sentinel + status. Skip on guest-team-tagged rows that the
+  // bulk-guest path already handled separately.
+  await syncPlayerToSocial(eventId, targetId, status, cleanPrefs as Record<string, unknown>);
   return NextResponse.json({ ok: true });
 }
 
@@ -238,5 +307,8 @@ export async function DELETE(
     where: { eventId, playerId: user.id },
     data: { status: "unavailable" },
   });
+  // Mirror the unavailable flip to the linked social event (deletes the
+  // social EventPlayer row since unavailable doesn't qualify).
+  await syncPlayerToSocial(eventId, user.id, "unavailable", null);
   return NextResponse.json({ ok: true });
 }

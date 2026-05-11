@@ -24,8 +24,16 @@ export async function canSeeEmails(userId: string | null | undefined, role: stri
  */
 export function stripEmailsDeep<T>(value: T): T {
   if (value === null || value === undefined) return value;
+  // Preserve non-plain objects (Date, Buffer, etc.) as-is. Walking
+  // their enumerable own properties drops the actual content — for
+  // Date that meant the API silently emitted `{}` instead of the ISO
+  // string, breaking every event-list date filter downstream.
+  if (value instanceof Date) return value;
   if (Array.isArray(value)) return value.map((v) => stripEmailsDeep(v)) as unknown as T;
   if (typeof value === "object") {
+    // Skip non-plain objects we don't recognise (e.g., Buffer, Map).
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (k === "email") continue;
@@ -74,6 +82,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           role: player.role,
           emoji: player.emoji,
           canCreateLeagues: player.canCreateLeagues,
+          canCreateClubs: player.canCreateClubs,
+          country: player.country,
         };
       },
     }),
@@ -85,6 +95,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = (user as unknown as { role: string }).role;
         token.emoji = (user as unknown as { emoji: string }).emoji;
         token.canCreateLeagues = (user as unknown as { canCreateLeagues?: boolean }).canCreateLeagues ?? false;
+        token.canCreateClubs = (user as unknown as { canCreateClubs?: boolean }).canCreateClubs ?? false;
+        token.country = (user as unknown as { country?: string | null }).country ?? null;
       }
       return token;
     },
@@ -96,6 +108,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         u.role = token.role;
         u.emoji = token.emoji;
         u.canCreateLeagues = token.canCreateLeagues ?? false;
+        u.canCreateClubs = token.canCreateClubs ?? false;
+        u.country = token.country ?? null;
       }
       return session;
     },
@@ -128,6 +142,22 @@ export async function requireLeagueCreator() {
     select: { canCreateLeagues: true },
   });
   if (player?.canCreateLeagues) return user;
+  throw new Error("Forbidden");
+}
+
+/**
+ * Check if the current user is allowed to create clubs. App admins always
+ * can; other users require the canCreateClubs flag (granted by app admin).
+ * Re-reads from the DB to avoid relying on a possibly stale session.
+ */
+export async function requireClubCreator() {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+  const player = await prisma.player.findUnique({
+    where: { id: user.id },
+    select: { canCreateClubs: true },
+  });
+  if (player?.canCreateClubs) return user;
   throw new Error("Forbidden");
 }
 

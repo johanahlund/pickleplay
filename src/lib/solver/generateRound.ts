@@ -19,6 +19,7 @@
  */
 
 import type {
+  BaseMode,
   Match,
   PairLock,
   PairingSettings,
@@ -34,6 +35,7 @@ import { generateRoundSingles } from "./generateRoundSingles";
 import { generateRoundFixed } from "./generateRoundFixed";
 import { generateRoundSwiss } from "./generateRoundSwiss";
 import { generateRoundKing } from "./generateRoundKing";
+import { generateRoundKingFixed } from "./generateRoundKingFixed";
 
 const PLAYERS_PER_MATCH = 4; // doubles
 
@@ -44,8 +46,40 @@ interface ScoredMatch {
 }
 
 export function generateRound(input: SolverInput): SolverResult {
+  // `activeMode` lets organizers override the configured base mid-event
+  // (e.g., run 3 rounds of Random after 5 rounds of King). The route
+  // through generateRound treats activeMode as the truth; `base` is only
+  // the configured default that the UI uses to render the picker.
+  const effectiveMode: BaseMode = input.settings.activeMode ?? input.settings.base;
+
+  // Mode → solver-side defaults. These bake the "atomic mode" idea: each
+  // mode hardcodes the right windows so the user doesn't tune them. The
+  // Advanced sub-page can still override (those overrides take precedence
+  // because we read input.settings.X !== Infinity as "the user touched it").
+  let effectiveSettings = input.settings;
+  if (effectiveMode === "skill") {
+    effectiveSettings = {
+      ...input.settings,
+      base: "random",
+      skillWindow: Number.isFinite(input.settings.skillWindow) ? input.settings.skillWindow : 1,
+      varietyWindow: Number.isFinite(input.settings.varietyWindow) ? input.settings.varietyWindow : 0,
+    };
+  } else if (effectiveMode === "random") {
+    effectiveSettings = {
+      ...input.settings,
+      base: "random",
+      // Random's defining property is "everyone plays everyone" — set the
+      // variety window to 0 unless the user explicitly overrode it.
+      varietyWindow: Number.isFinite(input.settings.varietyWindow) ? input.settings.varietyWindow : 0,
+    };
+  } else if (effectiveMode !== input.settings.base) {
+    effectiveSettings = { ...input.settings, base: effectiveMode };
+  }
+  const effectiveInput: SolverInput =
+    effectiveSettings === input.settings ? input : { ...input, settings: effectiveSettings };
+
   // Route to base-mode / format-specific implementation.
-  if (input.settings.base === "manual") {
+  if (effectiveMode === "manual") {
     // Manual: solver does nothing. The UI creates matches directly.
     return {
       round: [],
@@ -54,18 +88,23 @@ export function generateRound(input: SolverInput): SolverResult {
       sittingOut: input.players.filter((p) => !p.paused).map((p) => p.id),
     };
   }
-  if (input.settings.base === "swiss") {
-    return generateRoundSwiss(input);
+  if (effectiveMode === "swiss") {
+    return generateRoundSwiss(effectiveInput);
   }
-  if (input.settings.base === "king") {
-    return generateRoundKing(input);
+  if (effectiveMode === "king") {
+    if (input.settings.teams === "fixed") {
+      return generateRoundKingFixed(effectiveInput);
+    }
+    return generateRoundKing(effectiveInput);
   }
   if (input.format === "singles") {
-    return generateRoundSingles(input);
+    return generateRoundSingles(effectiveInput);
   }
   if (input.settings.teams === "fixed") {
-    return generateRoundFixed(input);
+    return generateRoundFixed(effectiveInput);
   }
+  // Random / Skill fall through to the score-based selector below.
+  input = effectiveInput;
   const { settings, numCourts, history, locks } = input;
   const activePlayers = input.players.filter((p) => !p.paused);
   const playerMap = new Map(activePlayers.map((p) => [p.id, p]));

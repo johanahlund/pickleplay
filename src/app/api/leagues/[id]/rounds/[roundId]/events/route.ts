@@ -135,7 +135,7 @@ export async function POST(
     for (const cat of effectiveCats) {
       if (!cat._hasFK) continue;
       await prisma.leagueGame.create({
-        data: { eventId: event.id, categoryId: cat.id, team1Id: t1Id, team2Id: t2Id },
+        data: { eventId: event.id, categoryId: cat.id, team1Id: t1Id, team2Id: t2Id, createdById: user.id },
       });
     }
   }

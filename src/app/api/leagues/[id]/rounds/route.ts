@@ -143,7 +143,24 @@ export async function PATCH(
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
-  const round = await prisma.leagueRound.update({ where: { id: roundId }, data });
+  // Round publish cascade: when status flips setup → active, sweep
+  // every child event currently in "setup" into "open" so the league
+  // admin's single "publish" action makes them visible to everyone in
+  // scope. Done in the same transaction as the round update so the
+  // two states can't diverge.
+  const isPublishing = data.status === "active";
+  const round = await prisma.$transaction(async (tx) => {
+    if (isPublishing) {
+      const before = await tx.leagueRound.findUnique({ where: { id: roundId }, select: { status: true } });
+      if (before?.status === "setup") {
+        await tx.event.updateMany({
+          where: { roundId, status: "setup" },
+          data: { status: "open" },
+        });
+      }
+    }
+    return tx.leagueRound.update({ where: { id: roundId }, data });
+  });
   return NextResponse.json(round);
 }
 

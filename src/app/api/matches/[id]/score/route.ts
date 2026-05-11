@@ -159,7 +159,7 @@ export async function POST(
   // "none" — no ELO, no confirmation needed
 
   // ── Post-score hooks ──
-  await handlePostScore(match.id);
+  await handlePostScore(match.id, user.id);
 
   // ── League game winner ──
   const leagueGame = await prisma.leagueGame.findUnique({ where: { matchId: id } });
@@ -191,7 +191,7 @@ export async function POST(
  * 1. Bracket progression — fill winner/loser into next bracket match
  * 2. Dynamic court assignment — assign freed court to next pending match
  */
-async function handlePostScore(matchId: string) {
+async function handlePostScore(matchId: string, triggeredById?: string) {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: {
@@ -334,6 +334,7 @@ async function handlePostScore(matchId: string) {
           courtNum: result.courtNum,
           round: maxRound + 1,
           rankingMode: match.rankingMode,
+          ...(triggeredById ? { createdById: triggeredById } : {}),
           players: {
             create: [
               ...result.team1.map((pid) => ({ playerId: pid, team: 1 })),

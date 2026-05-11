@@ -130,6 +130,12 @@ Many clubs (especially in Portugal) prefer cash. The platform must support both:
 | Freemium | Everyone | Free basic, paid advanced features |
 | Event fee | Per event | €1-3 per event |
 
+### Paid-tier perks (parking lot)
+
+Features intentionally reserved for paying users — collected here so we can pick the right bundle once the freemium boundary is drawn.
+
+- **Privacy controls** — paying users decide whether their **app rank** and **won / lost match counts** are visible to other players. Free users see the public defaults; paying users can toggle each independently (e.g., show rank but hide W/L, or vice versa). Aligns with the same-app behavior where non-admins already don't see rank in the general player list until they've played enough matches.
+
 ### Implementation
 
 | Task | Effort |

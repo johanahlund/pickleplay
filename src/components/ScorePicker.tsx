@@ -12,6 +12,12 @@ interface ScorePickerProps {
   onAutoOpened?: () => void;
   onChange: (value: string) => void;
   onClearBoth?: () => void;
+  /**
+   * When true, skip target/winBy validation entirely. Used by classes with
+   * `maxMinutes` set — a match can be cut short by the timer at any score,
+   * so we accept whatever the players entered.
+   */
+  allowAnyScore?: boolean;
 }
 
 export function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
@@ -44,8 +50,11 @@ function getErrorMessage(score: number, otherScore: number, target: number, winB
   if (winner > target && winner - loser !== winBy) return `Above ${target}, difference must be exactly ${winBy}`;
   return null;
 }
+// `getErrorMessage` is unused inside this file but exported callers may rely
+// on the named function being available for client-side validation hints.
+void getErrorMessage;
 
-export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, autoOpen, onAutoOpened, onChange, onClearBoth }: ScorePickerProps) {
+export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, autoOpen, onAutoOpened, onChange, onClearBoth, allowAnyScore }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +85,10 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
     : visibleCount;
   const allNumbers = Array.from({ length: maxNum }, (_, i) => i);
 
-  // Only show valid numbers when the other team's score is already set
-  const numbers = hasOtherScore
+  // Only show valid numbers when the other team's score is already set.
+  // When `allowAnyScore` is on (timed matches), skip filtering entirely —
+  // the timer can cut the match at any score.
+  const numbers = hasOtherScore && !allowAnyScore
     ? allNumbers.filter((n) => isValidPair(n, otherScore, targetScore, winBy))
     : allNumbers;
 

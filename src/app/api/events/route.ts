@@ -22,6 +22,10 @@ export async function GET() {
       classes: true,
       players: { include: { player: { select: safePlayerSelect } } },
       helpers: { include: { player: { select: safePlayerSelect } } },
+      // Event "manager" surfaced on the event list cards — the creator
+      // for standalone events, plus helpers list (the same surface used
+      // on the detail page).
+      createdBy: { select: { id: true, name: true, emoji: true, photoUrl: true } },
       club: { select: { id: true, name: true, shortName: true, emoji: true, logoUrl: true, locations: { select: { id: true, name: true, googleMapsUrl: true } } } },
       _count: { select: { matches: true } },
       // Used by visibility check: league participants (team players/captains,
@@ -43,30 +47,31 @@ export async function GET() {
 
   // Hide events from outsiders in two cases:
   //   - visibility="hidden" (creator-only)
-  //   - status is "setup" / "draft" (event hasn't been published yet)
-  // In both cases, the creator/helpers/players/admin (and league participants
-  // for league match-day events) can still see them.
+  //   - status is "setup" / "draft" / "visible" (legacy aliases for setup)
+  // Setup LEAGUE events are visible only to league administrators
+  // (organizer / deputy / helper) plus app admin. Team captains and
+  // players don't see them until the round is published and the event
+  // auto-flips to "open". Standalone hidden events keep the broader
+  // creator/helper/player branch.
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const filtered = events.filter((event) => {
-    const isSetup = event.status === "setup" || event.status === "draft";
+    const isSetup = event.status === "setup" || event.status === "draft" || event.status === "visible";
     const needsInsiderView = event.visibility === "hidden" || isSetup;
     if (!needsInsiderView) return true;
     if (!userId) return false;
     if (isAdmin) return true;
-    if (event.createdById === userId) return true;
-    if (event.helpers.some((h) => h.playerId === userId)) return true;
-    if (event.players.some((p) => p.playerId === userId)) return true;
     const league = event.round?.league;
     if (league) {
+      // League event: only league admin tier.
       if (league.createdById === userId) return true;
       if (league.deputyId === userId) return true;
       if (league.helpers.some((h) => h.playerId === userId)) return true;
-      if (league.teams.some((t) =>
-        t.captainId === userId ||
-        t.viceCaptainId === userId ||
-        t.players.some((p) => p.playerId === userId),
-      )) return true;
+      return false;
     }
+    // Standalone hidden/setup: original broader insider rule.
+    if (event.createdById === userId) return true;
+    if (event.helpers.some((h) => h.playerId === userId)) return true;
+    if (event.players.some((p) => p.playerId === userId)) return true;
     return false;
   });
   // Drop the round.league inner detail from the response — it was only used
@@ -114,11 +119,17 @@ export async function POST(req: Request) {
     effectiveNumCourts = Math.min(reqCourts, locCourts);
   }
 
-  // Create event
+  // Create event. We override the schema's "setup" default to "open"
+  // so newly created standalone events are immediately visible to
+  // normal users. The /events/new form doesn't expose a status field,
+  // so without this override creators kept making invisible events.
+  // Organizers who want a hidden draft can flip the status to "setup"
+  // afterwards from the Event Data section.
   const event = await prisma.event.create({
     data: {
       name: name.trim(),
       numCourts: effectiveNumCourts,
+      status: "open",
       createdById: user.id,
       ...(clubId ? { clubId } : {}),
       ...(locationId ? { locationId } : {}),

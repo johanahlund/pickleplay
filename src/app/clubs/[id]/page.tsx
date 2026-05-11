@@ -11,9 +11,11 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { getPreview, setPreview } from "@/lib/entityPreview";
-import { useHideBottomNav } from "@/lib/hooks";
+import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
+import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
+import { nameMatchesSearch } from "@/lib/searchUtil";
 
 // ── Long press to delete ──
 // `onDelete` is responsible for confirming via useConfirm before mutating;
@@ -79,6 +81,10 @@ interface Player {
   wins: number;
   losses: number;
   role?: string;
+  country?: string | null;
+  /** Club memberships from /api/players. Used to disambiguate players
+   *  with similar names in the Add Member picker. */
+  clubs?: { id: string; name: string; emoji: string; role: string }[];
 }
 
 interface ClubMember {
@@ -127,7 +133,7 @@ interface Club {
   _count: { events: number };
 }
 
-type Tab = "feed" | "events" | "members" | "rankings";
+type Tab = "feed" | "events" | "members" | "requests" | "rankings";
 
 // ── Role Pill ──
 const ROLE_COLORS: Record<string, string> = {
@@ -154,9 +160,9 @@ function RolePill({ role, canChange, onChange }: { role: string; canChange: bool
     <div className="relative w-16" ref={ref}>
       <button
         onClick={(e) => { e.stopPropagation(); if (canChange) setOpen(!open); }}
-        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize w-full text-center ${ROLE_COLORS[role] || ROLE_COLORS.member} ${canChange ? "cursor-pointer" : ""}`}
+        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium w-full text-center ${ROLE_COLORS[role] || ROLE_COLORS.member} ${canChange ? "cursor-pointer" : ""}`}
       >
-        {role}
+        {clubRoleLabel(role)}
       </button>
       {open && (
         <div className="absolute right-0 top-6 bg-white rounded-lg shadow-xl border border-border z-50 overflow-hidden min-w-[100px]">
@@ -167,8 +173,8 @@ function RolePill({ role, canChange, onChange }: { role: string; canChange: bool
               onChange(r);
               setOpen(false);
             }}
-              className={`w-full text-left px-3 py-1.5 text-xs capitalize hover:bg-gray-50 ${role === r ? "font-bold" : ""}`}>
-              {r} {role === r ? "✓" : ""}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${role === r ? "font-bold" : ""}`}>
+              {clubRoleLabel(r)} {role === r ? "✓" : ""}
             </button>
           ))}
         </div>
@@ -205,11 +211,12 @@ function SwipeableMemberRow({
   // Can this member row be removed by the current viewer?
   //   - App admin can remove anyone, including themselves
   //   - Club owner/admin can remove non-owner members other than themselves
-  //   - The sole owner cannot be removed (they must transfer ownership first)
-  //     unless the viewer is an app admin
-  const canRemove = canManage
-    && (!isSelf || isGlobalAdmin)
-    && (member.role !== "owner" || isGlobalAdmin);
+  //   - Any non-owner member can remove THEMSELVES (leave the club)
+  //   - The owner can't leave without transferring ownership first
+  //     (the API enforces this); only app admin can remove the owner
+  const canRemove = isSelf
+    ? (member.role !== "owner" || isGlobalAdmin)
+    : (canManage && (member.role !== "owner" || isGlobalAdmin));
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!canRemove) return;
@@ -251,19 +258,26 @@ function SwipeableMemberRow({
       onTouchEnd={handleTouchEnd}
     >
       <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+      {p.gender && (
+        <span className={`text-xs w-4 text-center shrink-0 ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+          {p.gender === "M" ? "♂" : "♀"}
+        </span>
+      )}
       <div className="flex-1 min-w-0">
         <div className="font-medium text-sm truncate">{p.name}</div>
-        {(member.role === "owner" || member.role === "admin") && (
+        {/*
+          Render the role pill for ALL members when the viewer is the
+          club owner (so they can promote a member directly to admin or
+          even owner — required for ownership transfer). For
+          admin/owner members the pill always renders so their status
+          is visible.
+        */}
+        {((member.role === "owner" || member.role === "admin") || (isOwner && !isSelf)) && (
           <div className="mt-0.5">
             <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
           </div>
         )}
       </div>
-      {p.gender && (
-        <span className={`text-xs w-4 text-center ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-          {p.gender === "M" ? "♂" : "♀"}
-        </span>
-      )}
       {p.phone && showContact && (
         <a
           href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
@@ -272,10 +286,22 @@ function SwipeableMemberRow({
           onClick={(e) => e.stopPropagation()}
         >💬</a>
       )}
-      <span className="text-xs text-muted w-10 text-right tabular-nums">{Math.round(p.rating)}</span>
-      <span className="text-xs text-muted w-12 text-right tabular-nums">{p.wins}W {p.losses}L</span>
-      {/* Always-visible remove button (touch: also swipe-left works) */}
-      {canRemove && (
+      {/* Rating shown only after the member has played at least 20
+          matches. Before that the rating isn't statistically meaningful;
+          show a placeholder dash so the column stays aligned. */}
+      <span className="text-xs text-muted w-10 text-right tabular-nums">
+        {(p.wins + p.losses) >= 20 ? Math.round(p.rating) : <span className="text-muted/50">—</span>}
+      </span>
+      {/* Wins / Losses stacked, each on its own line, smaller font,
+          coloured. Replaces the old "3W 2L" inline pair. */}
+      <span className="flex flex-col items-end leading-tight tabular-nums w-10 shrink-0">
+        <span className="text-[10px] font-semibold text-green-600">{p.wins}</span>
+        <span className="text-[10px] font-semibold text-orange-500">{p.losses}</span>
+      </span>
+      {/* Always-visible remove button (touch: also swipe-left works).
+          Hidden on the viewer's own row — they leave the club via the
+          dedicated "Leave club" link in the club header instead. */}
+      {canRemove && !isSelf && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -334,7 +360,7 @@ export default function ClubDetailPage() {
   const searchParams = useSearchParams();
   const tabFromUrl = (() => {
     const t = searchParams.get("tab");
-    return t && ["feed", "events", "members", "rankings"].includes(t) ? (t as Tab) : "feed";
+    return t && ["feed", "events", "members", "requests", "rankings"].includes(t) ? (t as Tab) : "feed";
   })();
   const [tab, setTab] = useState<Tab>(tabFromUrl);
   useEffect(() => { setTab(tabFromUrl); }, [tabFromUrl]);
@@ -342,9 +368,17 @@ export default function ClubDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberSearch, setAddMemberSearch] = useState("");
-  const [addMemberGender, setAddMemberGender] = useState<"all" | "M" | "F">("all");
+  // Gender filter is a M/F toggle (null = both). No "All" button — the
+  // selected pill is tapped again to clear.
+  const [addMemberGender, setAddMemberGender] = useState<"M" | "F" | null>(null);
+  // Country filter. Defaults applied from session.user.country on first
+  // open (see effect below). Empty string = all countries.
+  const [addMemberCountry, setAddMemberCountry] = useState<string>("");
+  // Staging tray of player ids the admin has picked but not yet saved.
+  // Persists across taps until they click "Add N members" or close.
+  const [pendingMemberIds, setPendingMemberIds] = useState<Set<string>>(new Set());
   const [addedMemberIds, setAddedMemberIds] = useState<Set<string>>(new Set());
-  const [flashMemberId, setFlashMemberId] = useState<string | null>(null);
+  const [savingMembers, setSavingMembers] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [editing, setEditing] = useState(false);
   const [clubDirty, setClubDirty] = useState(false);
@@ -381,8 +415,19 @@ export default function ClubDetailPage() {
 
   const EMOJIS = ["🏓", "🎾", "⚡", "🔥", "🌟", "💪", "🏆", "🎯", "🦅", "🐉"];
 
-  // Preview cache lookup for instant render-on-navigation.
-  const clubPreview = typeof id === "string" ? getPreview<{ id: string; name: string; emoji: string; logoUrl?: string | null; coverUrl?: string | null; description?: string | null; city?: string | null; country?: string | null; myRole?: string; _count?: { members?: number; events?: number } }>("club", id) : null;
+  // Preview cache lookup for instant render-on-navigation. Reading
+  // sessionStorage at render time causes a hydration mismatch (the
+  // server has no sessionStorage so it sees null, but the client
+  // sees the cached preview). Defer to useEffect so the initial
+  // client render matches the server render — then we replace null
+  // with the cached preview after mount.
+  type ClubPreview = { id: string; name: string; emoji: string; logoUrl?: string | null; coverUrl?: string | null; description?: string | null; city?: string | null; country?: string | null; myRole?: string; _count?: { members?: number; events?: number } };
+  const [clubPreview, setClubPreview] = useState<ClubPreview | null>(null);
+  useEffect(() => {
+    if (typeof id === "string") {
+      setClubPreview(getPreview<ClubPreview>("club", id));
+    }
+  }, [id]);
 
   const fetchClub = useCallback(async () => {
     const r = await fetch(`/api/clubs/${id}`);
@@ -409,34 +454,102 @@ export default function ClubDetailPage() {
   useEffect(() => { fetchClub(); fetchEvents(); fetchPosts(); }, [fetchClub, fetchEvents, fetchPosts]);
 
   const myMembership = club?.members.find((m) => m.playerId === userId);
-  const canManage = hasRole(viewRole, "club") && (myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin);
-  const isOwner = hasRole(viewRole, "club") && (myMembership?.role === "owner" || isGlobalAdmin);
+  // Real club owners/admins always have manage authority over their own
+  // club — the view-role toggle is admin-only and shouldn't strip a club
+  // owner of the ability to edit their own data.
+  // App admins in "club" view-role simulate being THE club director on
+  // whichever club they're looking at — they get the same UX affordances
+  // (edit, transfer, manage roles). Strict owner-protection overrides
+  // (e.g. removing the actual owner) stay reserved for "admin" view via
+  // `isGlobalAdmin` above.
+  const isAppAdmin = session?.user?.role === "admin";
+  const simulatesClubDirector = isAppAdmin && hasRole(viewRole, "club") && !isGlobalAdmin;
+  const canManage = myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin || simulatesClubDirector;
+  const isOwner = myMembership?.role === "owner" || isGlobalAdmin || simulatesClubDirector;
 
   const [myPendingRequest, setMyPendingRequest] = useState(false);
 
   // Fetch join requests for managers
-  useEffect(() => {
+  const fetchJoinRequests = async () => {
     if (!canManage || !club) return;
-    fetch(`/api/clubs/${club.id}/join-request`).then((r) => r.ok ? r.json() : []).then(setJoinRequests);
+    const r = await fetch(`/api/clubs/${club.id}/join-request`);
+    if (r.ok) setJoinRequests(await r.json());
+  };
+  useEffect(() => {
+    fetchJoinRequests();
   }, [canManage, club?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check if current user has a pending join request
-  useEffect(() => {
+  const fetchMyPendingRequest = async () => {
     if (!userId || !club || myMembership) return;
-    fetch(`/api/clubs/${club.id}/join-request/mine`).then((r) => r.ok ? r.json() : null).then((data) => {
-      setMyPendingRequest(data?.pending || false);
-    }).catch(() => {});
+    try {
+      const r = await fetch(`/api/clubs/${club.id}/join-request/mine`);
+      if (r.ok) {
+        const data = await r.json();
+        setMyPendingRequest(data?.pending || false);
+      }
+    } catch { /* ignore */ }
+  };
+  useEffect(() => {
+    fetchMyPendingRequest();
   }, [userId, club?.id, myMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Background refresh — admins see new join requests appear, and a
+  // member who's been kicked sees their access drop. 60s base interval
+  // plus tab focus, via usePollingRefresh.
+  usePollingRefresh(
+    async () => {
+      if (!club) return;
+      await fetchClub();
+      await fetchJoinRequests();
+      await fetchMyPendingRequest();
+    },
+    60000,
+    !!club,
+  );
+
   const fetchAllPlayers = async () => {
-    if (allPlayers.length > 0) return;
-    const r = await fetch("/api/players");
+    // Always refetch when the picker opens — the cached snapshot can
+    // become stale after a member is removed/added elsewhere, which
+    // leaves the wrong club pills showing on player rows.
+    // High limit so every candidate is available client-side.
+    const r = await fetch("/api/players?limit=5000");
     if (r.ok) setAllPlayers(await r.json());
   };
 
   const addMember = async (playerId: string) => {
     await fetch(`/api/clubs/${id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId }) });
     fetchClub();
+  };
+
+  // Batch save: persist every staged player as a member. Used by the
+  // "Add N members" button in the add-member picker. Each call is fired
+  // in parallel; the tray clears at the end and the picker stays open
+  // so the admin can do another batch.
+  const addPendingMembers = async () => {
+    if (pendingMemberIds.size === 0) return;
+    setSavingMembers(true);
+    try {
+      const ids = [...pendingMemberIds];
+      await Promise.all(
+        ids.map((playerId) =>
+          fetch(`/api/clubs/${id}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ playerId }),
+          }),
+        ),
+      );
+      setAddedMemberIds((s) => {
+        const n = new Set(s);
+        ids.forEach((pid) => n.add(pid));
+        return n;
+      });
+      setPendingMemberIds(new Set());
+      fetchClub();
+    } finally {
+      setSavingMembers(false);
+    }
   };
 
   const removeMember = async (playerId: string, playerName?: string) => {
@@ -469,14 +582,41 @@ export default function ClubDetailPage() {
   };
 
   const updateRole = async (playerId: string, role: string) => {
+    // The PATCH handler auto-demotes whoever is currently owner when the
+    // role transfer assigns ownership. Tailor the confirm message based
+    // on whether the caller is the current owner (typical "You become
+    // admin" hand-off) or an app admin acting on behalf of the club
+    // (no demotion of the caller — only the current director moves).
+    const callerIsOwner = myMembership?.role === "owner";
+    const target = club?.members.find((m) => m.playerId === playerId);
+    const targetName = target?.player.name || "this member";
+    let title = "";
+    let message = "";
+    if (role === "owner") {
+      title = "Transfer directorship?";
+      message = callerIsOwner
+        ? `${targetName} becomes the new director. You will become admin.`
+        : `${targetName} becomes the new director. The current director will be demoted to admin.`;
+    } else if (role === "admin") {
+      title = "Make admin?";
+      message = `${targetName} will gain admin powers (edit club, manage members, approve join requests).`;
+    } else {
+      title = "Change to member?";
+      message = `${targetName} will lose admin powers but stays in the club.`;
+    }
     const ok = await confirmDialog({
-      title: role === "owner" ? "Transfer ownership?" : `Change role to ${role}?`,
-      message: role === "owner" ? "You will become admin." : "",
+      title,
+      message,
       confirmText: role === "owner" ? "Transfer" : "Change",
       danger: role === "owner",
     });
     if (!ok) return;
-    await fetch(`/api/clubs/${id}/members`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId, role }) });
+    const r = await fetch(`/api/clubs/${id}/members`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerId, role }) });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to change role", "Error");
+      return;
+    }
     fetchClub();
   };
 
@@ -522,21 +662,35 @@ export default function ClubDetailPage() {
   };
 
   const deleteClub = async () => {
+    if (!club) return;
+    const memberCount = club.members.length;
     const ok = await confirmDialog({
-      title: "Delete club?",
-      message: "This cannot be undone.",
-      confirmText: "Delete",
+      title: "Delete this club?",
+      message:
+        `This permanently deletes ${club.name}.\n\n` +
+        `· ${memberCount} member${memberCount === 1 ? "" : "s"} will lose access\n` +
+        `· Posts, comments, locations and join requests are erased\n` +
+        `· Any events/leagues hosted here become orphaned\n\n` +
+        `This cannot be undone.`,
+      confirmText: "Delete forever",
+      cancelText: "Cancel",
       danger: true,
+      requireType: club.name,
     });
     if (!ok) return;
-    await fetch(`/api/clubs/${id}`, { method: "DELETE" });
+    const r = await fetch(`/api/clubs/${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to delete club", "Error");
+      return;
+    }
     router.push("/clubs");
   };
 
   // Filtered events — sorted by date ascending
   const filteredEvents = useMemo(() => {
     return events
-      .filter((e) => e.name.toLowerCase().includes(eventSearch.toLowerCase()))
+      .filter((e) => nameMatchesSearch(e.name, eventSearch))
       .filter((e) => matchesDateFilter(e.date, dateFilter))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [events, eventSearch, dateFilter]);
@@ -588,7 +742,7 @@ export default function ClubDetailPage() {
     if (!club) return [];
     const rank = (role: string) => role === "owner" ? 0 : role === "admin" ? 1 : 2;
     return club.members
-      .filter((m) => !memberSearch || m.player.name.toLowerCase().includes(memberSearch.toLowerCase()))
+      .filter((m) => !memberSearch || nameMatchesSearch(m.player.name, memberSearch))
       .filter((m) => !memberGender || m.player.gender === memberGender)
       .sort((a, b) => {
         const ra = rank(a.role); const rb = rank(b.role);
@@ -609,7 +763,7 @@ export default function ClubDetailPage() {
 
   const nonMembers = allPlayers
     .filter((p) => !club?.members.some((m) => m.playerId === p.id))
-    .filter((p) => !addMemberSearch || p.name.toLowerCase().includes(addMemberSearch.toLowerCase()))
+    .filter((p) => !addMemberSearch || nameMatchesSearch(p.name, addMemberSearch))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Portal the tab bar into the header and hide the fallback tabs
@@ -659,7 +813,7 @@ export default function ClubDetailPage() {
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold">{clubPreview.name}</h2>
                     {clubPreview.myRole && (
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{clubPreview.myRole}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium">{clubRoleLabel(clubPreview.myRole)}</span>
                     )}
                   </div>
                   {(clubPreview.city || clubPreview.country) && (
@@ -691,10 +845,15 @@ export default function ClubDetailPage() {
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
 
+  // The "Requests" tab is admin-only and only shown when at least one
+  // pending join request exists. Keeps the tab bar tidy for the common
+  // case where there's nothing waiting.
+  const pendingCount = joinRequests.filter((r) => r.status === "pending").length;
   const tabs: { key: Tab; label: string }[] = [
     { key: "feed", label: "Feed" },
     { key: "events", label: "Events" },
     { key: "members", label: "Members" },
+    ...(canManage && pendingCount > 0 ? [{ key: "requests" as Tab, label: `Requests (${pendingCount})` }] : []),
     { key: "rankings", label: "Rankings" },
   ];
 
@@ -793,77 +952,237 @@ export default function ClubDetailPage() {
   );
 
   if (showAddMember && club) {
-    const filtered = nonMembers
-      .filter((p) => !addedMemberIds.has(p.id))
-      .filter((p) => addMemberGender === "all" || p.gender === addMemberGender);
+    // Filter chain — search box + gender toggle + country dropdown +
+    // not-already-staged. The staging tray sits at the top; tapping a
+    // row puts the player in the tray; tapping a tray chip removes them.
+    // Applies all picker filters (search, gender, country) to a list.
+    // Used both for the eligible list and the "already-member" tail.
+    const applyPickerFilters = (list: Player[]) => list
+      .filter((p) => !addMemberSearch || nameMatchesSearch(p.name, addMemberSearch))
+      .filter((p) => !addMemberGender || p.gender === addMemberGender)
+      // Country filter only excludes players with an EXPLICIT different
+      // country. Players with country=null (never set their profile)
+      // pass every filter — they could be anyone, and hiding them makes
+      // them invisible to admins trying to add them.
+      .filter((p) => !addMemberCountry || !p.country || p.country === addMemberCountry);
+
+    const filtered = applyPickerFilters(nonMembers)
+      .filter((p) => !pendingMemberIds.has(p.id))
+      .filter((p) => !addedMemberIds.has(p.id));
+    const pendingPlayers = nonMembers.filter((p) => pendingMemberIds.has(p.id));
+
+    // Players from the full pool who DO match the current filters but
+    // are already in this club — rendered as a faded tail under the
+    // eligible list so an admin searching for "Nuno" sees both
+    // pickable-Nunos and "Nuno · already a member" with one glance.
+    const memberIds = new Set((club.members || []).map((m) => m.playerId));
+    const alreadyMembersMatching = applyPickerFilters(
+      allPlayers.filter((p) => memberIds.has(p.id)),
+    ).sort((a, b) => a.name.localeCompare(b.name));
+    const togglePending = (pid: string) => {
+      setPendingMemberIds((s) => {
+        const n = new Set(s);
+        if (n.has(pid)) n.delete(pid);
+        else n.add(pid);
+        return n;
+      });
+    };
+    const closePicker = () => {
+      setShowAddMember(false);
+      setPendingMemberIds(new Set());
+      setAddedMemberIds(new Set());
+    };
     return (
-      <div className="space-y-2">
-        <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
-          <button
-            onClick={() => { setShowAddMember(false); setAddedMemberIds(new Set()); setFlashMemberId(null); }}
-            className="text-sm text-action font-medium"
-          >← Members <span className="text-xs text-muted font-normal">({club.name})</span></button>
-        </div>
+      // Same outer wrapper as the Members-tab return below so the back
+      // link sits at the same Y position in both views (no sticky shadow
+      // card, no extra padding — just `space-y-3` like the main page).
+      <div className="space-y-3">
+        <button onClick={closePicker} className="text-sm text-action font-medium">
+          ← Members <span className="text-xs text-muted font-normal">({clubLabel(club)})</span>
+        </button>
         <div className={`${frameClass} p-4 space-y-3`}>
-          <h3 className="text-sm font-semibold">Add Member to {club.name}</h3>
-          <div className="flex gap-1">
-            <button onClick={() => setAddMemberGender("all")}
-              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "all" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-              All
-            </button>
-            <button onClick={() => setAddMemberGender("M")}
-              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "M" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-              <span className={addMemberGender === "M" ? "text-white" : "text-blue-500"}>♂</span> Men
-            </button>
-            <button onClick={() => setAddMemberGender("F")}
-              className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${addMemberGender === "F" ? "bg-black text-white" : "bg-gray-100 text-muted"}`}>
-              <span className={addMemberGender === "F" ? "text-white" : "text-pink-500"}>♀</span> Women
+          {/* Title + Add button on the same row. The button moved up
+              from the sticky-bottom bar so it's always reachable
+              alongside the staging tray. */}
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold truncate">Add Members to {club.name}</h3>
+            <button
+              type="button"
+              onClick={addPendingMembers}
+              disabled={pendingPlayers.length === 0 || savingMembers}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-action text-white disabled:opacity-40 active:bg-action-dark transition-colors shrink-0"
+            >
+              {savingMembers
+                ? "Adding..."
+                : pendingPlayers.length === 0
+                  ? "Add"
+                  : `Add ${pendingPlayers.length}`}
             </button>
           </div>
-          <ClearInput value={addMemberSearch} onChange={setAddMemberSearch} placeholder="Search by name..." className="text-sm" />
-          <div className="text-[11px] text-muted">{filtered.length} available {addedMemberIds.size > 0 && `· ${addedMemberIds.size} added`}</div>
-          {filtered.length === 0 ? (
-            <p className="text-xs text-muted text-center py-6">No players to add</p>
-          ) : (
-            <div className="space-y-0.5">
-              {filtered.map((p) => {
-                const flashing = flashMemberId === p.id;
-                return (
+
+          {/* Staging tray — sits at the top so the admin can see who
+              they've already picked. Tap an X-chip to remove someone. */}
+          <div className="rounded-lg border border-border bg-gray-50 px-2 py-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted">
+                Selected ({pendingPlayers.length})
+              </span>
+              {pendingPlayers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPendingMemberIds(new Set())}
+                  className="text-[11px] text-danger font-medium hover:underline"
+                >Clear all</button>
+              )}
+            </div>
+            {pendingPlayers.length === 0 ? (
+              <div className="text-[11px] text-muted italic">
+                Tap players below to add them here, then press <span className="not-italic">&quot;Add&quot;</span>.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {pendingPlayers.map((p) => (
                   <button
                     key={p.id}
                     type="button"
-                    disabled={flashing}
-                    onClick={() => {
-                      setFlashMemberId(p.id);
-                      addMember(p.id);
-                      setTimeout(() => {
-                        setAddedMemberIds((s) => { const n = new Set(s); n.add(p.id); return n; });
-                        setFlashMemberId((cur) => (cur === p.id ? null : cur));
-                      }, 800);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-                      flashing ? "bg-emerald-50" : "hover:bg-gray-50 active:bg-gray-100"
-                    }`}
+                    onClick={() => togglePending(p.id)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-action/10 text-foreground text-xs border border-action/30 hover:bg-action/15"
+                    title="Tap to remove"
                   >
-                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{p.name}</div>
-                    </div>
+                    <span className="font-medium">{p.name}</span>
                     {p.gender && (
-                      <span className={`text-xs ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                      <span className={p.gender === "F" ? "text-pink-500" : "text-blue-500"}>
                         {p.gender === "F" ? "♀" : "♂"}
                       </span>
                     )}
-                    {flashing ? (
-                      <span className="text-xs font-semibold text-emerald-600">✓ Selected</span>
-                    ) : (
-                      <span className="text-xs text-primary">+ Add</span>
-                    )}
+                    <span className="text-muted">×</span>
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Filter row — country first, then gender. Same order as the
+              event Add Players picker so the two surfaces feel
+              consistent. No "All" gender pill; tap selected to clear. */}
+          <div className="flex items-center gap-2">
+            <select
+              value={addMemberCountry}
+              onChange={(e) => setAddMemberCountry(e.target.value)}
+              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-white"
+            >
+              <option value="">All countries</option>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {(["M", "F"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setAddMemberGender((cur) => (cur === g ? null : g))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                  addMemberGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                }`}
+              >
+                <span className={addMemberGender === g ? "text-white" : g === "M" ? "text-blue-500" : "text-pink-500"}>
+                  {g === "M" ? "♂" : "♀"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <ClearInput value={addMemberSearch} onChange={setAddMemberSearch} placeholder="Search by name..." className="text-sm" />
+          <div className="text-[11px] text-muted">
+            {filtered.length} available
+            {addedMemberIds.size > 0 && ` · ${addedMemberIds.size} added so far`}
+          </div>
+
+          {filtered.length === 0 && alreadyMembersMatching.length === 0 ? (
+            <p className="text-xs text-muted text-center py-6">No players match these filters</p>
+          ) : (
+            <>
+              <div className="space-y-0.5">
+                {filtered.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => togglePending(p.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  >
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                    {p.gender && (
+                      <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                      {/* Country (plain text) + club pills. Matches the
+                          chip style used in the players list and disambiguates
+                          same-named players. The default 🏓 / 🏟️ emoji is
+                          dropped — the pill itself carries the visual weight. */}
+                      {(p.country || (p.clubs && p.clubs.length > 0)) && (
+                        <div className="mt-0.5 flex items-center gap-1 flex-wrap">
+                          {p.country && (
+                            <span className="text-[10px] text-muted">{p.country}</span>
+                          )}
+                          {p.clubs?.map((c) => (
+                            <span
+                              key={c.id}
+                              className="text-[10px] bg-gray-100 text-foreground px-1.5 py-0.5 rounded-full font-medium truncate max-w-[140px]"
+                              title={`${c.name} (${c.role})`}
+                            >
+                              {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {/* Already-a-member tail. Faded, non-clickable. Tells the
+                  admin "yes, the person you're searching for IS in this
+                  club already" so they don't keep hunting. */}
+              {alreadyMembersMatching.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-dashed border-border">
+                  <div className="text-[10px] uppercase tracking-wide text-muted mb-1.5">
+                    Already in this club ({alreadyMembersMatching.length})
+                  </div>
+                  <div className="space-y-0.5">
+                    {alreadyMembersMatching.map((p) => (
+                      <div
+                        key={p.id}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg opacity-50 cursor-default select-none"
+                      >
+                        <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                        {p.gender && (
+                          <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                            {p.gender === "F" ? "♀" : "♂"}
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                        </div>
+                        <span className="text-[10px] text-muted font-medium">✓ member</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
+
+          {/* Bottom action bar — just "Done" now. The primary Add
+              action lives next to the title above. */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-white border-t border-border flex justify-end">
+            <button
+              type="button"
+              onClick={closePicker}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200"
+            >Done</button>
+          </div>
         </div>
       </div>
     );
@@ -871,7 +1190,9 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-3">
-      {/* Back navigation */}
+      {/* Back navigation. Always reads "← Clubs" to match the quick-view
+          card shown before data finishes loading. Avoids the flash where
+          the label changes from "Clubs" → "Back". */}
       {tab === "feed" ? (
         <button onClick={async () => {
           if (editing && clubDirty) {
@@ -879,8 +1200,8 @@ export default function ClubDetailPage() {
             if (!ok) return;
             setClubDirty(false); setEditing(false);
           }
-          router.back();
-        }} className="text-sm text-action font-medium">← Back</button>
+          router.push("/clubs");
+        }} className="text-sm text-action font-medium">← Clubs</button>
       ) : (
         <button onClick={async () => {
           if (editing && clubDirty) {
@@ -889,7 +1210,7 @@ export default function ClubDetailPage() {
             setClubDirty(false); setEditing(false);
           }
           setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
-        }} className="text-sm text-action font-medium">← {club.name}</button>
+        }} className="text-sm text-action font-medium">← {clubLabel(club)}</button>
       )}
 
       {/* ── Club Info Panel ── */}
@@ -919,7 +1240,7 @@ export default function ClubDetailPage() {
                   {club.logoUrl ? (
                     <img src={club.logoUrl} alt="Logo" className="w-16 h-16 rounded-xl object-cover" />
                   ) : (
-                    <span className="text-4xl">{club.emoji}</span>
+                    <div className="w-16 h-16 rounded-xl bg-gray-100 border border-border" aria-hidden />
                   )}
                   <label className="text-xs text-action font-medium cursor-pointer hover:underline">
                     Upload logo
@@ -1059,7 +1380,7 @@ export default function ClubDetailPage() {
                 if (!owner) return null;
                 return (
                   <div className="pt-2 border-t border-border">
-                    <label className="block text-sm font-medium text-muted mb-1">Owner</label>
+                    <label className="block text-sm font-medium text-muted mb-1">Director</label>
                     <div className="flex items-center gap-2 text-sm">
                       <PlayerAvatar name={owner.player.name} photoUrl={owner.player.photoUrl} size="xs" />
                       <span className="font-medium">{owner.player.name}</span>
@@ -1072,7 +1393,7 @@ export default function ClubDetailPage() {
                 return (
                   <div className="space-y-2 pt-2 border-t border-border">
                     <div>
-                      <label className="block text-sm font-medium text-muted mb-1">Transfer ownership</label>
+                      <label className="block text-sm font-medium text-muted mb-1">Transfer directorship</label>
                       {eligibleMembers.length === 0 ? (
                         <p className="text-xs text-muted italic">
                           No other members to transfer to. Add members to the club first.
@@ -1099,8 +1420,8 @@ export default function ClubDetailPage() {
                                 if (!transferTargetId) return;
                                 const target = club.members.find((m) => m.playerId === transferTargetId);
                                 const ok = await confirmDialog({
-                                  title: "Transfer ownership",
-                                  message: `Transfer ownership of ${club.name} to ${target?.player.name || "this member"}? You will become an admin.`,
+                                  title: "Transfer directorship",
+                                  message: `Transfer directorship of ${club.name} to ${target?.player.name || "this member"}? You will become an admin.`,
                                   danger: true,
                                   confirmText: "Transfer",
                                 });
@@ -1151,7 +1472,7 @@ export default function ClubDetailPage() {
                   {club.logoUrl ? (
                     <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" />
                   ) : (
-                    <span className="text-2xl">{club.emoji}</span>
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 border border-border" aria-hidden />
                   )}
                   <div>
                     <h3 className="font-bold">{club.name}</h3>
@@ -1206,14 +1527,16 @@ export default function ClubDetailPage() {
         <div className="space-y-3">
           {/* Club overview */}
           <div className={`${frameClass} overflow-hidden`}>
-            <div className="flex items-center gap-3 px-3 py-2.5 bg-white">
-              {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
-              <div className="flex-1 min-w-0">
+            <div className="flex items-stretch gap-3 px-3 py-2.5 bg-white">
+              {club.logoUrl
+                ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 self-center" />
+                : <div className="w-10 h-10 rounded-xl bg-gray-100 border border-border shrink-0 self-center" aria-hidden />}
+              <div className="flex-1 min-w-0 self-center">
                 <h3 className="font-bold text-lg">{club.name}</h3>
                 {(() => {
                   const owner = club.members.find((m) => m.role === "owner");
                   return owner ? (
-                    <div className="text-[11px] text-muted">Owner: <span className="text-foreground font-medium">{owner.player.name}</span></div>
+                    <div className="text-[11px] text-muted">Director: <span className="text-foreground font-medium">{owner.player.name}</span></div>
                   ) : null;
                 })()}
                 {myMembership ? (
@@ -1222,26 +1545,71 @@ export default function ClubDetailPage() {
                     {myMembership.role !== "member" && <span className="text-muted"> ({myMembership.role})</span>}
                   </span>
                 ) : userId ? (
-                  (() => {
-                    return myPendingRequest ? (
-                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⏳ Requested</span>
-                    ) : (
-                      <button onClick={async () => {
+                  myPendingRequest ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[11px] text-amber-700">⏳ Waiting for review</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const director = club.members.find((m) => m.role === "owner");
+                          const ok = await confirmDialog({
+                            title: "Cancel join request?",
+                            message: `${club.name} won't be notified — your pending request is just withdrawn. You can request again later${director ? ` (the director ${director.player.name} can also accept it any time before you cancel)` : ""}.`,
+                            confirmText: "Cancel request",
+                            cancelText: "Keep waiting",
+                            danger: true,
+                          });
+                          if (!ok) return;
+                          const r = await fetch(`/api/clubs/${id}/join-request`, { method: "DELETE" });
+                          if (r.ok) { setMyPendingRequest(false); fetchClub(); }
+                          else { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed to cancel request", "Error"); }
+                        }}
+                        className="text-[11px] text-amber-700 font-medium bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg underline"
+                      >cancel</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const director = club.members.find((m) => m.role === "owner");
+                        const ok = await confirmDialog({
+                          title: `Request to join ${club.name}?`,
+                          message:
+                            `Your name and profile will be sent to ${director ? director.player.name : "the club director"} for approval. ` +
+                            `You'll get access to the club's members, events and feed once they accept. ` +
+                            `You can cancel this request any time before it's reviewed.`,
+                          confirmText: "Send request",
+                          cancelText: "Not now",
+                        });
+                        if (!ok) return;
                         const r = await fetch(`/api/clubs/${id}/join-request`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-                        if (r.ok) { await alertDialog("Join request sent!"); fetchClub(); }
-                        else { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); }
-                      }} className="text-[10px] bg-action text-white px-2 py-0.5 rounded-full font-medium hover:bg-action-dark transition-colors">
-                        Request to Join
-                      </button>
-                    );
-                  })()
+                        if (r.ok) { setMyPendingRequest(true); fetchClub(); }
+                        else { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed", "Error"); }
+                      }}
+                      className="mt-1 text-xs text-action font-medium px-3 py-1.5 rounded-lg border border-action/30 hover:bg-action/5"
+                    >Request to Join</button>
+                  )
                 ) : null}
               </div>
-              {canManage && (
-                <button onClick={() => { setShowInfo(true); startEditing(); }} className="text-muted hover:text-foreground p-1">
-                  <PenIcon />
-                </button>
-              )}
+              {/* Right column: Edit at the top, Leave at the bottom.
+                  Both live in the header area above the cover photo so
+                  the user has the destructive action far away from the
+                  editing action. Hidden for the owner — they need to
+                  transfer directorship first (API enforces). */}
+              <div className="flex flex-col justify-between items-end shrink-0">
+                {canManage ? (
+                  <button onClick={() => { setShowInfo(true); startEditing(); }} className="text-muted hover:text-foreground p-1">
+                    <PenIcon />
+                  </button>
+                ) : <span />}
+                {myMembership && myMembership.role !== "owner" && userId ? (
+                  <button
+                    type="button"
+                    onClick={() => removeMember(userId, session?.user?.name || undefined)}
+                    className="text-[11px] text-danger hover:underline"
+                  >Leave club</button>
+                ) : <span />}
+              </div>
             </div>
             {club.coverUrl && <img src={club.coverUrl} alt="" className="w-full h-28 object-cover" />}
             <div className="p-3 space-y-2">
@@ -1280,25 +1648,42 @@ export default function ClubDetailPage() {
               className={`w-full ${frameClass} p-3 flex items-center gap-3 active:bg-gray-50 transition-colors`}>
               <span className="text-xl">👥</span>
               <span className="text-sm font-semibold flex-1 text-left">Club Members</span>
-              <span className="text-xs text-muted">{club.members.length}</span>
+              {/* Total + male / female counts. The colours mirror the
+                  gender icon in the member row (blue ♂ / pink ♀). */}
+              {(() => {
+                const total = club.members.length;
+                const males = club.members.filter((m) => m.player.gender === "M").length;
+                const females = club.members.filter((m) => m.player.gender === "F").length;
+                return (
+                  <span className="text-xs text-muted flex items-center gap-1.5">
+                    <span className="tabular-nums">{total}</span>
+                    {(males > 0 || females > 0) && (
+                      <>
+                        <span className="text-blue-500 tabular-nums">{males}♂</span>
+                        <span className="text-pink-500 tabular-nums">{females}♀</span>
+                      </>
+                    )}
+                  </span>
+                );
+              })()}
               <span className="text-muted">›</span>
             </button>
             <button onClick={() => { setTab("rankings"); window.history.replaceState(null, "", `?tab=rankings`); }}
               className={`w-full ${frameClass} p-3 flex items-center gap-3 active:bg-gray-50 transition-colors`}>
-              <span className="text-xl">🏆</span>
+              <span className="text-xl">📊</span>
               <span className="text-sm font-semibold flex-1 text-left">Club Rankings</span>
               <span className="text-xs text-muted">{rankings.ranked.length} ranked</span>
               <span className="text-muted">›</span>
             </button>
           </div>
 
-          {/* Join requests alert */}
-          {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
-            <button onClick={() => { setTab("members"); window.history.replaceState(null, "", `?tab=members`); }}
+          {/* Join requests alert — links to the dedicated Requests tab */}
+          {canManage && pendingCount > 0 && (
+            <button onClick={() => { setTab("requests"); window.history.replaceState(null, "", `?tab=requests`); }}
               className="w-full bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2 active:bg-amber-100">
               <span className="text-lg">👋</span>
               <span className="text-sm font-medium text-amber-800 flex-1 text-left">
-                {joinRequests.filter((r) => r.status === "pending").length} pending join request{joinRequests.filter((r) => r.status === "pending").length !== 1 ? "s" : ""}
+                {pendingCount} pending join request{pendingCount !== 1 ? "s" : ""}
               </span>
               <span className="text-xs text-amber-600">View ›</span>
             </button>
@@ -1423,61 +1808,33 @@ export default function ClubDetailPage() {
       {/* ── Members Tab ── */}
       {tab === "members" && !showInfo && (
         <div className="space-y-3">
-          {/* Header row: title + Add Member button (top right) */}
-          {canManage && (
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-foreground">Members</h3>
+          {/* Header row: "Members" title always visible; the + Member
+              action is admin-only. Right side gets an empty spacer for
+              normal users so the title sits at the same Y as in the
+              manager view. */}
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-foreground">Members</h3>
+            {canManage && (
               <button
                 onClick={() => {
                   fetchAllPlayers();
                   setAddMemberSearch("");
-                  setAddMemberGender("all");
+                  setAddMemberGender(null);
+                  // Default country filter to the signed-in user's country
+                  // when known; falls back to "all countries" otherwise.
+                  setAddMemberCountry(
+                    (session?.user as { country?: string | null } | undefined)?.country || "",
+                  );
+                  setPendingMemberIds(new Set());
                   setAddedMemberIds(new Set());
-                  setFlashMemberId(null);
                   setShowAddMember(true);
                 }}
-                className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+                className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
               >
                 + Member
               </button>
-            </div>
-          )}
-          {/* Join requests */}
-          {canManage && joinRequests.filter((r) => r.status === "pending").length > 0 && (
-            <div className="bg-card rounded-xl border border-amber-200 overflow-hidden">
-              <div className="text-[10px] text-amber-700 px-3 pt-2 pb-1 uppercase tracking-wider font-medium">
-                Join Requests ({joinRequests.filter((r) => r.status === "pending").length})
-              </div>
-              {joinRequests.filter((r) => r.status === "pending").map((req) => (
-                <div key={req.id} className="flex items-center gap-2 py-2 px-3 border-b border-amber-100 last:border-b-0 bg-amber-50/50">
-                  <span className="text-lg">{req.player.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium">{req.player.name}</span>
-                    {req.message && <p className="text-[10px] text-muted truncate">{req.message}</p>}
-                  </div>
-                  <button onClick={async () => {
-                    await fetch(`/api/clubs/${club!.id}/join-request`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ requestId: req.id, action: "accept" }),
-                    });
-                    setJoinRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: "accepted" } : r));
-                    fetchClub();
-                  }}
-                    className="text-[10px] bg-green-600 text-white px-2.5 py-1 rounded font-medium">Accept</button>
-                  <button onClick={async () => {
-                    await fetch(`/api/clubs/${club!.id}/join-request`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ requestId: req.id, action: "decline" }),
-                    });
-                    setJoinRequests((prev) => prev.map((r) => r.id === req.id ? { ...r, status: "declined" } : r));
-                  }}
-                    className="text-[10px] text-danger px-2 py-1 rounded hover:bg-red-50">Decline</button>
-                </div>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
           {/* Filters */}
           <div className="flex gap-2">
             <ClearInput value={memberSearch} onChange={setMemberSearch} placeholder="Search members..." className="text-sm" />
@@ -1501,29 +1858,39 @@ export default function ClubDetailPage() {
             {canManage && (
               <button onClick={async () => {
                 const r = await fetch(`/api/clubs/${club.id}/invite`, { method: "POST" });
-                if (r.ok) {
-                  const invite = await r.json();
-                  const url = `${window.location.origin}/clubs/join/${invite.token}`;
-                  if (navigator.clipboard) {
-                    await navigator.clipboard.writeText(url);
-                    await alertDialog("Invite link copied!");
-                  } else {
-                    prompt("Copy this invite link:", url);
+                if (!r.ok) return;
+                const invite = await r.json();
+                const url = `${window.location.origin}/clubs/join/${invite.token}`;
+                const inviterName = session?.user?.name || "A club member";
+                // Pre-formatted message — what actually lands on the
+                // clipboard. Includes who is inviting, the club, and the
+                // join URL so recipients have full context.
+                const message =
+                  `${inviterName} invites you to join the club "${club.name}" on Rally — the pickleball app.\n\n` +
+                  `Tap the link to accept:\n${url}`;
+                let copied = false;
+                if (navigator.clipboard) {
+                  try {
+                    await navigator.clipboard.writeText(message);
+                    copied = true;
+                  } catch {
+                    copied = false;
                   }
                 }
-              }} className="text-xs text-action font-medium">Copy Invite Link</button>
+                // Show a how-to popup with the exact text that was copied,
+                // plus a quick guide on where to paste it.
+                await alertDialog(
+                  copied
+                    ? `${message}\n\n— — — — — — — — —\n\nCopied to your clipboard. Paste into WhatsApp, email, SMS, or any chat. The link is specific to "${club.name}" — the recipient lands directly on this club's join page.`
+                    : `${message}\n\n— — — — — — — — —\n\nSelect and copy the text above, then paste into WhatsApp, email, SMS, or any chat. The link is specific to "${club.name}".`,
+                  "Invite link ready",
+                  { messageSize: "xs" },
+                );
+                if (!copied && !navigator.clipboard) {
+                  prompt("Copy this invite text:", message);
+                }
+              }} className="text-xs text-action font-medium">Copy_Invite_Link</button>
             )}
-          </div>
-
-          {/* Column header */}
-          <div className="flex items-center gap-2 px-3 py-1 text-[10px] text-muted uppercase tracking-wider">
-            <span className="w-8" />
-            <span className="flex-1">Name</span>
-            <span className="w-4" />
-            <span className="w-6" />
-            <span className="w-10 text-right">Rating</span>
-            <span className="w-12 text-right">W/L</span>
-            <span className="w-16 text-center">Role</span>
           </div>
 
           <div className="space-y-1">
@@ -1545,6 +1912,74 @@ export default function ClubDetailPage() {
         </div>
       )}
 
+      {/* ── Requests Tab — admin-only, lists pending join requests so
+           directors can accept/decline without scrolling the members
+           list. Falls back to Members tab if requests no longer exist
+           (e.g. all handled). ── */}
+      {tab === "requests" && !showInfo && canManage && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-bold text-foreground">Pending join requests</h3>
+            <span className="text-[11px] text-muted">{pendingCount}</span>
+          </div>
+          {pendingCount === 0 ? (
+            <div className={`${frameClass} p-4 text-center text-sm text-muted`}>
+              No pending requests. They&apos;ll show up here automatically.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {joinRequests.filter((r) => r.status === "pending").map((req) => (
+                <div key={req.id} className={`${frameClass} p-3 flex items-center gap-2`}>
+                  <PlayerAvatar name={req.player.name} size="sm" />
+                  {req.player.gender && (
+                    <span className={`text-xs shrink-0 ${req.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                      {req.player.gender === "F" ? "♀" : "♂"}
+                    </span>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{req.player.name}</div>
+                    {req.message && <p className="text-[11px] text-muted truncate">{req.message}</p>}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const r = await fetch(`/api/clubs/${club!.id}/join-request`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ requestId: req.id, action: "accept" }),
+                      });
+                      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed", "Error"); return; }
+                      setJoinRequests((prev) => prev.map((rr) => rr.id === req.id ? { ...rr, status: "accepted" } : rr));
+                      fetchClub();
+                    }}
+                    className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium"
+                  >Accept</button>
+                  <button
+                    onClick={async () => {
+                      const ok = await confirmDialog({
+                        title: `Decline ${req.player.name}?`,
+                        message: `${req.player.name} won't be notified, but they can request again later.`,
+                        confirmText: "Decline",
+                        cancelText: "Cancel",
+                        danger: true,
+                      });
+                      if (!ok) return;
+                      const r = await fetch(`/api/clubs/${club!.id}/join-request`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ requestId: req.id, action: "decline" }),
+                      });
+                      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed", "Error"); return; }
+                      setJoinRequests((prev) => prev.map((rr) => rr.id === req.id ? { ...rr, status: "declined" } : rr));
+                    }}
+                    className="text-xs text-danger px-3 py-1.5 rounded-lg hover:bg-red-50"
+                  >Decline</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Rankings Tab ── */}
       {tab === "rankings" && !showInfo && (
         <div className="space-y-2">
@@ -1560,7 +1995,7 @@ export default function ClubDetailPage() {
           </div>
           {(() => {
             const filterPlayer = (p: { name: string; gender?: string | null }) =>
-              (!memberSearch || p.name.toLowerCase().includes(memberSearch.toLowerCase())) &&
+              (!memberSearch || nameMatchesSearch(p.name, memberSearch)) &&
               (!memberGender || p.gender === memberGender);
             const filteredRanked = rankings.ranked.filter(filterPlayer);
             const filteredUnranked = rankings.unranked.filter(filterPlayer);

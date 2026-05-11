@@ -28,13 +28,49 @@ export interface SolverPlayer {
    * bench-stuck players from being forgotten.
    */
   roundsSinceLastPlayed?: number;
+  /**
+   * Did this player lose their most recent completed match? Used as a
+   * tiebreak by the King solver when picking who sits out: among players
+   * tied on effective match count, losers go to bench before winners, and
+   * a losing pair is preferred over individual losers. Undefined for
+   * players who haven't played yet (round 1) or who only have history of
+   * cancelled/incomplete matches.
+   */
+  lostLastRound?: boolean;
+  /**
+   * The other player on the same team in the most recent completed match,
+   * IF that team lost. Used by the King solver to recognise "losing
+   * pairs" — when two tied players were teammates AND both lost, the
+   * solver prefers to bench them together rather than splitting.
+   */
+  lastRoundLosingPartnerId?: string;
+  /**
+   * Court number of the player's most recent completed match. Used by
+   * the King solver for the round-2 tiebreak ("send losers from the
+   * lowest court first") when everyone is tied at matchCount = 1.
+   */
+  lastRoundCourt?: number;
   /** If true, excluded from the active pool for next round. */
   paused?: boolean;
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
-export type BaseMode = "random" | "swiss" | "king" | "manual";
+/**
+ * The four user-facing modes. Each is an atomic preset (the solver picks
+ * the right algorithm + window defaults). Setup → user chooses base.
+ * Mid-event → user can pick `activeMode` to run a different mode for
+ * upcoming rounds without losing the configured base.
+ *
+ * - random: total variety, no skill care. Fairness ejection. Round or continuous.
+ * - king:   winners climb / losers fall by court tier + fairness ejection. Round-based.
+ * - skill:  same-level court + balanced teams + fairness. Round or continuous.
+ * - manual: organizer composes; auto-generation off.
+ *
+ * `swiss` is retained for older events that already chose it, but isn't
+ * exposed in the new UI. New events should pick from random/king/skill/manual.
+ */
+export type BaseMode = "random" | "swiss" | "king" | "manual" | "skill";
 export type TeamsMode = "fixed" | "rotating";
 export type GenderRule = "mixed" | "random" | "same";
 export type Format = "doubles" | "singles";
@@ -65,6 +101,17 @@ export interface PairingSettings {
    * naturally handles it.
    */
   maxWaitWindow?: number;
+  /**
+   * Runtime override for the base mode. When set, the solver runs this
+   * mode for upcoming rounds instead of `base`. Lets organizers flip
+   * mid-event (e.g., 5 rounds of king, then 3 rounds of random for
+   * variety) without losing the configured default. Equal to base = no
+   * override.
+   *
+   * Replaces the older `shake` boolean — shake=true was effectively
+   * "king but seat by variety," which is the same as activeMode="random".
+   */
+  activeMode?: BaseMode;
 }
 
 /** Two players who MUST partner together (e.g., tournament practice). */

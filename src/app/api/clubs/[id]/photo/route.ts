@@ -10,12 +10,14 @@ export async function POST(
   const user = await requireAuth();
   const { id } = await params;
 
-  // Must be club admin/owner
-  const membership = await prisma.clubMember.findUnique({
-    where: { clubId_playerId: { clubId: id, playerId: user.id } },
-  });
-  if (!membership || (!["owner", "admin"].includes(membership.role) && user.role !== "admin")) {
-    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  // Must be club owner/admin OR app admin (the latter regardless of membership).
+  if (user.role !== "admin") {
+    const membership = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: id, playerId: user.id } },
+    });
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
   }
 
   const formData = await req.formData();

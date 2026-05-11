@@ -14,7 +14,7 @@ import { frameClass } from "@/components/Card";
 
 // ── Types mirroring src/lib/solver/types.ts ──────────────────────────────
 
-type Base = "random" | "swiss" | "king" | "manual";
+type Base = "random" | "swiss" | "king" | "manual" | "skill";
 type Teams = "fixed" | "rotating";
 type Gender = "mixed" | "random" | "same";
 // Use numbers in the UI; Infinity is represented as "inf" over JSON.
@@ -28,6 +28,11 @@ interface PairingSettings {
   matchCountWindow: Window;
   varietyWindow: Window;
   maxWaitWindow: Window;
+  /**
+   * Mid-event override. When set, the solver runs this mode for upcoming
+   * rounds instead of the configured base. Replaces the old `shake` flag.
+   */
+  activeMode?: Base;
 }
 
 interface EventClass {
@@ -35,6 +40,10 @@ interface EventClass {
   name: string;
   format: string;
   pairingSettings: PairingSettings | null;
+  /** Max minutes per match before auto-finalise. Null = no cap. */
+  maxMinutes?: number | null;
+  /** "round_based" (default) or "continuous". Drives the per-court UX. */
+  playMode?: string;
 }
 
 interface EventPlayerDTO {
@@ -153,8 +162,10 @@ export default function PairingConfigPage() {
   const [event, setEvent] = useState<EventSummary | null>(null);
   const [classId, setClassId] = useState<string>("");
   const [settings, setSettings] = useState<PairingSettings>(DEFAULT_SETTINGS);
-  const [analysis, setAnalysis] = useState<PoolAnalysis | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  // Pool analysis state — DISABLED. Re-introduce if you uncomment the
+  // analyzer block lower down.
+  // const [analysis, setAnalysis] = useState<PoolAnalysis | null>(null);
+  // const [analyzing, setAnalyzing] = useState(false);
   const [locks, setLocks] = useState<PairLockDTO[]>([]);
   const [editingLocks, setEditingLocks] = useState(false);
   const [subPage, setSubPage] = useState<null | "settings">(null);
@@ -185,6 +196,14 @@ export default function PairingConfigPage() {
   const [includeCourts, setIncludeCourts] = useState<Set<number>>(new Set());
   const [preview, setPreview] = useState<NextMatchPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  // Per-court ghost previews ("what would play here when this court frees up?").
+  // Populated by parallel preview calls — keyed by court number. Only used
+  // when the class is in continuous play.
+  const [ghostByCourt, setGhostByCourt] = useState<Record<number, PreviewMatch | null>>({});
+  // Wait-vs-go diff cards: for each active court, paired previews of
+  // "play now (idle pool only)" vs "wait for this court". Keyed by court
+  // number. Filled by the same effect.
+  const [waitVsGo, setWaitVsGo] = useState<Record<number, { goNow: PreviewMatch[]; wait: PreviewMatch[] } | null>>({});
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [numRounds, setNumRounds] = useState(1);
   const [actionMatchId, setActionMatchId] = useState<string | null>(null);
@@ -265,26 +284,27 @@ export default function PairingConfigPage() {
       .then(setLocks);
   }, [id, classId]);
 
-  // ── Live analyzer — re-run whenever settings or class change ──────────
-  const runAnalyze = useCallback(async () => {
-    if (!classId) return;
-    setAnalyzing(true);
-    try {
-      const r = await fetch(`/api/events/${id}/pairing/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId, settings }),
-      });
-      if (r.ok) setAnalysis(await r.json());
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [id, classId, settings]);
-
-  useEffect(() => {
-    const timer = setTimeout(runAnalyze, 250); // debounce
-    return () => clearTimeout(timer);
-  }, [runAnalyze]);
+  // ── Pool analyzer — DISABLED. Kept commented for later revival; ──────
+  // the UX surface is gone and the per-keystroke fetch was creating noise.
+  // const runAnalyze = useCallback(async () => {
+  //   if (!classId) return;
+  //   setAnalyzing(true);
+  //   try {
+  //     const r = await fetch(`/api/events/${id}/pairing/analyze`, {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ classId, settings }),
+  //     });
+  //     if (r.ok) setAnalysis(await r.json());
+  //   } finally {
+  //     setAnalyzing(false);
+  //   }
+  // }, [id, classId, settings]);
+  //
+  // useEffect(() => {
+  //   const timer = setTimeout(runAnalyze, 250);
+  //   return () => clearTimeout(timer);
+  // }, [runAnalyze]);
 
   // ── Track dirty settings ────────
   useEffect(() => {
@@ -348,6 +368,68 @@ export default function PairingConfigPage() {
     const timer = setTimeout(runPreview, 200);
     return () => clearTimeout(timer);
   }, [runPreview]);
+
+  // ── Per-court ghost previews + wait-vs-go cards ────────────────────────
+  // For continuous-play classes only. Fires preview fetches per active
+  // court so the UI can show "if this court frees up next, here's what
+  // plays" + a wait-vs-go diff card.
+  useEffect(() => {
+    if (!event || !classId) return;
+    const cls = event.classes.find((c) => c.id === classId);
+    if (cls?.playMode !== "continuous") {
+      setGhostByCourt({});
+      setWaitVsGo({});
+      return;
+    }
+    const activeCourts = event.matches
+      .filter((m) => m.classId === classId && m.status === "active")
+      .map((m) => m.courtNum);
+    if (activeCourts.length === 0) {
+      setGhostByCourt({});
+      setWaitVsGo({});
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      const ghostEntries: [number, PreviewMatch | null][] = [];
+      const waitEntries: [number, { goNow: PreviewMatch[]; wait: PreviewMatch[] } | null][] = [];
+      await Promise.all(activeCourts.map(async (court) => {
+        try {
+          // "Wait" preview: include this court (its players are available).
+          const waitR = await fetch(`/api/events/${id}/pairing/generate-round`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ classId, settings, includeCourts: [court], preview: true }),
+          });
+          const waitJson = waitR.ok ? await waitR.json() : null;
+          // "Go now" preview: don't include this court (idle pool only).
+          const goR = await fetch(`/api/events/${id}/pairing/generate-round`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ classId, settings, includeCourts: [], preview: true }),
+          });
+          const goJson = goR.ok ? await goR.json() : null;
+          // The "wait" preview is also the ghost for this court.
+          const ghost = (waitJson?.round || []).find((m: PreviewMatch) => m.court === court)
+            || waitJson?.round?.[0]
+            || null;
+          ghostEntries.push([court, ghost]);
+          waitEntries.push([court, {
+            goNow: goJson?.round || [],
+            wait: waitJson?.round || [],
+          }]);
+        } catch {
+          ghostEntries.push([court, null]);
+          waitEntries.push([court, null]);
+        }
+      }));
+      if (cancelled) return;
+      setGhostByCourt(Object.fromEntries(ghostEntries));
+      setWaitVsGo(Object.fromEntries(waitEntries));
+    };
+    const t = setTimeout(run, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [id, classId, event, settings]);
 
   // ── Commit the preview ──────────────────────────────────────────────────
   // Next Round: ALL checked-in players, ALL courts (includes busy courts)
@@ -797,7 +879,7 @@ export default function PairingConfigPage() {
     return (
       <div className="space-y-4 pb-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Manual pair locks</h2>
+          <h2 className="text-xl font-bold">Set pairs</h2>
           <button
             onClick={() => setEditingLocks(false)}
             className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"
@@ -856,106 +938,53 @@ export default function PairingConfigPage() {
         </div>
         <div className="text-xs text-foreground/70">{event.name}</div>
 
-        {/* Mode & Teams — collapsible */}
-        <div>
-          <button onClick={() => toggleCollapsed("s-mode")}
-            className="flex items-center justify-between w-full text-left py-1">
-            <span className="flex items-center gap-1 text-sm font-bold">
-              <span className={`transition-transform ${collapsed.has("s-mode") ? "" : "rotate-90"}`}>›</span>
-              Mode & Teams
-            </span>
-            {collapsed.has("s-mode") && <span className="text-[10px] text-muted">{modeLabel}</span>}
-          </button>
-          {!collapsed.has("s-mode") && (
-            <div className={`${frameClass} p-4 space-y-3 mt-1`}>
-              <SegPicker label="Base mode" value={settings.base}
-                onChange={(v) => setSettings((s) => ({ ...s, base: v as Base }))}
-                options={[
-                  { value: "random", label: "Random" }, { value: "swiss", label: "Swiss" },
-                  { value: "king", label: "King" }, { value: "manual", label: "Manual" },
-                ]}
-              />
-              {settings.base !== "manual" && settings.base !== "king" && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs text-muted">Teams</label>
-                    <button type="button" onClick={() => setEditingLocks(true)}
-                      className="flex items-center gap-1 text-[11px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10">
-                      Pair locks {locks.length > 0 && `(${locks.length})`}
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
-                      <button key={v} type="button" onClick={() => setSettings((s) => ({ ...s, teams: v as Teams }))}
-                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                          settings.teams === v ? "bg-selected text-white" : "bg-gray-100 text-foreground"
-                        }`}>{label}</button>
-                    ))}
-                  </div>
-                  {locks.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      {locks.map((l) => (
-                        <div key={l.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 text-[11px]">
-                          <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
-                          <span className="font-medium">{l.playerA.name}</span>
-                          <span className="text-muted">+</span>
-                          <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
-                          <span className="font-medium flex-1">{l.playerB.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {settings.base !== "manual" && (
-                <SegPicker label="Gender" value={settings.gender}
-                  onChange={(v) => setSettings((s) => ({ ...s, gender: v as Gender }))}
-                  options={[
-                    { value: "random", label: "Any" }, { value: "mixed", label: "Mixed" }, { value: "same", label: "Same" },
-                  ]}
-                />
-              )}
-            </div>
-          )}
+        {/* Mode & Teams now live on the event Format page.
+            This sub-page only retains the Set-pairs editor (deep link
+            to the pair-locks UI below). */}
+        <div className={`${frameClass} p-3 text-xs text-muted space-y-2`}>
+          <div>
+            <span className="font-medium text-foreground">{settings.base === "swiss" ? "Random" : settings.base}</span>
+            {settings.activeMode && settings.activeMode !== settings.base && (
+              <span className="ml-1 text-amber-600">→ {settings.activeMode}</span>
+            )}
+            {" · "}{settings.teams === "fixed" ? "Fixed teams" : "Rotating teams"}
+            {settings.gender !== "random" && (
+              <> · {settings.gender === "mixed" ? "Mixed" : "Same gender"}</>
+            )}
+          </div>
+          <Link href={`/events/${id}`} className="inline-block text-action font-medium underline">
+            Change mode &amp; teams on the event page →
+          </Link>
         </div>
-
-        {/* Constraints — collapsible */}
         {settings.base !== "manual" && (
           <div>
-            <button onClick={() => toggleCollapsed("s-constraints")}
-              className="flex items-center justify-between w-full text-left py-1">
-              <span className="flex items-center gap-1 text-sm font-bold">
-                <span className={`transition-transform ${collapsed.has("s-constraints") ? "" : "rotate-90"}`}>›</span>
-                Constraints
-              </span>
-              {collapsed.has("s-constraints") && <span className="text-[10px] text-muted">{constraintLabel}</span>}
+            <button onClick={() => setEditingLocks(true)}
+              className="flex items-center justify-between w-full text-left py-2 px-3 rounded-lg border border-border bg-white hover:bg-gray-50">
+              <span className="text-sm font-medium">Set pairs {locks.length > 0 && `(${locks.length})`}</span>
+              <span className="text-action">›</span>
             </button>
-            {!collapsed.has("s-constraints") && (
-              <div className={`${frameClass} p-4 space-y-3 mt-1`}>
-                {settings.base !== "swiss" && (
-                  <WindowPicker label="Skill window" help="How close in skill level must players be?"
-                    value={settings.skillWindow} onChange={(v) => setSettings((s) => ({ ...s, skillWindow: v }))} />
-                )}
-                <WindowPicker label="Variety window" help="How many partner/opponent repeats allowed"
-                  value={settings.varietyWindow} onChange={(v) => setSettings((s) => ({ ...s, varietyWindow: v }))} />
-                <details className="group">
-                  <summary className="text-[11px] text-muted cursor-pointer list-none flex items-center gap-1 select-none">
-                    <span className="group-open:rotate-90 transition-transform">›</span>
-                    Advanced fairness
-                  </summary>
-                  <div className="mt-3 space-y-3">
-                    <WindowPicker label="Match count window" help="Max gap from average matches played (global fairness)"
-                      value={settings.matchCountWindow} onChange={(v) => setSettings((s) => ({ ...s, matchCountWindow: v }))} />
-                    <WindowPicker label="Max consecutive sit-outs" help="Max rounds a player may sit out in a row"
-                      value={settings.maxWaitWindow} onChange={(v) => setSettings((s) => ({ ...s, maxWaitWindow: v }))} />
+            {locks.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {locks.map((l) => (
+                  <div key={l.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-50 text-[11px]">
+                    <PlayerAvatar name={l.playerA.name} photoUrl={l.playerA.photoUrl} size="xs" />
+                    <span className="font-medium">{l.playerA.name}</span>
+                    <span className="text-muted">+</span>
+                    <PlayerAvatar name={l.playerB.name} photoUrl={l.playerB.photoUrl} size="xs" />
+                    <span className="font-medium flex-1">{l.playerB.name}</span>
                   </div>
-                </details>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Pool Analysis — below constraints */}
+        {/* Pool Analysis — DISABLED.
+            The analysis panel was removed to simplify the configurator. The
+            data is still served by /api/events/[id]/pairing/analyze if you
+            want to wire it back; restore the JSX below and re-enable the
+            runAnalyze effect near the top of the file.
+
         {analysis && (
           <div>
             <button onClick={() => toggleCollapsed("s-pool")}
@@ -972,21 +1001,13 @@ export default function PairingConfigPage() {
               const simulated = analysis.feasibility.simulatedRounds;
               return (
                 <div className={`${frameClass} p-4 space-y-3 mt-1`}>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="text-xs"><div className="font-medium">{active} active</div>
-                      <div className="text-muted">{analysis.pool.genderCounts.M}M · {analysis.pool.genderCounts.F}F{analysis.pool.paused > 0 && ` · ${analysis.pool.paused} paused`}</div></div>
-                    <div className="text-xs"><div className="font-medium">Skill</div>
-                      <div className="text-muted">{levelsWithPlayers.length === 0 ? "—" : levelsWithPlayers.map((l) => `${skillDist[l]}×L${l}`).join(" · ")}</div></div>
-                    <div className="text-xs"><div className="font-medium">Capacity</div>
-                      <div className="text-muted">{analysis.capacity.playersPerRound}/round{analysis.capacity.sitOutPerRound > 0 && ` · ${analysis.capacity.sitOutPerRound} sit out`}</div></div>
-                    <div className="text-xs"><div className="font-medium">Clean rounds</div>
-                      <div className="text-muted">{max >= simulated ? `${simulated}+` : max}</div></div>
-                  </div>
+                  ...
                 </div>
               );
             })()}
           </div>
         )}
+        */}
 
         {settingsDirty && (
           <div className="flex gap-2">
@@ -1120,12 +1141,89 @@ export default function PairingConfigPage() {
     if (ep.matchCountOffset && ep.matchCountOffset > 0) playerOffsetMap.set(ep.playerId, ep.matchCountOffset);
   }
   const pmcColor = (pid: string) => playerOffsetMap.has(pid) ? "text-blue-500" : "text-muted";
+  const pmcLabel = (pid: string) => {
+    const real = playerMatchCounts.get(pid) || 0;
+    const off = playerOffsetMap.get(pid) || 0;
+    return off > 0 ? `${real}+${off}` : `${real}`;
+  };
+  const pmcTitle = (pid: string) => {
+    const off = playerOffsetMap.get(pid) || 0;
+    if (off === 0) return undefined;
+    const real = playerMatchCounts.get(pid) || 0;
+    return `Joined mid-event with +${off} starting offset. Effective: ${real + off}.`;
+  };
+
+  // ── Variety indicator: how much of the partnership space have we used? ─
+  // Count partnerships across completed/pending/active matches in this class.
+  // Coverage = unique used / C(N, 2). Repeat = total / unique.
+  // Used to nudge the organizer to flip the Shake-it-up toggle when partner
+  // repeats start piling up.
+  const partnershipUseCount = new Map<string, number>();
+  for (const m of event.matches) {
+    if (m.classId !== classId && !(m.classId === null && classId === event.classes[0]?.id)) continue;
+    if (m.status === "cancelled" || m.status === "skipped") continue;
+    const t1 = m.players.filter((p) => p.team === 1).map((p) => p.playerId);
+    const t2 = m.players.filter((p) => p.team === 2).map((p) => p.playerId);
+    for (const team of [t1, t2]) {
+      if (team.length === 2) {
+        const k = team[0] < team[1] ? `${team[0]}:${team[1]}` : `${team[1]}:${team[0]}`;
+        partnershipUseCount.set(k, (partnershipUseCount.get(k) || 0) + 1);
+      }
+    }
+  }
+  const totalPartnerships = [...partnershipUseCount.values()].reduce((s, n) => s + n, 0);
+  const uniquePartnerships = partnershipUseCount.size;
+  const activePlayerN = classPlayers.filter((ep) => ep.status === "checked_in" || ep.status === "paused").length;
+  const possiblePartnerships = activePlayerN >= 2 ? (activePlayerN * (activePlayerN - 1)) / 2 : 0;
+  const partnerCoverage = possiblePartnerships > 0 ? uniquePartnerships / possiblePartnerships : 0;
+  const avgRepeat = uniquePartnerships > 0 ? totalPartnerships / uniquePartnerships : 0;
+  // Effective mode = configured base, optionally overridden mid-event.
+  const effectiveMode: Base = settings.activeMode ?? settings.base;
+  // Suggest flipping to Random when partnerships are getting stale and
+  // we're currently in King mode (which doesn't shuffle within a tier).
+  const suggestRandom =
+    effectiveMode === "king" &&
+    partnerCoverage > 0.7 &&
+    avgRepeat > 1.2;
+  // Mode chip visibility: only show once play has started — early on the
+  // organizer hasn't seen the base mode in action yet, so toggling makes
+  // little sense. We also hide for manual since there's nothing to toggle TO.
+  const modeChipAvailable = totalPartnerships > 0;
+
+  const switchMode = async (next: Base) => {
+    // Tapping the currently-effective mode clears the override (returns
+    // to base). Tapping anything else sets it.
+    const willSet = next === settings.base ? undefined : next;
+    const newSettings: PairingSettings = { ...settings, activeMode: willSet };
+    setSettings(newSettings);
+    if (!classId) return;
+    try {
+      const r = await fetch(`/api/events/${id}/pairing/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ classId, settings: newSettings }),
+      });
+      if (r.ok) {
+        setSavedSettings(newSettings);
+        setSettingsDirty(false);
+      }
+    } catch {
+      // Best-effort: setSettings already updated UI; if save fails the
+      // next debounced runPreview will still reflect the choice locally.
+    }
+  };
 
   return (
     <div className="space-y-4 pb-6 -mx-4">
       <AppHeader
         variant="hero-sub"
-        back={{ label: event.name, href: `/events/${id}` }}
+        back={{
+          // Truncate so a long league-event name ("…Zona Centro -
+          // Portugal: Setúbal vs Oeiras — Round 1") doesn't push the
+          // section meta off the right side of the header.
+          label: event.name.length <= 30 ? event.name : `${event.name.slice(0, 30).trimEnd()}…`,
+          href: `/events/${id}`,
+        }}
         meta="Pairing"
       />
 
@@ -1151,8 +1249,18 @@ export default function PairingConfigPage() {
         <div className="flex gap-1.5">
           <button onClick={() => setSubPage("settings")}
             className="flex-1 text-action font-medium border border-action/30 px-3 py-2.5 rounded-lg text-center text-sm capitalize">
-            <span>{settings.base} · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"} · {settings.gender === "mixed" ? "Mixed Gender" : settings.gender === "same" ? "Same Gender" : "Any Gender"}</span>
-            <span className="block text-xs mt-0.5">Skill window ±{settings.skillWindow === Infinity ? "∞" : settings.skillWindow} · Variety window ±{settings.varietyWindow === Infinity ? "∞" : settings.varietyWindow}</span>
+            <span>
+              {settings.base === "swiss" ? "Random" : settings.base}
+              {settings.activeMode && settings.activeMode !== settings.base && (
+                <span className="ml-1 text-amber-600 normal-case">→ {settings.activeMode}</span>
+              )}
+              {settings.base !== "manual" && (
+                <> · {settings.teams === "fixed" ? "Fixed Teams" : "Rotating Teams"}</>
+              )}
+              {settings.base !== "manual" && settings.gender !== "random" && (
+                <> · {settings.gender === "mixed" ? "Mixed" : "Same"}</>
+              )}
+            </span>
           </button>
           <button onClick={() => setShowPairingHelp(true)}
             className="w-9 h-9 rounded-lg border border-action/30 text-action flex items-center justify-center text-sm font-bold shrink-0 self-center">
@@ -1251,7 +1359,6 @@ export default function PairingConfigPage() {
                         {players
                           .sort((a, b) => a.player.name.localeCompare(b.player.name))
                           .map((ep) => {
-                            const count = playerMatchCounts.get(ep.playerId) || 0;
                             const isPaused = ep.status === "paused";
                             const isRegistered = ep.status === "registered";
                             const isCheckedIn = ep.status === "checked_in";
@@ -1293,7 +1400,7 @@ export default function PairingConfigPage() {
                                       : isPaused ? "line-through text-muted"
                                       : isRegistered ? "text-muted"
                                       : ""
-                                    }`}>{ep.player.name} <span className={`font-normal ${isSelected ? "text-white/70" : pmcColor(ep.playerId)}`}>({count})</span></span>
+                                    }`}>{ep.player.name} <span className={`font-normal ${isSelected ? "text-white/70" : pmcColor(ep.playerId)}`} title={pmcTitle(ep.playerId)}>({pmcLabel(ep.playerId)})</span></span>
                                   </span>
                                 </span>
                               </div>
@@ -1321,6 +1428,62 @@ export default function PairingConfigPage() {
       {!collapsed.has("actions") && (<>
       {/* Actions row */}
       <div className={`${frameClass} p-2.5 space-y-2`}>
+        {/* Mode chip: 4-way mid-event toggle. Tapping a non-base mode
+            sets activeMode; tapping the configured base again clears it.
+            Visible once play has started so the organizer has data to
+            judge the trade-off. */}
+        {modeChipAvailable && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted">For next round</span>
+              <span
+                className="text-[10px] text-muted tabular-nums shrink-0"
+                title={`${uniquePartnerships} of ${possiblePartnerships} possible partnerships used. Average repeat: ${avgRepeat.toFixed(2)}× per pair.`}
+              >
+                {possiblePartnerships > 0 ? `${Math.round(partnerCoverage * 100)}% partners` : ""}
+                {avgRepeat > 1 ? ` · ${avgRepeat.toFixed(1)}× repeat` : ""}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {([
+                { v: "king", label: "King", hint: "👑" },
+                { v: "random", label: "Random", hint: "🎲" },
+                { v: "skill", label: "Skill", hint: "🎯" },
+                { v: "manual", label: "Manual", hint: "✋" },
+              ] as const).map(({ v, label, hint }) => {
+                const isEffective = effectiveMode === v;
+                const isBase = settings.base === v;
+                const suggested = suggestRandom && v === "random";
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => switchMode(v)}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors ${
+                      isEffective
+                        ? "bg-action text-white border-action"
+                        : suggested
+                          ? "bg-amber-50 text-amber-700 border-amber-300 animate-pulse"
+                          : "bg-white text-foreground border-border"
+                    }`}
+                    title={
+                      isEffective && !isBase
+                        ? `Override active — base is ${settings.base}. Tap base to clear.`
+                        : isEffective
+                          ? "Current mode"
+                          : suggested
+                            ? "Partnerships getting stale — consider switching to Random"
+                            : `Switch upcoming rounds to ${label}`
+                    }
+                  >
+                    <span className="mr-0.5">{hint}</span>{label}
+                    {isEffective && !isBase && <span className="ml-1 text-[8px] opacity-80">override</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="flex gap-2 items-center">
           <button
             onClick={handleGenerate}
@@ -1379,8 +1542,34 @@ export default function PairingConfigPage() {
           if (ep.matchCountOffset && ep.matchCountOffset > 0) offsetMap.set(ep.playerId, ep.matchCountOffset);
         }
         const mcColor = (pid: string) => offsetMap.has(pid) ? "text-blue-500" : "text-muted";
+        // Render either "(3)" or "(3+2)" when the player joined mid-event
+        // with an offset. The effective count = real + offset is what the
+        // fairness algorithm uses; showing both keeps it transparent.
+        const mcLabel = (pid: string) => {
+          const real = matchCounts.get(pid) || 0;
+          const off = offsetMap.get(pid) || 0;
+          return off > 0 ? `${real}+${off}` : `${real}`;
+        };
+        const mcTitle = (pid: string) => {
+          const off = offsetMap.get(pid) || 0;
+          if (off === 0) return undefined;
+          const real = matchCounts.get(pid) || 0;
+          return `Joined mid-event with +${off} starting offset. Effective: ${real + off}.`;
+        };
 
-        const renderMatchCard = (m: EventMatchDTO) => {
+        // Swap two pending matches' (round, courtNum) so they trade places
+        // in the start queue. Continuous-play only — round-based events
+        // don't need this since organisers commit a whole round at once.
+        const swapPending = async (aId: string, bId: string) => {
+          await fetch(`/api/matches/${aId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ swapWithMatchId: bId }),
+          });
+          router.refresh();
+        };
+
+        const renderMatchCard = (m: EventMatchDTO, ctx?: { pending: EventMatchDTO[]; i: number }) => {
           const t1 = m.players.filter((p) => p.team === 1);
           const t2 = m.players.filter((p) => p.team === 2);
           const isActive = m.status === "active";
@@ -1402,7 +1591,7 @@ export default function PairingConfigPage() {
                     <div key={mp.playerId} className="flex items-center gap-1.5">
                       <PlayerAvatar name={pl?.name || "?"} photoUrl={pl?.photoUrl} size="xs" />
                       <span className={`text-base truncate ${isMe ? "font-bold" : "font-medium"} ${won ? "text-green-700" : ""}`}>
-                        {pl?.name || "?"} <span className={`text-sm ${mcColor(mp.playerId)} font-normal`}>({matchCounts.get(mp.playerId) || 0})</span>
+                        {pl?.name || "?"} <span className={`text-sm ${mcColor(mp.playerId)} font-normal`} title={mcTitle(mp.playerId)}>({mcLabel(mp.playerId)})</span>
                       </span>
                     </div>
                   );
@@ -1417,6 +1606,7 @@ export default function PairingConfigPage() {
                       value={scores[m.id]?.[team] ?? ""}
                       targetScore={11}
                       winBy={2}
+                      allowAnyScore={(currentClass as unknown as { scoringFormat?: string })?.scoringFormat === "timed" || (!!currentClass?.maxMinutes && currentClass.maxMinutes > 0)}
                       otherTeamScore={scores[m.id]?.[team === "team1" ? "team2" : "team1"] ?? ""}
                       onChange={(v) => setScores((prev) => ({
                         ...prev,
@@ -1445,13 +1635,35 @@ export default function PairingConfigPage() {
                 <div className="flex flex-col items-center shrink-0 min-w-[2.5rem]">
                   {m.startedAt && <span className="text-[8px] text-muted">{new Date(m.startedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
                   {isPending ? (
-                    <button onClick={(e) => { e.stopPropagation(); startMatch(m.id); }}
-                      className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shadow-sm active:bg-green-700 relative"
-                      title="Start match"
-                    >
-                      <span className="text-lg font-bold">▶</span>
-                      <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-gray-600 text-white text-[9px] font-bold flex items-center justify-center">{m.courtNum}</span>
-                    </button>
+                    <div className="flex flex-col items-center gap-0.5">
+                      {/* Queue reorder arrows — continuous play only, when
+                          this card has a neighbour to swap with. */}
+                      {ctx && ctx.pending.length > 1 && canManage && currentClass?.playMode === "continuous" && (
+                        <button
+                          type="button"
+                          disabled={ctx.i === 0}
+                          onClick={(e) => { e.stopPropagation(); if (ctx.i > 0) swapPending(m.id, ctx.pending[ctx.i - 1].id); }}
+                          className="w-5 h-4 rounded text-[10px] leading-none text-muted hover:text-foreground disabled:opacity-30"
+                          title="Move earlier in queue"
+                        >▲</button>
+                      )}
+                      <button onClick={(e) => { e.stopPropagation(); startMatch(m.id); }}
+                        className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center shadow-sm active:bg-green-700 relative"
+                        title="Start match"
+                      >
+                        <span className="text-lg font-bold">▶</span>
+                        <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-gray-600 text-white text-[9px] font-bold flex items-center justify-center">{m.courtNum}</span>
+                      </button>
+                      {ctx && ctx.pending.length > 1 && canManage && currentClass?.playMode === "continuous" && (
+                        <button
+                          type="button"
+                          disabled={ctx.i >= ctx.pending.length - 1}
+                          onClick={(e) => { e.stopPropagation(); if (ctx.i < ctx.pending.length - 1) swapPending(m.id, ctx.pending[ctx.i + 1].id); }}
+                          className="w-5 h-4 rounded text-[10px] leading-none text-muted hover:text-foreground disabled:opacity-30"
+                          title="Move later in queue"
+                        >▼</button>
+                      )}
+                    </div>
                   ) : (
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${courtColor}`}>{m.courtNum}</div>
                   )}
@@ -1475,6 +1687,50 @@ export default function PairingConfigPage() {
                   Submit Score
                 </button>
               )}
+              {/* Ghost preview: only on ACTIVE matches in continuous play.
+                  Shows the predicted next match for this court when it
+                  frees up. Live-updates as state changes. */}
+              {isActive && ghostByCourt[m.courtNum] && (
+                <div className="px-2 py-1.5 border-t border-dashed border-border bg-gray-50/70 text-[10px]">
+                  <div className="flex items-center gap-1 text-muted">
+                    <span className="font-bold uppercase tracking-wider">Next here</span>
+                    <span aria-hidden>›</span>
+                    <span className="truncate">
+                      {ghostByCourt[m.courtNum]!.team1Players.map((p) => p.name).join(" + ")}
+                      <span className="mx-1 text-foreground/40">vs</span>
+                      {ghostByCourt[m.courtNum]!.team2Players.map((p) => p.name).join(" + ")}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* Wait-vs-go card: only on ACTIVE matches, continuous play.
+                  Shows two side-by-side previews so the organiser can
+                  decide whether to wait for this court or start the next
+                  match from idle players right now. */}
+              {isActive && waitVsGo[m.courtNum] && waitVsGo[m.courtNum]!.goNow.length > 0 && (
+                <div className="px-2 py-2 border-t border-border bg-blue-50/40 text-[10px] grid grid-cols-2 gap-1.5">
+                  <div className="rounded bg-white/70 border border-border px-1.5 py-1">
+                    <div className="font-bold text-[9px] uppercase tracking-wider text-amber-800">Start now</div>
+                    {waitVsGo[m.courtNum]!.goNow.slice(0, 1).map((gm) => (
+                      <div key={`go-${gm.court}`} className="truncate">
+                        {gm.team1Players.map((p) => p.name).join(" + ")}
+                        <span className="mx-1 text-foreground/40">vs</span>
+                        {gm.team2Players.map((p) => p.name).join(" + ")}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded bg-white/70 border border-border px-1.5 py-1">
+                    <div className="font-bold text-[9px] uppercase tracking-wider text-emerald-800">Wait for C{m.courtNum}</div>
+                    {waitVsGo[m.courtNum]!.wait.slice(0, 1).map((wm) => (
+                      <div key={`wait-${wm.court}`} className="truncate">
+                        {wm.team1Players.map((p) => p.name).join(" + ")}
+                        <span className="mx-1 text-foreground/40">vs</span>
+                        {wm.team2Players.map((p) => p.name).join(" + ")}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         };
@@ -1486,6 +1742,39 @@ export default function PairingConfigPage() {
         const sittingOutPlayers = classPlayers.filter((ep) => !playingIds.has(ep.playerId) && ep.status !== "paused" && ep.status !== "registered");
         const notCheckedInPlayers = classPlayers.filter((ep) => ep.status === "registered");
         const pausedPlayers = classPlayers.filter((ep) => ep.status === "paused");
+
+        // Wait pressure: rounds since each player last played. Used for
+        // the tinted chip + the "about to fall behind" nudge.
+        const currentRound = Math.max(0, ...event.matches.map((m) => m.round || 0));
+        const lastPlayedRound = new Map<string, number>();
+        for (const m of event.matches) {
+          if (m.status !== "completed" && m.status !== "active" && m.status !== "pending") continue;
+          for (const p of m.players) {
+            lastPlayedRound.set(p.playerId, Math.max(lastPlayedRound.get(p.playerId) || 0, m.round));
+          }
+        }
+        const playerWait = (pid: string) => {
+          const last = lastPlayedRound.get(pid) || 0;
+          if (last === 0) return 0; // never played yet
+          return Math.max(0, currentRound - last);
+        };
+        // Chip background by wait magnitude.
+        const waitTint = (wait: number) => {
+          if (wait >= 3) return "bg-red-200 ring-1 ring-red-300";
+          if (wait === 2) return "bg-amber-100 ring-1 ring-amber-300";
+          return "bg-white/70";
+        };
+        // Detect "about to fall behind": player sitting out with wait
+        // strictly greater than the median wait + 1.
+        const sittingWaits = sittingOutPlayers.map((ep) => playerWait(ep.playerId));
+        const sortedWaits = [...sittingWaits].sort((a, b) => a - b);
+        const medianWait = sortedWaits.length > 0
+          ? sortedWaits[Math.floor(sortedWaits.length / 2)]
+          : 0;
+        const fallingBehind = sittingOutPlayers
+          .map((ep) => ({ ep, wait: playerWait(ep.playerId) }))
+          .filter(({ wait }) => wait >= medianWait + 2 && wait >= 2)
+          .sort((a, b) => b.wait - a.wait);
 
         return (
           <div className="space-y-4">
@@ -1500,15 +1789,38 @@ export default function PairingConfigPage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
                   </button>
                 </div>
+                {fallingBehind.length > 0 && (
+                  <div className="bg-amber-100 border border-amber-300 rounded-lg px-2.5 py-1.5 text-[11px] text-amber-800 flex items-center gap-1.5">
+                    <span aria-hidden>⚠</span>
+                    <span>
+                      <strong>{fallingBehind.slice(0, 3).map(({ ep }) => ep.player.name).join(", ")}</strong>
+                      {fallingBehind.length > 3 ? ` +${fallingBehind.length - 3} more ` : " "}
+                      {fallingBehind.length === 1 ? "has" : "have"} waited {fallingBehind[0].wait} rounds — pick {fallingBehind.length === 1 ? "them" : "some of them"} next.
+                    </span>
+                  </div>
+                )}
                 {sittingOutPlayers.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {sittingOutPlayers.map((ep) => (
-                      <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
-                        className="flex items-center gap-1 bg-white/70 rounded-full px-2 py-1">
-                        <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                        <span className="text-[11px] font-medium">{ep.player.name} <span className={`text-xs ${mcColor(ep.playerId)} font-normal`}>({matchCounts.get(ep.playerId) || 0})</span></span>
-                      </button>
-                    ))}
+                    {sittingOutPlayers.map((ep) => {
+                      const wait = playerWait(ep.playerId);
+                      return (
+                        <button
+                          key={ep.playerId}
+                          onClick={() => setPlayerActionId(ep.playerId)}
+                          className={`flex items-center gap-1 rounded-full px-2 py-1 ${waitTint(wait)}`}
+                          title={wait > 0 ? `Sat out ${wait} round${wait === 1 ? "" : "s"}` : "Hasn't played yet"}
+                        >
+                          <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                          <span className="text-[11px] font-medium">
+                            {ep.player.name}
+                            <span className={`text-xs ${mcColor(ep.playerId)} font-normal`} title={mcTitle(ep.playerId)}> ({mcLabel(ep.playerId)})</span>
+                            {wait >= 2 && (
+                              <span className={`ml-1 text-[9px] font-bold ${wait >= 3 ? "text-red-700" : "text-amber-700"}`}>⏱{wait}</span>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {pausedPlayers.length > 0 && (
@@ -1519,7 +1831,7 @@ export default function PairingConfigPage() {
                         <button key={ep.playerId} onClick={() => setPlayerActionId(ep.playerId)}
                           className="flex items-center gap-1 bg-amber-100/80 rounded-full px-2 py-1 opacity-70">
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className="text-[11px] font-medium line-through">{ep.player.name} <span className={`text-xs ${mcColor(ep.playerId)} font-normal no-underline`}>({matchCounts.get(ep.playerId) || 0})</span></span>
+                          <span className="text-[11px] font-medium line-through">{ep.player.name} <span className={`text-xs ${mcColor(ep.playerId)} font-normal no-underline`} title={mcTitle(ep.playerId)}>({mcLabel(ep.playerId)})</span></span>
                         </button>
                       ))}
                     </div>
@@ -1557,7 +1869,9 @@ export default function PairingConfigPage() {
                   <span className="text-xs font-bold text-green-700 uppercase tracking-wider">Upcoming</span>
                   <button onClick={deleteAllPending} className="text-[10px] text-danger font-medium">Delete all</button>
                 </div>
-                <div className="space-y-2 mt-2">{pending.map(renderMatchCard)}</div>
+                <div className="space-y-2 mt-2">
+                  {pending.map((m, i) => renderMatchCard(m, { pending, i }))}
+                </div>
               </div>
             )}
             {active.length > 0 && (
@@ -1566,7 +1880,7 @@ export default function PairingConfigPage() {
                   <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                   <span className="text-xs font-bold text-orange-700 uppercase tracking-wider">In Play</span>
                 </div>
-                <div className="space-y-2">{active.map(renderMatchCard)}</div>
+                <div className="space-y-2">{active.map((m) => renderMatchCard(m))}</div>
               </div>
             )}
             {paused.length > 0 && (
@@ -1574,7 +1888,7 @@ export default function PairingConfigPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Paused</span>
                 </div>
-                <div className="space-y-2">{paused.map(renderMatchCard)}</div>
+                <div className="space-y-2">{paused.map((m) => renderMatchCard(m))}</div>
               </div>
             )}
             {completed.length > 0 && (
@@ -1587,7 +1901,7 @@ export default function PairingConfigPage() {
                   Completed ({completed.length})
                 </button>
                 {!collapsed.has("past") && (
-                  <div className="space-y-2">{completed.slice(0, 20).map(renderMatchCard)}</div>
+                  <div className="space-y-2">{completed.slice(0, 20).map((m) => renderMatchCard(m))}</div>
                 )}
               </div>
             )}
@@ -1666,6 +1980,7 @@ export default function PairingConfigPage() {
         const ep = event.players.find((p) => p.playerId === playerActionId);
         if (!ep) return null;
         const count = playerMatchCounts.get(ep.playerId) || 0;
+        const offset = playerOffsetMap.get(ep.playerId) || 0;
         const close = () => setPlayerActionId(null);
         return (
           <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
@@ -1682,7 +1997,7 @@ export default function PairingConfigPage() {
                 </span>
                 <div>
                   <div className="text-sm font-semibold">{ep.player.name}</div>
-                  <div className={`text-xs ${pmcColor(ep.playerId)}`}>{count} match{count !== 1 ? "es" : ""} · {ep.status === "checked_in" ? "Checked in" : ep.status === "paused" ? "Paused" : "Registered"}</div>
+                  <div className={`text-xs ${pmcColor(ep.playerId)}`}>{count} match{count !== 1 ? "es" : ""}{offset > 0 ? ` (+${offset} late-join offset, effective ${count + offset})` : ""} · {ep.status === "checked_in" ? "Checked in" : ep.status === "paused" ? "Paused" : "Registered"}</div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5 p-4">
@@ -1765,6 +2080,7 @@ export default function PairingConfigPage() {
                       <div className="space-y-1">
                         {players.map((ep) => {
                           const count = playerMatchCounts.get(ep.playerId) || 0;
+                          const offset = playerOffsetMap.get(ep.playerId) || 0;
                           const isPaused = ep.status === "paused";
                           const isRegistered = ep.status === "registered";
                           const isCheckedIn = ep.status === "checked_in";
@@ -1793,7 +2109,7 @@ export default function PairingConfigPage() {
                                   : "text-foreground"
                                 }`}>{ep.player.name}</span>
                               </span>
-                              <span className={`text-lg ${pmcColor(ep.playerId)} tabular-nums shrink-0`}>{count} <span className="text-sm">matches</span></span>
+                              <span className={`text-lg ${pmcColor(ep.playerId)} tabular-nums shrink-0`} title={pmcTitle(ep.playerId)}>{count}{offset > 0 ? <span className="text-sm">+{offset}</span> : null} <span className="text-sm">matches</span></span>
                             </button>
                           );
                         })}
@@ -1886,10 +2202,6 @@ export default function PairingConfigPage() {
                 <p>When a player checks in mid-event, the system records the current average match count. The solver treats them as if they&apos;ve played that many matches, so they won&apos;t be unfairly prioritized or penalized. Their match count is shown in <span className="text-blue-500 font-medium">blue</span>.</p>
               </div>
 
-              <div>
-                <h3 className="font-bold text-foreground mb-1">Pool Analysis</h3>
-                <p><strong>Clean rounds</strong> = how many rounds the solver can generate with zero violations. When this drops, you may need to widen your Skill or Variety window.</p>
-              </div>
             </div>
           </div>
         </div>

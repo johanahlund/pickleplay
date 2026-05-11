@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -9,6 +9,8 @@ import { ClearInput } from "@/components/ClearInput";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { COUNTRIES } from "@/lib/countries";
+import { nameMatchesSearch } from "@/lib/searchUtil";
 
 interface PlayerClub {
   id: string;
@@ -39,6 +41,8 @@ interface Player {
   phone?: string | null;
   role?: string;
   canCreateLeagues?: boolean;
+  canCreateClubs?: boolean;
+  country?: string | null;
   clubs?: PlayerClub[];
   leagueTeams?: PlayerLeagueTeam[];
   _count?: { matchPlayers: number };
@@ -66,22 +70,75 @@ export default function PlayersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editGender, setEditGender] = useState<string | null>(null);
   const [editPhone, setEditPhone] = useState("");
+  const [editCountry, setEditCountry] = useState<string>("");
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [clubFilter, setClubFilter] = useState<string>("");
+  // Country filter — defaults to the signed-in user's country (set when
+  // the session loads). "" means "all countries" — handy for app admins
+  // and people who want to browse the global pool.
+  const [countryFilter, setCountryFilter] = useState<string>("");
+  // Tracks whether we've applied the session-default once. Without this
+  // flag the user couldn't reset the filter to "All": every render that
+  // saw a session country would overwrite their choice.
+  const [countryDefaultApplied, setCountryDefaultApplied] = useState(false);
+  // Admin-only "Grant permissions" popup. Holds the target player id when open.
+  const [grantTargetId, setGrantTargetId] = useState<string | null>(null);
 
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
 
-  const fetchPlayers = async () => {
-    const r = await fetch("/api/players");
-    const data = await r.json();
-    setPlayers(data);
-    setLoading(false);
-  };
+  // Server-side search + pagination. The server caps to `limit` rows and
+  // signals overflow via response headers (X-Total, X-Has-More). The
+  // client passes the search query so name-filtering happens in the DB,
+  // not over the wire.
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [currentLimit, setCurrentLimit] = useState(100);
 
-  useEffect(() => {
-    fetchPlayers();
+  const fetchPlayers = useCallback(async (limit: number, q: string, country: string) => {
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      if (q.trim()) params.set("q", q.trim());
+      if (country) params.set("country", country);
+      const r = await fetch(`/api/players?${params.toString()}`);
+      if (!r.ok) {
+        setPlayers([]);
+        setHasMore(false);
+        return;
+      }
+      const text = await r.text();
+      // Defensive parse: an empty body shouldn't crash the page.
+      const data = text ? JSON.parse(text) : [];
+      setPlayers(Array.isArray(data) ? data : []);
+      const totalHeader = r.headers.get("X-Total");
+      const moreHeader = r.headers.get("X-Has-More");
+      setTotalCount(totalHeader ? parseInt(totalHeader, 10) : null);
+      setHasMore(moreHeader === "1");
+    } catch {
+      setPlayers([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Apply the signed-in user's country as the initial filter — once.
+  // After that the user's manual choice (including "All") wins.
+  useEffect(() => {
+    if (countryDefaultApplied) return;
+    const mine = (session?.user as { country?: string | null } | undefined)?.country;
+    if (mine) setCountryFilter(mine);
+    setCountryDefaultApplied(true);
+  }, [session, countryDefaultApplied]);
+
+  // Initial load + debounced refetch when the search query / country changes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void fetchPlayers(currentLimit, searchQuery, countryFilter);
+    }, searchQuery ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [fetchPlayers, currentLimit, searchQuery, countryFilter]);
 
 
   const voidPlayer = async (id: string, playerName: string) => {
@@ -93,7 +150,7 @@ export default function PlayersPage() {
     });
     if (!ok) return;
     await fetch(`/api/players/${id}/void`, { method: "POST" });
-    fetchPlayers();
+    fetchPlayers(currentLimit, searchQuery, countryFilter);
   };
 
   const startEdit = (p: Player) => {
@@ -101,11 +158,13 @@ export default function PlayersPage() {
     setEditName(p.name);
     setEditGender(p.gender || null);
     setEditPhone(p.phone || "");
+    setEditCountry((p as Player & { country?: string | null }).country || "");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditName("");
+    setEditCountry("");
   };
 
   const saveEdit = async () => {
@@ -113,10 +172,15 @@ export default function PlayersPage() {
     await fetch(`/api/players/${editingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName.trim(), gender: editGender, phone: editPhone.trim() || null }),
+      body: JSON.stringify({
+        name: editName.trim(),
+        gender: editGender,
+        phone: editPhone.trim() || null,
+        country: editCountry || null,
+      }),
     });
     cancelEdit();
-    fetchPlayers();
+    fetchPlayers(currentLimit, searchQuery, countryFilter);
   };
 
   const invitePlayer = async (player: Player) => {
@@ -191,27 +255,26 @@ export default function PlayersPage() {
     }
   };
 
-  const toggleLeagueCreator = async (player: Player) => {
-    const next = !player.canCreateLeagues;
-    const verb = next ? "grant" : "revoke";
-    const ok = await confirmDialog({
-      title: `${verb === "grant" ? "Grant" : "Revoke"} league-creation?`,
-      message: `For ${player.name}.`,
-      confirmText: verb === "grant" ? "Grant" : "Revoke",
-      danger: verb === "revoke",
-    });
-    if (!ok) return;
+  // Generic grant flow. Admin clicks the Grant chip on a player row →
+  // the popup at the bottom of the page (grantTargetId) opens with two
+  // toggles, one for each permission. Each toggle hits the API directly
+  // and updates state.
+  const setPermission = async (
+    player: Player,
+    field: "canCreateLeagues" | "canCreateClubs",
+    next: boolean,
+  ) => {
     const res = await fetch(`/api/players/${player.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ canCreateLeagues: next }),
+      body: JSON.stringify({ [field]: next }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      await alertDialog(data.error || `Failed to ${verb}`);
+      await alertDialog(data.error || "Failed to update");
       return;
     }
-    fetchPlayers();
+    fetchPlayers(currentLimit, searchQuery, countryFilter);
   };
 
   const resetRating = async (player: Player) => {
@@ -227,7 +290,7 @@ export default function PlayersPage() {
       await alertDialog("Failed to reset rating");
       return;
     }
-    fetchPlayers();
+    fetchPlayers(currentLimit, searchQuery, countryFilter);
   };
 
   const isUnclaimed = (p: Player) => !p.hasAccount;
@@ -240,7 +303,7 @@ export default function PlayersPage() {
   ).sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredPlayers = players
-    .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((p) => nameMatchesSearch(p.name, searchQuery))
     .filter((p) => !genderFilter || p.gender === genderFilter)
     .filter((p) => !clubFilter || (p.clubs || []).some((c) => c.id === clubFilter))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -248,7 +311,7 @@ export default function PlayersPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Players {!loading && `(${searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})`}</h2>
+        <h2 className="text-xl font-bold">Players {!loading && `(${searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})`}</h2>
         {isAdmin && (
           <Link
             href="/players/new"
@@ -260,34 +323,56 @@ export default function PlayersPage() {
       </div>
 
       <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search players..." className="text-base" />
-      {allClubs.length > 0 && (
+      {/* Country + Clubs filters on one row when there's space. Country
+          defaults to the signed-in user's country (server-side filter,
+          so the pool is sized down before it hits the wire). */}
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={countryFilter}
+          onChange={(e) => { setCountryFilter(e.target.value); setCurrentLimit(100); }}
+          className="border border-border rounded-lg px-3 py-2 text-sm bg-white"
+        >
+          <option value="">All countries</option>
+          {COUNTRIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
         <select
           value={clubFilter}
           onChange={(e) => setClubFilter(e.target.value)}
-          className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+          className="border border-border rounded-lg px-3 py-2 text-sm bg-white"
         >
           <option value="">All clubs</option>
           {allClubs.map((c) => (
-            <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
-      )}
-      <div className="flex gap-2">
-        {[
-          { value: null, label: "All" },
+      </div>
+      {/* Gender filter as toggle pair + filtered count on the right.
+          No "All" button — clicking the currently-active pill clears
+          the filter to show everyone. */}
+      <div className="flex items-center gap-2">
+        {([
           { value: "M", label: "♂ Male" },
           { value: "F", label: "♀ Female" },
-        ].map((g) => (
+        ] as const).map((g) => (
           <button
-            key={g.label}
-            onClick={() => setGenderFilter(g.value)}
-            className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
+            key={g.value}
+            onClick={() => setGenderFilter((cur) => (cur === g.value ? null : g.value))}
+            className={`px-3 py-2 rounded-lg font-medium text-sm transition-all ${
               genderFilter === g.value ? "bg-black text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
             }`}
           >
             {g.label}
           </button>
         ))}
+        <span className="ml-auto text-xs text-muted tabular-nums">
+          {filteredPlayers.length}
+          {totalCount !== null && totalCount > filteredPlayers.length && (
+            <> of {totalCount}</>
+          )}{" "}
+          {filteredPlayers.length === 1 ? "player" : "players"}
+        </span>
       </div>
 
       {loading ? (
@@ -348,6 +433,19 @@ export default function PlayersPage() {
                       className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-muted mb-1">Country</label>
+                    <select
+                      value={editCountry}
+                      onChange={(e) => setEditCountry(e.target.value)}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    >
+                      <option value="">— unset —</option>
+                      {COUNTRIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={saveEdit}
@@ -369,6 +467,11 @@ export default function PlayersPage() {
                     <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        {p.gender && (
+                          <span className={`text-sm shrink-0 ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                            {p.gender === "M" ? "♂" : "♀"}
+                          </span>
+                        )}
                         <span className="font-semibold text-lg">{p.name}</span>
                         {p.role === "admin" && (
                           <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
@@ -380,14 +483,14 @@ export default function PlayersPage() {
                             🏆 League
                           </span>
                         )}
+                        {p.canCreateClubs && p.role !== "admin" && (
+                          <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create clubs">
+                            🏟️ Club
+                          </span>
+                        )}
                         {isUnclaimed(p) && (
                           <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
                             Unclaimed
-                          </span>
-                        )}
-                        {p.gender && (
-                          <span className={`text-xs ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                            {p.gender === "M" ? "♂" : "♀"}
                           </span>
                         )}
                         {p.phone && (isAdmin || session?.user?.id === p.id) && (
@@ -404,8 +507,12 @@ export default function PlayersPage() {
                         )}
                       </div>
                       <div className="text-base text-muted">
-                        {Math.round(p.rating)} &middot; {p.wins}W / {p.losses}L
-                        {p.email && (isAdmin || session?.user?.id === p.id) && <span className="ml-1.5 text-xs">· {p.email}</span>}
+                        {/* Hide wins/losses from the general list. Rating is
+                            also hidden until we settle on ranking model
+                            (DUPR + app rating + min matches played, TBD) —
+                            shown only to app admins for now. */}
+                        {isAdmin && <>{Math.round(p.rating)}</>}
+                        {p.email && (isAdmin || session?.user?.id === p.id) && <span className={`${isAdmin ? "ml-1.5" : ""} text-xs`}>{isAdmin ? "· " : ""}{p.email}</span>}
                       </div>
                     </div>
                     {((p.clubs || []).length > 0 || (p.leagueTeams || []).length > 0) && (
@@ -461,15 +568,15 @@ export default function PlayersPage() {
                       )}
                       {p.role !== "admin" && (
                         <button
-                          onClick={() => toggleLeagueCreator(p)}
+                          onClick={() => setGrantTargetId(p.id)}
                           className={`text-xs px-2 py-1 rounded transition-colors ${
-                            p.canCreateLeagues
+                            p.canCreateLeagues || p.canCreateClubs
                               ? "text-emerald-700 hover:bg-emerald-50"
                               : "text-muted hover:bg-gray-100"
                           }`}
-                          title={p.canCreateLeagues ? "Revoke league-creation permission" : "Grant league-creation permission"}
+                          title="Grant or revoke creation permissions"
                         >
-                          {p.canCreateLeagues ? "🏆 Revoke" : "🏆 Grant"}
+                          🔑 Grant
                         </button>
                       )}
                       <button
@@ -500,8 +607,84 @@ export default function PlayersPage() {
               )}
             </div>
           ))}
+          {hasMore && (
+            <button
+              type="button"
+              onClick={() => setCurrentLimit((n) => n + 100)}
+              className="w-full mt-2 py-2.5 rounded-lg border border-border text-sm font-medium text-action hover:bg-action/5 active:bg-action/10 transition-colors"
+            >
+              Load more
+              {totalCount !== null && (
+                <span className="text-xs text-muted font-normal ml-1.5">
+                  ({Math.min(currentLimit + 100, totalCount) - filteredPlayers.length} more)
+                </span>
+              )}
+            </button>
+          )}
         </div>
       )}
+
+      {/* Grant-permissions popup (app-admin only). Shows two toggles —
+          one per permission — so admins can grant or revoke League and
+          Club creation independently. Normal users have neither by
+          default. */}
+      {grantTargetId && (() => {
+        const target = players.find((pp) => pp.id === grantTargetId);
+        if (!target) return null;
+        return (
+          <div
+            className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center"
+            onClick={() => setGrantTargetId(null)}
+          >
+            <div
+              className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mx-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
+              <div className="px-4 pb-3 border-b border-border">
+                <h2 className="text-base font-bold">Grant permissions</h2>
+                <p className="text-xs text-muted">For {target.name}.</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  onClick={() => setPermission(target, "canCreateLeagues", !target.canCreateLeagues)}
+                  className={`w-full flex items-center justify-between py-3 px-3 rounded-xl border ${
+                    target.canCreateLeagues ? "bg-emerald-50 border-emerald-300" : "bg-white border-border"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🏆</span>
+                    <span className="text-sm font-medium">Create leagues</span>
+                  </span>
+                  <span className={`text-xs font-semibold ${target.canCreateLeagues ? "text-emerald-700" : "text-muted"}`}>
+                    {target.canCreateLeagues ? "Granted · tap to revoke" : "Tap to grant"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setPermission(target, "canCreateClubs", !target.canCreateClubs)}
+                  className={`w-full flex items-center justify-between py-3 px-3 rounded-xl border ${
+                    target.canCreateClubs ? "bg-sky-50 border-sky-300" : "bg-white border-border"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🏟️</span>
+                    <span className="text-sm font-medium">Create clubs</span>
+                  </span>
+                  <span className={`text-xs font-semibold ${target.canCreateClubs ? "text-sky-700" : "text-muted"}`}>
+                    {target.canCreateClubs ? "Granted · tap to revoke" : "Tap to grant"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setGrantTargetId(null)}
+                  className="w-full py-2.5 mt-2 rounded-xl bg-gray-100 text-sm font-medium"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

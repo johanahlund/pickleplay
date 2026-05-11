@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/db";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, requireClubCreator } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-// List clubs the current user is a member of.
-// App admins get all clubs back, with `myRole` set to their real role when
-// they are a member, or "admin" (synthetic) otherwise — so admin mode behaves
-// as if they belong to every club.
+// List clubs the current user is a member of (their "My Clubs"). App
+// admins do NOT get a synthetic membership in every club here — they can
+// still browse and manage any club via the global admin path, but the
+// "My Clubs" list should only reflect actual memberships so the role
+// pill ("Director" / "Admin" / "Member") is truthful.
 export async function GET() {
   let user;
   try {
@@ -14,22 +15,17 @@ export async function GET() {
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 
-  if (user.role === "admin") {
-    const [allClubs, myMemberships] = await Promise.all([
-      prisma.club.findMany({
-        include: { _count: { select: { members: true, events: true } } },
-        orderBy: { name: "asc" },
-      }),
-      prisma.clubMember.findMany({
-        where: { playerId: user.id },
-        select: { clubId: true, role: true },
-      }),
-    ]);
-    const roleByClub = new Map(myMemberships.map((m) => [m.clubId, m.role]));
-    return NextResponse.json(
-      allClubs.map((c) => ({ ...c, myRole: roleByClub.get(c.id) || "admin" }))
-    );
-  }
+  // Include all members on each club so the clubs list can show:
+  //   - "Director: X · Admins: Y, Z" (filtered from role)
+  //   - total · ♂ count · ♀ count (filtered from gender)
+  // Most users belong to a handful of clubs with < a few hundred members
+  // each, so loading the full member list is fine for this surface.
+  const leaderMembers = {
+    select: {
+      role: true,
+      player: { select: { id: true, name: true, gender: true } },
+    },
+  } as const;
 
   const memberships = await prisma.clubMember.findMany({
     where: { playerId: user.id },
@@ -37,6 +33,7 @@ export async function GET() {
       club: {
         include: {
           _count: { select: { members: true, events: true } },
+          members: leaderMembers,
         },
       },
     },
@@ -51,12 +48,21 @@ export async function GET() {
   );
 }
 
-// Create a new club
+// Create a new club. Requires either app admin OR the player's
+// `canCreateClubs` flag (granted by an app admin from the players
+// admin panel). Regular users get 403.
 export async function POST(req: Request) {
   let user;
   try {
-    user = await requireAuth();
-  } catch {
+    user = await requireClubCreator();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "Forbidden") {
+      return NextResponse.json(
+        { error: "You don't have permission to create clubs. Ask an app admin to grant the 'canCreateClubs' flag on your profile." },
+        { status: 403 },
+      );
+    }
     return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
 

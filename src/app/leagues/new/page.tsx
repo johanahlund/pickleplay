@@ -113,7 +113,7 @@ export default function NewLeaguePage() {
           <select value={clubId} onChange={(e) => setClubId(e.target.value)}
             className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
             <option value="">Independent — no club</option>
-            {ownedClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+            {ownedClubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           {ownedClubs.length === 0 && (
             <p className="text-[11px] text-muted mt-1">You don&apos;t own any clubs. The league will be independent.</p>

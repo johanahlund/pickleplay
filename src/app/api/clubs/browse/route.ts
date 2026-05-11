@@ -28,6 +28,14 @@ export async function GET(req: Request) {
     include: {
       _count: { select: { members: true, events: true } },
       locations: true,
+      // Load all members so the browse card can show director, admins
+      // and ♂/♀ counts. Same shape as GET /api/clubs.
+      members: {
+        select: {
+          role: true,
+          player: { select: { id: true, name: true, gender: true } },
+        },
+      },
     },
     orderBy: { name: "asc" },
     take: 50,
@@ -45,5 +53,6 @@ export async function GET(req: Request) {
     city: c.city,
     country: c.country,
     locations: c.locations,
+    members: c.members,
   })));
 }

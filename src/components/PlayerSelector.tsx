@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { ClearInput } from "./ClearInput";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { useConfirm } from "./ConfirmDialog";
+import { nameMatchesSearch } from "@/lib/searchUtil";
 
 interface Player {
   id: string;

@@ -171,7 +171,7 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
             )}
           </h4>
           {canManage && !showAdd && (
-            <button onClick={() => { setShowAdd(true); fetch("/api/players").then((r) => r.ok ? r.json() : []).then(setAllPlayers); }}
+            <button onClick={() => { setShowAdd(true); fetch("/api/players?limit=5000").then((r) => r.ok ? r.json() : []).then(setAllPlayers); }}
               className="text-xs text-action font-medium">+ Add Player</button>
           )}
         </div>

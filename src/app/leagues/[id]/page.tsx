@@ -10,14 +10,18 @@ import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
+import { leagueShortName } from "@/lib/leagueDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
+import { nameMatchesSearch } from "@/lib/searchUtil";
+import { RulesChatSheet } from "@/components/RulesChatSheet";
 
 interface LeaguePreview {
   id: string;
   name: string;
+  shortName: string | null;
   description: string | null;
   season: string | null;
   status: string;
@@ -54,6 +58,10 @@ interface LeagueRoundEvent {
   id: string; name: string; date: string; status: string; hostTeamId: string | null;
   leagueTeams: { teamId: string; points: number; team: { id: string; name: string; logoUrl: string | null } }[];
   leagueGames: LeagueGame[];
+  /** Per-event signup snapshots so the round list can show whether the
+   *  viewer has already signed up to this match-day event. Server
+   *  returns playerId + status + signupPreferences for each EventPlayer. */
+  players?: { playerId: string; status?: string; signupPreferences?: Record<string, unknown> | null }[];
 }
 interface LeagueRound {
   id: string; roundNumber: number; name: string | null;
@@ -72,7 +80,7 @@ interface League {
   config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   rulesPdfUrl?: string | null;
   rulesPdfName?: string | null;
-  documents?: { id: string; url: string; name: string; mimeType: string; sizeBytes: number }[];
+  documents?: { id: string; url: string; name: string; mimeType: string; sizeBytes: number; includeInAssistant?: boolean; showToUsers?: boolean }[];
   participationRequests?: { id: string; playerId: string; preferredTeamId: string | null; status: string; preferences?: Record<string, { level: "prefer" | "ok" | "no"; note?: string }> | null; player: { id: string; gender: string | null } }[];
   createdBy?: { id: string; name: string } | null;
   deputy?: { id: string; name: string } | null;
@@ -119,13 +127,15 @@ function roundDisplayStatus(round: { status: string; startDate: string | null; e
   return "active";
 }
 function roundStatusLabel(s: RoundDisplayStatus): string {
-  return s === "in_progress" ? "in progress" : s;
+  // Simplified two-state binary for the round-list pill: setup vs
+  // active. The richer phase derivation (scheduled / in_progress /
+  // completed) is still computed for other surfaces, but the round
+  // list just needs to tell organisers "is this round live yet?".
+  return s === "setup" ? "Setup" : "Active";
 }
 function roundStatusClass(s: RoundDisplayStatus): string {
-  if (s === "completed") return "bg-green-100 text-green-700";
-  if (s === "in_progress" || s === "active") return "bg-orange-100 text-orange-700";
-  if (s === "setup") return "bg-amber-100 text-amber-700";
-  return "bg-gray-100 text-muted"; // scheduled
+  if (s === "setup") return "bg-gray-100 text-muted";
+  return "bg-emerald-100 text-emerald-700";
 }
 
 // Clamp a numeric input string to [1, max] integers. Empty string passes
@@ -234,6 +244,11 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, fo
             className={`flex items-center gap-2 py-1 transition-all rounded-lg ${removing ? "opacity-50 line-through" : ""} ${focused ? "ring-2 ring-action shadow-sm bg-action/5 px-1" : ""}`}
           >
             <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+            {tp.player.gender && (
+              <span className={`text-xs shrink-0 ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                {tp.player.gender === "F" ? "♀" : "♂"}
+              </span>
+            )}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">
                 {tp.player.name}
@@ -241,11 +256,6 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, fo
                 {isDeputy && <span className="text-[10px] text-muted ml-1">(Deputy)</span>}
               </div>
             </div>
-            {tp.player.gender && (
-              <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
-                {tp.player.gender === "F" ? "♀" : "♂"}
-              </span>
-            )}
             {/* Unclaimed flag — shown to anyone who can see the roster, since
                 it's not really sensitive (just "this player hasn't signed up
                 to the app yet"). The visibility gate on the roster itself
@@ -829,6 +839,7 @@ export default function LeagueDetailPage() {
   })();
   const [tab, setTab] = useState<Tab>(tabFromUrl ?? "overview");
   useEffect(() => { if (tabFromUrl) setTab(tabFromUrl); }, [tabFromUrl]);
+  const [chatOpen, setChatOpen] = useState(false);
   // ?expandTeam=<id> + ?focus=<id> + ?focusPlayer=<id> — used by the
   // league sign-up "back" link when returning from editing a teammate's
   // prefs. Expand that team's roster, scroll the specific player row
@@ -869,6 +880,10 @@ export default function LeagueDetailPage() {
   // Empty on initial render; populated after hydration to default-collapse
   // every team (honouring ?expandTeam=<id>). See effect below.
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  // Tracks whether the standings expand/collapse-all button last
+  // toggled into "all collapsed" state. The <details> elements are
+  // uncontrolled, so this is just for the button's label/icon.
+  const [standingsAllCollapsed, setStandingsAllCollapsed] = useState(false);
   // Run once after mount when league has data: collapse all teams except
   // the one called out by ?expandTeam in the URL.
   useEffect(() => {
@@ -1023,7 +1038,8 @@ export default function LeagueDetailPage() {
     // Refresh preview cache so the next visit renders header instantly with current data.
     if (typeof id === "string") {
       setPreview<LeaguePreview>("league", id, {
-        id: data.id, name: data.name, description: data.description ?? null,
+        id: data.id, name: data.name, shortName: data.shortName ?? null,
+        description: data.description ?? null,
         season: data.season ?? null, status: data.status, club: data.club ?? null,
       });
     }
@@ -1073,7 +1089,7 @@ export default function LeagueDetailPage() {
 
   useHideBottomNav(!!editSection);
 
-  const fetchPlayers = async () => { if (allPlayers.length) return; const r = await fetch("/api/players"); if (r.ok) setAllPlayers(await r.json()); };
+  const fetchPlayers = async () => { if (allPlayers.length) return; const r = await fetch("/api/players?limit=5000"); if (r.ok) setAllPlayers(await r.json()); };
   const fetchClubs = async () => { if (allClubs.length) return; const r = await fetch("/api/clubs/browse"); if (r.ok) setAllClubs(await r.json()); };
 
   if (loading || !league) {
@@ -1519,7 +1535,7 @@ export default function LeagueDetailPage() {
         }
         setDirty(false);
         setEditSection(target as typeof editSection);
-      }} className="text-sm text-action font-medium">{label} <span className="text-xs text-muted font-normal">({league.name})</span></button>
+      }} className="text-sm text-action font-medium">{label} <span className="text-xs text-muted font-normal">({leagueShortName(league)})</span></button>
     </div>
   );
 
@@ -1581,7 +1597,7 @@ export default function LeagueDetailPage() {
             <select value={editLeagueClubId} onChange={(e) => { setEditLeagueClubId(e.target.value); setDirty(true); }}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
               <option value="">Independent — no club</option>
-              {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+              {allClubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -1603,21 +1619,57 @@ export default function LeagueDetailPage() {
             <div className="space-y-1.5">
               {(league.documents || []).map((d) => {
                 const isImg = d.mimeType.startsWith("image/");
+                const isPdf = d.mimeType === "application/pdf";
+                const inAssistant = d.includeInAssistant ?? true;
+                const showToUsers = d.showToUsers ?? true;
+                const patchFlags = async (patch: { includeInAssistant?: boolean; showToUsers?: boolean }) => {
+                  const r = await fetch(`/api/leagues/${id}/documents/${d.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patch),
+                  });
+                  if (!r.ok) { const j = await r.json().catch(() => ({})); await alertDialog(j.error || "Failed to update"); return; }
+                  fetchLeague();
+                };
                 return (
-                  <div key={d.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border">
-                    <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-center gap-2 text-sm hover:underline">
-                      <span>{isImg ? "🖼️" : "📄"}</span>
-                      <span className="truncate font-medium text-action">{d.name}</span>
-                      <span className="text-[10px] text-muted shrink-0">{Math.round(d.sizeBytes / 1024)} KB</span>
-                    </a>
-                    <button type="button" onClick={async (e) => {
-                      e.stopPropagation();
-                      const ok = await confirm({ title: "Remove document", message: `Remove "${d.name}"?`, danger: true, confirmText: "Remove" });
-                      if (!ok) return;
-                      const r = await fetch(`/api/leagues/${id}/documents/${d.id}`, { method: "DELETE" });
-                      if (!r.ok) { const j = await r.json().catch(() => ({})); await alertDialog(j.error || "Failed to remove"); return; }
-                      fetchLeague();
-                    }} className="text-danger text-sm w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center" aria-label="Remove">✕</button>
+                  <div key={d.id} className="space-y-1">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border">
+                      <a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-center gap-2 text-sm hover:underline">
+                        <span>{isImg ? "🖼️" : "📄"}</span>
+                        <span className="truncate font-medium text-action">{d.name}</span>
+                        <span className="text-[10px] text-muted shrink-0">{Math.round(d.sizeBytes / 1024)} KB</span>
+                      </a>
+                      <button type="button" onClick={async (e) => {
+                        e.stopPropagation();
+                        const ok = await confirm({ title: "Remove document", message: `Remove "${d.name}"?`, danger: true, confirmText: "Remove" });
+                        if (!ok) return;
+                        const r = await fetch(`/api/leagues/${id}/documents/${d.id}`, { method: "DELETE" });
+                        if (!r.ok) { const j = await r.json().catch(() => ({})); await alertDialog(j.error || "Failed to remove"); return; }
+                        fetchLeague();
+                      }} className="text-danger text-sm w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center" aria-label="Remove">✕</button>
+                    </div>
+                    <div className="pl-3 flex flex-wrap gap-x-4 gap-y-1">
+                      <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={showToUsers}
+                          onChange={(e) => patchFlags({ showToUsers: e.target.checked })}
+                          className="w-3.5 h-3.5"
+                        />
+                        <span>Show to users</span>
+                      </label>
+                      {isPdf && (
+                        <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={inAssistant}
+                            onChange={(e) => patchFlags({ includeInAssistant: e.target.checked })}
+                            className="w-3.5 h-3.5"
+                          />
+                          <span>Include in Event Assistant</span>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1827,13 +1879,13 @@ export default function LeagueDetailPage() {
     const captainPlayer = editTeamCaptainId ? allPlayers.find((p) => p.id === editTeamCaptainId) : null;
     const vicePlayer = editTeamViceCaptainId ? allPlayers.find((p) => p.id === editTeamViceCaptainId) : null;
     const playerResults = (search: string, excludeIds: string[]) =>
-      allPlayers.filter((p) => !excludeIds.includes(p.id) && p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10);
+      allPlayers.filter((p) => !excludeIds.includes(p.id) && nameMatchesSearch(p.name, search)).slice(0, 10);
 
     return (
       <div className="space-y-2">
         {editBackLink("")}
         <div className={`${frameClass} p-4 space-y-3`}>
-          <h3 className="text-sm font-semibold">{editingTeamId ? "Edit Team" : "Add Team"}</h3>
+          <h3 className="text-sm font-semibold">{editingTeamId ? "Edit Team Data" : "Add Team"}</h3>
 
           <div>
             <label className="block text-xs text-muted mb-1">Team Name</label>
@@ -1864,7 +1916,7 @@ export default function LeagueDetailPage() {
                 }}
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white">
                 <option value="">No club</option>
-                {allClubs.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
+                {allClubs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}
@@ -1928,7 +1980,13 @@ export default function LeagueDetailPage() {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setShowTeamCaptainPicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+                <div className="flex items-center justify-between mt-1">
+                  <button onClick={() => setShowTeamCaptainPicker(false)} className="text-xs text-muted">Cancel</button>
+                  <Link
+                    href={`/players/new?leagueId=${id}${editingTeamId ? `&teamId=${editingTeamId}` : ""}&returnTo=${encodeURIComponent(`/leagues/${id}?expandTeam=${editingTeamId ?? ""}`)}`}
+                    className="text-xs text-action font-medium"
+                  >+ New player</Link>
+                </div>
               </div>
             ) : (
               <button onClick={() => { setShowTeamCaptainPicker(true); setTeamCaptainSearch(""); }}
@@ -1964,7 +2022,13 @@ export default function LeagueDetailPage() {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setShowTeamVicePicker(false)} className="text-xs text-muted mt-1">Cancel</button>
+                <div className="flex items-center justify-between mt-1">
+                  <button onClick={() => setShowTeamVicePicker(false)} className="text-xs text-muted">Cancel</button>
+                  <Link
+                    href={`/players/new?leagueId=${id}${editingTeamId ? `&teamId=${editingTeamId}` : ""}&returnTo=${encodeURIComponent(`/leagues/${id}?expandTeam=${editingTeamId ?? ""}`)}`}
+                    className="text-xs text-action font-medium"
+                  >+ New player</Link>
+                </div>
               </div>
             ) : (
               <button onClick={() => { setShowTeamVicePicker(true); setTeamViceSearch(""); }}
@@ -1983,7 +2047,7 @@ export default function LeagueDetailPage() {
 
   if (editSection === "management") {
     const playerSearchResults = (search: string, excludeIds: string[]) =>
-      allPlayers.filter((p) => !excludeIds.includes(p.id) && p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 10);
+      allPlayers.filter((p) => !excludeIds.includes(p.id) && nameMatchesSearch(p.name, search)).slice(0, 10);
 
     const deputyPlayer = editDeputyId ? allPlayers.find((p) => p.id === editDeputyId) : null;
 
@@ -2164,10 +2228,14 @@ export default function LeagueDetailPage() {
         <div key={req.id} className="border border-border rounded-lg p-3 flex items-start gap-3">
           <div className="flex items-start gap-2 flex-1 min-w-0">
             <PlayerAvatar name={req.player.name} photoUrl={req.player.photoUrl} size="sm" />
+            {req.player.gender && (
+              <span className={`text-xs shrink-0 mt-0.5 ${req.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                {req.player.gender === "F" ? "♀" : "♂"}
+              </span>
+            )}
             <div className="flex-1 min-w-0 space-y-1">
               <div className="text-sm font-medium truncate">
                 {req.player.name}
-                {req.player.gender && <span className="ml-1 text-muted">{req.player.gender === "F" ? "♀" : "♂"}</span>}
                 {req.player.rating != null && <span className="ml-1 text-[11px] text-muted">· {Math.round(req.player.rating)}</span>}
               </div>
               {Object.keys(prefs).length > 0 && (
@@ -2268,7 +2336,7 @@ export default function LeagueDetailPage() {
       <div className="space-y-2">
         <div className="sticky top-0 z-30 bg-background -mx-4 px-4 py-2 shadow-sm">
           <button onClick={closeAddPlayer} className="text-sm text-action font-medium">
-            ← {team.name} <span className="text-xs text-muted font-normal">({league.name})</span>
+            ← {team.name} <span className="text-xs text-muted font-normal">({leagueShortName(league)})</span>
           </button>
         </div>
         <div className={`${frameClass} p-4 space-y-3`}>
@@ -2302,7 +2370,13 @@ export default function LeagueDetailPage() {
           <input type="text" value={addPlayerSearch} onChange={(e) => setAddPlayerSearch(e.target.value)}
             placeholder="Search by name..." autoFocus
             className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-          <div className="text-[11px] text-muted">{results.length} available {addedThisSession.size > 0 && `· ${addedThisSession.size} added`}</div>
+          <div className="flex items-center justify-between">
+            <div className="text-[11px] text-muted">{results.length} available {addedThisSession.size > 0 && `· ${addedThisSession.size} added`}</div>
+            <Link
+              href={`/players/new?leagueId=${id}&teamId=${team.id}&returnTo=${encodeURIComponent(`/leagues/${id}?expandTeam=${team.id}`)}`}
+              className="text-[11px] text-action font-medium"
+            >+ New player</Link>
+          </div>
           {results.length === 0 ? (
             <p className="text-xs text-muted text-center py-6">
               {addPlayerFilter === "club" && allClubMembers.length === 0 ? "No club members found" : "No players match"}
@@ -2341,15 +2415,15 @@ export default function LeagueDetailPage() {
                     }`}
                   >
                     <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                    {p.gender && (
+                      <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{p.name}</div>
                       {p.email && <div className="text-[10px] text-muted truncate">{p.email}</div>}
                     </div>
-                    {p.gender && (
-                      <span className={`text-xs ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
-                        {p.gender === "F" ? "♀" : "♂"}
-                      </span>
-                    )}
                     {flashing ? (
                       <span className="text-xs font-semibold text-emerald-600">✓ Selected</span>
                     ) : (
@@ -2388,22 +2462,61 @@ export default function LeagueDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => {
-              if (t === "teams" && tab !== "teams") {
-                // Default: collapse all teams when entering the tab
-                setCollapsedTeams(new Set(league.teams.map((tm) => tm.id)));
-              }
-              setTab(t);
-            }}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition-all ${
-              tab === t ? "bg-white text-foreground shadow-sm" : "text-muted hover:text-foreground"
-            }`}>{t}</button>
-        ))}
-      </div>
+      {(() => {
+        const assistantDocs = (league.documents || []).filter(
+          (d) => d.mimeType === "application/pdf" && (d.includeInAssistant ?? true)
+        );
+        const hasAssistant = assistantDocs.length > 0;
+        return (
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+            {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => {
+              const isOverview = t === "overview";
+              const isActive = tab === t;
+              return (
+                <div
+                  key={t}
+                  className={`flex-1 relative rounded-lg transition-all ${
+                    isActive ? "bg-white shadow-sm" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (t === "teams" && tab !== "teams") {
+                        setCollapsedTeams(new Set(league.teams.map((tm) => tm.id)));
+                      }
+                      setTab(t);
+                    }}
+                    className={`w-full py-2 ${isOverview && hasAssistant ? "pr-7" : ""} rounded-lg text-xs font-medium capitalize ${
+                      isActive ? "text-foreground" : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                  {isOverview && hasAssistant && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setChatOpen(true); }}
+                      aria-label="Open Event Rules Assistant"
+                      title="Ask about the rules"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-action text-white text-[10px] font-bold flex items-center justify-center shadow-sm hover:opacity-90 active:scale-95"
+                    >
+                      ?
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      <RulesChatSheet
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        leagueId={league.id}
+        leagueName={league.name}
+      />
 
       {/* ── Overview Tab ── */}
       {tab === "overview" && (
@@ -2617,22 +2730,35 @@ export default function LeagueDetailPage() {
             )}
           </div>
 
-          {/* Documents */}
-          {(league.documents?.length || 0) > 0 && (
-            <div className={`${frameClass} p-4 space-y-1.5`}>
-              <h3 className="text-sm font-semibold mb-1">Documents</h3>
-              {league.documents!.map((d) => {
-                const isImg = d.mimeType.startsWith("image/");
-                return (
-                  <a key={d.id} href={d.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm hover:underline">
-                    <span>{isImg ? "🖼️" : "📄"}</span>
-                    <span className="truncate font-medium text-action flex-1">{d.name}</span>
-                    <span className="text-[10px] text-muted shrink-0">{Math.round(d.sizeBytes / 1024)} KB</span>
-                  </a>
-                );
-              })}
-            </div>
+          {/* Documents — only those flagged showToUsers */}
+          {(() => {
+            const visibleDocs = (league.documents || []).filter((d) => d.showToUsers ?? true);
+            if (visibleDocs.length === 0) return null;
+            return (
+              <div className={`${frameClass} p-4 space-y-1.5`}>
+                <h3 className="text-sm font-semibold mb-1">Documents</h3>
+                {visibleDocs.map((d) => {
+                  const isImg = d.mimeType.startsWith("image/");
+                  return (
+                    <a key={d.id} href={d.url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm hover:underline">
+                      <span>{isImg ? "🖼️" : "📄"}</span>
+                      <span className="truncate font-medium text-action flex-1">{d.name}</span>
+                      <span className="text-[10px] text-muted shrink-0">{Math.round(d.sizeBytes / 1024)} KB</span>
+                    </a>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {canEdit && (
+            <Link
+              href={`/leagues/${id}/assistant-logs`}
+              className="block w-full py-2.5 text-xs text-action font-medium rounded-xl border border-border hover:bg-gray-50 text-center"
+            >
+              View assistant chat logs
+            </Link>
           )}
 
           {canEdit && (
@@ -2651,9 +2777,36 @@ export default function LeagueDetailPage() {
       {/* ── Standings Tab ── */}
       {tab === "standings" && standings && (
         <div className="space-y-4">
-          {/* General standings */}
-          <div className={`${frameClass} overflow-hidden`}>
-            <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">General Standings</div>
+          {/* Single Expand/Collapse-all toggle — same pattern as the
+              Teams tab. Reads the current open state of the standings
+              <details> elements; if all are collapsed, expand them all;
+              otherwise collapse them all. */}
+          {(() => {
+            const allCollapsed = standingsAllCollapsed;
+            return (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    const els = document.querySelectorAll<HTMLDetailsElement>("[data-standings-card]");
+                    const next = allCollapsed; // if currently all collapsed → open all
+                    els.forEach((el) => { el.open = next; });
+                    setStandingsAllCollapsed(!next);
+                  }}
+                  className="text-xs text-muted hover:text-foreground flex items-center gap-1 px-2 py-1"
+                  title={allCollapsed ? "Expand all" : "Collapse all"}
+                >
+                  <span className="text-[10px]">{allCollapsed ? "▼" : "▲"}</span>
+                  {allCollapsed ? "Expand all" : "Collapse all"}
+                </button>
+              </div>
+            );
+          })()}
+          {/* General standings — collapsible. Open by default. */}
+          <details data-standings-card open className={`${frameClass} overflow-hidden group`}>
+            <summary className="text-xs text-foreground px-3 pt-2 pb-1 uppercase tracking-wider font-bold cursor-pointer flex items-center justify-between hover:bg-gray-50">
+              <span>General Standings</span>
+              <span className="text-muted group-open:rotate-90 transition-transform">›</span>
+            </summary>
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[10px] text-muted uppercase border-b border-border">
@@ -2684,7 +2837,7 @@ export default function LeagueDetailPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </details>
 
           {/* Playoff eligibility */}
           {canEdit && (
@@ -2708,10 +2861,13 @@ export default function LeagueDetailPage() {
             </div>
           )}
 
-          {/* Category standings */}
+          {/* Category standings — each card collapsible. Open by default. */}
           {standings.categories.map((cat) => (
-            <div key={cat.id} className={`${frameClass} overflow-hidden`}>
-              <div className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium">{cat.name}</div>
+            <details key={cat.id} data-standings-card open className={`${frameClass} overflow-hidden group`}>
+              <summary className="text-[10px] text-muted px-3 pt-2 pb-1 uppercase tracking-wider font-medium cursor-pointer flex items-center justify-between hover:bg-gray-50">
+                <span>{cat.name}</span>
+                <span className="text-muted group-open:rotate-90 transition-transform">›</span>
+              </summary>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-[10px] text-muted uppercase border-b border-border">
@@ -2732,7 +2888,7 @@ export default function LeagueDetailPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </details>
           ))}
         </div>
       )}
@@ -2805,33 +2961,87 @@ export default function LeagueDetailPage() {
                 const teamLabel = ev.leagueTeams.map((t) => t.team.name).join(" vs ") || "match-day";
                 // The sign-up button shows only on the event the viewer's
                 // team is playing in (rostered on one of the two teams).
+                // "My team" = a team the viewer is on as roster, captain, or
+                // vice-captain. Captains/vices aren't always also roster
+                // players, but we still want to flag their team-day.
                 const myEventTeam = userId ? ev.leagueTeams.find((et) => {
                   const fullTeam = league.teams.find((lt) => lt.id === et.teamId);
-                  return fullTeam?.players.some((p) => p.playerId === userId) ?? false;
+                  if (!fullTeam) return false;
+                  return fullTeam.captain?.id === userId
+                    || fullTeam.viceCaptain?.id === userId
+                    || fullTeam.players.some((p) => p.playerId === userId);
                 }) : undefined;
                 const isMyMatch = !!myEventTeam;
                 return (
                   <div key={ev.id} className="px-3 py-2.5 border-b border-border last:border-0 flex items-center gap-2">
                     <Link href={`/events/${ev.id}`} className="flex-1 min-w-0 hover:bg-gray-50 -mx-1 px-1 py-0.5 rounded">
                       <div className="text-sm font-bold truncate">
-                        {ev.leagueTeams.map((t, i) => (
-                          <span key={t.teamId}>
-                            {i > 0 && <span className="text-muted font-normal mx-1">vs</span>}
-                            {t.team.name}
-                          </span>
-                        ))}
+                        {ev.leagueTeams.map((t, i) => {
+                          // Visually flag the viewer's own team so they can
+                          // spot their match-day at a glance in a long
+                          // rounds list. Match the cue used elsewhere for
+                          // "this is yours": action color + italic.
+                          const isMine = myEventTeam?.teamId === t.teamId;
+                          return (
+                            <span key={t.teamId}>
+                              {i > 0 && <span className="text-muted font-normal mx-1">vs</span>}
+                              <span className={isMine ? "text-action italic" : ""}>{t.team.name}</span>
+                            </span>
+                          );
+                        })}
                       </div>
                       <div className="text-[11px] text-muted">
                         {ev.date && new Date(ev.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
                         <span className="ml-2">· {eventDisplayLabel(ev)}</span>
                       </div>
                     </Link>
-                    {isMyMatch && (
-                      <Link href={`/events/${ev.id}/sign-up`}
-                        className="text-xs bg-action text-white font-semibold px-2.5 py-1 rounded-lg whitespace-nowrap">
-                        Sign up
-                      </Link>
-                    )}
+                    {isMyMatch && (() => {
+                      // Did the current user already sign up for this
+                      // event? Three states drive the right column:
+                      //   - NOT signed up → primary Sign up button.
+                      //   - SIGNED UP → info badge ("✓ Signed up" /
+                      //     "✓ Attending" / "✓ Social") with a small
+                      //     "Edit Preferences" link below — the badge
+                      //     itself is non-interactive info, the link
+                      //     under it is the actual edit action.
+                      //   - UNAVAILABLE → ✗ info badge + same Edit link.
+                      type Prefs = Record<string, unknown> & { _intent?: string };
+                      const myEp = (ev.players as Array<{ playerId: string; status?: string; signupPreferences?: Prefs | null }> | undefined)
+                        ?.find((p) => p.playerId === userId);
+                      const status = myEp?.status;
+                      const intent = (myEp?.signupPreferences as Prefs | undefined)?._intent;
+                      const isSignedUp = !!myEp && status !== "unavailable";
+                      const isUnavailable = myEp?.status === "unavailable";
+                      if (!isSignedUp && !isUnavailable) {
+                        return (
+                          <Link href={`/events/${ev.id}/sign-up`}
+                            className="text-xs bg-action text-white font-semibold px-2.5 py-1 rounded-lg whitespace-nowrap">
+                            Sign up
+                          </Link>
+                        );
+                      }
+                      const label = isUnavailable
+                        ? "✗ Unavailable"
+                        : intent === "attending"
+                          ? "✓ Attending"
+                          : intent === "social"
+                            ? "✓ Social"
+                            : "✓ Signed up";
+                      const badgeClass = isUnavailable
+                        ? "text-rose-700 bg-rose-50 border-rose-200"
+                        : "text-emerald-700 bg-emerald-50 border-emerald-200";
+                      return (
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`text-[11px] font-semibold border rounded-full px-2 py-0.5 whitespace-nowrap ${badgeClass}`}>
+                            {label}
+                          </span>
+                          <Link href={`/events/${ev.id}/sign-up?edit=1`}
+                            className="text-[11px] text-action font-medium hover:underline whitespace-nowrap">
+                            Edit Preferences
+                          </Link>
+                        </div>
+                      );
+                    })()}
                     {canEdit && (
                       <button onClick={() => deleteRoundEvent(round.id, ev.id, teamLabel)}
                         aria-label="Delete event"
@@ -3173,8 +3383,8 @@ export default function LeagueDetailPage() {
                     {canAddToTeam && (
                       <span
                         onClick={(e) => { e.stopPropagation(); openAddPlayer(team); }}
-                        className="text-[11px] text-primary font-medium px-2 py-0.5 mr-2 rounded hover:bg-primary/10"
-                      >+ Add Player</span>
+                        className="text-xs text-action font-medium border border-action/30 px-3 py-1 mr-2 rounded-lg hover:bg-action/5 active:bg-action/10 transition-colors"
+                      >+ Player</span>
                     )}
                   </div>
                 )}

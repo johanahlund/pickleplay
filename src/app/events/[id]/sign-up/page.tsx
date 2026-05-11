@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { leagueShortName } from "@/lib/leagueDisplay";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Preference = "prefer" | "ok" | "no";
 
@@ -28,12 +29,19 @@ export default function EventSignUpPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   // ?for=<playerId> → captain or organizer is signing up someone else (e.g.
   // a teammate without the app). Empty/missing = self-signup.
   const onBehalfOf = searchParams.get("for");
   const targetId = onBehalfOf || userId;
   const isOnBehalf = !!onBehalfOf && onBehalfOf !== userId;
+  // ?returnTo=<path> → after saving (in the on-behalf flow), navigate
+  // back here. Used by the league lineup page so captains return to the
+  // lineup picker instead of the public event page. Must be a relative
+  // path beginning with "/" to avoid open redirects.
+  const rawReturnTo = searchParams.get("returnTo");
+  const returnTo = rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : null;
   const [targetName, setTargetName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -47,6 +55,13 @@ export default function EventSignUpPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [playerGender, setPlayerGender] = useState<string | null>(null);
   const [myTeamName, setMyTeamName] = useState<string | null>(null); // set if rostered on a playing team
+  // Guest mode: target is NOT on a playing-team roster but is tagged to
+  // one via signupPreferences._guestTeamId. They can only be social or
+  // attending (never "playing" — they aren't in any lineup). guestTeamId
+  // is preserved through save so the team-column membership doesn't get
+  // dropped when prefs are rewritten.
+  const [guestTeamId, setGuestTeamId] = useState<string | null>(null);
+  const [guestTeamName, setGuestTeamName] = useState<string | null>(null);
   // Four intents (UI quad-state). Backend stores:
   //   playing      → status="registered", category prefs set
   //   social       → status="registered", _intent="social" sentinel in prefs
@@ -56,8 +71,12 @@ export default function EventSignUpPage() {
   const [preferences, setPreferences] = useState<Record<string, { level: Preference; note?: string }>>({});
   const [savedView, setSavedView] = useState(false);
   // Tracks whether the target already had an EventPlayer when the page
-  // loaded — used to switch the success card from "Signed up" to "Updated".
-  const [wasExistingSignup, setWasExistingSignup] = useState(false);
+  // loaded — used to switch the success card from "Signed up" to "Updated"
+  // AND to swap the page header between "Sign up" and "Edit preferences".
+  // Initialised from `?edit=1` so the initial render (before the API fetch
+  // lands) already shows the right title when arriving via the pen icon.
+  const editHint = searchParams.get("edit") === "1";
+  const [wasExistingSignup, setWasExistingSignup] = useState(editHint);
 
   useHideBottomNav();
 
@@ -89,6 +108,21 @@ export default function EventSignUpPage() {
     const playingTeamIds: string[] = (ev.leagueTeams || []).map((et: { teamId: string }) => et.teamId);
     const targetTeam = allTeams.find((t) => playingTeamIds.includes(t.id) && t.players.some((p) => p.playerId === targetId));
     setMyTeamName(targetTeam?.name ?? null);
+    // Guest detection: the target may already have a guest-mode sign-up
+    // recorded (signupPreferences._guestTeamId points at a playing team).
+    // In that case the intent picker is unblocked even though the target
+    // is not on the team roster.
+    if (!targetTeam) {
+      type EPLite = { player: { id: string }; signupPreferences?: Record<string, unknown> | null };
+      const targetEpForGuest = (ev.players || []).find((ep: EPLite) => ep.player.id === targetId);
+      const prefs = targetEpForGuest?.signupPreferences as Record<string, unknown> | null | undefined;
+      const gtid = typeof prefs?._guestTeamId === "string" ? (prefs._guestTeamId as string) : null;
+      if (gtid && playingTeamIds.includes(gtid)) {
+        const guestTeam = allTeams.find((t) => t.id === gtid);
+        setGuestTeamId(gtid);
+        setGuestTeamName(guestTeam?.name ?? null);
+      }
+    }
 
     // Default category prefs from the player's league sign-up
     // (LeagueParticipationRequest.preferences). Used when no per-event
@@ -97,6 +131,19 @@ export default function EventSignUpPage() {
     const leaguePrefs = targetRosterEntry?.participationPrefs && typeof targetRosterEntry.participationPrefs === "object"
       ? targetRosterEntry.participationPrefs as Record<string, { level: Preference; note?: string }>
       : null;
+
+    // Lineup auto-seed: if the target is already placed in any leagueGame
+    // for this event, we'll default their intent to "playing" and pre-tick
+    // the matching categories as "prefer" — but ONLY when they have no
+    // existing per-event prefs yet. (See further down where we apply this.)
+    type LeagueGameLite = { id: string; categoryId: string; gamePlayers: { playerId: string }[] };
+    const leagueGames: LeagueGameLite[] = Array.isArray(ev.leagueGames) ? ev.leagueGames : [];
+    const linedUpCategoryIds = new Set<string>();
+    for (const g of leagueGames) {
+      if (g.gamePlayers.some((gp) => gp.playerId === targetId)) {
+        linedUpCategoryIds.add(g.categoryId);
+      }
+    }
 
     // Existing EventPlayer for the target — pre-fill intent + prefs.
     type EP = { player: { id: string }; status?: string; signupPreferences?: Record<string, { level: Preference; note?: string }> | null };
@@ -115,11 +162,31 @@ export default function EventSignUpPage() {
         if (v && typeof v === "object" && "level" in v) prefs[k] = v as { level: Preference; note?: string };
       }
       const hasAnyPlay = Object.values(prefs).some((p) => p.level === "prefer" || p.level === "ok");
-      if (targetEp.status === "unavailable") setIntent("unavailable");
+      // Lineup auto-seed for EXISTING sign-ups with no per-event prefs
+      // recorded yet: if the captain placed them in a category lineup,
+      // treat that as implicit consent — intent = "playing" and the
+      // matched categories default to "prefer". Doesn't touch existing
+      // prefs (we only fill an empty record).
+      const isEmpty = Object.keys(prefs).length === 0 && !sentinel;
+      if (isEmpty && linedUpCategoryIds.size > 0 && targetEp.status !== "unavailable") {
+        for (const cid of linedUpCategoryIds) {
+          prefs[cid] = { level: "prefer" };
+        }
+        setIntent("playing");
+      } else if (targetEp.status === "unavailable") setIntent("unavailable");
       else if (sentinel === "social") setIntent("social");
       else if (sentinel === "attending" || Object.keys(prefs).length === 0 || !hasAnyPlay) setIntent("attending");
       else setIntent("playing");
       setPreferences(prefs);
+    } else if (linedUpCategoryIds.size > 0) {
+      // First-time view BUT the captain has already placed them in a
+      // lineup → start from "playing" + the matched categories.
+      setIntent("playing");
+      const seeded: Record<string, { level: Preference; note?: string }> = leaguePrefs ? { ...leaguePrefs } : {};
+      for (const cid of linedUpCategoryIds) {
+        seeded[cid] = { level: "prefer" };
+      }
+      setPreferences(seeded);
     } else if (leaguePrefs) {
       // First-time event sign-up: seed from league-level preferences and
       // assume "Liga play" intent. Captain/player can adjust freely.
@@ -162,6 +229,26 @@ export default function EventSignUpPage() {
   const submit = async () => {
     setSaving(true);
     setErrorMsg(null);
+    // Guest path: target isn't on a playing team's roster — route through
+    // the signup-prefs "guest add" shape so _guestTeamId is preserved.
+    // Guests can only be social or attending; "playing" is hidden in the
+    // picker for guests so this branch only sees those two (or unavailable
+    // → fall through to the rostered branch which sets status).
+    if (guestTeamId && (intent === "social" || intent === "attending")) {
+      const r = await fetch(`/api/events/${id}/signup-prefs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerIds: [onBehalfOf || userId], intent, teamId: guestTeamId }),
+      });
+      setSaving(false);
+      if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to save"); return; }
+      if (isOnBehalf) {
+        router.push(returnTo || `/events/${id}?section=players`);
+        return;
+      }
+      setSavedView(true);
+      return;
+    }
     // Server stores `_intent` as a sentinel inside signupPreferences so
     // we can distinguish "social" from "attending" without a schema change.
     let payload: { status: "registered" | "unavailable"; preferences: Record<string, unknown> };
@@ -189,13 +276,39 @@ export default function EventSignUpPage() {
     setSaving(false);
     if (!r.ok) { const d = await r.json().catch(() => ({})); setErrorMsg(d.error || "Failed to sign up"); return; }
     if (isOnBehalf) {
-      // Captain workflow — skip the celebratory card and drop them
-      // straight back into the participants section. Use sessionStorage
-      // to surface a small toast on the event page if/when we add one.
-      router.push(`/events/${id}#participants`);
+      // Captain workflow — skip the celebratory card. If a returnTo
+      // path was provided (e.g., the league lineup page), go back there
+      // so the captain stays in flow. Otherwise drop into the event
+      // participants section.
+      router.push(returnTo || `/events/${id}?section=players`);
       return;
     }
     setSavedView(true);
+  };
+
+  const removeFromEvent = async () => {
+    const removeTargetId = onBehalfOf || userId;
+    if (!removeTargetId) return;
+    const who = isOnBehalf ? (targetName || "this player") : "you";
+    const ok = await confirmDialog({
+      title: isOnBehalf ? `Remove ${who} from event?` : "Leave this event?",
+      message: isOnBehalf
+        ? `${who}'s sign-up will be cancelled. They can sign up again later if their plans change.`
+        : "Your sign-up will be cancelled. You can sign up again later.",
+      confirmText: "Remove",
+      cancelText: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    setSaving(true);
+    const r = await fetch(`/api/events/${id}/players/${removeTargetId}`, { method: "DELETE" });
+    setSaving(false);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to remove", "Error");
+      return;
+    }
+    router.push(`/events/${id}`);
   };
 
   if (savedView) {
@@ -238,16 +351,37 @@ export default function EventSignUpPage() {
     <>
       <AppHeader
         variant="hero-sub"
-        title={isOnBehalf ? `Sign up ${targetName || "player"}` : myTeamName ? `Sign up · ${myTeamName}` : "Sign up"}
-        back={{ label: "Back to event", onClick: () => router.push(`/events/${id}`) }}
+        title={
+          wasExistingSignup
+            ? isOnBehalf
+              ? `Edit preferences for ${targetName || "player"}`
+              : myTeamName
+                ? `Edit preferences · ${myTeamName}`
+                : "Edit preferences"
+            : isOnBehalf
+              ? `Sign up ${targetName || "player"}`
+              : myTeamName
+                ? `Sign up · ${myTeamName}`
+                : "Sign up"
+        }
+        back={{ label: "Participants", onClick: () => router.push(returnTo || `/events/${id}?section=players`) }}
       />
     <div className="space-y-2">
 
+      {/* Header card — always visible so the user knows whose
+          preferences they're about to edit while the form below
+          loads. */}
       <div className={`${frameClass} p-4 space-y-2`}>
         <h2 className="text-lg font-bold">
-          {isOnBehalf
-            ? <>Sign up <span className="text-action">{targetName || "player"}</span></>
-            : <>Sign up{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}</>}
+          {wasExistingSignup ? (
+            isOnBehalf
+              ? <>Edit preferences for <span className="text-action">{targetName || "player"}</span></>
+              : <>Edit preferences{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}</>
+          ) : (
+            isOnBehalf
+              ? <>Sign up <span className="text-action">{targetName || "player"}</span></>
+              : <>Sign up{myTeamName ? <> for <span className="text-action">{myTeamName}</span></> : ""}</>
+          )}
         </h2>
         <p className="text-[11px] text-muted">
           {leagueName} · {roundName}
@@ -256,33 +390,58 @@ export default function EventSignUpPage() {
         </p>
         {isOnBehalf && (
           <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-            You&apos;re signing up <strong>{targetName || "this player"}</strong> on their behalf.
+            {wasExistingSignup ? (
+              <>You&apos;re editing preferences for <strong>{targetName || "this player"}</strong> on their behalf.</>
+            ) : (
+              <>You&apos;re signing up <strong>{targetName || "this player"}</strong> on their behalf.</>
+            )}
           </p>
         )}
         {errorMsg && (
           <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">{errorMsg}</div>
         )}
+      </div>
 
-        {!loading && !myTeamName && (
+      {/* Loading shim — shown BELOW the header card while the API
+          fetch resolves, so the user has context (whose prefs they're
+          editing) immediately and sees the spinner here as it loads. */}
+      {loading && (
+        <div className={`${frameClass} p-4 flex items-center gap-2 text-sm text-muted`}>
+          <div className="w-4 h-4 border-2 border-action border-t-transparent rounded-full animate-spin" />
+          <span>Loading preferences…</span>
+        </div>
+      )}
+
+      {!loading && (
+      <div className={`${frameClass} p-4 space-y-2`}>
+        {!myTeamName && !guestTeamId && (
           <p className="text-sm text-muted">Sign-up is for players on one of the two teams playing this match-day.</p>
         )}
 
-        {myTeamName && (
+        {(myTeamName || guestTeamId) && (
           <div>
-            <label className="block text-xs text-muted mb-1">{isOnBehalf ? "How will they participate?" : "How will you participate?"}</label>
-            <div className="grid grid-cols-2 gap-1">
-              <button onClick={() => setIntent("playing")}
-                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "playing" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
-              >🏆 Liga play</button>
+            <label className="block text-xs text-muted mb-1">
+              {guestTeamId
+                ? <>Guest of <span className="font-semibold">{guestTeamName || "team"}</span> — choose intent</>
+                : isOnBehalf ? "How will they participate?" : "How will you participate?"}
+            </label>
+            <div className={guestTeamId ? "grid grid-cols-2 gap-1" : "grid grid-cols-2 gap-1"}>
+              {!guestTeamId && (
+                <button onClick={() => setIntent("playing")}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "playing" ? "bg-action text-white" : "bg-gray-100 text-muted"}`}
+                >🏆 Liga play</button>
+              )}
               <button onClick={() => setIntent("social")}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "social" ? "bg-blue-500 text-white" : "bg-gray-100 text-muted"}`}
               >🎾 Social play</button>
               <button onClick={() => setIntent("attending")}
                 className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "attending" ? "bg-emerald-500 text-white" : "bg-gray-100 text-muted"}`}
               >👋 Just attending</button>
-              <button onClick={() => setIntent("unavailable")}
-                className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "unavailable" ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
-              >Can&apos;t come</button>
+              {!guestTeamId && (
+                <button onClick={() => setIntent("unavailable")}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-medium ${intent === "unavailable" ? "bg-rose-500 text-white" : "bg-gray-100 text-muted"}`}
+                >Can&apos;t come</button>
+              )}
             </div>
             {intent === "social" && (
               <p className="text-[11px] text-muted mt-2">Coming to play casual matches — not eligible for league lineup.</p>
@@ -293,8 +452,9 @@ export default function EventSignUpPage() {
           </div>
         )}
       </div>
+      )}
 
-      {myTeamName && intent === "playing" && (() => {
+      {!loading && myTeamName && intent === "playing" && (() => {
         const visibleCategories = categories.filter((c) => categoryMatchesGender(c.gender, playerGender));
         if (!loading && visibleCategories.length === 0) return null;
         return (
@@ -329,11 +489,21 @@ export default function EventSignUpPage() {
       })()}
 
       {myTeamName && (
-        <div className={`${frameClass} p-3 sticky bottom-2`}>
+        <div className={`${frameClass} p-3 sticky bottom-2 space-y-2`}>
           <button onClick={submit} disabled={saving || loading}
             className="w-full bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">
             {saving ? "Saving…" : "Save sign-up"}
           </button>
+          {wasExistingSignup && (
+            <button
+              type="button"
+              onClick={removeFromEvent}
+              disabled={saving || loading}
+              className="w-full text-danger text-xs font-medium py-2 rounded-xl border border-red-200 hover:bg-red-50 disabled:opacity-50"
+            >
+              {isOnBehalf ? `Remove ${targetName || "this player"} from event` : "Leave this event"}
+            </button>
+          )}
         </div>
       )}
     </div>

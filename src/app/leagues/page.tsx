@@ -12,6 +12,7 @@ import { frameClass } from "@/components/Card";
 interface League {
   id: string;
   name: string;
+  shortName: string | null;
   description: string | null;
   season: string | null;
   status: string;
@@ -55,7 +56,8 @@ export default function LeaguesPage() {
           {leagues.map((league) => (
             <Link key={league.id} href={`/leagues/${league.id}`}
               onClick={() => setPreview("league", league.id, {
-                id: league.id, name: league.name, description: league.description,
+                id: league.id, name: league.name, shortName: league.shortName ?? null,
+                description: league.description,
                 season: league.season, status: league.status, club: league.club ?? null,
               })}
               className={`block ${frameClass} p-4 active:bg-gray-50 transition-colors`}>

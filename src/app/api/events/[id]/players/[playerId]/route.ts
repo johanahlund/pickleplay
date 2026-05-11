@@ -1,15 +1,57 @@
 import { prisma } from "@/lib/db";
-import { requireEventManager } from "@/lib/auth";
+import { requireAuth, requireEventManager } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { syncPlayerToSocial } from "@/lib/socialEventSync";
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string; playerId: string }> }
 ) {
   const { id, playerId } = await params;
+  // Authorisation: event manager (organizer / event helper / league
+  // director-deputy / app admin) OR self-leave OR — for league events —
+  // captain/vice of one of the playing teams where the target player is
+  // a roster member. The last path lets team captains remove a player
+  // they signed up on behalf of (or whose plans changed).
+  let user;
   try {
-    await requireEventManager(id);
+    user = await requireAuth();
   } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
+  }
+  const isSelf = user.id === playerId;
+  let authorized = isSelf;
+  if (!authorized) {
+    try {
+      await requireEventManager(id);
+      authorized = true;
+    } catch { /* fall through */ }
+  }
+  if (!authorized) {
+    // Team-captain path: viewer is captain/vice of a team that's in this
+    // league-event AND the target is on that team's roster.
+    const event = await prisma.event.findUnique({
+      where: { id },
+      select: {
+        leagueTeams: {
+          select: {
+            team: {
+              select: {
+                id: true, captainId: true, viceCaptainId: true,
+                players: { select: { playerId: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    const teams = event?.leagueTeams.map((et) => et.team) ?? [];
+    const myTeam = teams.find((t) => t.captainId === user.id || t.viceCaptainId === user.id);
+    if (myTeam && myTeam.players.some((tp) => tp.playerId === playerId)) {
+      authorized = true;
+    }
+  }
+  if (!authorized) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
@@ -43,6 +85,9 @@ export async function DELETE(
   await prisma.eventPlayer.deleteMany({
     where: { eventId: id, playerId },
   });
+
+  // Mirror deletion to the linked social event (no-op when none).
+  await syncPlayerToSocial(id, playerId, "unavailable", null);
 
   // Promote next waitlisted player if an active player was removed
   if (wasActive) {

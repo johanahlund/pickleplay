@@ -27,6 +27,36 @@ interface GameContext {
   captainTeamId: string | null; // null = organizer/admin (any team)
 }
 
+/**
+ * Effective cap on Principal + League matches per event. Pulls
+ * `maxMatchesPerEvent` from the round's configOverride first, then
+ * falls back to the league's config. Returns null when no cap is set.
+ * Friendly ("extra") matches don't count against this cap.
+ */
+async function getMaxMatchesPerEvent(eventId: string): Promise<number | null> {
+  const ev = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      round: {
+        select: {
+          configOverride: true,
+          league: { select: { config: true } },
+        },
+      },
+    },
+  });
+  const override = ev?.round?.configOverride as { maxMatchesPerEvent?: unknown } | null | undefined;
+  const overrideVal = override && typeof override === "object" && typeof override.maxMatchesPerEvent === "number"
+    ? override.maxMatchesPerEvent
+    : null;
+  if (overrideVal !== null && overrideVal > 0) return overrideVal;
+  const baseCfg = ev?.round?.league?.config as { maxMatchesPerEvent?: unknown } | null | undefined;
+  const baseVal = baseCfg && typeof baseCfg === "object" && typeof baseCfg.maxMatchesPerEvent === "number"
+    ? baseCfg.maxMatchesPerEvent
+    : null;
+  return baseVal !== null && baseVal > 0 ? baseVal : null;
+}
+
 async function loadEventContext(leagueId: string, eventId: string, userId: string, isAppAdmin: boolean): Promise<GameContext | { error: string; status: number }> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -87,21 +117,45 @@ export async function POST(
   const ctx = await loadEventContext(leagueId, eventId, user.id, isAppAdmin);
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
 
-  // Captain-side edits (toggle_slot, assign_players, set_kind) are blocked
-  // when the captain's own team has flipped lineupReady=true. They must
-  // re-open (set_ready false) before changing anything. set_ready itself
-  // is always allowed — that's the escape hatch.
+  // Captain-side edits (toggle_slot, assign_players, set_kind) are
+  // gated by lineup-lock state:
+  //
+  //   Pre-reveal (event.lineupTotalLocked = false)
+  //     This captain can edit when their OWN team's lineupReady is
+  //     false. set_ready itself is always allowed — that's the escape
+  //     hatch out of a locked state.
+  //
+  //   Post-reveal (event.lineupTotalLocked = true, latched)
+  //     Mutual-unlock required: BOTH teams must have lineupReady=false
+  //     before either side can edit. A captain who unlocks alone will
+  //     hit this guard and see a "waiting on opponent" message.
+  //
+  // App admins bypass both gates (incident recovery / data fixes).
   const captainEdits = ["toggle_slot", "assign_players", "set_kind"];
-  if (ctx.captainTeamId !== null && captainEdits.includes(body.action)) {
-    const myEt = await prisma.leagueEventTeam.findUnique({
-      where: { eventId_teamId: { eventId, teamId: ctx.captainTeamId } },
-      select: { lineupReady: true },
+  if (ctx.captainTeamId !== null && captainEdits.includes(body.action) && !isAppAdmin) {
+    const ets = await prisma.leagueEventTeam.findMany({
+      where: { eventId },
+      select: { teamId: true, lineupReady: true },
     });
+    const myEt = ets.find((e) => e.teamId === ctx.captainTeamId);
+    const otherEt = ets.find((e) => e.teamId !== ctx.captainTeamId);
     if (myEt?.lineupReady) {
       return NextResponse.json(
         { error: "Your team's lineup is locked. Tap Re-open to edit it." },
         { status: 400 },
       );
+    }
+    if (otherEt?.lineupReady) {
+      const ev = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { lineupTotalLocked: true },
+      });
+      if (ev?.lineupTotalLocked) {
+        return NextResponse.json(
+          { error: "waiting on the opposing team to unlock for joint editing" },
+          { status: 400 },
+        );
+      }
     }
   }
 
@@ -135,16 +189,28 @@ export async function POST(
       // demote/swap via set_kind. If a principal already exists in the
       // category (e.g. someone added slot 2 as principal manually), the
       // new game stays "league".
+      // Event-wide cap: Principal + League ≤ maxMatchesPerEvent. When
+      // the cap is reached, new ticked slots fall back to "extra"
+      // (Friendly) so the captain can still mark intent without
+      // overflowing standings.
       const principalCount = await prisma.leagueGame.count({
         where: { eventId, categoryId, kind: "principal" },
       });
-      const kind = principalCount === 0 ? "principal" : "league";
+      let kind: "principal" | "league" | "extra" = principalCount === 0 ? "principal" : "league";
+      const cap = await getMaxMatchesPerEvent(eventId);
+      if (cap !== null) {
+        const countingNow = await prisma.leagueGame.count({
+          where: { eventId, kind: { in: ["principal", "league"] } },
+        });
+        if (countingNow >= cap) kind = "extra";
+      }
       const created = await prisma.leagueGame.create({
         data: {
           eventId, categoryId, slotNumber,
           team1Id: ctx.team1Id, team2Id: ctx.team2Id,
           team1Wants: isTeam1Side, team2Wants: !isTeam1Side,
           kind,
+          createdById: user.id,
         },
       });
       return NextResponse.json(created);
@@ -203,7 +269,7 @@ export async function POST(
     }
     const game = await prisma.leagueGame.findUnique({
       where: { id: gameId },
-      select: { eventId: true, team1Id: true, team2Id: true, winnerId: true },
+      select: { eventId: true, team1Id: true, team2Id: true, winnerId: true, categoryId: true },
     });
     if (!game || game.eventId !== eventId) {
       return NextResponse.json({ error: "Game not in event" }, { status: 404 });
@@ -241,16 +307,45 @@ export async function POST(
         update: {},
       });
     }
+
+    // Auto-bump each assigned player's preference for this game's category
+    // to at least "ok". Rationale: if a captain picks a player for a
+    // category, the player is implicitly available for it — even if they
+    // had said "no" or skipped it during sign-up. Treat "prefer" as the
+    // ceiling (don't downgrade); upgrade "no"/missing/"ok" to "ok".
+    if (game.categoryId && playerIds.length > 0) {
+      const eps = await prisma.eventPlayer.findMany({
+        where: { eventId, playerId: { in: playerIds as string[] } },
+        select: { id: true, playerId: true, signupPreferences: true },
+      });
+      for (const ep of eps) {
+        const prefs = (ep.signupPreferences as Record<string, { level?: string; note?: string }> | null) ?? {};
+        const current = prefs[game.categoryId]?.level;
+        if (current === "prefer") continue; // already top-level, don't downgrade
+        const next = { ...prefs, [game.categoryId]: { ...(prefs[game.categoryId] ?? {}), level: "ok" } };
+        await prisma.eventPlayer.update({
+          where: { id: ep.id },
+          data: { signupPreferences: next },
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   }
 
   // ─── set_ready ───────────────────────────────────────────────
   // body: { action: "set_ready", ready: boolean }
-  // Captain locks/unlocks their team's lineup. Opponent's gamePlayers stay
-  // hidden in API responses until BOTH teams flip ready=true. As a side
-  // effect: when both teams are ready the event auto-advances to "active";
-  // if either team un-readys while the event is "active" it rolls back to
-  // "closed".
+  // Captain locks/unlocks their team's lineup. Cross-team visibility
+  // and edit-gating are now driven by Event.lineupTotalLocked instead
+  // of an event status flip:
+  //   - The moment BOTH teams' lineupReady become true → latch
+  //     event.lineupTotalLocked = true (NEVER reset).
+  //   - After the latch, lineup mutations (assign_players, toggle_slot)
+  //     require BOTH teams to have lineupReady = false ("mutual unlock"
+  //     — neither side can stealth-edit after seeing the opponent's
+  //     lineup).
+  //   - The opponent's gamePlayers stay hidden in API responses only
+  //     until the latch fires; after that they're visible permanently.
   if (body.action === "set_ready") {
     if (ctx.captainTeamId === null) {
       return NextResponse.json({ error: "Only captains can mark a lineup ready." }, { status: 400 });
@@ -265,20 +360,26 @@ export async function POST(
       },
     });
 
-    // Re-evaluate both teams' ready state and auto-flip event status.
+    // Re-evaluate both teams' ready state and latch lineupTotalLocked
+    // if both are now true. We DO NOT auto-flip event.status anymore —
+    // "Active" is gone from the stored status taxonomy. Cross-team
+    // reveal piggybacks on lineupTotalLocked.
     const ets = await prisma.leagueEventTeam.findMany({
       where: { eventId },
       select: { lineupReady: true },
     });
     const bothReady = ets.length === 2 && ets.every((et) => et.lineupReady);
-    const ev = await prisma.event.findUnique({
-      where: { id: eventId },
-      select: { status: true },
-    });
-    if (bothReady && ev?.status !== "active") {
-      await prisma.event.update({ where: { id: eventId }, data: { status: "active" } });
-    } else if (!bothReady && ev?.status === "active") {
-      await prisma.event.update({ where: { id: eventId }, data: { status: "closed" } });
+    if (bothReady) {
+      const ev = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { lineupTotalLocked: true },
+      });
+      if (!ev?.lineupTotalLocked) {
+        await prisma.event.update({
+          where: { id: eventId },
+          data: { lineupTotalLocked: true },
+        });
+      }
     }
     return NextResponse.json({ ok: true });
   }
@@ -306,6 +407,26 @@ export async function POST(
       && game.team1Id !== ctx.captainTeamId
       && game.team2Id !== ctx.captainTeamId) {
       return NextResponse.json({ error: "Game does not involve your team" }, { status: 403 });
+    }
+    // Enforce event-wide cap: Principal + League ≤ maxMatchesPerEvent.
+    // Switching from extra → principal/league adds 1 to the count;
+    // switching principal/league → extra removes 1. Same kind = no-op.
+    const cap = await getMaxMatchesPerEvent(eventId);
+    if (cap !== null) {
+      const oldGame = await prisma.leagueGame.findUnique({ where: { id: gameId }, select: { kind: true } });
+      const oldCounts = oldGame?.kind === "principal" || oldGame?.kind === "league";
+      const newCounts = kind === "principal" || kind === "league";
+      if (newCounts && !oldCounts) {
+        const countingNow = await prisma.leagueGame.count({
+          where: { eventId, kind: { in: ["principal", "league"] } },
+        });
+        if (countingNow >= cap) {
+          return NextResponse.json(
+            { error: `This match-day allows at most ${cap} Principal + League matches combined. Switch one to Friendly first.` },
+            { status: 400 },
+          );
+        }
+      }
     }
     if (kind === "principal") {
       // Demote any other principal in the same category to "league".
@@ -340,6 +461,7 @@ export async function POST(
         team1Id, team2Id,
         team1Wants: true, team2Wants: true,
         kind: "extra",
+        createdById: user.id,
         ...(matchId ? { matchId } : {}),
       },
     });

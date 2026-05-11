@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
@@ -15,6 +15,7 @@ import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { ClubBadge } from "@/components/ClubBadge";
 import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement, stopAnnouncement } from "@/components/SpeakerMode";
 import { ClassesManager } from "@/components/ClassesManager";
@@ -26,6 +27,8 @@ import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 import { frameClass } from "@/components/Card";
+import { nameMatchesSearch } from "@/lib/searchUtil";
+import { COUNTRIES } from "@/lib/countries";
 
 interface Player {
   id: string;
@@ -40,6 +43,8 @@ interface Player {
   gender?: string | null;
   phone?: string | null;
   hasAccount?: boolean;
+  country?: string | null;
+  clubs?: { id: string; name: string; emoji: string; role: string }[];
 }
 
 interface MatchPlayer {
@@ -169,6 +174,17 @@ interface Event {
   round?: LeagueRoundLink | null;
   leagueTeams?: LeagueEventTeamLink[];
   hostTeamId?: string | null;
+  // Flat list of league games (per-category match slots) for this event.
+  // Used by the participants list to flag who is/isn't in a lineup yet.
+  // gamePlayers is filtered server-side to the viewer's side until both
+  // teams flip lineupReady, so this stays privacy-safe.
+  leagueGames?: { id: string; categoryId: string; gamePlayers: { playerId: string }[] }[];
+  // Linked social side event. Present (single item) on league events
+  // where the operator opted into running a parallel social event.
+  socialEvents?: { id: string; name: string; status: string }[];
+  // Inverse: when this event IS a social side, link back to its league
+  // parent so the page can show a "← back to league event" affordance.
+  socialOf?: { id: string; name: string } | null;
 }
 
 function toDateInput(iso: string) {
@@ -390,6 +406,7 @@ function SwipeablePlayerRow({
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
@@ -455,17 +472,49 @@ export default function EventDetailPage() {
   // since playerIds are globally unique.
   const [rosterAddSelected, setRosterAddSelected] = useState<Set<string>>(new Set());
   const [rosterAddSaving, setRosterAddSaving] = useState(false);
+  // Guest add — full-page picker. Mirrors the Add Players UX (country +
+  // club + gender filters, search, staging tray with batch save). One
+  // picker is open at a time; addGuestTeamId says which team the staged
+  // guests are tagged to. Intent ("social" | "attending") is per staged
+  // player (default "social"), toggleable on each chip.
+  const [showAddGuest, setShowAddGuest] = useState(false);
+  const [addGuestTeamId, setAddGuestTeamId] = useState<string | null>(null);
+  const [addGuestSearch, setAddGuestSearch] = useState("");
+  const [addGuestGender, setAddGuestGender] = useState<"M" | "F" | null>(null);
+  const [addGuestCountry, setAddGuestCountry] = useState<string>("");
+  const [addGuestClubFilter, setAddGuestClubFilter] = useState<"all" | "club">("club");
+  const [pendingGuestEntries, setPendingGuestEntries] = useState<Map<string, "social" | "attending">>(new Map());
+  const [addedGuestIds, setAddedGuestIds] = useState<Set<string>>(new Set());
+  const [savingGuests, setSavingGuests] = useState(false);
+  // Players who have signed up to ANY prior match-day in this league.
+  // Drives the "Recent" scope of the guest picker. Populated once when
+  // the event has a league context (see useEffect below).
+  const [leagueRecentPlayerIds, setLeagueRecentPlayerIds] = useState<Set<string>>(new Set());
   const [bulkGenderFilter, setBulkGenderFilter] = useState<string | null>(null);
   const [bulkSearch, setBulkSearch] = useState("");
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
-  const [addPlayerGender, setAddPlayerGender] = useState<string | null>(null);
+  const [addPlayerGender, setAddPlayerGender] = useState<"M" | "F" | null>(null);
   const [addPlayerClubFilter, setAddPlayerClubFilter] = useState<"all" | "club">("club");
+  // Country filter — defaults to the signed-in user's country on open.
+  const [addPlayerCountry, setAddPlayerCountry] = useState<string>("");
+  // Staging tray for the new picker pattern. Tap a row → adds the
+  // player id here. Tap "Add N players" → POSTs everything in one go.
+  const [pendingPlayerIds, setPendingPlayerIds] = useState<Set<string>>(new Set());
+  const [addedPlayerIds, setAddedPlayerIds] = useState<Set<string>>(new Set());
+  const [savingPlayers, setSavingPlayers] = useState(false);
   const [editFormat, setEditFormat] = useState("doubles");
   const [editScoringFormat, setEditScoringFormat] = useState("1x11");
   const [editWinBy, setEditWinBy] = useState("2");
+  // Empty string = no cap. Numeric string (e.g., "15") = cap minutes per match.
+  const [editMaxMinutes, setEditMaxMinutes] = useState<string>("");
   const [editPairingMode, setEditPairingMode] = useState("random");
   const [editPlayMode, setEditPlayMode] = useState("round_based");
+  // New pairing fields, persisted as EventClass.pairingSettings JSON.
+  const [editBaseMode, setEditBaseMode] = useState<"king" | "random" | "skill" | "manual">("king");
+  const [editTeams, setEditTeams] = useState<"rotating" | "fixed">("rotating");
+  const [editGender, setEditGender] = useState<"random" | "mixed" | "same">("random");
+  const [editSkillWindow, setEditSkillWindow] = useState<number | "inf">(1);
   const [editPrioSpeed, setEditPrioSpeed] = useState(true);
   const [editPrioFairness, setEditPrioFairness] = useState(true);
   const [editPrioSkill, setEditPrioSkill] = useState(true);
@@ -478,6 +527,13 @@ export default function EventDetailPage() {
   const [levelSelectedIds, setLevelSelectedIds] = useState<Set<string>>(new Set());
   const [expandedEmptyLevels, setExpandedEmptyLevels] = useState<Set<number | "unset">>(new Set());
   const [levelEditMode, setLevelEditMode] = useState(false);
+  // "Remove Player" mode mirrors the Add picker's staging pattern. When
+  // on, tapping a player row's 🗑️ stages them in `pendingRemoveIds` —
+  // no row is removed until the manager clicks the red "Remove N"
+  // confirm button at the top. Toggle lives next to "Edit levels".
+  const [removeMode, setRemoveMode] = useState(false);
+  const [pendingRemoveIds, setPendingRemoveIds] = useState<Set<string>>(new Set());
+  const [removingPlayers, setRemovingPlayers] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
   const [leagueFilter, setLeagueFilter] = useState<"all" | "principal" | "friendly" | "non-league">("all");
@@ -490,10 +546,17 @@ export default function EventDetailPage() {
   const [manualCourt, setManualCourt] = useState(1);
   const [editingManualMatchId, setEditingManualMatchId] = useState<string | null>(null);
   const [numRounds, setNumRounds] = useState(1);
+  // Initial section: read from `?section=...` so a back link from the
+  // sign-up page (or anywhere else) can land the user directly on the
+  // Participants/Matches sub-view instead of bouncing them to the
+  // overview. We default to overview during SSR and reconcile in a
+  // useEffect once searchParams resolves on the client — otherwise the
+  // server-rendered HTML for ?section=players hydrates as overview and
+  // sticks there.
   const [activeSection, setActiveSection] = useState<"overview" | "when" | "admins" | "scoring" | "pairing" | "players" | "pairs" | "competition" | "rounds" | "manual">("overview");
 
   // Hide bottom nav on edit/add sub-flows — keep the overview tidy.
-  useHideBottomNav(activeSection !== "overview" || showAddPlayer || bulkSelectMode);
+  useHideBottomNav(activeSection !== "overview" || showAddPlayer || showAddGuest || bulkSelectMode);
 
   const [adminSearch, setAdminSearch] = useState("");
   const [pairMode, setPairMode] = useState<"rating" | "level" | "random" | "manual">("rating");
@@ -549,6 +612,74 @@ export default function EventDetailPage() {
   // fetchEvent = trigger SWR revalidation (used by existing code)
   const fetchEvent = useCallback(() => { swrEvent.mutate(); }, [swrEvent]);
 
+  // Re-open the Add Players picker when returning from "+ New App
+  // User". The API has already attached the new player; we just need
+  // to (a) flip to the Players section, (b) seed the picker filters,
+  // and (c) flip showAddPlayer=true so renderAddPlayers() takes over.
+  // Order matters: activeSection must change BEFORE the picker render
+  // branch can run, so we sequence with two effects (one to switch
+  // section, one to open the picker).
+  const handledOpenAddPlayerRef = useRef(false);
+  const [pendingOpenAddPlayer, setPendingOpenAddPlayer] = useState(false);
+  // Name of the player just added via "+ New App User" — surfaced as
+  // a transient green banner in the picker. Cleared after a short
+  // delay below.
+  const [addedToast, setAddedToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!searchParams || handledOpenAddPlayerRef.current) return;
+    if (searchParams.get("openAddPlayer") !== "1") return;
+    handledOpenAddPlayerRef.current = true;
+    setActiveSection("players");
+    setPendingOpenAddPlayer(true);
+    const name = searchParams.get("addedName");
+    // Sentinel still present = /players/new didn't substitute (probably
+    // because POST didn't return a name). Skip the toast in that case.
+    if (name && name !== "__NEW_NAME__") {
+      setAddedToast(decodeURIComponent(name));
+    }
+    if (typeof id === "string") router.replace(`/events/${id}`);
+  }, [searchParams, id, router]);
+  // Sync activeSection from ?section=... once on mount. A returning link
+  // from the sign-up page lands here with ?section=players — we honour
+  // that and then strip the param so a subsequent back-to-overview gesture
+  // doesn't reapply it.
+  const handledInitialSectionRef = useRef(false);
+  useEffect(() => {
+    if (!searchParams || handledInitialSectionRef.current) return;
+    const s = searchParams.get("section");
+    if (!s) return;
+    handledInitialSectionRef.current = true;
+    const allowed = ["overview", "when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds", "manual"] as const;
+    if ((allowed as readonly string[]).includes(s)) {
+      setActiveSection(s as typeof allowed[number]);
+    }
+    if (typeof id === "string") router.replace(`/events/${id}`);
+  }, [searchParams, id, router]);
+  // Auto-dismiss the green banner ~4s after it appears.
+  useEffect(() => {
+    if (!addedToast) return;
+    const t = setTimeout(() => setAddedToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [addedToast]);
+  // Once we've landed on the Players section and the event is loaded,
+  // actually open the picker with sensible defaults.
+  useEffect(() => {
+    if (!pendingOpenAddPlayer || activeSection !== "players" || !event) return;
+    setPendingOpenAddPlayer(false);
+    fetchAllPlayers();
+    setAddPlayerSearch("");
+    setAddPlayerGender(null);
+    setAddPlayerCountry(
+      (session?.user as { country?: string | null } | undefined)?.country || "",
+    );
+    setAddPlayerClubFilter(event.club ? "club" : "all");
+    setPendingPlayerIds(new Set());
+    setAddedPlayerIds(new Set());
+    setShowAddPlayer(true);
+    // session/event are read non-reactively for one-shot initialisation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenAddPlayer, activeSection, event]);
+
   const fetchWaGroups = useCallback(async () => {
     const [linked, all] = await Promise.all([
       fetch(`/api/events/${id}/whatsapp-groups`).then((r) => r.json()),
@@ -559,6 +690,37 @@ export default function EventDetailPage() {
   }, [id]);
 
   useEffect(() => { fetchWaGroups(); }, [fetchWaGroups]);
+
+  // Build the "Recent" player set for the guest picker: anyone signed
+  // up to any earlier match-day event in this league. Skipped for
+  // non-league events. Uses the league's full rounds list — one fetch
+  // when the event's league id is known.
+  const leagueIdForRecent = event?.round?.league?.id ?? null;
+  useEffect(() => {
+    if (!leagueIdForRecent) { setLeagueRecentPlayerIds(new Set()); return; }
+    let cancelled = false;
+    (async () => {
+      const r = await fetch(`/api/leagues/${leagueIdForRecent}`);
+      if (!r.ok || cancelled) return;
+      const data = await r.json().catch(() => null);
+      if (!data || cancelled) return;
+      const ids = new Set<string>();
+      type Ev = { id: string; players?: { playerId?: string; player?: { id?: string } }[] };
+      type Round = { events?: Ev[] };
+      const rounds: Round[] = (data.rounds as Round[]) ?? [];
+      for (const r of rounds) {
+        for (const ev of r.events ?? []) {
+          if (ev.id === id) continue; // skip the current event
+          for (const ep of ev.players ?? []) {
+            const pid = ep.playerId ?? ep.player?.id;
+            if (pid) ids.add(pid);
+          }
+        }
+      }
+      setLeagueRecentPlayerIds(ids);
+    })();
+    return () => { cancelled = true; };
+  }, [leagueIdForRecent, id]);
 
   const buildWhatsAppMessage = () => {
     if (!event) return "";
@@ -700,7 +862,10 @@ export default function EventDetailPage() {
   };
 
   const fetchAllPlayers = async () => {
-    const r = await fetch("/api/players");
+    // High limit so every candidate is available for the Add Players
+    // picker. The default 100 cap on /api/players caused players outside
+    // the top-100 by rating to be invisible.
+    const r = await fetch("/api/players?limit=5000");
     const data = await r.json();
     setAllPlayers(data);
   };
@@ -786,6 +951,37 @@ export default function EventDetailPage() {
     fetch(`/api/matches/${matchId}/players`, { method: "DELETE" }).then(() => fetchEvent());
   };
 
+  // Flip a guest's intent between "social" and "attending" without leaving
+  // the team column. Uses the same signup-prefs POST endpoint that the
+  // guest-add picker uses, which preserves _guestTeamId because the server
+  // re-writes the sentinel from { intent, teamId } in the body.
+  const toggleGuestIntent = async (playerId: string, currentIntent: "social" | "attending", teamId: string) => {
+    const newIntent: "social" | "attending" = currentIntent === "social" ? "attending" : "social";
+    const r = await fetch(`/api/events/${id}/signup-prefs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerIds: [playerId], intent: newIntent, teamId }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to update guest", "Error");
+      return;
+    }
+    await fetchEvent();
+  };
+
+  const removeGuest = async (playerId: string, playerName: string) => {
+    const ok = await confirmDialog({
+      title: `Remove ${playerName}?`,
+      message: `${playerName}'s guest sign-up will be cancelled.`,
+      confirmText: "Remove",
+      cancelText: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    await removePlayer(playerId, playerName);
+  };
+
   const removePlayer = async (playerId: string, _playerName?: string) => {
     // Check if player is in any match — block removal with clear message
     const inMatch = event?.matches.some((m) => m.players.some((p) => p.playerId === playerId));
@@ -807,6 +1003,55 @@ export default function EventDetailPage() {
     await fetchEvent();
   };
 
+  // Batch-remove the staged players. Skips anyone currently in a match
+  // (the per-player removePlayer handles that case with a confirmation
+  // already). Confirms once for the whole batch.
+  const removePendingPlayers = async () => {
+    const ids = [...pendingRemoveIds];
+    if (ids.length === 0) return;
+    const names = ids
+      .map((pid) => event?.players.find((ep) => ep.player.id === pid)?.player.name)
+      .filter(Boolean) as string[];
+    const ok = await confirmDialog({
+      title: ids.length === 1 ? `Remove ${names[0] || "player"}?` : `Remove ${ids.length} players?`,
+      message:
+        ids.length === 1
+          ? `${names[0] || "This player"} will be removed from the event. Any matches they're in must be deleted first.`
+          : `${ids.length} players will be removed from the event:\n\n${names.join(", ")}\n\nPlayers currently in matches will be skipped (delete those matches first to remove them).`,
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    setRemovingPlayers(true);
+    try {
+      // Skip players currently in matches; surface the count after.
+      const inMatchIds = new Set(
+        ids.filter((pid) =>
+          event?.matches.some((m) => m.players.some((p) => p.playerId === pid)),
+        ),
+      );
+      const removable = ids.filter((pid) => !inMatchIds.has(pid));
+      await Promise.all(
+        removable.map((pid) =>
+          fetch(`/api/events/${id}/players/${pid}`, { method: "DELETE" }),
+        ),
+      );
+      setPendingRemoveIds(new Set());
+      // Auto-exit remove mode after a successful batch — no point
+      // leaving the destructive UI armed once the admin has committed.
+      setRemoveMode(false);
+      await fetchEvent();
+      if (inMatchIds.size > 0) {
+        await alertDialog(
+          `${inMatchIds.size} ${inMatchIds.size === 1 ? "player was" : "players were"} skipped because they're in a match. Delete the match first to remove them.`,
+          "Some players skipped",
+        );
+      }
+    } finally {
+      setRemovingPlayers(false);
+    }
+  };
+
   // Sections that need explicit Save (edit fields + save button)
   const saveSections = new Set(["when", "scoring", "pairing", "competition"]);
 
@@ -821,7 +1066,30 @@ export default function EventDetailPage() {
     setEditFormat(event.format || "doubles");
     setEditScoringFormat(event.scoringFormat || "1x11");
     setEditWinBy(event.classes?.[0]?.winBy || "2");
+    {
+      const cls0fmt = event.classes?.[0] as unknown as { maxMinutes?: number | null };
+      const mm = cls0fmt?.maxMinutes;
+      setEditMaxMinutes(mm ? String(mm) : "");
+    }
     setEditPairingMode(event.pairingMode);
+    // Hydrate new pairing-settings fields from the first class's JSON.
+    {
+      const cls0 = event.classes?.[0] as unknown as {
+        pairingSettings?: {
+          base?: string; teams?: string; gender?: string;
+          skillWindow?: number | "inf" | "infinity";
+        } | null;
+      } | undefined;
+      const ps = cls0?.pairingSettings || null;
+      const baseRaw = ps?.base ?? "king";
+      const knownBases = ["king", "random", "skill", "manual"] as const;
+      setEditBaseMode((knownBases as readonly string[]).includes(baseRaw) ? (baseRaw as typeof knownBases[number]) : "king");
+      setEditTeams(ps?.teams === "fixed" ? "fixed" : "rotating");
+      const g = ps?.gender;
+      setEditGender(g === "mixed" || g === "same" ? g : "random");
+      const sw = ps?.skillWindow;
+      setEditSkillWindow(sw === "inf" || sw === "infinity" ? "inf" : typeof sw === "number" ? sw : 1);
+    }
     const cls = event.classes?.[0];
     setEditPlayMode(cls?.playMode || "round_based");
     setEditPrioSpeed(cls?.prioSpeed ?? true);
@@ -863,6 +1131,7 @@ export default function EventDetailPage() {
         format: editFormat,
         scoringFormat: editScoringFormat,
         winBy: editWinBy,
+        maxMinutes: editMaxMinutes.trim() === "" ? null : Math.max(1, Math.min(60, parseInt(editMaxMinutes, 10) || 0)) || null,
         pairingMode: editPairingMode,
         playMode: editPlayMode,
         prioSpeed: editPrioSpeed,
@@ -875,6 +1144,28 @@ export default function EventDetailPage() {
         locationId: editLocationId,
       }),
     });
+    // Persist the new Mode & Teams settings via the pairing settings
+    // endpoint. The endpoint takes a class id; we update each class.
+    if (event?.classes?.length) {
+      const payload = {
+        base: editBaseMode,
+        teams: editTeams,
+        gender: editGender,
+        skillWindow: editSkillWindow,
+        // The window settings below are baked into the mode but we still
+        // send sensible defaults so the persisted JSON is complete.
+        varietyWindow: 0,
+        matchCountWindow: 1,
+        maxWaitWindow: 1,
+      };
+      await Promise.all(event.classes.map((c) =>
+        fetch(`/api/events/${id}/pairing/settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ classId: c.id, settings: payload }),
+        }),
+      ));
+    }
     // If competition mode changed, persist via the dedicated competition endpoint
     const currentCompetition = !!event?.competitionMode;
     if (currentCompetition !== editCompetitionMode) {
@@ -928,11 +1219,26 @@ export default function EventDetailPage() {
   };
 
   const removeHelper = async (playerId: string) => {
-    await fetch(`/api/events/${id}/helpers`, {
+    const helper = event?.helpers.find((h) => h.playerId === playerId);
+    const name = helper?.player.name || "this helper";
+    const ok = await confirmDialog({
+      title: `Remove ${name} as helper?`,
+      message: `${name} will lose helper access to this event (managing players, matches, settings). They stay signed up as a player if they were.`,
+      confirmText: "Remove helper",
+      cancelText: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await fetch(`/api/events/${id}/helpers`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to remove helper", "Error");
+      return;
+    }
     await fetchEvent();
   };
 
@@ -1253,7 +1559,7 @@ export default function EventDetailPage() {
     <div onClick={() => { if (canManage) { fetchAllPlayers(); setActiveSection("admins"); } }}
       className={`${frameClass} p-3 flex items-center gap-2 ${canManage ? "active:opacity-70 cursor-pointer" : ""}`}>
       <div className="flex-1 min-w-0">
-        <p className="text-base font-bold text-foreground">Event Manager</p>
+        <p className="text-base font-bold text-foreground">Event Organizer</p>
         <p className="text-sm font-medium truncate">
           {ownerName || "—"}
           {helperNames.length > 0 && <span className="text-muted font-normal"> + {helperNames.join(", ")}</span>}
@@ -1268,7 +1574,7 @@ export default function EventDetailPage() {
     admins: "Organizer",
     scoring: "Format",
     pairing: "Pairing",
-    players: "Players",
+    players: "Participants",
     pairs: "Pairs",
     competition: event.competitionMode ? "Competition" : "Ranked",
     rounds: "Matches",
@@ -1364,6 +1670,42 @@ export default function EventDetailPage() {
 
   const renderWhen = () => (
     <div className={`${frameClass} p-4 space-y-3`}>
+      {/* Status is first — it's the most actionable knob and what
+          organizers come here to change most often (open/close
+          registration, override the league auto-advance, etc.). */}
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Status</label>
+        {/* For LEAGUE events past Setup, the Setup option is hidden
+            from non-admin users — they can't push the event back into
+            the hidden state once the round has been published. App
+            admin gets the full list for incident recovery. */}
+        {(() => {
+          const isLeague = !!event.round;
+          const hideSetup = isLeague && editStatus !== "setup" && !isAdmin;
+          return (
+            <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setHasEdits(true); }}
+              className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
+              {!hideSetup && <option value="setup">Setup</option>}
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
+          );
+        })()}
+        {/* Tiny explainer below the field, tailored to the current
+            selection. League events get extra context about the auto
+            transitions driven by the parent Round. */}
+        <p className="text-[11px] text-muted mt-1">
+          {editStatus === "setup"
+            ? (event.round
+                ? "Hidden from everyone except league admin. Auto-flips to Open when the round is published."
+                : "Hidden from players. Only you can see the event while shaping it.")
+            : editStatus === "open"
+              ? "Registration is open — players can sign up."
+              : editStatus === "closed"
+                ? "Sign-ups are locked. Lineup-locking is handled separately on the lineup page."
+                : ""}
+        </p>
+      </div>
       <div>
         <label className="block text-sm font-medium text-muted mb-1">Event Name</label>
         <input type="text" value={editName} onChange={(e) => { setEditName(e.target.value); setHasEdits(true); }}
@@ -1385,12 +1727,12 @@ export default function EventDetailPage() {
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="block text-sm font-medium text-muted mb-1">From</label>
-          <input type="time" value={editTime} onChange={(e) => { setEditTime(e.target.value); setHasEdits(true); }}
+          <input type="time" value={editTime} step={300} onChange={(e) => { setEditTime(e.target.value); setHasEdits(true); }}
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
         <div className="flex-1">
           <label className="block text-sm font-medium text-muted mb-1">To</label>
-          <input type="time" value={editEndTime} onChange={(e) => { setEditEndTime(e.target.value); setHasEdits(true); }}
+          <input type="time" value={editEndTime} step={300} onChange={(e) => { setEditEndTime(e.target.value); setHasEdits(true); }}
             className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
       </div>
@@ -1414,34 +1756,35 @@ export default function EventDetailPage() {
           ) : (
             <select
               value={editLocationId || ""}
-              onChange={(e) => { setEditLocationId(e.target.value || null); setHasEdits(true); }}
+              onChange={(e) => {
+                const nextId = e.target.value || null;
+                // Smart-mirror Event.numCourts onto the new location's
+                // default — but ONLY when the operator hasn't manually
+                // overridden. Heuristic: if editCourts currently matches
+                // the OLD location's numCourts (or matches no location
+                // when there isn't one), assume default-tracking and
+                // adopt the new location's numCourts. Otherwise leave
+                // their manual override alone.
+                const locs = (event.club?.locations ?? []) as { id: string; numCourts?: number | null }[];
+                const prevLoc = locs.find((l) => l.id === editLocationId);
+                const nextLoc = locs.find((l) => l.id === nextId);
+                const prevDefault = (prevLoc?.numCourts ?? null);
+                if (nextLoc && (prevDefault === null || editCourts === prevDefault)) {
+                  const next = typeof nextLoc.numCourts === "number" && nextLoc.numCourts > 0 ? nextLoc.numCourts : editCourts;
+                  if (next !== editCourts) setEditCourts(next);
+                }
+                setEditLocationId(nextId);
+                setHasEdits(true);
+              }}
               className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
-              {event.club.locations.map((loc: { id: string; name: string }) => (
-                <option key={loc.id} value={loc.id}>📍 {loc.name}</option>
+              {(event.club.locations as { id: string; name: string; numCourts?: number | null }[]).map((loc) => (
+                <option key={loc.id} value={loc.id}>📍 {loc.name}{typeof loc.numCourts === "number" ? ` · ${loc.numCourts} courts` : ""}</option>
               ))}
             </select>
           )}
         </div>
       )}
-      {/* Event status. For league events, status auto-advances when both
-          captains lock their lineups — the dropdown is still here so the
-          league admin can override (e.g. demote back to "closed"). */}
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Status</label>
-        <select value={editStatus} onChange={(e) => { setEditStatus(e.target.value); setHasEdits(true); }}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="setup">Setup — only organizers can see</option>
-          <option value="open">Registration open — players can sign up</option>
-          <option value="closed">Registration closed — captains finalising lineup</option>
-          <option value="active">Active — lineups revealed, event running</option>
-        </select>
-        {event.round && (
-          <p className="text-[11px] text-muted mt-1">
-            League events flip to <strong>Active</strong> automatically when both teams mark lineup ready.
-          </p>
-        )}
-      </div>
       {/* Competition toggle — local state + Save/Cancel flow */}
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-3 cursor-pointer">
@@ -1465,68 +1808,219 @@ export default function EventDetailPage() {
           </div>
         </label>
       </div>
+      {/* Speaker — moved here from the overview. Lives with the rest of
+          the per-event configuration so the overview stays clean. */}
+      <div className="border-t border-border pt-3">
+        <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
+      </div>
       {editButtons}
     </div>
   );
 
-  // ── Section: Format (doubles/singles + scoring + ranking) ──
+  // ── Section: Event Format (scoring + mode + ranking) ──
   const renderScoring = () => (
     <div className={`${frameClass} p-4 space-y-3`}>
+      <p className="text-xs text-muted -mt-1">
+        Default format and pairing mode during the event.
+      </p>
       <select value={editFormat} onChange={(e) => { setEditFormat(e.target.value); setHasEdits(true); }}
         className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
         <option value="doubles">Doubles</option>
         <option value="singles">Singles</option>
       </select>
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Scoring</label>
-        <select value={editScoringFormat} onChange={(e) => { setEditScoringFormat(e.target.value); setHasEdits(true); }}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <optgroup label="Normal — 1 Set">
-            <option value="1x7">1 set to 7</option>
-            <option value="1x9">1 set to 9</option>
-            <option value="1x11">1 set to 11</option>
-            <option value="1x15">1 set to 15</option>
-          </optgroup>
-          <optgroup label="Normal — Best of 3">
-            <option value="3x11">Best of 3 to 11</option>
-            <option value="3x15">Best of 3 to 15</option>
-          </optgroup>
-          <optgroup label="Rally — 1 Set">
-            <option value="1xR15">1 set rally to 15</option>
-            <option value="1xR21">1 set rally to 21</option>
-          </optgroup>
-          <optgroup label="Rally — Best of 3">
-            <option value="3xR15">Best of 3 rally to 15</option>
-            <option value="3xR21">Best of 3 rally to 21</option>
-          </optgroup>
-        </select>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-muted mb-1">Scoring</label>
+          <select value={editScoringFormat} onChange={(e) => { setEditScoringFormat(e.target.value); setHasEdits(true); }}
+            className="w-full border border-border rounded-lg px-2 py-2 text-xs font-medium">
+            <option value="timed">Open / timed</option>
+            <optgroup label="Normal — 1 Set">
+              <option value="1x7">1 to 7</option>
+              <option value="1x9">1 to 9</option>
+              <option value="1x11">1 to 11</option>
+              <option value="1x15">1 to 15</option>
+            </optgroup>
+            <optgroup label="Normal — Best of 3">
+              <option value="3x11">Bo3 to 11</option>
+              <option value="3x15">Bo3 to 15</option>
+            </optgroup>
+            <optgroup label="Rally — 1 Set">
+              <option value="1xR15">1 rally to 15</option>
+              <option value="1xR21">1 rally to 21</option>
+            </optgroup>
+            <optgroup label="Rally — Best of 3">
+              <option value="3xR15">Bo3 rally to 15</option>
+              <option value="3xR21">Bo3 rally to 21</option>
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          {/* Win-by hides itself when Scoring = "timed" — there's no
+              target, so no win-by to define. The empty slot keeps the
+              Max-min field anchored in column 3. */}
+          {editScoringFormat !== "timed" ? (
+            <>
+              <label className="block text-xs font-medium text-muted mb-1">Win by</label>
+              <select value={editWinBy} onChange={(e) => { setEditWinBy(e.target.value); setHasEdits(true); }}
+                className="w-full border border-border rounded-lg px-2 py-2 text-xs font-medium">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="2_gp18">2 (GP @18)</option>
+                <option value="2_gp21">2 (GP @21)</option>
+                <option value="cap13">Cap 13</option>
+                <option value="cap15">Cap 15</option>
+                <option value="cap17">Cap 17</option>
+                <option value="cap18">Cap 18</option>
+                <option value="cap23">Cap 23</option>
+                <option value="cap25">Cap 25</option>
+              </select>
+            </>
+          ) : (
+            <div aria-hidden className="invisible">
+              <label className="block text-xs font-medium mb-1">·</label>
+              <div className="px-2 py-2 text-xs">·</div>
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted mb-1">Max min</label>
+          <input
+            type="number"
+            min={1}
+            max={60}
+            placeholder="—"
+            value={editMaxMinutes}
+            onChange={(e) => { setEditMaxMinutes(e.target.value); setHasEdits(true); }}
+            className="w-full border border-border rounded-lg px-2 py-2 text-xs font-medium"
+          />
+        </div>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-muted mb-1">Win by</label>
-        <select value={editWinBy} onChange={(e) => { setEditWinBy(e.target.value); setHasEdits(true); }}
-          className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="2_gp18">2 (Golden Point @18)</option>
-          <option value="2_gp21">2 (Golden Point @21)</option>
-          <option value="cap13">Cap 13</option>
-          <option value="cap15">Cap 15</option>
-          <option value="cap17">Cap 17</option>
-          <option value="cap18">Cap 18</option>
-          <option value="cap23">Cap 23</option>
-          <option value="cap25">Cap 25</option>
-        </select>
+      {/* Single explainer line that describes how scoring + timer
+          combine. Scoring rules always apply implicitly; the timer is a
+          safety cap so a match can also end before the target is hit. */}
+      {(() => {
+        const isTimed = editScoringFormat === "timed";
+        if (isTimed) {
+          if (editMaxMinutes.trim() === "") {
+            return <p className="text-xs text-muted -mt-1">Open / timed — no target, no timer. Players submit whatever score they end on.</p>;
+          }
+          return <p className="text-xs text-muted -mt-1">Open / timed — match runs for {editMaxMinutes} min. Players submit whatever score they end on; the leading team wins.</p>;
+        }
+        const target = parseInt(editScoringFormat.replace(/^[13]x/, "").replace("R", ""), 10) || 11;
+        const wbLabel = editWinBy === "1" ? "first to target" : editWinBy.startsWith("cap") ? `cap ${editWinBy.replace("cap", "")}` : editWinBy.startsWith("2_gp") ? `win by 2 (golden point @${editWinBy.split("gp")[1]})` : "win by 2";
+        if (editMaxMinutes.trim() === "") {
+          return <p className="text-xs text-muted -mt-1">Matches play out to {target}, {wbLabel}. No timer.</p>;
+        }
+        return <p className="text-xs text-muted -mt-1">Matches play to {target}, {wbLabel}. After {editMaxMinutes} min the timer auto-finalises at whatever the score is — the leading team wins.</p>;
+      })()}
+      {/* ── Mode & Teams (was on the pairing settings sub-page) ────── */}
+      <div className="border-t border-border pt-3 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-muted mb-1">Pairing mode</label>
+          <div className="grid grid-cols-4 gap-1">
+            {([
+              { v: "king", label: "King", icon: "👑" },
+              { v: "random", label: "Random", icon: "🎲" },
+              { v: "skill", label: "Skill", icon: "🎯" },
+              { v: "manual", label: "Manual", icon: "✋" },
+            ] as const).map(({ v, label, icon }) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => { setEditBaseMode(v); setHasEdits(true); }}
+                className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border ${
+                  editBaseMode === v ? "bg-action text-white border-action" : "bg-white text-foreground border-border"
+                }`}
+              >
+                <span className="mr-0.5">{icon}</span>{label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {editBaseMode !== "manual" && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-muted">Teams</label>
+              <Link href={`/events/${id}/pairing`}
+                className="text-[10px] text-action font-medium px-2 py-0.5 rounded hover:bg-action/10"
+              >
+                Set pairs →
+              </Link>
+            </div>
+            <div className="flex gap-1">
+              {([["rotating", "Rotating"], ["fixed", "Fixed"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => { setEditTeams(v); setHasEdits(true); }}
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    editTeams === v ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {editBaseMode !== "manual" && (
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">Gender rule</label>
+            <div className="flex gap-1">
+              {([
+                { v: "random", label: "Any" },
+                { v: "mixed", label: "Mixed" },
+                { v: "same", label: "Same Gender" },
+              ] as const).map(({ v, label }) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => { setEditGender(v); setHasEdits(true); }}
+                  className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
+                    editGender === v ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}
+                >{label}</button>
+              ))}
+            </div>
+            {editBaseMode === "king" && editGender === "mixed" && (
+              <p className="text-[11px] text-muted mt-1">
+                In King, teams on each court are formed 1M + 1F when possible. Court placement still follows winners-up / losers-down, so opposing teams may have different gender mixes. For strict separation, use two classes.
+              </p>
+            )}
+            {editBaseMode === "king" && editGender === "same" && (
+              <p className="text-[11px] text-muted mt-1">
+                In King, each team is kept same-gender within a court when possible (M+M or F+F), but the opposing team may be the other gender. For strict M / F brackets, use two classes.
+              </p>
+            )}
+          </div>
+        )}
+        {editBaseMode === "skill" && (
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">Skill window</label>
+            <div className="flex gap-1">
+              {([0, 1, 2, "inf"] as const).map((v) => (
+                <button
+                  key={String(v)}
+                  type="button"
+                  onClick={() => { setEditSkillWindow(v); setHasEdits(true); }}
+                  className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
+                    editSkillWindow === v ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  }`}
+                >±{v === "inf" ? "∞" : v}</button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted mt-1">Max skill-level spread across the 4 players on a court.</p>
+          </div>
+        )}
       </div>
-      <div>
+      <div className="border-t border-border pt-3">
         <label className="block text-sm font-medium text-muted mb-1">Ranking</label>
         <select value={editRankingMode} onChange={(e) => { setEditRankingMode(e.target.value); setHasEdits(true); }}
           className="w-full border border-border rounded-lg px-3 py-2.5 text-sm font-medium">
-          <option value="ranked">Ranked</option>
-          <option value="approval">Approval</option>
+          <option value="ranked">Auto Ranked</option>
+          <option value="approval">Approval Ranked</option>
           <option value="none">Unranked</option>
         </select>
         <p className="text-xs text-muted mt-1">
-          {editRankingMode === "ranked" ? "Scores count towards player rankings immediately" : editRankingMode === "approval" ? "Scores need confirmation by both teams or event admin" : "Scores recorded but don't affect rankings"}
+          {editRankingMode === "ranked" ? "Scores count towards player rankings immediately." : editRankingMode === "approval" ? "Scores need confirmation by both teams or event admin before counting." : "Scores recorded but don't affect rankings."}
         </p>
       </div>
       {editButtons}
@@ -1640,7 +2134,7 @@ export default function EventDetailPage() {
   const renderAdmins = () => {
     const availablePlayers = allPlayers
       .filter((p) => p.id !== event.createdById && !event.helpers.some((h) => h.playerId === p.id))
-      .filter((p) => p.name.toLowerCase().includes(adminSearch.toLowerCase()))
+      .filter((p) => nameMatchesSearch(p.name, adminSearch))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const owner = event.createdById
@@ -1650,25 +2144,31 @@ export default function EventDetailPage() {
 
     return (
       <div className="space-y-3">
-        {/* Owner */}
+        {/* Organizer */}
         {owner && (
           <div>
-            <h4 className="text-sm font-medium text-muted mb-1">Owner</h4>
+            <h4 className="text-sm font-medium text-muted mb-1">Organizer</h4>
             <div className="flex items-center gap-2 rounded-lg px-3 py-2 bg-purple-50">
               <PlayerAvatar name={owner.name} photoUrl={owner.photoUrl} size="sm" />
               <span className="text-lg font-medium">{owner.name}</span>
-              <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Owner</span>
+              <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium ml-auto">Organizer</span>
             </div>
             {(isOwner || isAdmin) && (
               <details className="mt-1">
-                <summary className="text-[10px] text-muted cursor-pointer">Transfer ownership</summary>
+                <summary className="text-[10px] text-muted cursor-pointer">Transfer to other organizer</summary>
                 <select className="w-full mt-1 border border-border rounded-lg px-3 py-2 text-sm"
                   defaultValue=""
                   onChange={async (e) => {
                     const newOwnerId = e.target.value;
                     if (!newOwnerId) return;
                     const newOwner = [...event.helpers.map((h) => h.player), ...event.players.map((ep) => ep.player)].find((p) => p.id === newOwnerId);
-                    if (!await confirmDialog({ message: `Transfer ownership to ${newOwner?.name}? You will become a helper.` })) { e.target.value = ""; return; }
+                    if (!await confirmDialog({
+                      title: "Transfer to other organizer?",
+                      message: `${newOwner?.name || "This person"} becomes the new event organizer. You'll be added as a helper.`,
+                      confirmText: "Transfer",
+                      cancelText: "Cancel",
+                      danger: true,
+                    })) { e.target.value = ""; return; }
                     await fetch(`/api/events/${id}`, {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
@@ -1676,7 +2176,7 @@ export default function EventDetailPage() {
                     });
                     fetchEvent();
                   }}>
-                  <option value="">Select new owner...</option>
+                  <option value="">Select new organizer...</option>
                   {event.helpers.map((h) => (
                     <option key={h.playerId} value={h.playerId}>{h.player.name} (helper)</option>
                   ))}
@@ -1907,83 +2407,584 @@ export default function EventDetailPage() {
     );
   };
 
-  // ── Section: Players ──
+  // ── Section: Players — Add Players picker ──
+  // Mirrors the club Add Member picker (staging tray, batch save) plus
+  // a faded "already in this event" tail so admins searching for a name
+  // don't keep hunting when the player is already signed up.
   const renderAddPlayers = () => {
     const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
+    const eventPlayerIds = new Set(event.players.map((ep) => ep.player.id));
+
+    // Shared filter chain — applied to both the eligible list and the
+    // "already in event" tail so the tail respects gender/country/club
+    // and search just like the main list.
+    const passesFilters = (p: Player) =>
+      (!addPlayerSearch || nameMatchesSearch(p.name, addPlayerSearch)) &&
+      (!addPlayerGender || p.gender === addPlayerGender) &&
+      (!addPlayerCountry || !p.country || p.country === addPlayerCountry) &&
+      (addPlayerClubFilter !== "club" || !eventClubId
+        ? true
+        : ((p as unknown as { clubs?: { id: string }[] }).clubs?.some((c) => c.id === eventClubId) ?? false));
+
     const available = allPlayers
-      .filter((p) => !event.players.some((ep) => ep.player.id === p.id))
-      .filter((p) => p.name.toLowerCase().includes(addPlayerSearch.toLowerCase()))
-      .filter((p) => !addPlayerGender || p.gender === addPlayerGender)
-      .filter((p) => {
-        if (addPlayerClubFilter !== "club" || !eventClubId) return true;
-        const clubs = (p as unknown as { clubs?: { id: string }[] }).clubs;
-        return clubs?.some((c) => c.id === eventClubId) ?? false;
-      })
+      .filter((p) => !eventPlayerIds.has(p.id))
+      .filter((p) => !pendingPlayerIds.has(p.id))
+      .filter((p) => !addedPlayerIds.has(p.id))
+      .filter(passesFilters)
       .sort((a, b) => a.name.localeCompare(b.name));
+
+    const alreadyInEvent = allPlayers
+      .filter((p) => eventPlayerIds.has(p.id))
+      .filter(passesFilters)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const pendingPlayers = allPlayers.filter((p) => pendingPlayerIds.has(p.id));
+
+    const togglePending = (pid: string) => {
+      setPendingPlayerIds((s) => {
+        const n = new Set(s);
+        if (n.has(pid)) n.delete(pid);
+        else n.add(pid);
+        return n;
+      });
+    };
+
+    const closePicker = () => {
+      setShowAddPlayer(false);
+      setAddPlayerSearch("");
+      setAddPlayerGender(null);
+      setPendingPlayerIds(new Set());
+      setAddedPlayerIds(new Set());
+    };
+
+    const savePending = async () => {
+      if (pendingPlayerIds.size === 0) return;
+      setSavingPlayers(true);
+      try {
+        const ids = [...pendingPlayerIds];
+        await Promise.all(
+          ids.map((playerId) =>
+            fetch(`/api/events/${id}/players`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ playerId }),
+            }),
+          ),
+        );
+        setAddedPlayerIds((s) => {
+          const n = new Set(s);
+          ids.forEach((pid) => n.add(pid));
+          return n;
+        });
+        setPendingPlayerIds(new Set());
+        await fetchEvent();
+      } finally {
+        setSavingPlayers(false);
+      }
+    };
 
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-foreground">Add Players ({available.length} available)</h3>
-          <button
-            onClick={() => { setShowAddPlayer(false); setAddPlayerSearch(""); setAddPlayerGender(null); }}
-            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
-          >
-            Done
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-base" />
+        {/* Blue back link in the content area. The event name itself is
+            displayed (non-clickable) in the green hero header above. */}
+        <button onClick={closePicker} className="text-sm text-action font-medium">
+          ← Players
+        </button>
+        {/* Transient confirmation toast after a "+ New App User" add.
+            Auto-dismisses on its own; tap × to clear immediately. */}
+        {addedToast && (
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg px-3 py-2 text-sm">
+            <span aria-hidden>✓</span>
+            <span className="flex-1">
+              <strong>{addedToast}</strong> was added to this event.
+            </span>
+            <button
+              type="button"
+              onClick={() => setAddedToast(null)}
+              className="text-emerald-700 hover:text-emerald-900 px-1"
+              aria-label="Dismiss"
+            >×</button>
           </div>
-          {eventClubId && (
-            <div className="flex gap-1 shrink-0">
+        )}
+        <div className={`${frameClass} p-4 space-y-3`}>
+          {/* Title + Add button on one row */}
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold truncate">Add Players to {heroTitle}</h3>
+            <button
+              type="button"
+              onClick={savePending}
+              disabled={pendingPlayers.length === 0 || savingPlayers}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-action text-white disabled:opacity-40 active:bg-action-dark transition-colors shrink-0"
+            >
+              {savingPlayers
+                ? "Adding..."
+                : pendingPlayers.length === 0
+                  ? "Add"
+                  : `Add ${pendingPlayers.length}`}
+            </button>
+          </div>
+
+          {/* Staging tray */}
+          <div className="rounded-lg border border-border bg-gray-50 px-2 py-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted">
+                Selected ({pendingPlayers.length})
+              </span>
+              {pendingPlayers.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPendingPlayerIds(new Set())}
+                  className="text-[11px] text-danger font-medium hover:underline"
+                >Clear all</button>
+              )}
+            </div>
+            {pendingPlayers.length === 0 ? (
+              <div className="text-[11px] text-muted italic">
+                Tap players below to add them here, then press <span className="not-italic">&quot;Add&quot;</span>.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {pendingPlayers.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => togglePending(p.id)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-action/10 text-foreground text-xs border border-action/30 hover:bg-action/15"
+                    title="Tap to remove"
+                  >
+                    <span className="font-medium">{p.name}</span>
+                    {p.gender && (
+                      <span className={p.gender === "F" ? "text-pink-500" : "text-blue-500"}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
+                    <span className="text-muted">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Filter row, left → right: country, club, gender icons.
+              Country goes first because it's the broadest filter and is
+              defaulted from the session; gender icons go last so the
+              line still reads naturally if scanned right-to-left. */}
+          <div className="flex items-center gap-2">
+            <select
+              value={addPlayerCountry}
+              onChange={(e) => setAddPlayerCountry(e.target.value)}
+              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-white"
+            >
+              <option value="">All countries</option>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {eventClubId && (
               <button
                 type="button"
-                onClick={() => setAddPlayerClubFilter("club")}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  addPlayerClubFilter === "club" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                onClick={() => setAddPlayerClubFilter((cur) => (cur === "club" ? "all" : "club"))}
+                title={`Only members of ${event.club?.name || "the club"}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                  addPlayerClubFilter === "club"
+                    ? "bg-black text-white"
+                    : "bg-gray-100 text-foreground"
                 }`}
               >
-                {event.club?.emoji || "Club"}
+                Club
               </button>
+            )}
+            {(["M", "F"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setAddPlayerGender((cur) => (cur === g ? null : g))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                  addPlayerGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                }`}
+              >
+                <span className={addPlayerGender === g ? "text-white" : g === "M" ? "text-blue-500" : "text-pink-500"}>
+                  {g === "M" ? "♂" : "♀"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <ClearInput value={addPlayerSearch} onChange={setAddPlayerSearch} placeholder="Search by name..." className="text-sm" />
+
+          <div className="flex items-center justify-between text-[11px] text-muted">
+            <span>
+              {available.length} available
+              {addedPlayerIds.size > 0 && ` · ${addedPlayerIds.size} added so far`}
+            </span>
+            {/* "Add a player who doesn't have an account yet". The
+                API auto-attaches the new player to this event. The
+                returnTo encodes a `__NEW_NAME__` sentinel which
+                /players/new substitutes after a successful POST, so
+                the event page can show a "Foo added" toast. */}
+            <Link
+              href={`/players/new?eventId=${event.id}&returnTo=${encodeURIComponent(`/events/${event.id}?openAddPlayer=1&addedName=__NEW_NAME__`)}`}
+              className="text-action font-medium"
+            >+ New App User</Link>
+          </div>
+
+          {available.length === 0 && alreadyInEvent.length === 0 ? (
+            <p className="text-xs text-muted text-center py-6">No players match these filters</p>
+          ) : (
+            <>
+              <div className="space-y-0.5">
+                {available.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => togglePending(p.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  >
+                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                    {p.gender && (
+                      <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                        {p.gender === "F" ? "♀" : "♂"}
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name}</div>
+                      {(p.country || (p.clubs && p.clubs.length > 0)) && (
+                        <div className="mt-0.5 flex items-center gap-1 flex-wrap">
+                          {p.country && (
+                            <span className="text-[10px] text-muted">{p.country}</span>
+                          )}
+                          {p.clubs?.map((c) => (
+                            <span
+                              key={c.id}
+                              className="text-[10px] bg-gray-100 text-foreground px-1.5 py-0.5 rounded-full font-medium truncate max-w-[140px]"
+                              title={`${c.name} (${c.role})`}
+                            >
+                              {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {/* Already-in-event tail. Faded, non-clickable. Confirms
+                  to the admin "yes, this person is already signed up". */}
+              {alreadyInEvent.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-dashed border-border">
+                  <div className="text-[10px] uppercase tracking-wide text-muted mb-1.5">
+                    Already in this event ({alreadyInEvent.length})
+                  </div>
+                  <div className="space-y-0.5">
+                    {alreadyInEvent.map((p) => (
+                      <div
+                        key={p.id}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg opacity-50 cursor-default select-none"
+                      >
+                        <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                        {p.gender && (
+                          <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                            {p.gender === "F" ? "♀" : "♂"}
+                          </span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                        </div>
+                        <span className="text-[10px] text-muted font-medium">✓ signed up</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Sticky bottom — just Done. Primary "Add N" lives next to the title. */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-white border-t border-border flex justify-end">
+            <button
+              type="button"
+              onClick={closePicker}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200"
+            >Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAddGuests = () => {
+    const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
+    const eventPlayerIds = new Set(event.players.map((ep) => ep.player.id));
+    const teamId = addGuestTeamId;
+    // The league's full team list lives on event.round.league.teams. Each
+    // team carries its full roster (team.players) which we use to exclude
+    // already-rostered players of the PLAYING teams.
+    const allLeagueTeamsLocal = (event.round?.league?.teams || []) as Array<{ id: string; name: string; players?: { playerId: string }[] }>;
+    const team = teamId ? allLeagueTeamsLocal.find((t) => t.id === teamId) : null;
+    const teamName = team?.name || (event.leagueTeams?.find((lt) => lt.team.id === teamId)?.team.name ?? "team");
+
+    // Exclude rosters of the two PLAYING teams — those go through the
+    // regular roster picker. Players on OTHER league teams ARE eligible
+    // as guests.
+    const playingRosterIds = new Set<string>();
+    for (const lt of (event.leagueTeams || [])) {
+      const full = allLeagueTeamsLocal.find((t) => t.id === lt.team.id);
+      for (const tp of (full?.players ?? [])) playingRosterIds.add(tp.playerId);
+    }
+    const passesFilters = (p: Player) =>
+      (!addGuestSearch || nameMatchesSearch(p.name, addGuestSearch)) &&
+      (!addGuestGender || p.gender === addGuestGender) &&
+      (!addGuestCountry || !p.country || p.country === addGuestCountry) &&
+      (addGuestClubFilter !== "club" || !eventClubId
+        ? true
+        : ((p as unknown as { clubs?: { id: string }[] }).clubs?.some((c) => c.id === eventClubId) ?? false));
+
+    const stagedIds = new Set(pendingGuestEntries.keys());
+    const available = allPlayers
+      .filter((p) => !eventPlayerIds.has(p.id) && !playingRosterIds.has(p.id))
+      .filter((p) => !stagedIds.has(p.id))
+      .filter((p) => !addedGuestIds.has(p.id))
+      .filter(passesFilters)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const pendingPlayers = allPlayers.filter((p) => stagedIds.has(p.id));
+
+    const stagePlayer = (pid: string) => {
+      setPendingGuestEntries((prev) => {
+        const next = new Map(prev);
+        if (next.has(pid)) next.delete(pid);
+        else next.set(pid, "social");
+        return next;
+      });
+    };
+    const toggleIntent = (pid: string) => {
+      setPendingGuestEntries((prev) => {
+        const next = new Map(prev);
+        const cur = next.get(pid);
+        next.set(pid, cur === "social" ? "attending" : "social");
+        return next;
+      });
+    };
+    const closePicker = () => {
+      setShowAddGuest(false);
+      setAddGuestTeamId(null);
+      setAddGuestSearch("");
+      setAddGuestGender(null);
+      setAddGuestCountry("");
+      setAddGuestClubFilter("club");
+      setPendingGuestEntries(new Map());
+      setAddedGuestIds(new Set());
+    };
+    const savePending = async () => {
+      if (pendingGuestEntries.size === 0 || !teamId) return;
+      setSavingGuests(true);
+      try {
+        // API takes ONE intent per call, so batch by intent.
+        const entries = [...pendingGuestEntries.entries()];
+        const socialIds = entries.filter(([, i]) => i === "social").map(([pid]) => pid);
+        const attendIds = entries.filter(([, i]) => i === "attending").map(([pid]) => pid);
+        const calls: Promise<Response>[] = [];
+        if (socialIds.length > 0) {
+          calls.push(fetch(`/api/events/${event.id}/signup-prefs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ playerIds: socialIds, intent: "social", teamId }),
+          }));
+        }
+        if (attendIds.length > 0) {
+          calls.push(fetch(`/api/events/${event.id}/signup-prefs`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ playerIds: attendIds, intent: "attending", teamId }),
+          }));
+        }
+        const results = await Promise.all(calls);
+        if (results.some((r) => !r.ok)) {
+          await alertDialog("Failed to add some guests", "Error");
+        }
+        const allIds = entries.map(([pid]) => pid);
+        setAddedGuestIds((s) => {
+          const n = new Set(s);
+          allIds.forEach((pid) => n.add(pid));
+          return n;
+        });
+        setPendingGuestEntries(new Map());
+        await fetchEvent();
+      } finally {
+        setSavingGuests(false);
+      }
+    };
+
+    return (
+      <div className="space-y-3">
+        <button onClick={closePicker} className="text-sm text-action font-medium">
+          ← Players
+        </button>
+        <div className={`${frameClass} p-4 space-y-3`}>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold truncate">Add Guests to {teamName}</h3>
+            <button
+              type="button"
+              onClick={savePending}
+              disabled={pendingGuestEntries.size === 0 || savingGuests}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-action text-white disabled:opacity-40 active:bg-action-dark transition-colors shrink-0"
+            >
+              {savingGuests
+                ? "Adding..."
+                : pendingGuestEntries.size === 0
+                  ? "Add"
+                  : `Add ${pendingGuestEntries.size}`}
+            </button>
+          </div>
+
+          {/* Staging tray. Each chip shows the assigned intent — tap the
+              icon to flip Social ↔ Attend; tap × to remove from tray. */}
+          <div className="rounded-lg border border-border bg-gray-50 px-2 py-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] uppercase tracking-wide text-muted">
+                Selected ({pendingGuestEntries.size})
+              </span>
+              {pendingGuestEntries.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPendingGuestEntries(new Map())}
+                  className="text-[11px] text-danger font-medium hover:underline"
+                >Clear all</button>
+              )}
+            </div>
+            {pendingGuestEntries.size === 0 ? (
+              <div className="text-[11px] text-muted italic">
+                Tap players below to stage them. Default is 🎾 Social — tap the icon on a chip to flip to 👋 Attend.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {pendingPlayers.map((p) => {
+                  const intent = pendingGuestEntries.get(p.id) || "social";
+                  return (
+                    <div
+                      key={p.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-action/10 text-foreground text-xs border border-action/30"
+                    >
+                      <span className="font-medium">{p.name}</span>
+                      {p.gender && (
+                        <span className={p.gender === "F" ? "text-pink-500" : "text-blue-500"}>
+                          {p.gender === "F" ? "♀" : "♂"}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleIntent(p.id)}
+                        title={intent === "social" ? "Tap to flip to Attend" : "Tap to flip to Social"}
+                        className="px-1"
+                      >{intent === "social" ? "🎾" : "👋"}</button>
+                      <button
+                        type="button"
+                        onClick={() => stagePlayer(p.id)}
+                        className="text-muted px-1"
+                        title="Remove from selection"
+                      >×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Filter row mirrors Add Players: country (left, broadest),
+              club toggle (middle), gender icons (right). */}
+          <div className="flex items-center gap-2">
+            <select
+              value={addGuestCountry}
+              onChange={(e) => setAddGuestCountry(e.target.value)}
+              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-white"
+            >
+              <option value="">All countries</option>
+              {COUNTRIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {eventClubId && (
               <button
                 type="button"
-                onClick={() => setAddPlayerClubFilter("all")}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                  addPlayerClubFilter === "all" ? "bg-action text-white" : "bg-gray-100 text-foreground"
+                onClick={() => setAddGuestClubFilter((cur) => (cur === "club" ? "all" : "club"))}
+                title={`Only members of ${event.club?.name || "the club"}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                  addGuestClubFilter === "club"
+                    ? "bg-black text-white"
+                    : "bg-gray-100 text-foreground"
                 }`}
               >
-                All
+                Club
               </button>
+            )}
+            {(["M", "F"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setAddGuestGender((cur) => (cur === g ? null : g))}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${addGuestGender === g ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}
+              >
+                <span className={addGuestGender === g ? "text-white" : g === "M" ? "text-blue-500" : "text-pink-500"}>
+                  {g === "M" ? "♂" : "♀"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <ClearInput value={addGuestSearch} onChange={setAddGuestSearch} placeholder="Search by name..." className="text-sm" />
+
+          <div className="flex items-center justify-between text-[11px] text-muted">
+            <span>
+              {available.length} available
+              {addedGuestIds.size > 0 && ` · ${addedGuestIds.size} added so far`}
+            </span>
+          </div>
+
+          {available.length === 0 ? (
+            <p className="text-xs text-muted text-center py-6">No players match these filters</p>
+          ) : (
+            <div className="space-y-0.5">
+              {available.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => stagePlayer(p.id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                >
+                  <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
+                  {p.gender && (
+                    <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                      {p.gender === "F" ? "♀" : "♂"}
+                    </span>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{p.name}</div>
+                    {(p.country || (p.clubs && p.clubs.length > 0)) && (
+                      <div className="mt-0.5 flex items-center gap-1 flex-wrap">
+                        {p.country && <span className="text-[10px] text-muted">{p.country}</span>}
+                        {p.clubs?.map((c) => (
+                          <span
+                            key={c.id}
+                            className="text-[10px] bg-gray-100 text-foreground px-1.5 py-0.5 rounded-full font-medium truncate max-w-[140px]"
+                            title={`${c.name} (${c.role})`}
+                          >
+                            {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
             </div>
           )}
-        </div>
-        <div className="flex gap-2">
-          {[
-            { value: null, label: "All" },
-            { value: "M", label: "♂ Male" },
-            { value: "F", label: "♀ Female" },
-          ].map((g) => (
-            <button key={g.label} onClick={() => setAddPlayerGender(g.value)}
-              className={`flex-1 py-2 rounded-lg font-medium text-sm transition-all ${
-                addPlayerGender === g.value ? "bg-action text-white" : "bg-gray-100 text-foreground hover:bg-gray-200"
-              }`}>{g.label}</button>
-          ))}
-        </div>
-        <div className="space-y-1">
-          {available.map((p) => (
-            <button key={p.id} onClick={() => addPlayerToEvent(p.id)}
-              className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 transition-colors">
-              <PlayerAvatar name={p.name} size="sm" />
-              <span className="text-lg font-medium">{p.name}</span>
-              {p.gender && <span className={`text-sm ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>{p.gender === "M" ? "♂" : "♀"}</span>}
-              <span className="text-muted ml-auto">{Math.round(p.rating)}</span>
-            </button>
-          ))}
-          {available.length === 0 && (
-            <p className="text-center py-6 text-muted text-base">No players to add</p>
-          )}
+
+          <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-white border-t border-border flex justify-end">
+            <button
+              type="button"
+              onClick={closePicker}
+              className="px-4 py-2.5 rounded-lg text-sm font-medium text-muted bg-gray-100 hover:bg-gray-200"
+            >Done</button>
+          </div>
         </div>
       </div>
     );
@@ -2076,14 +3077,14 @@ export default function EventDetailPage() {
           </div>
 
           {allPlayers.length > 6 && (
-            <ClearInput value={playerSearch.startsWith("__gender_") ? "" : playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base" />
+            <ClearInput value={playerSearch.startsWith("__gender_") ? "" : playerSearch} onChange={setPlayerSearch} placeholder="Search participants..." className="text-base" />
           )}
           <div className="space-y-0">
             {allPlayers
               .filter((entry) => {
                 if (playerSearch === "__gender_F") return entry.player.player.gender === "F";
                 if (playerSearch === "__gender_M") return entry.player.player.gender === "M";
-                return entry.player.player.name.toLowerCase().includes(playerSearch.toLowerCase());
+                return nameMatchesSearch(entry.player.player.name, playerSearch);
               })
               .map((entry) => {
                 const p = entry.player.player;
@@ -2117,6 +3118,7 @@ export default function EventDetailPage() {
 
     // Non-competition mode: standard player management
     if (bulkSelectMode && canManage) return renderBulkSelect();
+    if (showAddGuest) return renderAddGuests();
     if (showAddPlayer && canManage) return renderAddPlayers();
 
     return (
@@ -2130,9 +3132,32 @@ export default function EventDetailPage() {
             )}
           </div>
         )}
+        {/* + Player above the filter row. Outlined (process-style)
+            button, matches the convention of the club Add Member entry. */}
+        {canManage && !bulkSelectMode && !showAddPlayer && !levelEditMode && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                fetchAllPlayers();
+                setAddPlayerSearch("");
+                setAddPlayerGender(null);
+                setAddPlayerCountry(
+                  (session?.user as { country?: string | null } | undefined)?.country || "",
+                );
+                setAddPlayerClubFilter(event.club ? "club" : "all");
+                setPendingPlayerIds(new Set());
+                setAddedPlayerIds(new Set());
+                setShowAddPlayer(true);
+              }}
+              className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
+            >
+              + Player
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {event.players.length > 6 && (
-            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search players..." className="text-base flex-1" />
+            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search participants..." className="text-base flex-1" />
           )}
           {/* Home/Away toggle — only meaningful on league events with 2 teams.
               Click toggles in/out (no "Both" pill needed; deselected = both). */}
@@ -2167,7 +3192,7 @@ export default function EventDetailPage() {
             events always render the 2-column-by-team view (in the next
             branch) regardless of the viewer's role. */}
         {canManage && !(event.round && (event.leagueTeams?.length ?? 0) === 2) ? (() => {
-          const filtered = event.players.filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter));
+          const filtered = event.players.filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter));
           const groups = new Map<number | "unset", typeof filtered>();
           for (const ep of filtered) {
             const key = ep.skillLevel ?? "unset";
@@ -2176,13 +3201,31 @@ export default function EventDetailPage() {
           }
           const playerMatchCounts = new Map<string, number>();
           for (const m of event.matches) for (const p of m.players) playerMatchCounts.set(p.playerId, (playerMatchCounts.get(p.playerId) || 0) + 1);
+          // Late-joiner offset: stored on EventPlayer.matchCountOffset.
+          // Effective count (used by the fairness algorithm) = real + offset.
+          const playerOffsetMap = new Map<string, number>();
+          for (const ep of event.players ?? []) {
+            const off = (ep as { matchCountOffset?: number }).matchCountOffset;
+            if (off && off > 0) playerOffsetMap.set(ep.player.id, off);
+          }
+          const matchCountLabel = (pid: string) => {
+            const real = playerMatchCounts.get(pid) || 0;
+            const off = playerOffsetMap.get(pid) || 0;
+            return off > 0 ? `${real}+${off}m` : `${real}m`;
+          };
+          const matchCountTitle = (pid: string) => {
+            const off = playerOffsetMap.get(pid) || 0;
+            if (off === 0) return undefined;
+            const real = playerMatchCounts.get(pid) || 0;
+            return `Joined mid-event with +${off} starting offset. Effective: ${real + off}.`;
+          };
           const rows: { key: number | "unset"; label: string }[] = [
             { key: 5, label: "L5" },
             { key: 4, label: "L4" },
             { key: 3, label: "L3" },
             { key: 2, label: "L2" },
             { key: 1, label: "L1" },
-            { key: "unset", label: "Unset" },
+            { key: "unset", label: "Players registered for Event" },
           ];
           const assignLevel = (playerIds: string[], target: number | "unset") => {
             const level = target === "unset" ? null : target;
@@ -2264,28 +3307,93 @@ export default function EventDetailPage() {
                     <span className="w-3 h-3 bg-green-500 text-white rounded-full flex items-center justify-center text-[7px] font-bold inline-flex">✓</span> Check in all
                   </button>
                 )}
-                {canManage && !bulkSelectMode && !showAddPlayer && !levelEditMode && (
-                  <button
-                    onClick={() => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); }}
-                    className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
-                  >
-                    +/- Player
-                  </button>
-                )}
+                {/* + Player moved up above the filter row. */}
                 <button
-                  onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); }}
+                  onClick={() => { setLevelEditMode((p) => !p); setLevelSelectedIds(new Set()); setRemoveMode(false); setPendingRemoveIds(new Set()); }}
                   className="text-[10px] text-action font-medium border border-action/30 px-2 py-1 rounded-lg"
                 >
                   {levelEditMode ? "Done" : "Edit levels"}
                 </button>
+                {canManage && !levelEditMode && (
+                  <button
+                    onClick={() => {
+                      setRemoveMode((p) => {
+                        if (p) setPendingRemoveIds(new Set()); // closing = clear staged
+                        return !p;
+                      });
+                    }}
+                    className={`text-[10px] font-medium border px-2 py-1 rounded-lg ${
+                      removeMode
+                        ? "bg-gray-200 text-foreground border-gray-300 hover:bg-gray-300"
+                        : "text-danger border-danger/40"
+                    }`}
+                    title={removeMode ? "Stage players for removal, then press Remove" : "Open remove-player mode"}
+                  >
+                    {removeMode ? "Cancel" : "Remove Player"}
+                  </button>
+                )}
               </div>
+              {/* Remove-mode staging bar — shows directly below the
+                  toolbar. Lists staged players as chips + a red "Remove N"
+                  confirm button. */}
+              {removeMode && (
+                <div className="rounded-lg border border-danger/30 bg-red-50 px-2 py-1.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-danger font-semibold">
+                      To remove ({pendingRemoveIds.size})
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {pendingRemoveIds.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingRemoveIds(new Set())}
+                          className="text-[11px] text-danger font-medium hover:underline"
+                        >Clear</button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={removePendingPlayers}
+                        disabled={pendingRemoveIds.size === 0 || removingPlayers}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold bg-danger text-white disabled:opacity-40 active:bg-red-700 transition-colors"
+                      >
+                        {removingPlayers ? "Removing..." : pendingRemoveIds.size === 0 ? "Remove" : `Remove ${pendingRemoveIds.size}`}
+                      </button>
+                    </div>
+                  </div>
+                  {pendingRemoveIds.size === 0 ? (
+                    <div className="text-[11px] text-danger/70 italic">
+                      Tap the <span className="not-italic">🗑️</span> next to each player to stage them for removal.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {[...pendingRemoveIds].map((pid) => {
+                        const ep = event.players.find((e) => e.player.id === pid);
+                        const name = ep?.player.name || "?";
+                        return (
+                          <button
+                            key={pid}
+                            type="button"
+                            onClick={() => setPendingRemoveIds((s) => { const n = new Set(s); n.delete(pid); return n; })}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white text-danger text-[11px] border border-danger/30 hover:bg-red-100"
+                            title="Tap to unstage"
+                          >
+                            <span className="font-medium">{name}</span>
+                            <span className="text-danger/70">×</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               {rows.map((row) => {
-                const eps = (groups.get(row.key) || []).sort((a, b) => {
-                  const ra = typeof a.player.rating === "number" ? a.player.rating : -Infinity;
-                  const rb = typeof b.player.rating === "number" ? b.player.rating : -Infinity;
-                  if (rb !== ra) return rb - ra;
-                  return a.player.name.localeCompare(b.player.name);
-                });
+                // Sort by name (A→Z). Used to be rating-DESC then name —
+                // alphabetical is easier to scan when looking for a
+                // specific person, and gender icon now sits before the
+                // name so the row reads "♂ Ana", "♀ Beatriz", …
+                const eps = (groups.get(row.key) || []).sort((a, b) =>
+                  a.player.name.localeCompare(b.player.name),
+                );
                 const isOver = levelDragOver === row.key;
                 const isEmpty = eps.length === 0;
                 const expanded = expandedEmptyLevels.has(row.key);
@@ -2330,6 +3438,7 @@ export default function EventDetailPage() {
                           const isPaused = ep.status === "paused";
                           const isRegistered = ep.status === "registered";
                           const isCheckedIn = ep.status === "checked_in";
+                          const stagedForRemoval = removeMode && pendingRemoveIds.has(ep.player.id);
                           return (
                             <div
                               key={ep.player.id}
@@ -2337,19 +3446,30 @@ export default function EventDetailPage() {
                               onDragStart={levelEditMode ? (e) => { setLevelDragId(ep.player.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ep.player.id); } : undefined}
                               onDragEnd={levelEditMode ? () => { setLevelDragId(null); setLevelDragOver(null); } : undefined}
                               className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 min-w-0 transition-all ${
-                                selected ? "bg-action text-white"
+                                stagedForRemoval ? "bg-red-50 ring-1 ring-danger/40"
+                                  : selected ? "bg-action text-white"
                                   : dragging ? "opacity-50 bg-gray-100"
                                   : isPaused ? "bg-amber-100 opacity-60"
                                   : isRegistered ? "bg-gray-50"
                                   : "bg-gray-50 hover:bg-gray-100"
                               }`}
                             >
-                              {/* Name area: tap = check-in toggle (default) or level select (edit mode) */}
+                              {/* Name area: behavior depends on active mode.
+                                  - level edit: tap = toggle selection
+                                  - remove mode: tap = stage/unstage for removal
+                                  - default: tap = toggle check-in */}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (levelEditMode) {
                                     setLevelSelectedIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(ep.player.id)) next.delete(ep.player.id);
+                                      else next.add(ep.player.id);
+                                      return next;
+                                    });
+                                  } else if (removeMode) {
+                                    setPendingRemoveIds((prev) => {
                                       const next = new Set(prev);
                                       if (next.has(ep.player.id)) next.delete(ep.player.id);
                                       else next.add(ep.player.id);
@@ -2369,6 +3489,14 @@ export default function EventDetailPage() {
                                     }`}>✓</span>
                                   )}
                                 </span>
+                                {/* Gender icon sits BEFORE the name (♂ Ana,
+                                    ♀ Beatriz, …) — easier to scan in a
+                                    grid sorted alphabetically. */}
+                                {ep.player.gender && (
+                                  <span className={`text-[10px] shrink-0 ${ep.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                                    {ep.player.gender === "F" ? "♀" : "♂"}
+                                  </span>
+                                )}
                                 <div className="min-w-0 flex-1">
                                   <div className={`text-[11px] font-medium truncate ${
                                     selected ? "font-bold"
@@ -2379,8 +3507,10 @@ export default function EventDetailPage() {
                                   }`}>{ep.player.name}</div>
                                 </div>
                               </button>
-                              {/* Match count + pause: tap = toggle pause */}
-                              {!levelEditMode && (
+                              {/* Match count + pause: tap = toggle pause.
+                                  Replaced by a stage-for-removal toggle
+                                  when removeMode is on. */}
+                              {!levelEditMode && !removeMode && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); togglePausePlayer(ep.player.id); }}
                                   className={`flex items-center gap-0.5 shrink-0 px-1 py-0.5 rounded transition-colors ${
@@ -2388,13 +3518,38 @@ export default function EventDetailPage() {
                                   }`}
                                   title={isPaused ? "Tap to unpause" : "Tap to pause"}
                                 >
-                                  <span className="text-[10px] tabular-nums">{playerMatchCounts.get(ep.player.id) || 0}m</span>
+                                  <span className={`text-[10px] tabular-nums ${playerOffsetMap.has(ep.player.id) ? "text-blue-500" : ""}`} title={matchCountTitle(ep.player.id)}>{matchCountLabel(ep.player.id)}</span>
                                   <span className="text-[9px]">⏸</span>
                                 </button>
                               )}
+                              {!levelEditMode && removeMode && (() => {
+                                const staged = pendingRemoveIds.has(ep.player.id);
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPendingRemoveIds((s) => {
+                                        const n = new Set(s);
+                                        if (n.has(ep.player.id)) n.delete(ep.player.id);
+                                        else n.add(ep.player.id);
+                                        return n;
+                                      });
+                                    }}
+                                    className={`flex items-center shrink-0 px-1.5 py-0.5 rounded transition-colors ${
+                                      staged
+                                        ? "bg-danger/10 ring-1 ring-danger/40 text-danger"
+                                        : "text-danger hover:bg-red-50 active:bg-red-100"
+                                    }`}
+                                    title={staged ? `Unstage ${ep.player.name}` : `Stage ${ep.player.name} for removal`}
+                                    aria-label={staged ? `Unstage ${ep.player.name}` : `Stage ${ep.player.name} for removal`}
+                                  >
+                                    <span className="text-sm">{staged ? "✓" : "🗑️"}</span>
+                                  </button>
+                                );
+                              })()}
                               {levelEditMode && (
-                                <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : "text-muted"}`}>
-                                  {playerMatchCounts.get(ep.player.id) || 0}m
+                                <span className={`text-[10px] tabular-nums shrink-0 ${selected ? "text-white/90" : playerOffsetMap.has(ep.player.id) ? "text-blue-500" : "text-muted"}`} title={matchCountTitle(ep.player.id)}>
+                                  {matchCountLabel(ep.player.id)}
                                 </span>
                               )}
                             </div>
@@ -2414,11 +3569,24 @@ export default function EventDetailPage() {
           const allLeagueTeams = event.round!.league.teams || [];
           const ets = event.leagueTeams || [];
           const canSeeAll = isAdmin || canManage;
+          // "My team" = any team in this event where the viewer is a roster
+          // player, captain, or vice-captain. Captains/vices may not be on
+          // the roster themselves — their authority alone unlocks visibility
+          // of their own team's signed-up names (opponents stay hidden until
+          // both teams mark lineup ready).
           const myTeamId = allLeagueTeams.find((t) =>
-            ets.some((et) => et.teamId === t.id)
-            && t.players.some((p) => p.playerId === userId),
+            ets.some((et) => et.teamId === t.id) &&
+            (t.captainId === userId || t.viceCaptainId === userId || t.players.some((p) => p.playerId === userId)),
           )?.id ?? null;
           const bothReady = ets.every((et) => et.lineupReady);
+          // Reality check: which players are actually placed in a lineup
+          // slot for this event? Drives the participant-row icon — see
+          // the row rendering below for the four cases.
+          const linedUpPlayerIds = new Set<string>();
+          for (const g of (event.leagueGames ?? [])) {
+            for (const gp of g.gamePlayers) linedUpPlayerIds.add(gp.playerId);
+          }
+          const lineupFixed = bothReady;
           const teamColumn = (et: LeagueEventTeamLink) => {
             const fullTeam = allLeagueTeams.find((t) => t.id === et.teamId);
             const rosterIds = new Set((fullTeam?.players ?? []).map((p) => p.playerId));
@@ -2432,9 +3600,17 @@ export default function EventDetailPage() {
             const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
             const isLeagueAdmin = !!isLeagueOrganizerOfEvent;
             const canAddToTeam = isCaptainHere || isLeagueAdmin || isAdmin;
+            // Include both roster sign-ups AND guests tagged to this team
+            // (signupPreferences._guestTeamId === et.teamId). Guests render
+            // with a "guest" badge so it's clear they aren't on the team
+            // roster — see the row rendering below.
             const eps = event.players
-              .filter((ep) => rosterIds.has(ep.player.id))
-              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
+              .filter((ep) => {
+                if (rosterIds.has(ep.player.id)) return true;
+                const prefs = (ep.signupPreferences || {}) as Record<string, unknown>;
+                return typeof prefs._guestTeamId === "string" && prefs._guestTeamId === et.teamId;
+              })
+              .filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
               .sort((a, b) => a.player.name.localeCompare(b.player.name));
             // Roster players who haven't signed up yet — eligible for the
             // "+ Add" picker. Note: these are full team rosters from the
@@ -2459,56 +3635,96 @@ export default function EventDetailPage() {
                 ) : (
                   <div className="space-y-0.5">
                     {eps.map((ep) => {
-                      // Derive intent from status + signupPreferences sentinel.
+                      // Reality-aware icon for the row:
+                      //   - In a lineup slot → 🏆 (non-faded) regardless of phase
+                      //   - "Can't come" → ❌ always
+                      //   - Pre-lineup-fixed AND not in lineup → preferred icon, FADED
+                      //     (their stated intent, still aspirational)
+                      //   - Post-lineup-fixed AND not in lineup → social/attending
+                      //     (they weren't picked; downgrade from "playing")
                       const prefs = (ep.signupPreferences || {}) as Record<string, { level?: string } | string | undefined>;
                       const sentinel = typeof prefs._intent === "string" ? prefs._intent : null;
-                      const hasAnyPlay = Object.entries(prefs).some(([k, v]) => k !== "_intent" && typeof v === "object" && v !== null && (v.level === "prefer" || v.level === "ok"));
-                      const ix: "playing" | "social" | "attending" | "unavailable" =
+                      const isGuest = !rosterIds.has(ep.player.id);
+                      const hasAnyPlay = Object.entries(prefs).some(([k, v]) => k !== "_intent" && k !== "_guestTeamId" && typeof v === "object" && v !== null && (v.level === "prefer" || v.level === "ok"));
+                      const preferred: "playing" | "social" | "attending" | "unavailable" =
                         ep.status === "unavailable" ? "unavailable"
                           : sentinel === "social" ? "social"
                           : sentinel === "attending" ? "attending"
                           : hasAnyPlay ? "playing"
                           : "attending";
+                      const inLineup = linedUpPlayerIds.has(ep.player.id);
+                      const ix: "playing" | "social" | "attending" | "unavailable" =
+                        preferred === "unavailable" ? "unavailable"
+                          : inLineup ? "playing"
+                          : lineupFixed ? (sentinel === "social" || preferred === "social" ? "social" : "attending")
+                          : preferred;
                       const ixIcon = ix === "playing" ? "🏆" : ix === "social" ? "🎾" : ix === "attending" ? "👋" : "❌";
+                      // Fade the icon when it represents an unrealised
+                      // preference (pre-fix, not yet in a lineup). Once
+                      // the lineup is fixed OR the player IS in a slot,
+                      // show it solid.
+                      const iconFaded = !lineupFixed && !inLineup && preferred === "playing";
                       const isMe = ep.player.id === userId;
-                      // Captain/vice of THIS team, event manager, or admin can
-                      // un-sign-up a player. Self can also remove their own
-                      // sign-up (matches the swipe-to-remove on the legacy row).
-                      const canRemove = canAddToTeam || isMe;
-                      const onRemove = async () => {
-                        const ok = await confirmDialog({
-                          title: `Remove ${ep.player.name}?`,
-                          message: `Cancel ${isMe ? "your" : "their"} sign-up for this event.`,
-                          confirmText: "Remove",
-                          danger: true,
-                        });
-                        if (!ok) return;
-                        await removePlayer(ep.player.id, ep.player.name);
-                      };
+                      // Captain/vice of THIS team, league/event admin, or
+                      // app admin can edit a player's prefs (and remove
+                      // them) via the sign-up form. Self can edit their
+                      // own. The pen for admins routes to the on-behalf
+                      // sign-up flow which also offers a "Remove from
+                      // event" button.
+                      const canEdit = canAddToTeam || isMe;
+                      // edit=1 is a hint for the sign-up page so its
+                      // initial-render header says "Edit preferences"
+                      // instead of "Sign up" before the API fetch lands.
+                      const editHref = isMe
+                        ? `/events/${event.id}/sign-up?edit=1`
+                        : `/events/${event.id}/sign-up?for=${ep.player.id}&edit=1`;
+                      const genderIcon = ep.player.gender ? (
+                        <span className={`text-[10px] shrink-0 ${ep.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
+                          {ep.player.gender === "F" ? "♀" : "♂"}
+                        </span>
+                      ) : null;
                       return (
-                        <div key={ep.player.id} className="flex items-center gap-1.5 px-1 py-1 rounded">
+                        <div key={ep.player.id} className={`flex items-center gap-1.5 px-1 py-1 rounded ${isGuest ? "bg-amber-50/60 border border-dashed border-amber-200" : ""}`}>
+                          {/* Row body is plain text now — only the pen
+                              icon at the end opens the preferences
+                              page. Tapping the name itself does
+                              nothing. */}
                           <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                          <span className={`flex-1 min-w-0 text-xs leading-tight break-words ${isMe ? "text-action font-bold" : "font-medium"} ${ix === "unavailable" ? "line-through text-muted" : ""}`}>
+                          {genderIcon}
+                          <span className={`flex-1 min-w-0 text-xs leading-tight break-words ${isMe ? "text-action font-bold" : "font-medium"} ${isGuest ? "italic" : ""} ${ix === "unavailable" ? "line-through text-muted" : ""}`}>
                             {ep.player.name}
+                            {isGuest && <span className="text-[9px] text-amber-700 not-italic font-normal ml-1">(guest)</span>}
                           </span>
-                          {ep.player.gender && (
-                            <span className={`text-[10px] shrink-0 ${ep.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>
-                              {ep.player.gender === "F" ? "♀" : "♂"}
-                            </span>
-                          )}
                           {ep.player.hasAccount === false && canAddToTeam && (
                             <span title="Unclaimed account" className="text-[9px] shrink-0 bg-amber-100 text-amber-700 px-1 rounded-full font-medium">⚠</span>
                           )}
-                          <span className="text-[11px] shrink-0" title={ix === "playing" ? "Liga play" : ix === "social" ? "Social play" : ix === "attending" ? "Just attending" : "Can't come"}>
+                          {/* Always show the participation icon (no
+                              inline flip), and a single pen icon when
+                              the viewer can edit. Removal moves to
+                              the bottom of the sign-up/preferences
+                              page (consistent for roster + guests). */}
+                          <span
+                            className={`text-[11px] shrink-0 ${iconFaded ? "opacity-30" : ""}`}
+                            title={
+                              ix === "playing"
+                                ? (inLineup ? "In lineup" : "Wants to play liga")
+                                : ix === "social"
+                                  ? "Social play"
+                                  : ix === "attending"
+                                    ? (lineupFixed && preferred === "playing" ? "Wasn't picked — attending" : "Just attending")
+                                    : "Can't come"
+                            }
+                          >
                             {ixIcon}
                           </span>
-                          {canRemove && (
-                            <button
-                              type="button"
-                              onClick={onRemove}
-                              aria-label="Remove sign-up"
-                              className="text-muted hover:text-danger text-xs shrink-0 px-1"
-                            >✕</button>
+                          {canEdit && (
+                            <Link
+                              href={editHref}
+                              aria-label="Edit preferences"
+                              className="text-muted hover:text-action shrink-0 px-1"
+                            >
+                              <PenIcon />
+                            </Link>
                           )}
                         </div>
                       );
@@ -2571,17 +3787,25 @@ export default function EventDetailPage() {
               });
               await fetchEvent();
             };
+            // Uncontrolled <details> — the user manages open/closed
+            // themselves. Previously we passed `open={teamSelected.length > 0}`
+            // which auto-collapsed the picker when the last selected
+            // player was deselected, which is not what anyone wants.
             return (
-              <details key={`add-${et.teamId}`} className="mt-2 px-1" open={teamSelected.length > 0 || undefined}>
-                <summary className="text-xs text-action font-medium cursor-pointer flex items-center justify-between gap-2">
-                  <span>+ Add player to {et.team.name} ({rosterUnsigned.length})</span>
+              <details key={`add-${et.teamId}`} className="mt-2 px-1">
+                <summary className="text-xs text-action font-medium cursor-pointer">
+                  + Add player to {et.team.name} ({rosterUnsigned.length})
+                </summary>
+                {/* Select all / Clear all sits INSIDE the collapsed area
+                    so it doesn't compete with the summary text. */}
+                <div className="mt-2 flex justify-end">
                   <button
                     type="button"
-                    onClick={(e) => { e.preventDefault(); toggleAll(); }}
-                    className="text-[11px] text-muted hover:text-action"
+                    onClick={toggleAll}
+                    className="text-[11px] text-muted hover:text-action underline"
                   >{allSelected ? "Clear all" : "Select all"}</button>
-                </summary>
-                <div className="mt-2 space-y-1">
+                </div>
+                <div className="mt-1 space-y-1">
                   {rosterUnsigned.map((tp) => {
                     const selected = rosterAddSelected.has(tp.playerId);
                     return (
@@ -2595,8 +3819,8 @@ export default function EventDetailPage() {
                           {selected ? "✓" : ""}
                         </span>
                         <PlayerAvatar name={tp.player.name} photoUrl={tp.player.photoUrl} size="xs" />
+                        {tp.player.gender && <span className={`text-xs shrink-0 ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
                         <span className="text-sm flex-1">{tp.player.name}</span>
-                        {tp.player.gender && <span className={`text-xs ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
                         {tp.player.hasAccount === false && (
                           <span title="Unclaimed account" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚠ unclaimed</span>
                         )}
@@ -2604,6 +3828,14 @@ export default function EventDetailPage() {
                     );
                   })}
                 </div>
+                {event.round?.league?.id && (
+                  <div className="mt-2 pt-2 border-t border-border flex justify-end">
+                    <Link
+                      href={`/players/new?leagueId=${event.round.league.id}&teamId=${et.teamId}&returnTo=${encodeURIComponent(`/events/${event.id}`)}`}
+                      className="text-[11px] text-action font-medium"
+                    >+ New player</Link>
+                  </div>
+                )}
                 {teamSelected.length > 0 && (
                   <button
                     type="button"
@@ -2615,6 +3847,38 @@ export default function EventDetailPage() {
               </details>
             );
           };
+          // Per-team "Add guest" entry button. Opens the full-page guest
+          // picker (renderAddGuests) tagged to this team. Visible to team
+          // captain/vice, league organizer, app admin only.
+          const teamGuestPicker = (et: LeagueEventTeamLink) => {
+            const fullTeam = allLeagueTeams.find((t) => t.id === et.teamId);
+            const isCaptainHere = !!userId && (fullTeam?.captainId === userId || fullTeam?.viceCaptainId === userId);
+            const isLeagueAdmin = !!isLeagueOrganizerOfEvent;
+            const canAddHere = isCaptainHere || isLeagueAdmin || isAdmin;
+            if (!canAddHere) return null;
+            const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
+            const openPicker = () => {
+              setAddGuestTeamId(et.teamId);
+              setAddGuestSearch("");
+              setAddGuestGender(null);
+              setAddGuestCountry("");
+              setAddGuestClubFilter(eventClubId ? "club" : "all");
+              setPendingGuestEntries(new Map());
+              setAddedGuestIds(new Set());
+              setShowAddGuest(true);
+              if (allPlayers.length === 0) void fetchAllPlayers();
+            };
+            return (
+              <button
+                key={`guest-${et.teamId}`}
+                type="button"
+                onClick={openPicker}
+                className="mt-2 px-1 text-xs text-action font-medium text-left block"
+              >
+                + Add {et.team.name} Guest
+              </button>
+            );
+          };
           // Determine home/away. Host team (event.hostTeamId) is home;
           // otherwise the first leagueTeam is treated as home.
           const homeTeamId = event.hostTeamId || ets[0]?.teamId;
@@ -2624,19 +3888,24 @@ export default function EventDetailPage() {
             : playerTeamFilter === "away"
             ? ets.filter((et) => et.teamId === awayTeamId)
             : ets;
+          // Pickers stack full-width BELOW the team columns. Half-width
+          // pickers (anchored under their team column) make long names
+          // wrap into 3+ lines; the summary text "+ Add player to X"
+          // already makes ownership unambiguous, so we go wide.
           return (
             <>
               <div className={visibleEts.length === 1 ? "" : "grid grid-cols-2 gap-2"}>
                 {visibleEts.map((et) => teamColumn(et))}
               </div>
               {visibleEts.map((et) => teamAddPicker(et))}
+              {visibleEts.map((et) => teamGuestPicker(et))}
             </>
           );
         })() : (
           <div className="space-y-0">
             {[...event.players]
               .sort((a, b) => a.player.name.localeCompare(b.player.name))
-              .filter((ep) => ep.player.name.toLowerCase().includes(playerSearch.toLowerCase()) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
+              .filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
               .map((ep) => (
               <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
                 showContact={isAdmin || ep.player.id === userId}
@@ -2799,6 +4068,11 @@ export default function EventDetailPage() {
                     ) : showInputs ? (
                       <div onClick={(e) => e.stopPropagation()}>
                         <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
+                          allowAnyScore={(() => {
+                            const c = cls as unknown as { maxMinutes?: number | null; scoringFormat?: string };
+                            const mm = c?.maxMinutes ?? 0;
+                            return c?.scoringFormat === "timed" || mm > 0;
+                          })()}
                           otherTeamScore={scores[match.id]?.[otherTeamKey] ?? ""}
                           teamLabel={teamPlayers.map((mp) => mp.player.name.split(" ")[0]).join(" & ")}
                           autoOpen={autoOpenScoreTeam?.matchId === match.id && autoOpenScoreTeam?.team === teamKey}
@@ -2899,7 +4173,7 @@ export default function EventDetailPage() {
     <div>
       <AppHeader
         variant="hero-sub"
-        back={{ label: event.name, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
+        back={{ label: heroTitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
         meta="Matches"
         action={canManage ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
       />
@@ -3293,7 +4567,7 @@ export default function EventDetailPage() {
         <AppHeader
           variant="hero-sub"
           back={{ label: backLabel, subtitle: backSubtitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
-          meta="Players"
+          meta="Participants"
           action={canManage ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } } : undefined}
         />
         <div className="px-4">
@@ -3494,7 +4768,7 @@ export default function EventDetailPage() {
   };
 
   if (activeSection !== "overview") {
-    const sectionMeta = ({ when: "Event Data", admins: "Organizer", scoring: "Format", pairing: "Pairing", players: "Players", pairs: "Pairs", rounds: "Matches", competition: "Competition", manual: "Manual Match" } as Record<string, string>)[activeSection] || activeSection;
+    const sectionMeta = ({ when: "Event Data", admins: "Organizer", scoring: "Event Format", pairing: "Pairing", players: "Participants", pairs: "Pairs", rounds: "Matches", competition: "Competition", manual: "Manual Match" } as Record<string, string>)[activeSection] || activeSection;
     const handleBackToOverview = async () => {
       if (hasEdits) {
         const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
@@ -3506,13 +4780,20 @@ export default function EventDetailPage() {
     const sectionAction = undefined;
     return (
       <div className="-mx-4">
-        {!bulkSelectMode && !showAddPlayer && activeSection !== "rounds" && activeSection !== "manual" && (
+        {!bulkSelectMode && !showAddPlayer && !showAddGuest && activeSection !== "rounds" && activeSection !== "manual" && (
           <AppHeader
             variant="hero-sub"
-            back={{ label: event.name, href: `/events/${id}`, onClick: handleBackToOverview }}
+            back={{ label: heroTitle, href: `/events/${id}`, onClick: handleBackToOverview }}
             meta={sectionMeta}
             action={sectionAction}
           />
+        )}
+        {/* Add-Player / Add-Guest mode keeps the event name visible in
+            the hero header (as plain text, NOT a back chevron) and drops
+            the section meta. The blue back link to "Players" lives below
+            in the content area. */}
+        {(showAddPlayer || showAddGuest) && (
+          <AppHeader variant="hero-sub" title={heroTitle} />
         )}
 
         <div className="px-4 space-y-2">
@@ -3609,7 +4890,6 @@ export default function EventDetailPage() {
       <div className="space-y-3">
         {eventHeroHeader}
         {managerCard}
-        <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
         {/* Total players */}
         <div className={`${frameClass} overflow-hidden`}>
@@ -3769,7 +5049,7 @@ export default function EventDetailPage() {
                 </>
               )}
             </div>
-            <Link href={`/events/${id}/sign-up`}
+            <Link href={hasSignedUp ? `/events/${id}/sign-up?edit=1` : `/events/${id}/sign-up`}
               className="bg-action text-white text-sm font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap">
               {hasSignedUp ? "Edit" : "Sign up"}
             </Link>
@@ -3824,32 +5104,27 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Format — managers only. Hidden for league events: format/scoring
-          come from the league categories, set per-class. */}
-      {canManage && !event.round && (
-        <div className={`${frameClass} overflow-hidden`}>
-          <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
-            <span className="text-base font-bold text-foreground">Format</span>
-            <span className="flex-1 text-right">
-              <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
-              {event.rankingMode !== "none" && (
-                <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
-              )}
-            </span>
-            <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>
-          </div>
-        </div>
-      )}
-
       {/* Players & Pairs — relabel "Participants" for league events since
-          rosters can include attend-only signups, not just match players. */}
+          rosters can include attend-only signups, not just match players.
+          Sits above Format because the participant count is the number
+          most organizers check first when opening the event. */}
       <div className={`${frameClass} overflow-hidden`}>
         <button onClick={() => setActiveSection("players")} className={rowClass}>
           <span className="text-base font-bold text-foreground">{event.round ? "Participants" : "Players"}</span>
           <span className="text-sm font-medium flex-1 text-right">
-            {activePlayers.length}
-            {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
-            {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
+            {(() => {
+              const males = activePlayers.filter((ep) => ep.player.gender === "M").length;
+              const females = activePlayers.filter((ep) => ep.player.gender === "F").length;
+              return (
+                <>
+                  {activePlayers.length}
+                  <span className="text-blue-500"> · {males}♂</span>
+                  <span className="text-pink-500"> · {females}♀</span>
+                  {pausedPlayers.length > 0 ? ` + ${pausedPlayers.length} paused` : ""}
+                  {waitlistedPlayers.length > 0 ? ` + ${waitlistedPlayers.length} waitlist` : ""}
+                </>
+              );
+            })()}
           </span>
         </button>
         {/* Per-team attendee breakdown for league events. Counts everyone who
@@ -3887,6 +5162,24 @@ export default function EventDetailPage() {
         )}
       </div>
 
+      {/* Format — managers only. Hidden for league events: format/scoring
+          come from the league categories, set per-class. Sits below
+          Players because format rarely changes after the event opens. */}
+      {canManage && !event.round && (
+        <div className={`${frameClass} overflow-hidden`}>
+          <div onClick={() => { startEditEvent(); setActiveSection("scoring"); }} className={rowClass} style={{ cursor: "pointer" }}>
+            <span className="text-base font-bold text-foreground">Format</span>
+            <span className="flex-1 text-right">
+              <span className="text-sm font-medium capitalize">{event.format} · {scoringDisplay}</span>
+              {event.rankingMode !== "none" && (
+                <span className="block text-[10px] text-muted">Ranked — {event.rankingMode === "approval" ? "approval" : "auto"}</span>
+              )}
+            </span>
+            <span className="text-muted/50 self-start mt-0.5 ml-3">{penIcon}</span>
+          </div>
+        </div>
+      )}
+
       {/* Pairing — managers only. Hidden for league events: pairings are
           driven by the lineup builder, not the auto-pairing engine. */}
       {canManage && !event.round && (
@@ -3898,9 +5191,6 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Speaker */}
-      <SpeakerMode eventId={id as string} userId={userId || ""} userName={session?.user?.name || ""} isManager={canManage} />
 
       {/* Matches */}
       <div className={`${frameClass} overflow-hidden`}>

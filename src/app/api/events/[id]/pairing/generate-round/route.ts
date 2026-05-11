@@ -44,7 +44,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  try { await requireEventManager(id); } catch (e) { return authErrorResponse(e); }
+  let user;
+  try { user = await requireEventManager(id); } catch (e) { return authErrorResponse(e); }
 
   try {
   const body = await req.json().catch(() => null) as {
@@ -127,6 +128,7 @@ export async function POST(
           round: nextRound,
           courtNum: m.court,
           status: "pending",
+          createdById: user.id,
           players: { create: [...team1, ...team2] },
         },
         select: { id: true },
@@ -161,6 +163,19 @@ export async function POST(
   const activeMatches: typeof allMatches = [];
   const counts = new Map<string, number>();
   const lastPlayedRound = new Map<string, number>();
+  // Tracks the most recent completed match for each player — used to derive
+  // the King solver tiebreak fields (lostLastRound, lastRoundLosingPartnerId,
+  // lastRoundCourt). Only updated by completed matches; pending/scheduled
+  // matches don't have a winner yet.
+  const lastCompletedMatch = new Map<
+    string,
+    {
+      round: number;
+      courtNum: number;
+      teammateId: string;
+      teamLost: boolean;
+    }
+  >();
   let maxRound = 0;
 
   for (const m of allMatches) {
@@ -186,6 +201,19 @@ export async function POST(
       for (const p of m.players) {
         counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
         lastPlayedRound.set(p.playerId, Math.max(lastPlayedRound.get(p.playerId) || 0, m.round));
+        // Record this completed match as the player's most recent — overwrite
+        // unconditionally; the outer loop is ordered by round ASC so a later
+        // match always supersedes an earlier one for the same player.
+        const teammates =
+          p.team === 1 ? t1Players.filter((q) => q.playerId !== p.playerId) : t2Players.filter((q) => q.playerId !== p.playerId);
+        const teammateId = teammates[0]?.playerId ?? "";
+        const teamLost = winningTeam !== null && winningTeam !== p.team;
+        lastCompletedMatch.set(p.playerId, {
+          round: m.round,
+          courtNum: m.courtNum,
+          teammateId,
+          teamLost,
+        });
       }
     } else if (m.status === "active" || m.status === "paused") {
       activeMatches.push(m);
@@ -254,6 +282,7 @@ export async function POST(
           globalRating: ep.player.globalRating,
         });
       const last = lastPlayedRound.get(ep.playerId) || 0;
+      const lastMatch = lastCompletedMatch.get(ep.playerId);
       return {
         id: ep.playerId,
         name: ep.player.name,
@@ -261,6 +290,12 @@ export async function POST(
         gender: normalizeGender(ep.player.gender),
         matchCount: (counts.get(ep.playerId) || 0) + (ep.matchCountOffset || 0),
         roundsSinceLastPlayed: last > 0 ? maxRound - last : 0,
+        lostLastRound: lastMatch?.teamLost,
+        lastRoundLosingPartnerId:
+          lastMatch && lastMatch.teamLost && lastMatch.teammateId
+            ? lastMatch.teammateId
+            : undefined,
+        lastRoundCourt: lastMatch?.courtNum,
         paused: ep.status === "paused",
       };
     });
@@ -389,6 +424,7 @@ export async function POST(
         round: nextRound,
         courtNum,
         status: "pending",
+        createdById: user.id,
         players: {
           create: [...team1, ...team2],
         },
@@ -422,13 +458,26 @@ function normalizeSettings(s: Partial<PairingSettings>): PairingSettings {
     if (v === "inf" || v === "infinity") return Infinity;
     return Number(v);
   };
+  // Migrate legacy `shake` flag: shake=true on a king-base event is now
+  // equivalent to activeMode="random". Done here so old persisted
+  // settings keep working without a one-off DB migration.
+  const base = (s.base as PairingSettings["base"]) ?? "random";
+  const allowedModes = ["random", "swiss", "king", "manual", "skill"] as const;
+  let activeMode: PairingSettings["activeMode"] = undefined;
+  const sAny = s as Record<string, unknown>;
+  if (typeof sAny.activeMode === "string" && (allowedModes as readonly string[]).includes(sAny.activeMode)) {
+    activeMode = sAny.activeMode as PairingSettings["activeMode"];
+  } else if (sAny.shake === true && base === "king") {
+    activeMode = "random";
+  }
   return {
-    base: (s.base as PairingSettings["base"]) ?? "random",
+    base,
     teams: (s.teams as PairingSettings["teams"]) ?? "rotating",
     gender: (s.gender as PairingSettings["gender"]) ?? "random",
     skillWindow: inf(s.skillWindow),
     matchCountWindow: inf(s.matchCountWindow),
     varietyWindow: inf(s.varietyWindow),
     maxWaitWindow: s.maxWaitWindow === undefined ? Infinity : inf(s.maxWaitWindow),
+    activeMode,
   };
 }

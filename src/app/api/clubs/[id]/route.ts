@@ -41,11 +41,16 @@ export async function PATCH(
   const { id } = await params;
   const user = await requireAuth();
 
-  const member = await prisma.clubMember.findUnique({
-    where: { clubId_playerId: { clubId: id, playerId: user.id } },
-  });
-  if (!member || (member.role !== "owner" && member.role !== "admin" && user.role !== "admin")) {
-    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+  // Allowed: app admin (regardless of membership), OR a member of this
+  // club whose role is owner/admin. The previous check short-circuited
+  // on `!member` and locked app admins out of clubs they hadn't joined.
+  if (user.role !== "admin") {
+    const member = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: id, playerId: user.id } },
+    });
+    if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
   }
 
   const { name, shortName, emoji, description, city, country, status, locations } = await req.json();
@@ -93,11 +98,14 @@ export async function DELETE(
   const { id } = await params;
   const user = await requireAuth();
 
-  const member = await prisma.clubMember.findUnique({
-    where: { clubId_playerId: { clubId: id, playerId: user.id } },
-  });
-  if (!member || (member.role !== "owner" && user.role !== "admin")) {
-    return NextResponse.json({ error: "Only the club owner can delete" }, { status: 403 });
+  // Allowed: app admin (regardless of membership), OR the club owner.
+  if (user.role !== "admin") {
+    const member = await prisma.clubMember.findUnique({
+      where: { clubId_playerId: { clubId: id, playerId: user.id } },
+    });
+    if (!member || member.role !== "owner") {
+      return NextResponse.json({ error: "Only the club owner can delete" }, { status: 403 });
+    }
   }
 
   await prisma.club.delete({ where: { id } });

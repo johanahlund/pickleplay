@@ -7,7 +7,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { AppHeader } from "@/components/AppHeader";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
-import { resolveRoundCategories, type LeagueCategoryShape } from "@/lib/leagueRound";
+import { resolveRoundCategories, resolveRoundConfig, type LeagueCategoryShape } from "@/lib/leagueRound";
 import { frameClass } from "@/components/Card";
 import { leagueShortName } from "@/lib/leagueDisplay";
 
@@ -37,7 +37,7 @@ export default function LineupBuilderPage() {
   const { id, eventId, teamId } = useParams() as { id: string; eventId: string; teamId: string };
   const router = useRouter();
   const { data: session } = useSession();
-  const { confirm: confirmDialog } = useConfirm();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const userId = (session?.user as { id?: string })?.id;
   const userRole = (session?.user as { role?: string })?.role;
 
@@ -47,15 +47,32 @@ export default function LineupBuilderPage() {
 
   const [team, setTeam] = useState<{ id: string; name: string; captainId: string | null; viceCaptainId: string | null } | null>(null);
   const [opponentTeam, setOpponentTeam] = useState<{ id: string; name: string } | null>(null);
+  // Opponent's roster IDs — used to EXCLUDE them from the wider
+  // Friendly-match pool (otherwise we'd be poaching the other team's
+  // people). League team rosters are public, so this isn't a secrecy
+  // leak; we already loaded league.teams to render the team list.
+  const [opponentRosterIds, setOpponentRosterIds] = useState<Set<string>>(new Set());
   const [hostTeamId, setHostTeamId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [leagueOrg, setLeagueOrg] = useState<{ createdById: string | null; deputyId: string | null }>({ createdById: null, deputyId: null });
   const [leagueName, setLeagueName] = useState<string>("");
+  const [roundNumber, setRoundNumber] = useState<number | null>(null);
+  const [roundName, setRoundName] = useState<string | null>(null);
+  const [eventLocation, setEventLocation] = useState<string | null>(null);
   const [eventDate, setEventDate] = useState<string | null>(null);
+  const [eventNumCourts, setEventNumCourts] = useState<number>(2);
+  // Cap on principal + league matches per event (from round override
+  // or league config). null = no cap. Friendly matches don't count.
+  const [maxMatchesPerEvent, setMaxMatchesPerEvent] = useState<number | null>(null);
   const [roster, setRoster] = useState<PlayerLite[]>([]);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [readyByTeam, setReadyByTeam] = useState<Record<string, boolean>>({});
+  // Latched cross-team reveal — true the moment both teams' lineupReady
+  // first hit true. After it's true the opponent's gamePlayers stay
+  // visible regardless of subsequent un-toggles, and edits require
+  // mutual unlock (both teams' lineupReady=false).
+  const [lineupTotalLocked, setLineupTotalLocked] = useState(false);
   // Per-category counter of "extra" empty slot rows the user has revealed
   // via "+ Add match". Local-only — resets on remount. Keeps the default
   // view to a single row per category until the captain explicitly asks
@@ -86,8 +103,24 @@ export default function LineupBuilderPage() {
     const effectiveCategories = resolveRoundCategories(round, league.categories || [])
       .filter((c): c is Category => !!c.id && c.status !== "draft");
     setCategories(effectiveCategories);
+    const effectiveCfg = resolveRoundConfig(round ?? null, league);
+    setMaxMatchesPerEvent(
+      typeof effectiveCfg.maxMatchesPerEvent === "number" && effectiveCfg.maxMatchesPerEvent > 0
+        ? effectiveCfg.maxMatchesPerEvent
+        : null,
+    );
     setLeagueOrg({ createdById: league.createdBy?.id || null, deputyId: league.deputy?.id || null });
     setLeagueName(leagueShortName(league));
+    setRoundNumber(typeof round?.roundNumber === "number" ? round.roundNumber : null);
+    setRoundName(typeof round?.name === "string" && round.name.trim() ? round.name.trim() : null);
+    // Venue label for the header: prefer the named ClubLocation, else the
+    // club name. Both come from /api/events/[id].
+    const eventClub = (event as { club?: { name?: string; locations?: { id: string; name?: string }[] } | null }).club;
+    const eventLocationId = (event as { locationId?: string | null }).locationId;
+    const matchedLoc = eventLocationId
+      ? eventClub?.locations?.find((l) => l.id === eventLocationId)
+      : null;
+    setEventLocation(matchedLoc?.name || eventClub?.name || null);
 
     const t = (league.teams || []).find((x: { id: string }) => x.id === teamId);
     if (t) {
@@ -98,13 +131,27 @@ export default function LineupBuilderPage() {
     const ev = (round?.events || []).find((e: { id: string }) => e.id === eventId);
     setEventDate(ev?.date ?? null);
     setHostTeamId(ev?.hostTeamId ?? null);
+    // Use the event's numCourts to scope the per-match court picker.
+    if (typeof event?.numCourts === "number" && event.numCourts > 0) {
+      setEventNumCourts(event.numCourts);
+    }
     const opp = ev?.leagueTeams?.find((lt: { teamId: string }) => lt.teamId !== teamId);
     setOpponentTeam(opp ? { id: opp.team.id, name: opp.team.name } : null);
+    // Pull the opponent's full roster IDs from the league team list so
+    // the Friendly-pool widening can exclude them.
+    if (opp) {
+      type TeamShape = { id: string; players?: { playerId: string }[] };
+      const oppFull = (league.teams as TeamShape[]).find((t) => t.id === opp.teamId);
+      setOpponentRosterIds(new Set((oppFull?.players ?? []).map((p) => p.playerId)));
+    } else {
+      setOpponentRosterIds(new Set());
+    }
     const ready: Record<string, boolean> = {};
     for (const lt of (ev?.leagueTeams ?? []) as { teamId: string; lineupReady?: boolean }[]) {
       ready[lt.teamId] = !!lt.lineupReady;
     }
     setReadyByTeam(ready);
+    setLineupTotalLocked(!!(ev as { lineupTotalLocked?: boolean } | undefined)?.lineupTotalLocked);
 
     setGames(((ev?.leagueGames as Game[]) || []));
 
@@ -121,6 +168,16 @@ export default function LineupBuilderPage() {
   }, [id, eventId, teamId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Lock body scroll while the player picker overlay is open. Without
+  // this, touch scrolls inside the sheet can bubble to the body, causing
+  // the background page to scroll while the picker appears stuck.
+  useEffect(() => {
+    if (!picker) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [picker]);
 
   // Poll so each team sees the opponent's picks live. Pauses while a
   // save is in flight or the picker is open so we don't clobber mid-edit.
@@ -174,7 +231,11 @@ export default function LineupBuilderPage() {
   };
 
   // Same as `post` but does not await loadAll() — caller has already done an
-  // optimistic update locally. We re-sync silently in the background.
+  // optimistic update locally. We re-sync silently in the background AFTER
+  // the response — fire-and-forget, so the user's click handler resolves
+  // immediately and the picker doesn't have to re-render against fresh
+  // server data on every tap (which caused noticeable lag and visual
+  // flicker when picking players in quick succession).
   const postOptimistic = async (body: Record<string, unknown>, rollback: () => void) => {
     setErrorMsg(null);
     const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
@@ -188,9 +249,10 @@ export default function LineupBuilderPage() {
       rollback();
       return;
     }
-    // Reconcile with server truth (real ids, opp's wants, etc.) — but the
-    // checkbox itself has already flipped, so the user feels no latency.
-    await loadAll();
+    // Reconcile with server truth in the background — don't block the
+    // caller. The 15s polling refresh and the next user action will pick
+    // up any missed reconciliation anyway.
+    void loadAll();
   };
 
   const toggleSlot = async (categoryId: string, slotNumber: number, want: boolean) => {
@@ -283,9 +345,34 @@ export default function LineupBuilderPage() {
     // demote any other principal in the same category.
     const target = games.find((g) => g.id === gameId);
     if (!target) return;
+    // If switching Friendly → Principal/League, drop any non-roster
+    // players assigned on OUR side (they were only eligible while the
+    // match was Friendly). The server enforces the same on assign,
+    // but doing it here keeps the UI honest immediately.
+    const rosterIdSet = new Set(roster.map((p) => p.id));
+    const ourPlayerIds = target.gamePlayers
+      .filter((gp) => rosterIdSet.has(gp.playerId))
+      .map((gp) => gp.playerId);
+    const oppPlayerEntries = target.gamePlayers.filter((gp) => !rosterIdSet.has(gp.playerId));
+    const hadIneligibleOnOurSide =
+      kind !== "extra" &&
+      target.kind === "extra" &&
+      target.gamePlayers.some((gp) => !rosterIdSet.has(gp.playerId) && !opponentRosterIds.has(gp.playerId));
     const snapshot = games;
     setGames((prev) => prev.map((g) => {
-      if (g.id === gameId) return { ...g, kind };
+      if (g.id === gameId) {
+        const cleaned = hadIneligibleOnOurSide
+          ? {
+              ...g,
+              kind,
+              gamePlayers: [
+                ...oppPlayerEntries,
+                ...g.gamePlayers.filter((gp) => rosterIdSet.has(gp.playerId)),
+              ],
+            }
+          : { ...g, kind };
+        return cleaned;
+      }
       if (kind === "principal" && g.categoryId === target.categoryId && g.kind === "principal") {
         return { ...g, kind: "league" };
       }
@@ -295,7 +382,14 @@ export default function LineupBuilderPage() {
       { action: "set_kind", gameId, kind },
       () => setGames(snapshot),
     );
+    // If we dropped non-roster players in the optimistic update, push
+    // the new roster-only player list to the server too — set_kind
+    // alone doesn't touch gamePlayers.
+    if (hadIneligibleOnOurSide) {
+      void assignPlayers(gameId, ourPlayerIds);
+    }
   };
+
 
   // Schedule update — PATCH directly (not the action-dispatched POST).
   // Optimistic: flip locally, fetch in background.
@@ -319,10 +413,16 @@ export default function LineupBuilderPage() {
     await loadAll();
   };
 
-  // Whether opponent rosters/sign-ups are revealed. We reveal once both
-  // teams have set lineupReady (or for league organizers/admin via the
-  // server, who get full data anyway).
-  const bothReady = !!(team && opponentTeam && readyByTeam[team.id] && readyByTeam[opponentTeam.id]);
+  // Whether opponent rosters/sign-ups are revealed. The reveal is now
+  // LATCHED on the event-level `lineupTotalLocked` field: once both
+  // teams hit lineupReady=true the latch fires permanently. After
+  // that, opponent data stays visible even if a team unlocks for a
+  // joint edit. Pre-latch we fall back to the legacy "both currently
+  // ready" check so any historical events without the new column
+  // still work. League organizers/admin always get full data from
+  // the server regardless.
+  const bothReady = lineupTotalLocked
+    || !!(team && opponentTeam && readyByTeam[team.id] && readyByTeam[opponentTeam.id]);
   // Only the home team's captain/vice (or a league organizer / app admin)
   // may set scheduledAt + courtNum on each game.
   const isHostCaptain = !!(team && hostTeamId === team.id && isTeamLeader);
@@ -338,7 +438,7 @@ export default function LineupBuilderPage() {
   // and not pickable.
   // All pools are filtered to players whose gender matches the category:
   //   male → "M", female → "F", mix/open → everyone (incl. unknown gender).
-  const buildPools = (cat: Category) => {
+  const buildPools = (cat: Category, kind: "principal" | "league" | "extra" = "principal") => {
     const matchesGender = (g: string | null | undefined) => {
       if (cat.gender === "male") return g === "M";
       if (cat.gender === "female") return g === "F";
@@ -348,18 +448,24 @@ export default function LineupBuilderPage() {
     const recommended: PlayerLite[] = [];
     const allSignups: PlayerLite[] = [];
     const opponentSignups: PlayerLite[] = [];
+    // Friendly-only pool: anyone signed up to the event who isn't on
+    // our roster AND isn't on the opposing team's roster. Empty when
+    // the slot is Principal/League (those require roster-only).
+    const friendlyExtras: PlayerLite[] = [];
     for (const s of signups) {
       if (!matchesGender(s.player.gender)) continue;
       const pl: PlayerLite = { ...s.player, gender: s.player.gender ?? null };
       const onRoster = rosterById.has(s.playerId);
+      const onOpponentRoster = opponentRosterIds.has(s.playerId);
       if (onRoster) {
         allSignups.push(pl);
         const pref = s.signupPreferences?.[cat.id]?.level;
         if (pref === "prefer" || pref === "ok") recommended.push(pl);
-      } else if (bothReady) {
-        // Show opponent sign-ups only after the reveal. Useful for matchup
-        // visibility — captain can see who they'll play against.
-        opponentSignups.push(pl);
+      } else if (onOpponentRoster) {
+        if (bothReady) opponentSignups.push(pl);
+      } else if (kind === "extra") {
+        // Non-roster signup, not on either team — eligible for friendly.
+        friendlyExtras.push(pl);
       }
     }
     const filteredRoster = roster.filter((p) => matchesGender(p.gender));
@@ -369,16 +475,48 @@ export default function LineupBuilderPage() {
       allSignups: allSignups.sort(byName),
       opponentSignups: opponentSignups.sort(byName),
       roster: filteredRoster.sort(byName),
+      friendlyExtras: friendlyExtras.sort(byName),
     };
   };
 
   const back = () => router.push(`/events/${eventId}`);
 
-  if (loading) return <div className="text-sm text-muted py-8 text-center">Loading lineup…</div>;
+  // Header content. Rendered immediately (even during initial load) so the
+  // user sees the league/round context before the body resolves. Fields
+  // fill in as loadAll() populates state.
+  const headerTitle = (() => {
+    const round = roundName || (roundNumber ? `Round ${roundNumber}` : null);
+    if (leagueName && round) return `${leagueName} - ${round}`;
+    return leagueName || round || "Lineup";
+  })();
+  const headerMeta = (() => {
+    const dateStr = eventDate
+      ? new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+      : null;
+    const parts = [eventLocation, dateStr].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
+  })();
+  const headerEl = (
+    <AppHeader
+      variant="hero-sub"
+      title={headerTitle}
+      meta={headerMeta}
+      back={{ label: "Back to event", onClick: back }}
+    />
+  );
+
+  if (loading) {
+    return (
+      <>
+        {headerEl}
+        <div className="text-sm text-muted py-8 text-center">Loading lineup…</div>
+      </>
+    );
+  }
   if (!team || !canEdit) {
     return (
       <>
-        <AppHeader variant="hero-sub" title="Lineup" back={{ label: "Back", onClick: back }} />
+        {headerEl}
         <div className="space-y-2">
           <div className={`${frameClass} p-4 text-sm`}>
             You don&apos;t have permission to edit this team&apos;s lineup.
@@ -390,43 +528,64 @@ export default function LineupBuilderPage() {
 
   return (
     <>
-      <AppHeader
-        variant="hero-sub"
-        title={`Lineup — ${team.name}`}
-        meta={opponentTeam ? `vs ${opponentTeam.name}` : undefined}
-        back={{ label: "Back to event", onClick: back }}
-      />
+      {headerEl}
     <div className="space-y-2">
 
       <div className={`${frameClass} p-4 space-y-2`}>
-        {(leagueName || eventDate) && (
+        {/* "vs {opponent}" context — used to live in the header meta, but
+            the meta now carries location + date. Keep a small line here
+            so the team-vs-opponent framing stays visible. */}
+        {(team || opponentTeam) && (
           <div className="text-[11px] text-muted">
-            {leagueName}
-            {leagueName && eventDate && " · "}
-            {eventDate && new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+            {team?.name}
+            {team && opponentTeam && " vs "}
+            {opponentTeam?.name}
           </div>
         )}
 
-        {/* Done picking — per-team flag. Until both teams flip true, each
-            team only sees its own players in the rows below. */}
+        {/* Lineup-lock state. Five distinct UI states:
+              1. Pre-reveal, nobody ready → "Mark as done when final."
+              2. Pre-reveal, I'm ready, opponent isn't → "Waiting for {opp}"
+              3. Both ready → reveal-latch fires → "Lineups revealed and locked."
+              4. Post-reveal, both unlocked → "Joint editing — mutual unlock."
+              5. Post-reveal, one side unlocked → "waiting on the
+                 opposing team to unlock for joint editing"
+            The latched `lineupTotalLocked` distinguishes pre/post-reveal. */}
         {(() => {
           const myReady = team ? !!readyByTeam[team.id] : false;
           const oppReady = opponentTeam ? !!readyByTeam[opponentTeam.id] : false;
+          const totalLocked = lineupTotalLocked;
           const bothReady = myReady && oppReady;
+          const bothUnlocked = !myReady && !oppReady;
+
+          let bg = "bg-gray-50 border-border";
+          let primary = "Mark as done when your lineup is final.";
+          if (bothReady) {
+            bg = "bg-emerald-50 border-emerald-200";
+            primary = totalLocked
+              ? "Lineups revealed and locked."
+              : "Both teams done picking — lineups revealed.";
+          } else if (totalLocked) {
+            bg = bothUnlocked
+              ? "bg-blue-50 border-blue-200"
+              : "bg-amber-50 border-amber-200";
+            primary = bothUnlocked
+              ? "Joint editing open — both teams unlocked."
+              : myReady
+                ? `Waiting on ${opponentTeam?.name || "the opposing team"} to unlock for joint editing.`
+                : `waiting on ${opponentTeam?.name || "the opposing team"} to unlock for joint editing`;
+          } else if (myReady) {
+            bg = "bg-amber-50 border-amber-200";
+            primary = `Waiting for ${opponentTeam?.name || "opponent"}…`;
+          }
+
           return (
-            <div className={`mt-1 rounded-lg border p-2 flex items-center justify-between gap-2 ${
-              bothReady ? "bg-emerald-50 border-emerald-200"
-              : myReady ? "bg-amber-50 border-amber-200"
-              : "bg-gray-50 border-border"
-            }`}>
+            <div className={`mt-1 rounded-lg border p-2 flex items-center justify-between gap-2 ${bg}`}>
               <div className="flex-1 text-xs">
-                <div className="font-medium">
-                  {bothReady ? "Both teams done picking — lineups revealed."
-                    : myReady ? `Waiting for ${opponentTeam?.name || "opponent"}…`
-                    : "Mark as done when your lineup is final."}
-                </div>
+                <div className="font-medium">{primary}</div>
                 <div className="text-[10px] text-muted">
-                  {opponentTeam?.name || "Opponent"}: {oppReady ? "✓ done" : "still picking"}
+                  {opponentTeam?.name || "Opponent"}: {oppReady ? "✓ locked" : "unlocked"}
+                  {totalLocked && <span className="ml-2 text-emerald-700">· lineups revealed</span>}
                 </div>
               </div>
               <button
@@ -436,7 +595,7 @@ export default function LineupBuilderPage() {
                 className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap ${
                   myReady ? "bg-gray-200 text-foreground" : "bg-action text-white"
                 } disabled:opacity-50`}
-              >{myReady ? "Re-open" : "Mark done"}</button>
+              >{myReady ? "Re-open" : "Team Lineup Finalized"}</button>
             </div>
           );
         })()}
@@ -447,6 +606,25 @@ export default function LineupBuilderPage() {
         <p className="text-[11px] text-muted">
           Tick the slots your team wants to play. Then assign your players. The opponent sees the same grid and ticks their own. One game per category should be marked as <span className="font-medium">Principal</span> — that&apos;s the match that counts for category standings.
         </p>
+        {/* Event-wide cap on Principal + League matches. Friendly
+            matches don't count against the cap. Count line is always
+            shown; the warning is on its own row only when at cap. */}
+        {maxMatchesPerEvent !== null && (() => {
+          const used = games.filter((g) => g.kind === "principal" || g.kind === "league").length;
+          const atCap = used >= maxMatchesPerEvent;
+          return (
+            <div className={`text-[11px] rounded px-2 py-1 space-y-0.5 ${atCap ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-muted bg-gray-50 border border-border"}`}>
+              <div>
+                Principal + League matches: <span className="font-semibold">{used} / {maxMatchesPerEvent}</span>
+              </div>
+              {atCap && (
+                <div className="font-medium">
+                  Cap reached. You can however add <span className="font-semibold">Friendly</span> matches.
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {categories.map((cat) => {
@@ -455,15 +633,22 @@ export default function LineupBuilderPage() {
           .filter((g) => g.categoryId === cat.id)
           .map((g) => g.slotNumber);
         const maxExisting = Math.max(0, ...existingSlots);
-        // Visible rows = slots already created + however many empty rows the
-        // captain has explicitly added (via the "+ Add match" pill). Always
-        // show at least 1 row so a fresh category has a checkbox to tick.
+        // Base rows: at least 1 so every category lights up with its first
+        // match row pre-displayed (no need to tap "+ Add match" before
+        // starting). extraSlots can be NEGATIVE: the captain can ✕ that
+        // first row away — the category card stays, the slot disappears,
+        // and "+ Add match" brings it back. Existing games (maxExisting)
+        // floor the count so a row with a real game can't be hidden via ✕.
+        const baseRows = Math.max(maxExisting, 1);
         const visibleSlotCount = Math.min(
           max,
-          Math.max(1, maxExisting + (extraSlots[cat.id] || 0)),
+          Math.max(maxExisting, baseRows + (extraSlots[cat.id] || 0)),
         );
         const slots = Array.from({ length: visibleSlotCount }, (_, i) => i + 1);
         const canAddMore = visibleSlotCount < max;
+        // Principal-per-category cap: only ONE principal per category in
+        // an event. Once a principal exists, the toggle for other slots
+        // is blocked (host can demote it first to flip another).
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
 
         return (
@@ -494,14 +679,22 @@ export default function LineupBuilderPage() {
 
               return (
                 <div key={slotNum} className={`relative border rounded-lg p-2 ${isPrincipal ? "border-emerald-300 bg-emerald-50/40" : "border-border"}`}>
-                  {/* Hide an empty extra row the captain added but didn't tick.
-                      Top-right red ✕, only when the row hasn't been ticked yet
-                      (rows with a game must be unticked to remove). */}
-                  {!ourWants && !g && slotNum > 1 && (
+                  {/* Top-right red ✕: hide this match row. Works whenever
+                      the captain hasn't assigned any of OUR players yet —
+                      including a ticked Match 1 that hasn't been filled.
+                      Untickes if we'd ticked, then hides the row. If the
+                      opponent is still up for this slot the row will
+                      stay visible (driven by the existing game). The
+                      category card itself always stays so "+ Add match"
+                      can bring the row back. */}
+                  {!locked && !ourLocked && ourPlayers.length === 0 && (
                     <button
                       type="button"
                       aria-label="Hide this match row"
-                      onClick={() => setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.max(0, (prev[cat.id] || 0) - 1) }))}
+                      onClick={() => {
+                        if (g && ourWants) toggleSlot(cat.id, slotNum, false);
+                        setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                      }}
                       className="absolute top-1 right-1 text-danger hover:bg-red-50 rounded w-5 h-5 flex items-center justify-center text-xs leading-none"
                     >✕</button>
                   )}
@@ -515,25 +708,90 @@ export default function LineupBuilderPage() {
                       />
                       <span className="text-xs font-medium">Match {slotNum}</span>
                     </label>
-                    {g && (
-                      <div className="flex items-center gap-1.5">
-                        {(["principal", "league", "extra"] as const).map((k) => (
-                          <button
-                            key={k}
-                            type="button"
-                            disabled={saving || locked || ourLocked || (k === "principal" && isPrincipal && principalCount > 1)}
-                            onClick={() => setKind(g.id, k)}
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                              g.kind === k
-                                ? k === "principal" ? "bg-emerald-500 text-white"
-                                  : k === "league"  ? "bg-blue-500 text-white"
-                                  : "bg-gray-500 text-white"
-                                : "bg-gray-100 text-muted hover:bg-gray-200"
-                            }`}
-                          >{k}</button>
-                        ))}
-                      </div>
-                    )}
+                    {g && (() => {
+                      // Three kinds via a native <select>. Underlying
+                      // values: principal | league | extra (labelled
+                      // "Friendly" in the UI). Only HOST captain /
+                      // league admin / app admin can flip — away captain
+                      // sees a read-only chip.
+                      const canFlipKind = canSchedule && !locked && !ourLocked;
+                      // Per-category cap: only ONE principal allowed.
+                      const promoteBlocked = g.kind !== "principal" && principalCount >= 1;
+                      // Event-wide cap: Principal + League ≤ maxMatchesPerEvent.
+                      // Friendly is unlimited (doesn't count toward the cap).
+                      // Switching to a "counting" kind is blocked when adding
+                      // would push the total over the cap.
+                      const countingNow = games.filter((gg) => gg.kind === "principal" || gg.kind === "league").length;
+                      const currentCounts = g.kind === "principal" || g.kind === "league";
+                      const wouldGoOverCap = (kind: "principal" | "league" | "extra") => {
+                        if (maxMatchesPerEvent === null) return false;
+                        const future = countingNow + (kind === "principal" || kind === "league" ? 1 : 0) - (currentCounts ? 1 : 0);
+                        return future > maxMatchesPerEvent;
+                      };
+                      const kinds: { key: "principal" | "league" | "extra"; label: string }[] = [
+                        { key: "principal", label: "Principal" },
+                        { key: "league",    label: "League" },
+                        { key: "extra",     label: "Friendly" },
+                      ];
+                      const colorClass =
+                        g.kind === "principal" ? "border-emerald-400 text-emerald-700 bg-emerald-50"
+                          : g.kind === "league" ? "border-blue-400 text-blue-700 bg-blue-50"
+                          : "border-gray-300 text-muted bg-gray-50";
+                      if (!canFlipKind) {
+                        // Away-team view: read-only chip. Tooltip
+                        // explains that the host controls the setting,
+                        // so any disagreement is a conversation, not a
+                        // UI race.
+                        const hostName = hostTeamId === team?.id
+                          ? team?.name
+                          : (opponentTeam?.id === hostTeamId ? opponentTeam?.name : "the host");
+                        return (
+                          <span
+                            title={`The hosting team (${hostName ?? "host"}) controls this value. Talk with them to agree.`}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${colorClass}`}
+                          >
+                            {kinds.find((k) => k.key === g.kind)?.label ?? g.kind}
+                          </span>
+                        );
+                      }
+                      return (
+                        <select
+                          value={g.kind}
+                          disabled={saving}
+                          title={`Discuss with ${opponentTeam?.name || "the away team"} before changing.`}
+                          onChange={(e) => {
+                            const next = e.target.value as "principal" | "league" | "extra";
+                            if (next === g.kind) return;
+                            if (next === "principal" && promoteBlocked) {
+                              void alertDialog(
+                                "Another match in this category is already Principal. Change that one to League or Friendly first.",
+                                "Only one Principal per category",
+                              );
+                              return;
+                            }
+                            if (wouldGoOverCap(next)) {
+                              void alertDialog(
+                                `This match-day allows at most ${maxMatchesPerEvent} Principal + League matches combined. Switch one of the existing ones to Friendly first to free up a slot.`,
+                                "Match-day cap reached",
+                              );
+                              return;
+                            }
+                            setKind(g.id, next);
+                          }}
+                          className={`text-[10px] font-medium border rounded-full pl-2 pr-5 py-0.5 appearance-none cursor-pointer ${colorClass}`}
+                          style={{
+                            backgroundImage:
+                              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
+                            backgroundRepeat: "no-repeat",
+                            backgroundPosition: "right 4px center",
+                          }}
+                        >
+                          {kinds.map((k) => (
+                            <option key={k.key} value={k.key}>{k.label}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
 
                   {/* Schedule (host-team captain only). Time + court inputs.
@@ -543,8 +801,13 @@ export default function LineupBuilderPage() {
                       <label className="text-muted">Start</label>
                       <input
                         type="time"
+                        step={300}
                         disabled={saving || !!g.winnerId}
-                        defaultValue={g.scheduledAt ? new Date(g.scheduledAt).toTimeString().slice(0, 5) : ""}
+                        defaultValue={(() => {
+                          if (!g.scheduledAt) return "";
+                          const d = new Date(g.scheduledAt);
+                          return isNaN(d.getTime()) ? "" : d.toTimeString().slice(0, 5);
+                        })()}
                         onBlur={(e) => {
                           const hhmm = e.target.value;
                           if (!hhmm) {
@@ -553,8 +816,15 @@ export default function LineupBuilderPage() {
                           }
                           // Combine the time-of-day with the event's calendar
                           // date. (HTML <input type="time"> only gives HH:MM.)
-                          const base = eventDate ? new Date(eventDate) : new Date();
+                          // Defensive: if eventDate is missing or corrupt
+                          // (which has produced "Invalid Date" in the
+                          // wild), fall back to today's date — otherwise
+                          // base.toISOString() throws and we'd silently
+                          // ship "Invalid Date" downstream.
+                          let base = eventDate ? new Date(eventDate) : new Date();
+                          if (isNaN(base.getTime())) base = new Date();
                           const [hh, mm] = hhmm.split(":").map((s) => parseInt(s, 10));
+                          if (Number.isNaN(hh) || Number.isNaN(mm)) return;
                           base.setHours(hh, mm, 0, 0);
                           const iso = base.toISOString();
                           if (iso !== g.scheduledAt) setSchedule(g.id, { scheduledAt: iso });
@@ -562,22 +832,29 @@ export default function LineupBuilderPage() {
                         className="border border-border rounded px-1.5 py-0.5 text-[11px]"
                       />
                       <label className="text-muted">Court</label>
-                      <input
-                        type="number"
-                        min={1}
+                      <select
                         disabled={saving || !!g.winnerId}
-                        defaultValue={g.courtNum ?? ""}
-                        onBlur={(e) => {
+                        value={g.courtNum ?? ""}
+                        onChange={(e) => {
                           const raw = e.target.value;
                           const n = raw === "" ? null : parseInt(raw, 10);
                           if (n !== (g.courtNum ?? null)) setSchedule(g.id, { courtNum: n });
                         }}
-                        className="w-12 border border-border rounded px-1.5 py-0.5 text-[11px]"
-                      />
+                        className="border border-border rounded px-1 py-0.5 text-[11px] bg-white"
+                      >
+                        <option value="">—</option>
+                        {Array.from({ length: eventNumCourts }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n}>Court {n}</option>
+                        ))}
+                      </select>
                     </div>
                   ) : (g.scheduledAt || g.courtNum) ? (
                     <div className="mt-2 text-[11px] text-muted flex items-center gap-2">
-                      {g.scheduledAt && <span>⏰ {new Date(g.scheduledAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>}
+                      {g.scheduledAt && (() => {
+                        const d = new Date(g.scheduledAt);
+                        if (isNaN(d.getTime())) return null;
+                        return <span>⏰ {d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>;
+                      })()}
                       {g.courtNum != null && <span>· Court {g.courtNum}</span>}
                     </div>
                   ) : null)}
@@ -585,17 +862,23 @@ export default function LineupBuilderPage() {
                   {ourWants && g && (
                     <div className="mt-2 space-y-1">
                       <div className="text-[10px] uppercase tracking-wide text-muted">Your players</div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {ourPlayers.map((p) => (
-                          <span key={p.id} className="px-2 py-1 rounded-full bg-action/10 text-foreground text-xs">{p.name}</span>
-                        ))}
+                      {/* Pills row + a right-anchored action button. Pinning
+                          the button to the right with ml-auto keeps it in
+                          a consistent spot across all match cards, no
+                          matter how few/many pills are rendered. */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                          {ourPlayers.map((p) => (
+                            <span key={p.id} className="px-2 py-1 rounded-full bg-action/10 text-foreground text-xs">{p.name}</span>
+                          ))}
+                        </div>
                         <button
                           type="button"
                           disabled={saving || locked || ourLocked}
                           onClick={() => setPicker({ categoryId: cat.id, slotNumber: slotNum, which: ourPlayers.length === 0 || !isDoubles(cat) ? 1 : 2 })}
-                          className="text-xs text-action font-medium px-2 py-1 rounded-full border border-dashed border-action/40 hover:bg-action/5 disabled:opacity-50"
+                          className="shrink-0 ml-auto text-xs text-action font-medium px-2 py-1 rounded-full border border-dashed border-action/40 hover:bg-action/5 disabled:opacity-50"
                         >
-                          {ourPlayers.length === 0 ? "+ Pick" : isDoubles(cat) && ourPlayers.length < 2 ? "+ Partner" : "Change"}
+                          {ourPlayers.length === 0 ? "+ Pick" : isDoubles(cat) && ourPlayers.length < 2 ? "+ Partner" : "Change Player(s)"}
                         </button>
                       </div>
                     </div>
@@ -633,16 +916,55 @@ export default function LineupBuilderPage() {
         if (!cat) return null;
         const g = gameByKey.get(`${picker.categoryId}:${picker.slotNumber}`);
         if (!g) return null;
-        const pools = buildPools(cat);
+        const pools = buildPools(cat, g.kind);
         const currentIds = ourPlayersForGame(g).map((p) => p.id);
+        // Mixed doubles: after the first pick, hide players of the same
+        // gender — the second slot must be the other gender. Looks up the
+        // first picked player's gender across all candidate pools.
+        const isMixedDoubles = isDoubles(cat) && cat.gender === "mix";
+        const firstPick = currentIds[0]
+          ? [...pools.recommended, ...pools.allSignups, ...pools.roster, ...pools.opponentSignups, ...pools.friendlyExtras].find((p) => p.id === currentIds[0])
+          : null;
+        const excludeGender = isMixedDoubles && firstPick?.gender ? firstPick.gender : null;
+        // Always hide already-picked players from the pools below — they
+        // live in the "Selected" panel at the top. Also drops same-gender
+        // candidates when this is a mixed-doubles second-slot scenario.
+        const filterMix = <T extends PlayerLite>(arr: T[]): T[] => {
+          return arr.filter((p) => {
+            if (currentIds.includes(p.id)) return false;
+            if (excludeGender && p.gender === excludeGender) return false;
+            return true;
+          });
+        };
         const close = () => setPicker(null);
         const choose = async (pid: string) => {
-          // Singles → replace. Doubles → toggle in/out, capped at 2.
+          // Singles → replace. Doubles → toggle in/out. When 2 are already
+          // picked AND the user taps an UNSELECTED player, bail with a
+          // hint instead of silently replacing the oldest pick — the
+          // implicit-replace was confusing ("which one did I lose?").
           let next: string[];
-          if (!isDoubles(cat)) next = [pid];
-          else if (currentIds.includes(pid)) next = currentIds.filter((x) => x !== pid);
-          else if (currentIds.length >= 2) next = [currentIds[1], pid];
-          else next = [...currentIds, pid];
+          if (!isDoubles(cat)) {
+            next = [pid];
+          } else if (currentIds.includes(pid)) {
+            // Tap a selected player → deselect. Close the picker so the
+            // captain sees the slot update and can re-open it to add a
+            // replacement explicitly.
+            next = currentIds.filter((x) => x !== pid);
+            setPicker(null);
+            void assignPlayers(g.id, next);
+            return;
+          } else if (currentIds.length >= 2) {
+            const playerName = pools.roster.find((p) => p.id === pid)?.name
+              || pools.allSignups.find((p) => p.id === pid)?.name
+              || "Player";
+            await alertDialog(
+              `Tap one of the already-picked players to remove them first, then pick ${playerName}.`,
+              "Both slots full",
+            );
+            return;
+          } else {
+            next = [...currentIds, pid];
+          }
           // If they haven't signed up yet, offer to fill their preferences
           // on their behalf (common when a player doesn't have the app).
           const su = signups.find((s) => s.playerId === pid);
@@ -654,7 +976,10 @@ export default function LineupBuilderPage() {
               confirmText: "Open",
             });
             if (!ok) return;
-            router.push(`/events/${eventId}/sign-up?for=${pid}`);
+            // Pass returnTo so after saving the captain returns to the
+            // lineup picker instead of dropping to the public event page.
+            const returnTo = encodeURIComponent(`/leagues/${id}/events/${eventId}/lineup/${teamId}`);
+            router.push(`/events/${eventId}/sign-up?for=${pid}&returnTo=${returnTo}`);
             return;
           }
           if (su.status === "unavailable") {
@@ -666,7 +991,15 @@ export default function LineupBuilderPage() {
             });
             if (!ok) return;
           }
-          await assignPlayers(g.id, next);
+          // Auto-close once the slot is fully filled: 1 for singles, 2 for
+          // doubles. For doubles still building toward 2, leave the picker
+          // open so the captain can pick the partner.
+          const slotComplete = !isDoubles(cat) ? next.length >= 1 : next.length >= 2;
+          if (slotComplete) setPicker(null);
+          // Fire and forget — the optimistic update inside assignPlayers
+          // has already flipped the UI. Awaiting here would block the
+          // close above behind the network round-trip.
+          void assignPlayers(g.id, next);
         };
 
         const Section = ({ title, players, hint, readOnly }: { title: string; players: PlayerLite[]; hint?: string; readOnly?: boolean }) => (
@@ -691,8 +1024,8 @@ export default function LineupBuilderPage() {
                   }`}
                 >
                   <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                  {p.gender && <span className={`text-xs shrink-0 ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{p.gender === "F" ? "♀" : "♂"}</span>}
                   <span className={`flex-1 text-left text-sm ${cantCome ? "line-through text-muted" : ""}`}>{p.name}</span>
-                  {p.gender && <span className={`text-xs ${p.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{p.gender === "F" ? "♀" : "♂"}</span>}
                   {cantCome && <span className="text-[10px] text-rose-600">unavailable</span>}
                   {noPref && !cantCome && <span className="text-[10px] text-amber-600">said &ldquo;no&rdquo;</span>}
                 </RowTag>
@@ -702,23 +1035,104 @@ export default function LineupBuilderPage() {
         );
 
         return (
-          <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" onClick={close}>
-            <div className="bg-card w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-border p-3 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-2">
+          <div
+            className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center overscroll-contain"
+            onClick={close}
+            // Block touchmoves on the dim layer so swipes outside the
+            // sheet don't scroll the page beneath. The inner sheet stops
+            // propagation so its own touchmoves still scroll it.
+            onTouchMove={(e) => e.preventDefault()}
+          >
+            <div
+              className="bg-card w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-border p-3 max-h-[85vh] overflow-y-auto overscroll-contain flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-2 sticky top-0 bg-card pt-1 pb-2 -mt-1 z-10">
                 <h3 className="text-sm font-semibold">Pick player — {cat.name} match {picker.slotNumber}</h3>
                 <button onClick={close} className="text-muted text-sm">Done</button>
               </div>
+              {/* Live "Selected" summary at the top of the sheet so the
+                  user gets instant feedback after each tap — instead of
+                  having to glance behind the modal to verify. Includes
+                  per-pick remove (×) and a Clear all when ≥1 picked. */}
+              {(() => {
+                const slotCap = isDoubles(cat) ? 2 : 1;
+                const selectedPlayers = currentIds
+                  .map((pid) =>
+                    [...pools.recommended, ...pools.allSignups, ...pools.roster].find((p) => p.id === pid)
+                      ?? ourPlayersForGame(g).find((p) => p.id === pid) // fallback if pool doesn't include them
+                      ?? null,
+                  )
+                  .filter((p): p is PlayerLite => !!p);
+                return (
+                  <div className="mb-2 rounded-lg border border-border bg-gray-50 px-2 py-1.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] uppercase tracking-wide text-muted">
+                        Selected ({selectedPlayers.length}/{slotCap})
+                      </span>
+                      {selectedPlayers.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => { setPicker(null); void assignPlayers(g.id, []); }}
+                          className="text-[11px] text-danger font-medium hover:underline"
+                        >Clear all</button>
+                      )}
+                    </div>
+                    {selectedPlayers.length === 0 ? (
+                      <div className="text-[11px] text-muted italic">No players picked yet — tap a name below.</div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedPlayers.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              const next = currentIds.filter((x) => x !== p.id);
+                              setPicker(null);
+                              void assignPlayers(g.id, next);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-action/10 text-foreground text-xs border border-action/30 hover:bg-action/15"
+                            title="Tap to remove"
+                          >
+                            <span>{p.name}</span>
+                            {p.gender && (
+                              <span className={p.gender === "F" ? "text-pink-500" : "text-blue-500"}>
+                                {p.gender === "F" ? "♀" : "♂"}
+                              </span>
+                            )}
+                            <span className="text-muted">×</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {excludeGender && (
+                <div className="text-[10px] text-muted bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                  Mixed match — partner must be {excludeGender === "M" ? "♀ female" : "♂ male"}.
+                </div>
+              )}
+              {g.kind === "extra" && (
+                <div className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 mb-2">
+                  Friendly match — anyone signed up to the event can play (except the opposing team&apos;s roster).
+                </div>
+              )}
               <div className="space-y-3">
-                <Section title="Recommended" hint="signed up + prefer/ok" players={pools.recommended} />
+                <Section title="Recommended" hint="signed up + prefer/ok" players={filterMix(pools.recommended)} />
                 {bothReady && pools.opponentSignups.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
-                    <Section title={`${team!.name} sign-ups`} players={pools.allSignups.filter((p) => !pools.recommended.some((r) => r.id === p.id))} />
-                    <Section title={`${opponentTeam?.name || "Opponent"} sign-ups`} players={pools.opponentSignups} readOnly />
+                    <Section title={`${team!.name} sign-ups`} players={filterMix(pools.allSignups.filter((p) => !pools.recommended.some((r) => r.id === p.id)))} />
+                    <Section title={`${opponentTeam?.name || "Opponent"} sign-ups`} players={filterMix(pools.opponentSignups)} readOnly />
                   </div>
                 ) : (
-                  <Section title="All sign-ups" players={pools.allSignups.filter((p) => !pools.recommended.some((r) => r.id === p.id))} />
+                  <Section title="All sign-ups" players={filterMix(pools.allSignups.filter((p) => !pools.recommended.some((r) => r.id === p.id)))} />
                 )}
-                <Section title="Roster" players={pools.roster.filter((p) => !pools.allSignups.some((s) => s.id === p.id))} />
+                <Section title="Roster" players={filterMix(pools.roster.filter((p) => !pools.allSignups.some((s) => s.id === p.id)))} />
+                {g.kind === "extra" && pools.friendlyExtras.length > 0 && (
+                  <Section title="Other event sign-ups" hint="friendly only" players={filterMix(pools.friendlyExtras)} />
+                )}
               </div>
             </div>
           </div>

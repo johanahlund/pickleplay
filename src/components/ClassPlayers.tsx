@@ -64,7 +64,9 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
   useEffect(() => { fetchClassPlayers(); }, [fetchClassPlayers]);
 
   const fetchAllPlayers = async () => {
-    const r = await fetch("/api/players");
+    // High limit so the add-player picker sees every candidate, not just
+    // the top 100 by rating.
+    const r = await fetch("/api/players?limit=5000");
     if (r.ok) setAllPlayers(await r.json());
   };
 

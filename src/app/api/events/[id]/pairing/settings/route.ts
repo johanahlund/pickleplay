@@ -29,8 +29,18 @@ export async function PUT(
 
   // Whitelist allowed top-level keys and shapes.
   const s = body.settings as Record<string, unknown>;
-  const cleaned = {
-    base: validString(s.base, ["random", "swiss", "king", "manual"], "random"),
+  const baseModes = ["random", "swiss", "king", "manual", "skill"] as const;
+  const cleaned: {
+    base: typeof baseModes[number];
+    teams: "fixed" | "rotating";
+    gender: "mixed" | "random" | "same";
+    skillWindow: number | "inf";
+    matchCountWindow: number | "inf";
+    varietyWindow: number | "inf";
+    maxWaitWindow: number | "inf";
+    activeMode?: typeof baseModes[number];
+  } = {
+    base: validString(s.base, [...baseModes], "random"),
     teams: validString(s.teams, ["fixed", "rotating"], "rotating"),
     gender: validString(s.gender, ["mixed", "random", "same"], "random"),
     skillWindow: validWindow(s.skillWindow),
@@ -38,6 +48,10 @@ export async function PUT(
     varietyWindow: validWindow(s.varietyWindow),
     maxWaitWindow: validWindow(s.maxWaitWindow),
   };
+  // activeMode: same set as base modes; undefined means "use base".
+  if (typeof s.activeMode === "string" && (baseModes as readonly string[]).includes(s.activeMode)) {
+    cleaned.activeMode = s.activeMode as typeof baseModes[number];
+  }
 
   // Verify the class belongs to this event.
   const cls = await prisma.eventClass.findUnique({

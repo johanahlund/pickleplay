@@ -97,7 +97,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Only the home team's captain/vice or a league organizer can schedule this match." }, { status: 403 });
     }
     if (body.scheduledAt !== undefined) {
-      data.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+      if (body.scheduledAt) {
+        const d = new Date(body.scheduledAt);
+        if (isNaN(d.getTime())) {
+          return NextResponse.json({ error: "Invalid scheduledAt — expected ISO datetime" }, { status: 400 });
+        }
+        data.scheduledAt = d;
+      } else {
+        data.scheduledAt = null;
+      }
     }
     if (body.courtNum !== undefined) {
       const n = body.courtNum === null || body.courtNum === "" ? null : Number(body.courtNum);

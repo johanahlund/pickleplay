@@ -14,6 +14,7 @@ import { usePollingRefresh } from "@/lib/hooks";
 import { eventDisplayLabel } from "@/lib/statusDisplay";
 import { eventStatusBadgeClass } from "@/lib/statusBadge";
 import { frameClass } from "@/components/Card";
+import { nameMatchesSearch } from "@/lib/searchUtil";
 
 interface Event {
   id: string;
@@ -29,11 +30,12 @@ interface Event {
   openSignup: boolean;
   visibility: string;
   createdById: string | null;
+  createdBy?: { id: string; name: string; emoji?: string | null; photoUrl?: string | null } | null;
   clubId: string | null;
   roundId?: string | null; // present when this event is attached to a league round
   club?: { id: string; name: string; shortName?: string | null; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null; skillMin?: number | null; skillMax?: number | null }[];
-  players: { player: { name: string; emoji: string; photoUrl?: string | null }; playerId: string; status?: string }[];
+  players: { player: { name: string; emoji: string; photoUrl?: string | null; gender?: string | null }; playerId: string; status?: string }[];
   helpers: { playerId: string }[];
   _count: { matches: number };
 }
@@ -85,7 +87,7 @@ function EventsPage() {
   const [loading, setLoading] = useState(true); // always true on first render to avoid hydration mismatch
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions" | "liga">("all");
   const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
   const [myEventsOnly, setMyEventsOnly] = useState(false);
   const [activeOnly, setActiveOnly] = useState(false);
@@ -95,28 +97,45 @@ function EventsPage() {
   const todayRef = useRef<HTMLDivElement>(null);
   const [scrolledToToday, setScrolledToToday] = useState(false);
 
-  const fetchEvents = useCallback(() => {
-    fetch("/api/events")
-      .then((r) => r.json())
-      .then((data) => {
-        const enriched = (data || []).map((e: Event & { classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string }[] }) => {
-          const cls = e.classes?.find((c) => c.isDefault) || e.classes?.[0];
-          if (cls) {
-            e.format = cls.format;
-            e.scoringFormat = cls.scoringFormat;
-            e.pairingMode = cls.pairingMode;
-          }
-          return e;
-        });
-        setEvents(enriched);
+  const fetchEvents = useCallback(async () => {
+    // Defensive fetch: any non-OK response (401 session expired, 500,
+    // network error, etc.) must NOT leave the page stuck on "loading".
+    // Previously a 401 would return a `{error: ...}` object, .map()
+    // would crash silently, and loading stayed true → blank page.
+    try {
+      const r = await fetch("/api/events");
+      if (!r.ok) {
+        console.warn("[events] fetch failed", r.status);
         setLoading(false);
-        // Refresh the cache so next navigation shows the latest data instantly.
-        try {
-          window.sessionStorage.setItem("events-list-cache", JSON.stringify(enriched));
-        } catch {
-          // ignore quota
+        return;
+      }
+      const data = await r.json().catch(() => null);
+      if (!Array.isArray(data)) {
+        console.warn("[events] non-array response", data);
+        setLoading(false);
+        return;
+      }
+      const enriched = data.map((e: Event & { classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string }[] }) => {
+        const cls = e.classes?.find((c) => c.isDefault) || e.classes?.[0];
+        if (cls) {
+          e.format = cls.format;
+          e.scoringFormat = cls.scoringFormat;
+          e.pairingMode = cls.pairingMode;
         }
+        return e;
       });
+      setEvents(enriched);
+      setLoading(false);
+      // Refresh the cache so next navigation shows the latest data instantly.
+      try {
+        window.sessionStorage.setItem("events-list-cache", JSON.stringify(enriched));
+      } catch {
+        // ignore quota
+      }
+    } catch (err) {
+      console.warn("[events] fetch threw", err);
+      setLoading(false);
+    }
   }, []);
 
   // Fetch user's clubs for filter
@@ -124,11 +143,12 @@ function EventsPage() {
     if (!userId) return;
     fetch("/api/clubs").then((r) => r.ok ? r.json() : []).then((clubs) => {
       setUserClubs(clubs || []);
-      // Default: select all user's clubs (or legacy single club filter)
+      // Default: NO club filter — show every event the user has access
+      // to. Auto-filtering to "my clubs" hid public events from clubs
+      // the user isn't in (or events with no club at all when the user
+      // had clubs). The filter is still available via the Filters panel.
       if (legacyClubFilter) {
         setSelectedClubIds(new Set([legacyClubFilter]));
-      } else if (!clubsLoaded) {
-        setSelectedClubIds(new Set((clubs || []).map((c: UserClub) => c.id)));
       }
       setClubsLoaded(true);
     });
@@ -198,7 +218,12 @@ function EventsPage() {
         if (!e.classes?.some((c) => c.competitionMode)) return false;
       }
       if (typeFilter === "events") {
+        // Social = non-competition AND non-league.
         if (e.classes?.some((c) => c.competitionMode)) return false;
+        if (e.roundId) return false;
+      }
+      if (typeFilter === "liga") {
+        if (!e.roundId) return false;
       }
       // My events only
       if (myEventsOnly && userId) {
@@ -228,19 +253,23 @@ function EventsPage() {
   }
   if (searchQuery) activeFilters.push(`"${searchQuery}"`);
   if (dateFilter !== "all") activeFilters.push(dateFilter === "past7" ? "Past 7d" : dateFilter === "today" ? "Today" : dateFilter === "tomorrow" ? "Tomorrow" : dateFilter === "next7" ? "Next 7d" : "Next 30d");
-  if (typeFilter !== "all") activeFilters.push(typeFilter === "competitions" ? "Competitions" : "Social");
+  if (typeFilter !== "all") activeFilters.push(
+    typeFilter === "competitions" ? "Competitions" :
+    typeFilter === "liga" ? "Liga" :
+    "Social",
+  );
   if (myEventsOnly) activeFilters.push("My events");
   if (activeOnly) activeFilters.push("Live");
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Back link when filtered by club */}
       {legacyClubFilter && (
         <button onClick={() => window.history.back()} className="text-sm text-action font-medium">← Club <span className="text-xs text-muted font-normal">({userClubs.find((c) => c.id === legacyClubFilter)?.name || ""})</span></button>
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mt-1">
+      <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">
           {showFilters ? "Filter Events" : legacyClubFilter ? "Club Events" : "Events"}
         </h2>
@@ -255,35 +284,27 @@ function EventsPage() {
         ) : session?.user ? (
           <Link
             href="/events/new"
-            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+            className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
           >
             + Event
           </Link>
         ) : null}
       </div>
 
-      {/* Filter bar — quick club pills + advanced filter button */}
+      {/* Filter rows. None selected = no constraint. Multi-select on
+          club pills (OR-filter). Type pills are single-select. */}
       {!showFilters && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {userClubs.length > 0 && (() => {
-            const allSelected = selectedClubIds.size === 0 || selectedClubIds.size === userClubs.length;
-            return (
+        <div className="space-y-1.5">
+          {/* Row 1: My clubs pills + My Events button (right) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {userClubs.length > 0 && (
               <>
-                <button
-                  onClick={() => setSelectedClubIds(new Set(userClubs.map((c) => c.id)))}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
-                    allSelected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                  }`}
-                >ALL</button>
+                <span className="text-xs text-muted shrink-0">My clubs:</span>
                 {userClubs.map((c) => {
-                  const selected = !allSelected && selectedClubIds.has(c.id);
+                  const selected = selectedClubIds.has(c.id);
                   return (
                     <button key={c.id}
-                      onClick={() => {
-                        // If ALL is currently active, switching to a single club narrows to just that one.
-                        if (allSelected) { setSelectedClubIds(new Set([c.id])); return; }
-                        toggleClub(c.id);
-                      }}
+                      onClick={() => toggleClub(c.id)}
                       className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
                         selected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
                       }`}
@@ -294,19 +315,51 @@ function EventsPage() {
                   );
                 })}
               </>
-            );
-          })()}
-          <button onClick={() => setShowFilters(true)}
-            className="text-sm px-2 py-1 rounded-lg transition-colors bg-gray-100 text-muted hover:text-foreground ml-auto">
-            ☰ Filter
-          </button>
+            )}
+            <button onClick={() => setMyEventsOnly(!myEventsOnly)}
+              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ml-auto ${
+                myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+              }`}
+            >👤 My Events</button>
+          </div>
+          {/* Row 2: Type pills + Date select (right) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {([
+              { value: "events", label: "🎾 Social" },
+              { value: "competitions", label: "🏆 Competition" },
+              { value: "liga", label: "🥇 Liga" },
+            ] as const).map((t) => (
+              <button key={t.value}
+                onClick={() => setTypeFilter(typeFilter === t.value ? "all" : t.value)}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                  typeFilter === t.value ? "bg-selected text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+                }`}
+              >{t.label}</button>
+            ))}
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="ml-auto text-xs border border-border rounded-full px-2 py-1 bg-white"
+            >
+              <option value="all">All dates</option>
+              <option value="past7">Past 7 days</option>
+              <option value="today">Today</option>
+              <option value="tomorrow">Tomorrow</option>
+              <option value="next7">Next 7 days</option>
+              <option value="next30">Next 30 days</option>
+            </select>
+            <button onClick={() => setShowFilters(true)}
+              className="text-xs text-muted hover:text-foreground px-2 py-1"
+              title="More filters"
+            >☰</button>
+          </div>
           {activeFilters.length > 0 && (
-            <div className="basis-full flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
               {activeFilters.map((f, i) => (
                 <span key={i} className="text-[10px] bg-action/10 text-action px-2 py-0.5 rounded-full font-medium">{f}</span>
               ))}
-              <button onClick={() => { setSelectedClubIds(new Set(userClubs.map((c) => c.id))); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
-                className="text-[10px] text-muted hover:text-foreground px-1">✕</button>
+              <button onClick={() => { setSelectedClubIds(new Set()); setDateFilter("all"); setTypeFilter("all"); setSearchQuery(""); setMyEventsOnly(false); setActiveOnly(false); }}
+                className="text-[10px] text-muted hover:text-foreground px-1">✕ Clear</button>
             </div>
           )}
         </div>
@@ -363,6 +416,7 @@ function EventsPage() {
               { value: "all", label: "All types" },
               { value: "events", label: "🎾 Social" },
               { value: "competitions", label: "🏆 Competition" },
+              { value: "liga", label: "🥇 Liga" },
             ] as const).map((t) => (
               <button key={t.value} onClick={() => setTypeFilter(t.value)}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -459,12 +513,17 @@ function EventsPage() {
                         {eventDisplayLabel(event)}
                       </span>
                     </div>
-                    {/* Time + DUPR */}
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-xs text-muted">
+                    {/* Time + Organizer + DUPR (all same small font) */}
+                    <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                      <span className="text-[10px] text-muted shrink-0">
                         {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                         {event.endDate && ` – ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
                       </span>
+                      {event.createdBy && (
+                        <span className="text-[10px] text-muted truncate">
+                          · Organizer: <span className="text-foreground font-medium">{event.createdBy.name}</span>
+                        </span>
+                      )}
                       {(() => {
                         const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
                         if (!cls?.skillMin && !cls?.skillMax) return null;
@@ -491,11 +550,15 @@ function EventsPage() {
                           const total = event.players.length;
                           const waitlisted = event.players.filter((p) => p.status === "waitlisted").length;
                           const registered = total - waitlisted;
+                          const males = event.players.filter((p) => p.player.gender === "M").length;
+                          const females = event.players.filter((p) => p.player.gender === "F").length;
                           const cls = event.classes?.find((c) => c.isDefault) || event.classes?.[0];
                           const max = cls?.maxPlayers;
                           const isFull = max && registered >= max;
                           return <>
                             {total} players
+                            <span className="text-blue-500"> · {males}♂</span>
+                            <span className="text-pink-500"> · {females}♀</span>
                             {isFull ? <span className="text-amber-600 font-medium"> · Full</span> : max ? ` (max ${max})` : ""}
                             {waitlisted > 0 && <span className="text-amber-600"> · {waitlisted} wl</span>}
                           </>;

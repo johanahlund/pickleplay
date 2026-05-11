@@ -8,3 +8,16 @@ export function clubLabel(club: { shortName?: string | null; name: string } | nu
   if (club.shortName && club.shortName.trim()) return club.shortName.trim();
   return club.name.slice(0, 10);
 }
+
+/**
+ * Display label for a club member's role. The DB stores "owner" / "admin" /
+ * "member" — we keep those values for backwards compatibility but render
+ * "owner" as "Director" in the UI, which matches how clubs talk about
+ * themselves in pickleball culture (a club director, not an "owner").
+ */
+export function clubRoleLabel(role: string | null | undefined): string {
+  if (role === "owner") return "Director";
+  if (role === "admin") return "Admin";
+  if (role === "member") return "Member";
+  return role || "";
+}

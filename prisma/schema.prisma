@@ -33,6 +33,7 @@ model Player {
   role             String  @default("user") // "admin" | "user"
   status           String  @default("active") // "active" | "voided"
   canCreateLeagues Boolean @default(false) // granted by app admin
+  canCreateClubs   Boolean @default(false) // granted by app admin
   inviteToken      String? @unique // for claim-account flow
   resetToken       String? @unique // for password reset flow
 
@@ -40,6 +41,9 @@ model Player {
   gender   String? // "M" | "F"
   phone    String? // WhatsApp number
   photoUrl String?
+  /// ISO 3166-1 alpha-2 country code (e.g. "PT", "ES"). Self-set on
+  /// profile; used as a coarse server-side filter on the players list.
+  country  String?
 
   eventPlayers                 EventPlayer[]
   matchPlayers                 MatchPlayer[]
@@ -65,8 +69,15 @@ model Player {
   leagueHelpers                LeagueHelper[]
   leagueGamePlayers            LeagueGamePlayer[]
   uploadedLeagueDocuments      LeagueDocument[]             @relation("leagueDocumentUploader")
+  leagueAssistantQueries       LeagueAssistantQuery[]       @relation("leagueAssistantQueryAsker")
   leagueParticipationRequests  LeagueParticipationRequest[] @relation("playerLeagueRequests")
   leagueParticipationResponses LeagueParticipationRequest[] @relation("leagueRequestResponder")
+  // Audit
+  addedById     String?
+  addedBy       Player?  @relation("playerAddedBy", fields: [addedById], references: [id])
+  addedPlayers  Player[] @relation("playerAddedBy")
+  createdMatches      Match[]       @relation("matchCreator")
+  createdLeagueGames  LeagueGame[]  @relation("leagueGameCreator")
 }
 
 model Club {
@@ -176,16 +187,22 @@ model Event {
   name       String
   date       DateTime  @default(now())
   endDate    DateTime?
-  // Stored: setup | open | closed | active.
-  //   setup  — organizer configuring; hidden from non-managers
-  //   open   — registration accepted (display: "Registration open")
-  //   closed — registration stopped, captains finalising lineups (display: "Registration closed")
-  //   active — for league events: both teams flipped lineupReady, lineups
-  //            revealed; for non-league events: organizer flipped manually.
-  //            Display phase derived from start/end dates: Scheduled →
-  //            In progress → Completed.
-  // Legacy values still tolerated on read: visible, completed, draft.
+  // Stored: setup | open | closed.
+  //   setup  — being shaped. For LEAGUE events: only league admin can
+  //            see; auto-flips to "open" when the parent Round goes
+  //            Active. For STANDALONE events: creator-only.
+  //   open   — registration accepting sign-ups
+  //   closed — registration locked (no more sign-ups). Nothing to do
+  //            with lineups — that's tracked on Event.lineupTotalLocked
+  //            + leagueTeams[].lineupReady.
+  // Legacy values still tolerated on read: visible, completed, draft, active.
   status     String    @default("setup")
+  /// Cross-team lineup reveal latch. Flips to true the moment BOTH
+  /// teams' `LeagueEventTeam.lineupReady` become true. Never resets to
+  /// false. After it's true, lineup-mutation endpoints require BOTH
+  /// teams to also have lineupReady=false (mutual unlock) — neither
+  /// team can stealth-edit after seeing the opponent's lineup.
+  lineupTotalLocked Boolean @default(false)
   numCourts  Int       @default(2)
   openSignup Boolean   @default(true) // kept for backwards compat
   visibility String    @default("visible") // kept for backwards compat
@@ -209,6 +226,16 @@ model Event {
   parentEventId String?
   parentEvent   Event?  @relation("eventSessions", fields: [parentEventId], references: [id])
   sessions      Event[] @relation("eventSessions")
+
+  // Linked "social side" event. For a league match-day event the organizer
+  // can opt-in to running a parallel social event — same date, same club —
+  // for casual play among everyone who isn't strictly attending-only.
+  // Players never sign up directly to the social event; sign-ups happen
+  // on the league event and are mirrored here based on intent. Set on
+  // the SOCIAL event, pointing at its league parent.
+  socialOfEventId String?
+  socialOf        Event?  @relation("eventSocial", fields: [socialOfEventId], references: [id])
+  socialEvents    Event[] @relation("eventSocial") // 0 or 1 in practice
 
   classes        EventClass[]
   players        EventPlayer[]
@@ -253,6 +280,21 @@ model EventClass {
   scoringFormat   String  @default("1x11") // e.g. "1x11", "3x11", "1xR15", "3xR21"
   winBy           String  @default("2") // "1", "2", "cap13", "cap15", "cap17", "cap18", "cap23", "cap25"
   timedMinutes    Int?
+  /// Max minutes a match in this class may run before being auto-finalized.
+  /// Behaviour combines with `scoringEnforced`:
+  ///   - maxMinutes null: scoring rules always apply, no timer.
+  ///   - maxMinutes set + scoringEnforced=true: scoring rules apply normally
+  ///     AND the timer acts as a hard cap (the match auto-ends if neither
+  ///     team has reached the target by then, accepting any score).
+  ///   - maxMinutes set + scoringEnforced=false: timer-only mode; players
+  ///     submit whatever final score they had when the clock ran out and
+  ///     target/win-by validation is skipped.
+  maxMinutes      Int?
+  /// When false AND maxMinutes is set, the score picker accepts any number
+  /// pair (timer-only). When true (default), normal target/win-by rules
+  /// apply and the match ends as soon as a team wins (timer is a safety
+  /// cap, not the primary trigger).
+  scoringEnforced Boolean @default(true)
   pairingMode     String  @default("random")
   /// New unified pairing settings (v2 model). JSON shape matches
   /// PairingSettings from src/lib/solver/types.ts. When present, the solver
@@ -416,10 +458,12 @@ model Match {
   createdAt   DateTime  @default(now())
   startedAt   DateTime?
   completedAt DateTime?
+  createdById String? // audit — null on rows created before audit was added
 
   event      Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class      EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)
   scorer     Player?       @relation("matchScorer", fields: [scorerId], references: [id])
+  createdBy  Player?       @relation("matchCreator", fields: [createdById], references: [id])
   players    MatchPlayer[]
   leagueGame LeagueGame?
 
@@ -546,6 +590,7 @@ model League {
   categories            LeagueCategory[]
   helpers               LeagueHelper[]
   documents             LeagueDocument[]
+  assistantQueries      LeagueAssistantQuery[]
   participationRequests LeagueParticipationRequest[]
 
   @@index([clubId])
@@ -692,6 +737,7 @@ model LeagueGame {
   // Both optional; the round-event matches view sorts by them.
   scheduledAt DateTime?
   courtNum    Int?
+  createdById String? // audit — captain or organizer who first ticked this slot
 
   event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   category    LeagueCategory     @relation(fields: [categoryId], references: [id])
@@ -699,6 +745,7 @@ model LeagueGame {
   team1       LeagueTeam         @relation("gameTeam1", fields: [team1Id], references: [id])
   team2       LeagueTeam         @relation("gameTeam2", fields: [team2Id], references: [id])
   winner      LeagueTeam?        @relation("gameWinner", fields: [winnerId], references: [id])
+  createdBy   Player?            @relation("leagueGameCreator", fields: [createdById], references: [id])
   gamePlayers LeagueGamePlayer[]
 
   @@unique([eventId, categoryId, slotNumber])
@@ -745,6 +792,38 @@ model LeagueParticipationRequest {
 // players for that game. No separate lineup table needed.
 
 // ── League documents (rules, schedule, posters, etc.) ──
+// Chat-log row for the jabberBrain Event Rules Assistant. One row per
+// user turn (question + assistant answer). Logged to a database so
+// league organizers and app admins can review what players are asking
+// about the rules. Anonymous users supported — playerId is null then.
+model LeagueAssistantQuery {
+  id             String   @id @default(cuid())
+  leagueId       String
+  conversationId String // groups turns from the same chat session
+  playerId       String? // null for anonymous askers
+  question       String   @db.Text
+  answer         String   @db.Text
+  // Soft PII flag: true if any email/phone-like pattern was redacted
+  // before persistence. Helps audit how often PII shows up in queries.
+  piiScrubbed    Boolean  @default(false)
+  // Anthropic usage telemetry — input/output/cache token counts so we
+  // can sanity-check spend per league. Zero on errored requests.
+  tokensInput       Int     @default(0)
+  tokensOutput      Int     @default(0)
+  tokensCacheRead   Int     @default(0)
+  tokensCacheCreate Int     @default(0)
+  // Filled if the model returned an error (e.g. quota) or the request
+  // never reached the model. Null on successful answers.
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  league League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  player Player? @relation("leagueAssistantQueryAsker", fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, createdAt])
+  @@index([conversationId])
+}
+
 model LeagueDocument {
   id           String   @id @default(cuid())
   leagueId     String
@@ -754,6 +833,16 @@ model LeagueDocument {
   sizeBytes    Int
   uploadedById String?
   uploadedAt   DateTime @default(now())
+  // When true and mimeType is application/pdf, this document is fed to
+  // the jabberBrain Event Rules Assistant. PDFs only — images are not
+  // supported by the assistant. Default true so newly-uploaded rules
+  // PDFs are queryable out of the box.
+  includeInAssistant Boolean @default(true)
+  // When true, this document is listed in the user-facing Documents
+  // section of the league overview. Independent from includeInAssistant
+  // so organizers can keep an internal-only doc for the AI while
+  // showing a cleaner public version to players, or vice versa.
+  showToUsers Boolean @default(true)
 
   league     League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   uploadedBy Player? @relation("leagueDocumentUploader", fields: [uploadedById], references: [id])

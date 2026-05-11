@@ -10,8 +10,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  let user;
   try {
-    await requireEventManager(id);
+    user = await requireEventManager(id);
   } catch {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
@@ -151,6 +152,7 @@ export async function POST(
               courtNum: match.court,
               round: roundIdx + 1,
               rankingMode: cls.rankingMode,
+              createdById: user.id,
               players: {
                 create: [
                   { playerId: pair1.player1Id, team: 1 },
@@ -246,6 +248,7 @@ export async function POST(
           courtNum: match.court,
           round: nextRound + roundIdx,
           rankingMode: cls.rankingMode,
+          createdById: user.id,
           players: {
             create: [
               ...match.team1.map((p) => ({

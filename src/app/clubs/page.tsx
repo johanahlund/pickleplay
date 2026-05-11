@@ -7,6 +7,9 @@ import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { setPreview } from "@/lib/entityPreview";
 import { frameClass } from "@/components/Card";
+import { clubRoleLabel } from "@/lib/clubLabel";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { usePollingRefresh } from "@/lib/hooks";
 
 interface ClubLocation {
   id: string;
@@ -25,6 +28,7 @@ interface Club {
   country?: string | null;
   locations?: ClubLocation[];
   myRole: string;
+  members: { role: string; player: { id: string; name: string; gender?: string | null } }[];
   _count: { members: number; events: number };
 }
 
@@ -40,10 +44,12 @@ interface BrowseClub {
   city: string | null;
   country: string | null;
   locations?: ClubLocation[];
+  members: { role: string; player: { id: string; name: string; gender?: string | null } }[];
 }
 
 export default function ClubsPage() {
   const { data: session } = useSession();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const isLoggedIn = !!session?.user;
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,18 +77,61 @@ export default function ClubsPage() {
   const [browseLoading, setBrowseLoading] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [requestedClubIds, setRequestedClubIds] = useState<Set<string>>(new Set());
+  const [pendingRequests, setPendingRequests] = useState<BrowseClub[]>([]);
   const [requesting, setRequesting] = useState<string | null>(null);
 
   const myClubIds = new Set(clubs.map((c) => c.id));
 
 
+  // Removed memberships are surfaced via the bell-icon notification
+  // inbox (server writes a Notification row when a director kicks
+  // someone). No client-side modal here.
   const fetchClubs = async () => {
     const r = await fetch("/api/clubs");
     if (r.ok) setClubs(await r.json());
     setLoading(false);
   };
 
-  useEffect(() => { if (isLoggedIn) fetchClubs(); else setLoading(false); }, [isLoggedIn]);
+  // Fetch the user's pending join requests so the "Pending" section
+  // renders on reload AND the "Requested" state survives a refresh.
+  // Accept/decline notifications are delivered via the bell-icon
+  // inbox (server writes a Notification row on PATCH), not as modals.
+  const fetchMyPendingRequests = async () => {
+    const r = await fetch("/api/clubs/join-requests/mine");
+    if (!r.ok) return;
+    const data: { requestId: string; club: BrowseClub & { _count?: { members?: number; events?: number } } }[] = await r.json();
+    const items: BrowseClub[] = data.map((d) => ({
+      id: d.club.id,
+      name: d.club.name,
+      emoji: d.club.emoji,
+      logoUrl: d.club.logoUrl ?? null,
+      coverUrl: d.club.coverUrl ?? null,
+      description: null,
+      memberCount: d.club._count?.members ?? 0,
+      eventCount: d.club._count?.events ?? 0,
+      city: d.club.city ?? null,
+      country: d.club.country ?? null,
+      members: d.club.members ?? [],
+    }));
+    setPendingRequests(items);
+    setRequestedClubIds(new Set(items.map((c) => c.id)));
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) { fetchClubs(); fetchMyPendingRequests(); }
+    else setLoading(false);
+  }, [isLoggedIn]);
+
+  // Light background refresh so when a club admin accepts (or declines)
+  // your join request elsewhere, the change shows up here without a
+  // manual reload. `usePollingRefresh` also re-fires on tab focus, which
+  // is the more useful trigger — pending requests don't move minute to
+  // minute, so a 60s baseline is plenty.
+  usePollingRefresh(
+    async () => { if (isLoggedIn) { await fetchClubs(); await fetchMyPendingRequests(); } },
+    60000,
+    isLoggedIn,
+  );
 
   const createClub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,19 +196,67 @@ export default function ClubsPage() {
     setBrowseLoading(false);
   };
 
-  const requestJoin = async (clubId: string) => {
-    setRequesting(clubId);
-    const r = await fetch(`/api/clubs/${clubId}/join-request`, {
+  const requestJoin = async (club: BrowseClub) => {
+    const director = club.members.find((m) => m.role === "owner");
+    const ok = await confirmDialog({
+      title: `Request to join ${club.name}?`,
+      message:
+        `Your name and profile will be sent to ${director ? director.player.name : "the club director"} for approval. ` +
+        `You'll get access to the club's members, events and feed once they accept. ` +
+        `You can cancel this request any time before it's reviewed.`,
+      confirmText: "Send request",
+      cancelText: "Not now",
+    });
+    if (!ok) return;
+    setRequesting(club.id);
+    const r = await fetch(`/api/clubs/${club.id}/join-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     if (r.ok) {
-      setRequestedClubIds((prev) => new Set([...prev, clubId]));
+      setRequestedClubIds((prev) => new Set([...prev, club.id]));
+      setPendingRequests((prev) => (prev.some((p) => p.id === club.id) ? prev : [club, ...prev]));
     } else {
       const data = await r.json();
       if (data.error === "Already a member") {
         fetchClubs();
+      } else {
+        await alertDialog(data.error || "Failed to send request", "Error");
+      }
+    }
+    setRequesting(null);
+  };
+
+  const cancelRequest = async (club: BrowseClub) => {
+    const ok = await confirmDialog({
+      title: "Cancel join request?",
+      message: `${club.name} won't be notified — your pending request is just withdrawn. You can request again later.`,
+      confirmText: "Cancel request",
+      cancelText: "Keep waiting",
+      danger: true,
+    });
+    if (!ok) return;
+    setRequesting(club.id);
+    const r = await fetch(`/api/clubs/${club.id}/join-request`, { method: "DELETE" });
+    if (r.ok) {
+      setRequestedClubIds((prev) => {
+        const next = new Set(prev);
+        next.delete(club.id);
+        return next;
+      });
+      setPendingRequests((prev) => prev.filter((p) => p.id !== club.id));
+    } else {
+      const data = await r.json().catch(() => ({}));
+      // "Already accepted" race: the bell-icon inbox already has the
+      // server-generated welcome notification, so we just silently
+      // refresh both lists — the club will appear under My Clubs and
+      // disappear from Pending. Show an error toast for other failures.
+      const message: string = data.error || "";
+      if (typeof message === "string" && message.toLowerCase().includes("already accepted")) {
+        await Promise.all([fetchClubs(), fetchMyPendingRequests()]);
+      } else {
+        await alertDialog(message || "Failed to cancel request", "Error");
       }
     }
     setRequesting(null);
@@ -172,14 +269,23 @@ export default function ClubsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">My Clubs</h2>
         <div className="flex gap-2">
-          {isLoggedIn && (
-            <button onClick={() => setShowCreate(!showCreate)}
-              className={showCreate
-                ? "text-muted text-sm font-medium px-3 py-2"
-                : "bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"}>
-              {showCreate ? "Cancel" : "+ Club"}
-            </button>
-          )}
+          {isLoggedIn && (() => {
+            // Only app admins and users with the canCreateClubs flag
+            // can create a new club. Hide the "+ Club" button for
+            // everyone else.
+            const role = (session?.user as { role?: string } | undefined)?.role;
+            const canCreateClubs = !!(session?.user as { canCreateClubs?: boolean } | undefined)?.canCreateClubs;
+            const canCreate = role === "admin" || canCreateClubs;
+            if (!canCreate) return null;
+            return (
+              <button onClick={() => setShowCreate(!showCreate)}
+                className={showCreate
+                  ? "text-muted text-sm font-medium px-3 py-2"
+                  : "bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"}>
+                {showCreate ? "Cancel" : "+ Club"}
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -325,7 +431,12 @@ export default function ClubsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {clubs.map((club) => (
+          {clubs.map((club) => {
+            const owner = club.members.find((m) => m.role === "owner");
+            const admins = club.members.filter((m) => m.role === "admin");
+            const males = club.members.filter((m) => m.player.gender === "M").length;
+            const females = club.members.filter((m) => m.player.gender === "F").length;
+            return (
             <div key={club.id} className={`${frameClass} overflow-hidden`}>
               <Link
                 href={`/clubs/${club.id}`}
@@ -333,14 +444,29 @@ export default function ClubsPage() {
                 className="block p-4 active:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover" /> : <span className="text-3xl">{club.emoji}</span>}
+                  {club.logoUrl
+                    ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                    : <div className="w-10 h-10 rounded-xl bg-gray-100 border border-border shrink-0" aria-hidden />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-lg">{club.name}</span>
-                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium capitalize">{club.myRole}</span>
+                      <span className="text-[10px] bg-gray-100 text-muted px-1.5 py-0.5 rounded-full font-medium">{clubRoleLabel(club.myRole)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-sm text-muted">
-                      <span>{club._count.members} member{club._count.members !== 1 ? "s" : ""} · {club._count.events} event{club._count.events !== 1 ? "s" : ""}</span>
+                    {owner && (
+                      <div className="text-[11px] text-muted truncate">
+                        Director: <span className="text-foreground font-medium">{owner.player.name}</span>
+                      </div>
+                    )}
+                    {admins.length > 0 && (
+                      <div className="text-[11px] text-muted truncate">
+                        Admin{admins.length === 1 ? "" : "s"}: <span className="text-foreground font-medium">{admins.map((a) => a.player.name).join(", ")}</span>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-muted">
+                      {club._count.members} member{club._count.members !== 1 ? "s" : ""}
+                      <span className="text-blue-500"> · {males}♂</span>
+                      <span className="text-pink-500"> · {females}♀</span>
+                      <span> · {club._count.events} event{club._count.events !== 1 ? "s" : ""}</span>
                     </div>
                   </div>
                   <span className="text-2xl text-muted">›</span>
@@ -374,7 +500,57 @@ export default function ClubsPage() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pending join requests — the clubs you've applied to but not yet
+          been accepted into. Lives between My Clubs and Find Clubs so it's
+          always visible without having to dig into the Find Clubs section. */}
+      {pendingRequests.length > 0 && (
+        <div className="border-t border-border pt-4">
+          <h3 className="text-lg font-bold mb-2">Pending requests to join club</h3>
+          <div className="space-y-2">
+            {pendingRequests.map((club) => {
+              const director = club.members.find((m) => m.role === "owner");
+              const pAdmins = club.members.filter((m) => m.role === "admin");
+              const isCanceling = requesting === club.id;
+              return (
+                <div key={club.id} className={`${frameClass} overflow-hidden`}>
+                  <div className="flex items-center gap-3 p-4">
+                    <Link
+                      href={`/clubs/${club.id}`}
+                      onClick={() => setPreview("club", club.id, { id: club.id, name: club.name, emoji: club.emoji, logoUrl: club.logoUrl, coverUrl: club.coverUrl, description: club.description, city: club.city, country: club.country, _count: { members: club.memberCount, events: club.eventCount } })}
+                      className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70"
+                    >
+                      {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" /> : <div className="w-8 h-8 rounded-lg bg-gray-100 border border-border shrink-0" aria-hidden />}
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold">{club.name}</span>
+                        {director && (
+                          <div className="text-[11px] text-muted truncate">
+                            Director: <span className="text-foreground font-medium">{director.player.name}</span>
+                          </div>
+                        )}
+                        {pAdmins.length > 0 && (
+                          <div className="text-[11px] text-muted truncate">
+                            Admin{pAdmins.length === 1 ? "" : "s"}: <span className="text-foreground font-medium">{pAdmins.map((a) => a.player.name).join(", ")}</span>
+                          </div>
+                        )}
+                        <div className="text-[11px] text-amber-700">⏳ Waiting for review</div>
+                      </div>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => cancelRequest(club)}
+                      disabled={isCanceling}
+                      className="text-[11px] text-amber-700 font-medium bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg shrink-0 disabled:opacity-50 underline"
+                    >Cancel</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -408,35 +584,69 @@ export default function ClubsPage() {
               <p className="text-sm text-muted text-center py-4">No clubs found</p>
             ) : (
               <div className="space-y-2">
-                {browseClubs.filter((c) => !myClubIds.has(c.id)).map((club) => {
+                {browseClubs.filter((c) => !myClubIds.has(c.id) && !requestedClubIds.has(c.id)).map((club) => {
                   const isPending = requestedClubIds.has(club.id);
                   const isRequesting = requesting === club.id;
+                  const director = club.members.find((m) => m.role === "owner");
+                  const browseAdmins = club.members.filter((m) => m.role === "admin");
+                  const browseMales = club.members.filter((m) => m.player.gender === "M").length;
+                  const browseFemales = club.members.filter((m) => m.player.gender === "F").length;
                   return (
                     <div key={club.id} className={`${frameClass} overflow-hidden`}>
                       <div className="flex items-center gap-3 p-4">
-                        {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" /> : <span className="text-2xl">{club.emoji}</span>}
-                        <div className="flex-1 min-w-0">
-                          <span className="font-semibold">{club.name}</span>
-                          <div className="flex items-center gap-1.5 text-xs text-muted">
-                            <span>
+                        {/* Card body is a Link to the detail page so anyone
+                            (including app admins not yet a member) can
+                            navigate in. The "Request to Join" button is a
+                            sibling so its click stays inside the row. */}
+                        <Link
+                          href={`/clubs/${club.id}`}
+                          onClick={() => setPreview("club", club.id, { id: club.id, name: club.name, emoji: club.emoji, logoUrl: club.logoUrl, coverUrl: club.coverUrl, description: club.description, city: club.city, country: club.country, _count: { members: club.memberCount, events: club.eventCount } })}
+                          className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70"
+                        >
+                          {club.logoUrl ? <img src={club.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover shrink-0" /> : <div className="w-8 h-8 rounded-lg bg-gray-100 border border-border shrink-0" aria-hidden />}
+                          <div className="flex-1 min-w-0">
+                            <span className="font-semibold">{club.name}</span>
+                            {director && (
+                              <div className="text-[11px] text-muted truncate">
+                                Director: <span className="text-foreground font-medium">{director.player.name}</span>
+                              </div>
+                            )}
+                            {browseAdmins.length > 0 && (
+                              <div className="text-[11px] text-muted truncate">
+                                Admin{browseAdmins.length === 1 ? "" : "s"}: <span className="text-foreground font-medium">{browseAdmins.map((a) => a.player.name).join(", ")}</span>
+                              </div>
+                            )}
+                            <div className="text-[11px] text-muted">
                               {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
-                              {club.city && ` · ${club.city}`}
-                              {club.country && !club.city && ` · ${club.country}`}
-                            </span>
+                              <span className="text-blue-500"> · {browseMales}♂</span>
+                              <span className="text-pink-500"> · {browseFemales}♀</span>
+                              {club.city && <span> · {club.city}</span>}
+                              {club.country && !club.city && <span> · {club.country}</span>}
+                            </div>
                           </div>
-                        </div>
+                        </Link>
                         {isLoggedIn && (
                           isPending ? (
-                            <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-lg">Requested</span>
+                            <button
+                              type="button"
+                              onClick={() => cancelRequest(club)}
+                              disabled={isRequesting}
+                              title="Cancel your join request"
+                              className="text-[11px] text-amber-700 font-medium bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg shrink-0 disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              <span>⏳ Requested</span>
+                              <span className="text-amber-500">·</span>
+                              <span className="underline">cancel</span>
+                            </button>
                           ) : (
-                            <button onClick={() => requestJoin(club.id)} disabled={isRequesting}
-                              className="text-xs text-action font-medium px-3 py-1.5 rounded-lg border border-action/30 hover:bg-action/5 disabled:opacity-50">
+                            <button onClick={() => requestJoin(club)} disabled={isRequesting}
+                              className="text-xs text-action font-medium px-3 py-1.5 rounded-lg border border-action/30 hover:bg-action/5 disabled:opacity-50 shrink-0">
                               {isRequesting ? "..." : "Request to Join"}
                             </button>
                           )
                         )}
                         {!isLoggedIn && (
-                          <Link href="/signin" className="text-xs text-action font-medium">Sign in to join</Link>
+                          <Link href="/signin" className="text-xs text-action font-medium shrink-0">Sign in to join</Link>
                         )}
                       </div>
                       {infoClubId === club.id && (
