@@ -2371,18 +2371,17 @@ export default function LeagueDetailPage() {
       {/* Header */}
       <div onClick={() => { if (canEdit) startEditInfo(); }}
         className={canEdit ? "active:opacity-70 cursor-pointer" : ""}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold">{league.name}</h2>
             <span className="text-sm text-muted">Season {league.season || "—"}</span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
-            {canEdit && (
-              <span className="text-muted">
-                <PenIcon />
-              </span>
-            )}
+          {/* Right column: pen on top, status pill at the bottom. */}
+          <div className="flex flex-col items-end gap-1 shrink-0 self-stretch">
+            {canEdit ? (
+              <span className="text-muted"><PenIcon /></span>
+            ) : <span />}
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full mt-auto ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
           </div>
         </div>
         {league.description && <p className="text-sm text-muted mt-1">{league.description}</p>}
