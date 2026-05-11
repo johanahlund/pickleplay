@@ -3054,21 +3054,6 @@ export default function LeagueDetailPage() {
               <span className="truncate">Removed <span className="font-medium">{lastRemovedName}</span></span>
             </div>
           )}
-          {(() => { const ns = normalizeLeagueStatus(league.status); return (isAppAdmin || isDirector || isDeputy) && league.teams.length > 0 && (ns === "open" || ns === "closed"); })() && (
-            <div className="text-xs rounded-lg px-3 py-2 flex items-center justify-between gap-2 border bg-blue-50 border-blue-200 text-blue-800">
-              <span>Rosters become visible when the league goes Active.</span>
-              <button onClick={async () => {
-                const ok = await confirm({ title: "Activate league", message: "Move the league to Active? Team rosters become visible to everyone and roster changes are frozen.", confirmText: "Activate" });
-                if (!ok) return;
-                const r = await fetch(`/api/leagues/${id}`, {
-                  method: "PATCH", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ status: "active" }),
-                });
-                if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
-                fetchLeague();
-              }} className="bg-action text-white px-3 py-1 rounded-lg font-medium text-xs whitespace-nowrap">Go Active</button>
-            </div>
-          )}
           {(() => {
             // A team's roster is visible to: organizers/helpers/admin always,
             // its own captain/vice always, and to everyone once the league
