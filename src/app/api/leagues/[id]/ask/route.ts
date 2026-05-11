@@ -45,21 +45,35 @@ const SYSTEM_PROMPT = [
   "2. Then OPTIONALLY add 1-3 expandable detail sections. Each section starts on its own line with: `## Section title` (level-2 markdown header). Section title is 2-5 words, in the USER's language. Body is ≤3 short lines or bullets.",
   "3. Skip sections entirely if the headline already answers the question fully. Most simple questions need no sections.",
   "4. Never put a `##` header on the headline itself — the headline is plain text, sections come after.",
-  "5. Cite the rule section in the body when relevant (e.g. \"§4.A\", \"Section 6\").",
+  "5. Citations: see the citation directive at the end of this prompt.",
   "",
   "Good example (user asked in English):",
   "Top 8 teams qualify for the single-elimination Final Day.",
   "## Bracket",
-  "1v8, 2v7, 3v6, 4v5. Winners meet in semifinals (§6).",
+  "1v8, 2v7, 3v6, 4v5. Winners meet in semifinals.",
   "## Match format",
   "Quarters/semis: single game to 15. Final/bronze: best-of-3 to 11.",
   "",
   "Good example (user asked in Portuguese — note titles also in Portuguese):",
   "As 8 melhores equipas apuram-se para a Final Day em formato eliminatório.",
   "## Quadro",
-  "1v8, 2v7, 3v6, 4v5. Vencedores seguem para meias-finais (§6).",
+  "1v8, 2v7, 3v6, 4v5. Vencedores seguem para meias-finais.",
   "## Formato dos jogos",
   "Quartos/meias: jogo único até 15. Final/bronze: à melhor de 3 até 11.",
+].join("\n");
+
+// Two citation modes appended to the system prompt at request time:
+//   - allowed: docs are visible to users, so they can verify cited refs
+//   - disallowed: at least one source doc is hidden, so refs would
+//     point to text users can't see — drop them entirely.
+const CITATION_DIRECTIVE_ALLOWED = [
+  "## Citations (final rule)",
+  "When relevant, cite the rule section in the body (e.g. \"§4.A\", \"Section 6 — Grande Final\"). Keep citations short and inline.",
+].join("\n");
+
+const CITATION_DIRECTIVE_DISALLOWED = [
+  "## Citations (final rule — STRICT OVERRIDE)",
+  "DO NOT include any section numbers, paragraph references, or \"see section X\" / \"§X\" / \"Section X\" / \"Article X\" style citations. The source document is NOT visible to users, so references would be useless and confusing. Just give the answer in plain prose. This rule overrides anything earlier in the prompt.",
 ].join("\n");
 
 interface Message {
@@ -119,7 +133,7 @@ export async function POST(
       documents: {
         where: { mimeType: "application/pdf", includeInAssistant: true },
         orderBy: { uploadedAt: "asc" },
-        select: { url: true, name: true },
+        select: { url: true, name: true, showToUsers: true },
       },
     },
   });
@@ -132,6 +146,13 @@ export async function POST(
   // inside the stream body so we can emit a heartbeat byte first and
   // avoid a 504 from the edge proxy on cold starts.
   const docs = league.documents;
+
+  // Citations are only allowed when every assistant doc is also shown
+  // to users — otherwise a "§4.A" reference would point to text the
+  // user has no way to read. Strictest reasonable interpretation of
+  // "don't cite unless visible".
+  const citationsAllowed = docs.length > 0 && docs.every((d) => d.showToUsers);
+  const systemPrompt = SYSTEM_PROMPT + "\n\n" + (citationsAllowed ? CITATION_DIRECTIVE_ALLOWED : CITATION_DIRECTIVE_DISALLOWED);
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -196,7 +217,7 @@ export async function POST(
           model: MODEL,
           max_tokens: 1024,
           system: [
-            { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+            { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
           ],
           messages: anthMessages,
         });
