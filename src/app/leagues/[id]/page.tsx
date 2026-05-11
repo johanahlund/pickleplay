@@ -2999,7 +2999,10 @@ export default function LeagueDetailPage() {
             const isOrganizer = isAppAdmin || isDirector || isDeputy || isHelper;
             if (!isOrganizer && captainTeams.length === 0) return null;
 
-            const reqs = league.participationRequests || [];
+            // Only PENDING requests — the API also returns the viewer's own
+            // accepted request (for cancel/leave UX) and we must not count
+            // that as a sign-up to review.
+            const reqs = (league.participationRequests || []).filter((r) => r.status === "pending");
             if (reqs.length === 0) return null;
 
             // Organizers see cards for every team with pending; captains only for their own teams.
