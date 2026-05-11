@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface RatingData {
   player: { id: string; name: string; emoji: string };
@@ -26,6 +27,7 @@ interface RecentMatch {
 
 export default function ProfilePage() {
   const { data: session, update: updateSession } = useSession();
+  const { confirm: confirmDialog } = useConfirm();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [ratings, setRatings] = useState<RatingData | null>(null);
   const [matches, setMatches] = useState<RecentMatch[]>([]);
@@ -213,6 +215,22 @@ export default function ProfilePage() {
           </div>
           <div className="text-[9px] text-muted">Streak</div>
         </div>
+      </div>
+
+      <div className="pt-2">
+        <button
+          onClick={async () => {
+            const ok = await confirmDialog({
+              title: "Sign out?",
+              message: "You'll need your password to sign back in.",
+              confirmText: "Sign out",
+              danger: true,
+            });
+            if (!ok) return;
+            await signOut({ callbackUrl: "/signin" });
+          }}
+          className="w-full text-sm font-medium text-danger bg-red-50 hover:bg-red-100 py-2.5 rounded-lg"
+        >Sign out</button>
       </div>
 
       {/* Club ratings */}
