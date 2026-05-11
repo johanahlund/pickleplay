@@ -128,55 +128,27 @@ export async function POST(
     return NextResponse.json({ error: "No documents are enabled for the assistant on this league" }, { status: 400 });
   }
 
-  // Fetch each PDF once per request and inline as base64. Anthropic
-  // caches the content blocks (cache_control on the last doc), so
-  // subsequent questions in the same conversation re-use the cached
-  // upload — only the user's new turn is billed at full input rate.
-  const docBlocks: Anthropic.Messages.DocumentBlockParam[] = [];
-  for (let i = 0; i < league.documents.length; i++) {
-    const doc = league.documents[i]!;
-    const resp = await fetch(doc.url);
-    if (!resp.ok) {
-      return NextResponse.json({ error: `Failed to fetch document ${doc.name}` }, { status: 502 });
-    }
-    const buf = Buffer.from(await resp.arrayBuffer());
-    const base64 = buf.toString("base64");
-    const isLast = i === league.documents.length - 1;
-    docBlocks.push({
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: base64 },
-      title: doc.name,
-      // Cache the document blocks so re-asks on the same league are cheap.
-      // Anthropic applies cache_control to everything up to and including
-      // this block, so we only set it on the final document.
-      ...(isLast ? { cache_control: { type: "ephemeral" } } : {}),
-    });
-  }
+  // Snapshot the docs we'll feed to the model. Fetching them is moved
+  // inside the stream body so we can emit a heartbeat byte first and
+  // avoid a 504 from the edge proxy on cold starts.
+  const docs = league.documents;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-  // First user turn gets the document blocks prepended; subsequent turns
-  // are plain text. This shape lets Anthropic's prompt cache hit on the
-  // doc block across every turn of the conversation.
-  const anthMessages: Anthropic.Messages.MessageParam[] = messages.map((m, idx) => {
-    if (idx === 0 && m.role === "user") {
-      return {
-        role: "user",
-        content: [
-          ...docBlocks,
-          { type: "text", text: m.content },
-        ],
-      };
-    }
-    return { role: m.role, content: m.content };
-  });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: string, data: unknown) => {
+      const sendEvent = (event: string, data: unknown) => {
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       };
+      // SSE comment lines (": ...\n\n") are valid keep-alive frames the
+      // client ignores. Emitting one immediately commits the response
+      // to the edge proxy so it won't 504 while we do the slow work.
+      const sendPing = (label: string) => {
+        controller.enqueue(encoder.encode(`: ${label}\n\n`));
+      };
+
+      sendPing("starting");
 
       // Accumulate text deltas server-side so we can persist the full
       // answer once the stream completes. Cheap — just appends.
@@ -185,6 +157,41 @@ export async function POST(
       let errorMessage: string | null = null;
 
       try {
+        // 1. Fetch PDFs from Vercel Blob (slowest part on cold start).
+        sendPing("fetching-docs");
+        const docBlocks: Anthropic.Messages.DocumentBlockParam[] = [];
+        for (let i = 0; i < docs.length; i++) {
+          const doc = docs[i]!;
+          const resp = await fetch(doc.url);
+          if (!resp.ok) {
+            throw new Error(`Failed to fetch document ${doc.name}`);
+          }
+          const buf = Buffer.from(await resp.arrayBuffer());
+          const base64 = buf.toString("base64");
+          const isLast = i === docs.length - 1;
+          docBlocks.push({
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: base64 },
+            title: doc.name,
+            // Cache the document blocks so re-asks on the same league are cheap.
+            ...(isLast ? { cache_control: { type: "ephemeral" } } : {}),
+          });
+          sendPing(`doc-${i + 1}-of-${docs.length}`);
+        }
+
+        // 2. Assemble messages with documents prepended on first user turn.
+        const anthMessages: Anthropic.Messages.MessageParam[] = messages.map((m, idx) => {
+          if (idx === 0 && m.role === "user") {
+            return {
+              role: "user",
+              content: [...docBlocks, { type: "text", text: m.content }],
+            };
+          }
+          return { role: m.role, content: m.content };
+        });
+
+        // 3. Stream from Anthropic.
+        sendPing("calling-model");
         const response = await client.messages.stream({
           model: MODEL,
           max_tokens: 1024,
@@ -197,7 +204,7 @@ export async function POST(
         for await (const chunk of response) {
           if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
             assistantText += chunk.delta.text;
-            send("delta", { text: chunk.delta.text });
+            sendEvent("delta", { text: chunk.delta.text });
           }
         }
 
@@ -208,10 +215,10 @@ export async function POST(
           cacheCreate: final.usage.cache_creation_input_tokens ?? 0,
           cacheRead: final.usage.cache_read_input_tokens ?? 0,
         };
-        send("done", { stopReason: final.stop_reason, usage });
+        sendEvent("done", { stopReason: final.stop_reason, usage });
       } catch (e) {
         errorMessage = e instanceof Error ? e.message : "Unknown error";
-        send("error", { message: errorMessage });
+        sendEvent("error", { message: errorMessage });
       } finally {
         // Persist regardless of success/error so organizers can see
         // failed asks too (helps tune docs and detect quota issues).
