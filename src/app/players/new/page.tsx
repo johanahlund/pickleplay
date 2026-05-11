@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -20,7 +20,17 @@ interface ContextInfo {
   clubId: string | null; // pre-select club when known
 }
 
+// Next.js requires useSearchParams() to be inside a Suspense boundary
+// for static prerendering, so the body lives in an inner component.
 export default function NewPlayerPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewPlayerPageInner />
+    </Suspense>
+  );
+}
+
+function NewPlayerPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
