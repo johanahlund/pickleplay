@@ -1726,7 +1726,7 @@ export default function LeagueDetailPage() {
                             onChange={(e) => patchFlags({ includeInAssistant: e.target.checked })}
                             className="w-3.5 h-3.5"
                           />
-                          <span>Include in Event Assistant</span>
+                          <span>Include in League Assistant</span>
                         </label>
                       )}
                     </div>
@@ -2568,8 +2568,8 @@ export default function LeagueDetailPage() {
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setChatOpen(true); }}
-                      aria-label="Open Event Rules Assistant"
-                      title="Ask about the rules"
+                      aria-label="Open League Assistant"
+                      title="Ask the League Assistant"
                       className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-action text-white text-[10px] font-bold flex items-center justify-center shadow-sm hover:opacity-90 active:scale-95"
                     >
                       ?

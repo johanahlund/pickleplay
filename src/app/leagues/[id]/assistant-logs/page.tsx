@@ -31,7 +31,7 @@ interface LeagueLite {
 }
 
 /**
- * League organizer / app admin viewer for the jabberBrain Event Rules
+ * League organizer / app admin viewer for the jabberBrain League
  * Assistant chat logs. Read-only — surfaces what players ask plus any
  * Anthropic usage telemetry per turn.
  */
@@ -115,7 +115,7 @@ export default function AssistantLogsPage() {
           )}
         </h1>
         <p className="text-xs text-muted mt-0.5">
-          Every question asked through the jabberBrain Event Rules Assistant and the answer it gave. Grouped by chat session.
+          Every question asked through the jabberBrain League Assistant and the answer it gave. Grouped by chat session.
         </p>
       </div>
 

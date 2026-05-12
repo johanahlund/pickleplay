@@ -792,7 +792,7 @@ model LeagueParticipationRequest {
 // players for that game. No separate lineup table needed.
 
 // ── League documents (rules, schedule, posters, etc.) ──
-// Chat-log row for the jabberBrain Event Rules Assistant. One row per
+// Chat-log row for the jabberBrain League Assistant. One row per
 // user turn (question + assistant answer). Logged to a database so
 // league organizers and app admins can review what players are asking
 // about the rules. Anonymous users supported — playerId is null then.
@@ -834,7 +834,7 @@ model LeagueDocument {
   uploadedById String?
   uploadedAt   DateTime @default(now())
   // When true and mimeType is application/pdf, this document is fed to
-  // the jabberBrain Event Rules Assistant. PDFs only — images are not
+  // the jabberBrain League Assistant. PDFs only — images are not
   // supported by the assistant. Default true so newly-uploaded rules
   // PDFs are queryable out of the box.
   includeInAssistant Boolean @default(true)

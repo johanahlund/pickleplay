@@ -197,7 +197,7 @@ export default function PlayersPage() {
       }
 
       const claimUrl = `${window.location.origin}/claim/${data.token}`;
-      const shareText = `Hey ${player.name}! You've been added to FriendlyBall 🏓 Claim your account to track your stats: ${claimUrl}`;
+      const shareText = `Hi ${player.name}, you've been added to FriendlyBall. Claim your account to track your stats:\n\n${claimUrl}`;
 
       // Try Web Share API first (mobile native share sheet)
       if (navigator.share) {
@@ -238,7 +238,7 @@ export default function PlayersPage() {
       }
 
       const resetUrl = `${window.location.origin}/reset/${data.token}`;
-      const shareText = `Reset your FriendlyBall password here: ${resetUrl}`;
+      const shareText = `Reset your FriendlyBall password:\n\n${resetUrl}`;
 
       if (navigator.share) {
         try {

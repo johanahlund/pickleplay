@@ -233,7 +233,7 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
         {/* Header */}
         <div className="px-4 pb-2 flex items-start gap-3 border-b border-border">
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-tight">jabberBrain Event Rules Assistant</h2>
+            <h2 className="text-sm font-semibold leading-tight">jabberBrain League Assistant</h2>
             <p className="text-[11px] text-muted truncate">{leagueName}</p>
           </div>
           <button

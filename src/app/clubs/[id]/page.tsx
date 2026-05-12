@@ -1867,16 +1867,13 @@ export default function ClubDetailPage() {
                 // clipboard. Includes who is inviting, the club, and the
                 // join URL so recipients have full context.
                 const message =
-                  `${inviterName} invites you to join the club "${club.name}" on FriendlyBall — the pickleball app.\n\n` +
-                  `Tap the link to accept:\n${url}`;
+                  `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`;
                 const copied = await copyText(message);
-                // Show a how-to popup with the exact text that was copied,
-                // plus a quick guide on where to paste it.
                 await alertDialog(
                   copied
-                    ? `${message}\n\n— — — — — — — — —\n\nCopied to your clipboard. Paste into WhatsApp, email, SMS, or any chat. The link is specific to "${club.name}" — the recipient lands directly on this club's join page.`
-                    : `${message}\n\n— — — — — — — — —\n\nSelect and copy the text above, then paste into WhatsApp, email, SMS, or any chat. The link is specific to "${club.name}".`,
-                  "Invite link ready",
+                    ? `${message}\n\n— — —\n\nCopied. Paste into WhatsApp, email, or any chat.`
+                    : `${message}\n\n— — —\n\nSelect and copy the text above to share.`,
+                  "Invite link",
                   { messageSize: "xs" },
                 );
               }} className="text-xs text-action font-medium">Copy_Invite_Link</button>

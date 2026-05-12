@@ -26,7 +26,7 @@ function scrubPii(text: string): { text: string; scrubbed: boolean } {
 }
 
 const SYSTEM_PROMPT = [
-  "You are the jabberBrain Event Rules Assistant for a pickleball league.",
+  "You are the jabberBrain League Assistant for a pickleball league.",
   "",
   "## Language (MOST IMPORTANT RULE)",
   "ALWAYS reply in the SAME language the user wrote their question in.",

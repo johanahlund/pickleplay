@@ -1,44 +1,66 @@
+/**
+ * Generate FriendlyBall app icons (favicon + apple-touch + PWA 192/512)
+ * from SVG sources, using `sharp`.
+ *
+ *   node scripts/generate-icons.mjs
+ *
+ * The pickleball glyph mirrors the one in `src/components/Logo.tsx`
+ * (light-green ball with darker pattern dots). The branded versions sit
+ * on the #15803d brand green; the favicon is transparent.
+ */
+
 import sharp from "sharp";
-import { writeFileSync } from "fs";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-// Simple paddle icon: green rounded rect + white paddle shape
-function createSvg(size) {
-  const r = Math.round(size * 0.2); // corner radius
-  const cx = size / 2;
-  const cy = size / 2;
-  const headR = Math.round(size * 0.22); // paddle head radius
-  const headY = Math.round(size * 0.38);
-  const handleW = Math.round(size * 0.07);
-  const handleH = Math.round(size * 0.28);
-  const handleY = Math.round(size * 0.55);
-  const handleR = Math.round(handleW / 2);
+// Pickleball glyph — inner SVG content for a viewBox of 0 0 20 20.
+// Matches Logo.tsx so the app icon and the in-app wordmark share a mark.
+function ballGlyph() {
+  return `
+    <circle cx="10" cy="10" r="9.5" fill="#d9f99d"/>
+    <circle cx="10" cy="4"  r="1.2" fill="#65a30d" opacity="0.65"/>
+    <circle cx="5"  cy="7"  r="1.2" fill="#65a30d" opacity="0.65"/>
+    <circle cx="15" cy="7"  r="1.2" fill="#65a30d" opacity="0.65"/>
+    <circle cx="7"  cy="11" r="1.2" fill="#65a30d" opacity="0.65"/>
+    <circle cx="13" cy="11" r="1.2" fill="#65a30d" opacity="0.65"/>
+    <circle cx="10" cy="15" r="1.2" fill="#65a30d" opacity="0.65"/>
+  `;
+}
 
-  return `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="${size}" height="${size}" rx="${r}" fill="#16a34a"/>
-  <ellipse cx="${cx}" cy="${headY}" rx="${headR}" ry="${Math.round(headR * 1.05)}" fill="white" opacity="0.95"/>
-  <rect x="${cx - handleW / 2}" y="${handleY}" width="${handleW}" height="${handleH}" rx="${handleR}" fill="white" opacity="0.95"/>
-  <circle cx="${Math.round(cx - headR * 0.35)}" cy="${Math.round(headY - headR * 0.2)}" r="${Math.round(headR * 0.12)}" fill="#16a34a" opacity="0.25"/>
-  <circle cx="${Math.round(cx + headR * 0.3)}" cy="${Math.round(headY + headR * 0.25)}" r="${Math.round(headR * 0.12)}" fill="#16a34a" opacity="0.25"/>
-  <circle cx="${Math.round(cx - headR * 0.1)}" cy="${Math.round(headY + headR * 0.5)}" r="${Math.round(headR * 0.1)}" fill="#16a34a" opacity="0.2"/>
-  <circle cx="${Math.round(cx + headR * 0.5)}" cy="${Math.round(headY - headR * 0.4)}" r="${Math.round(headR * 0.1)}" fill="#16a34a" opacity="0.2"/>
+// Plain ball on transparent background — browser favicon.
+function svgPlain() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+  ${ballGlyph()}
 </svg>`;
 }
 
-const sizes = [
-  { name: "icon-192.png", size: 192 },
-  { name: "icon-512.png", size: 512 },
-  { name: "apple-touch-icon.png", size: 180 },
-];
-
-for (const { name, size } of sizes) {
-  const svg = createSvg(size);
-  await sharp(Buffer.from(svg)).png().toFile(`public/${name}`);
-  console.log(`Generated public/${name}`);
+// Ball on the brand-green square — apple-touch + PWA icons. The ball
+// is inset to ~78% so iOS's auto-rounded mask doesn't clip the dots and
+// the PWA maskable safe area stays clean.
+function svgBranded() {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+  <rect width="20" height="20" fill="#15803d"/>
+  <g transform="translate(10 10) scale(0.78) translate(-10 -10)">
+    ${ballGlyph()}
+  </g>
+</svg>`;
 }
 
-// Also create a simple favicon.ico (32x32 PNG works as favicon)
-const faviconSvg = createSvg(32);
-await sharp(Buffer.from(faviconSvg)).png().toFile("public/favicon.png");
-console.log("Generated public/favicon.png");
+async function render(svg, size, outPath) {
+  const buf = await sharp(Buffer.from(svg))
+    .resize(size, size)
+    .png()
+    .toBuffer();
+  writeFileSync(outPath, buf);
+  console.log(`✓ ${outPath} (${size}×${size})`);
+}
 
-console.log("Done!");
+const publicDir = resolve(process.cwd(), "public");
+await render(svgPlain(),    64,  resolve(publicDir, "favicon.png"));
+await render(svgBranded(), 180,  resolve(publicDir, "apple-touch-icon.png"));
+await render(svgBranded(), 192,  resolve(publicDir, "icon-192.png"));
+await render(svgBranded(), 512,  resolve(publicDir, "icon-512.png"));
+
+console.log("Done.");

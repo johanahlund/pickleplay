@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 /**
  * Builds a compact markdown digest of a league's live state — teams,
  * rosters, rounds, match-day games (with lineups + winners), and a
- * computed general-standings table. Fed to the jabberBrain Event Rules
+ * computed general-standings table. Fed to the jabberBrain League
  * Assistant alongside the rules PDF so it can answer questions about
  * matches/lineups/results in addition to the rules.
  *
