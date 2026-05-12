@@ -517,7 +517,24 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
-  const swrEvent = useSWR(id ? `/api/events/${id}` : null, (url: string) => fetch(url).then((r) => { if (!r.ok) throw new Error("not found"); return r.json(); }), { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 30000 });
+  const swrEvent = useSWR(
+    id ? `/api/events/${id}` : null,
+    async (url: string) => {
+      const r = await fetch(url);
+      if (!r.ok) {
+        // Bubble up the actual status + server message so the error
+        // card can show real diagnostics (500 vs 404 vs 401).
+        let msg = `HTTP ${r.status}`;
+        try {
+          const d = await r.json();
+          if (d?.error) msg = `${d.error} (HTTP ${r.status})`;
+        } catch { /* response wasn't JSON — keep status-only message */ }
+        throw new Error(msg);
+      }
+      return r.json();
+    },
+    { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 30000 },
+  );
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
@@ -679,9 +696,12 @@ export default function EventDetailPage() {
   const isLeagueOrganizerOfEvent = !!(userId && leagueOfEvent && (leagueOfEvent.createdById === userId || leagueOfEvent.deputyId === userId)) && hasRole(viewRole, "league");
   const canManage = isAdmin || isOwner || isHelper || isLeagueOrganizerOfEvent;
 
-  // Sync SWR data → local event state with derived fields
+  // Sync SWR data → local event state with derived fields.
+  // Don't silently redirect on error — that masks the real cause
+  // (404, 401, 500) and made it look like clicks were "opening the
+  // events list". Render an in-place error card instead (see below).
   useEffect(() => {
-    if (swrEvent.error) { router.push("/events"); return; }
+    if (swrEvent.error) { return; }
     if (!swrEvent.data) return;
     const data = { ...swrEvent.data };
     const defaultClass = data.classes?.find((c: EventClassData) => c.isDefault) || data.classes?.[0];
@@ -1500,6 +1520,28 @@ export default function EventDetailPage() {
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Error state — surfaces the actual SWR error (404 / 401 / 500) so we
+  // can tell why the event isn't loading instead of silently bouncing
+  // to /events.
+  if (swrEvent.error && !event) {
+    const err = swrEvent.error as Error;
+    return (
+      <div className="px-4 pt-6 max-w-md mx-auto">
+        <div className={`${frameClass} p-4 text-center space-y-3`}>
+          <div className="text-base font-bold text-foreground">Can&apos;t open this event</div>
+          <div className="text-sm text-muted">{err?.message || "Unknown error"}</div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => swrEvent.mutate()}
+              className="text-sm bg-action text-white font-semibold px-3 py-1.5 rounded-lg"
+            >Retry</button>
+            <Link href="/events" className="text-sm bg-gray-100 text-foreground font-medium px-3 py-1.5 rounded-lg">All events</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !event) {
     // Show preview skeleton only after mount (sessionStorage is client-only).
@@ -4566,16 +4608,61 @@ export default function EventDetailPage() {
       const canDown = colIdx >= 0 && colIdx < col.length - 1;
       const canLeft = (g.courtNum ?? null) !== null;
       const canRight = (g.courtNum ?? null) !== numCourts;
+      // When the card is in "move mode" we replace its body with a
+      // big 3×3 D-pad filling the card area. Keeps the card's size +
+      // position stable so the user's eye/finger stays anchored.
+      if (isMoving) {
+        const arrowBtn = (label: string, enabled: boolean, onClick: () => void, title: string) => (
+          <button
+            type="button"
+            disabled={!enabled}
+            onClick={onClick}
+            title={title}
+            className="w-full aspect-square rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 disabled:opacity-25 disabled:cursor-not-allowed text-3xl font-bold flex items-center justify-center"
+          >{label}</button>
+        );
+        return (
+          <div key={g.id} className="relative border-2 border-action rounded-lg p-1.5 bg-white shadow-sm ring-2 ring-action/20">
+            <div className="text-[10px] text-center text-muted truncate px-1 mb-1">
+              {catName(g.categoryId)} · Match {g.slotNumber ?? "?"} · {teamShort(g.team1Id)} vs {teamShort(g.team2Id)}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <div />
+              {arrowBtn("↑", canUp, () => movePosition(g, -1), "Move up")}
+              <div />
+              {arrowBtn("←", canLeft, () => moveCourt(g, -1), "Move left (previous court)")}
+              <button
+                type="button"
+                onClick={() => setMovingScheduleId(null)}
+                className="w-full aspect-square rounded-lg bg-action text-white hover:brightness-110 text-xs font-bold flex items-center justify-center"
+                title="Done"
+              >Done</button>
+              {arrowBtn("→", canRight, () => moveCourt(g, 1), "Move right (next court)")}
+              <div />
+              {arrowBtn("↓", canDown, () => movePosition(g, 1), "Move down")}
+              <div />
+            </div>
+          </div>
+        );
+      }
       return (
-        <div key={g.id} className={`relative border rounded-lg p-2 pl-7 space-y-1.5 bg-white ${isMoving ? "border-action ring-2 ring-action/30" : "border-border"}`}>
+        <div key={g.id} className="relative border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white">
         {canEditSchedule && (
           <button
             type="button"
-            onClick={() => setMovingScheduleId(isMoving ? null : g.id)}
-            title={isMoving ? "Done moving" : "Move this match"}
-            className={`absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-[14px] select-none rounded-l-lg ${isMoving ? "bg-action text-white" : "text-muted hover:text-foreground hover:bg-gray-50"}`}
+            onClick={() => setMovingScheduleId(g.id)}
+            title="Move this match"
+            className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center select-none rounded-l-lg text-muted hover:text-foreground hover:bg-gray-50"
           >
-            {isMoving ? "✕" : "⇆"}
+            {/* Move icon — 4-arrow cross. */}
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="2.5" x2="8" y2="13.5" />
+              <line x1="2.5" y1="8" x2="13.5" y2="8" />
+              <polyline points="6,4 8,2 10,4" />
+              <polyline points="6,12 8,14 10,12" />
+              <polyline points="4,6 2,8 4,10" />
+              <polyline points="12,6 14,8 12,10" />
+            </svg>
           </button>
         )}
         <div className="contents">
@@ -4650,7 +4737,9 @@ export default function EventDetailPage() {
               {g.kind === "principal" ? "P" : g.kind === "league" ? "L" : "F"}
             </span>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">{catName(g.categoryId)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
+            {catName(g.categoryId)} <span className="text-muted/70">· Match {g.slotNumber ?? "?"}</span>
+          </div>
           {/* Two team rows. Always rendered so each card has the same
               shape, leaving a fixed-width slot on the right for the
               eventual score. Pre-reveal we show just the team name;
@@ -4714,33 +4803,6 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
-        {isMoving && (
-          <>
-            {/* Backdrop to dismiss on outside tap. */}
-            <div className="fixed inset-0 z-30" onClick={() => setMovingScheduleId(null)} />
-            {/* D-pad — large tap targets, anchored under the card so
-                the user can keep clicking the same screen area as the
-                card travels with each move. */}
-            <div className="absolute z-40 left-1/2 -translate-x-1/2 top-full mt-1 bg-white border-2 border-action shadow-xl rounded-xl p-2">
-              <div className="grid grid-cols-3 gap-1.5">
-                <div />
-                <button type="button" disabled={!canUp} onClick={() => movePosition(g, -1)}
-                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">↑</button>
-                <div />
-                <button type="button" disabled={!canLeft} onClick={() => moveCourt(g, -1)}
-                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">←</button>
-                <button type="button" onClick={() => setMovingScheduleId(null)}
-                  className="w-11 h-11 rounded-lg bg-action text-white hover:brightness-110 text-sm font-semibold flex items-center justify-center">Done</button>
-                <button type="button" disabled={!canRight} onClick={() => moveCourt(g, 1)}
-                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">→</button>
-                <div />
-                <button type="button" disabled={!canDown} onClick={() => movePosition(g, 1)}
-                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">↓</button>
-                <div />
-              </div>
-            </div>
-          </>
-        )}
         </div>
       );
     };
@@ -4750,40 +4812,49 @@ export default function EventDetailPage() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-base font-bold">Schedule</div>
           {canEditSchedule && (
-            <label className="text-[11px] text-muted flex items-center gap-1">
-              Per match
-              <input
-                type="number"
-                min={5} max={180} step={5}
-                value={scheduleDurationMin}
-                onChange={(e) => setScheduleDurationMin(Math.max(5, parseInt(e.target.value || "45", 10)))}
-                className="border border-border rounded px-1.5 py-0.5 text-[11px] w-14 tabular-nums"
-              />
+            <div className="text-[11px] text-muted flex items-center gap-1.5">
+              <span>Per match</span>
+              {/* +/- stepper — taps adjust by 5 minutes. No number keypad
+                  on mobile so the user can't break the 5-min rule. */}
+              <div className="inline-flex items-center border border-border rounded-lg overflow-hidden bg-white">
+                <button
+                  type="button"
+                  onClick={() => setScheduleDurationMin((v) => Math.max(5, v - 5))}
+                  disabled={scheduleDurationMin <= 5}
+                  aria-label="Decrease by 5 minutes"
+                  className="w-7 h-7 flex items-center justify-center text-foreground hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >–</button>
+                <span className="w-9 text-center text-sm font-semibold text-foreground tabular-nums select-none">{scheduleDurationMin}</span>
+                <button
+                  type="button"
+                  onClick={() => setScheduleDurationMin((v) => Math.min(180, v + 5))}
+                  disabled={scheduleDurationMin >= 180}
+                  aria-label="Increase by 5 minutes"
+                  className="w-7 h-7 flex items-center justify-center text-foreground hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >+</button>
+              </div>
               <span>min</span>
-            </label>
+            </div>
           )}
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-3 px-3 pb-2">
-          {(buckets["unassigned"].length > 0 || movingScheduleId) && (
+          {/* Hide empty columns from display. The D-pad ← → arrows are
+              still enabled based on the full column range (1..N), so
+              moving INTO an empty column makes it appear. */}
+          {buckets["unassigned"].length > 0 && (
             <div className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
               <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Unassigned</div>
-              {buckets["unassigned"].length === 0 ? (
-                <div className="text-[10px] text-muted italic px-1">use ← to move a match here</div>
-              ) : (
-                buckets["unassigned"].map(renderGameRow)
-              )}
+              {buckets["unassigned"].map(renderGameRow)}
             </div>
           )}
-          {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
-            <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Court {n}</div>
-              {(buckets[String(n)] || []).length === 0 ? (
-                <div className="text-[10px] text-muted italic px-1">empty</div>
-              ) : (
-                (buckets[String(n)] || []).map(renderGameRow)
-              )}
-            </div>
-          ))}
+          {Array.from({ length: numCourts }, (_, i) => i + 1)
+            .filter((n) => (buckets[String(n)] || []).length > 0)
+            .map((n) => (
+              <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Court {n}</div>
+                {(buckets[String(n)] || []).map(renderGameRow)}
+              </div>
+            ))}
         </div>
       </div>
     );

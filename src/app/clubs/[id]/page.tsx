@@ -10,6 +10,7 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
+import { withInstallTip } from "@/lib/inviteShare";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
@@ -1868,10 +1869,12 @@ export default function ClubDetailPage() {
                 const url = `${window.location.origin}/clubs/join/${invite.token}`;
                 const inviterName = session?.user?.name || "A club member";
                 // Pre-formatted message — what actually lands on the
-                // clipboard. Includes who is inviting, the club, and the
-                // join URL so recipients have full context.
-                const message =
-                  `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`;
+                // clipboard. Includes who is inviting, the club, the
+                // join URL, and the Add-to-Home-Screen install tip so
+                // recipients can save the app after signing in.
+                const message = withInstallTip(
+                  `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`,
+                );
                 const copied = await copyText(message);
                 await alertDialog(
                   copied

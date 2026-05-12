@@ -10,6 +10,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { COUNTRIES } from "@/lib/countries";
+import { withInstallTip } from "@/lib/inviteShare";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
 
@@ -197,7 +198,9 @@ export default function PlayersPage() {
       }
 
       const claimUrl = `${window.location.origin}/claim/${data.token}`;
-      const shareText = `Hi ${player.name}, you've been added to FriendlyBall. Claim your account to track your stats:\n\n${claimUrl}`;
+      const shareText = withInstallTip(
+        `Hi ${player.name}, you've been added to FriendlyBall. Claim your account to track your stats:\n\n${claimUrl}`,
+      );
 
       // Try Web Share API first (mobile native share sheet)
       if (navigator.share) {

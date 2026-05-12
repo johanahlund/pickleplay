@@ -210,12 +210,22 @@ export default function LineupBuilderPage() {
   // save is in flight or the picker is open so we don't clobber mid-edit.
   usePollingRefresh(loadAll, 15000, !loading && !saving && !picker);
 
-  // Determine which side our team is on. Canonical mapping = sort by id;
-  // server uses the same rule, so first id alphabetically is team1.
+  // Determine which side our team is on. MUST match the server's view:
+  // server uses `game.team1Id === captainTeamId` (the literal stored id).
+  // Older events (Round 1, created via the rounds/events POST endpoint)
+  // store team1Id as the home team — NOT alphabetical — so an
+  // alphabetical fallback would disagree with the server and flip the
+  // team tag on assignments, making picks land in the opponent column.
+  // Read team1Id straight from any existing game in this event; fall
+  // back to alphabetical only when there are no games yet.
   const ourSide: 1 | 2 | null = useMemo(() => {
-    if (!team || !opponentTeam) return null;
+    if (!team) return null;
+    if (games.length > 0) {
+      return games[0].team1Id === team.id ? 1 : 2;
+    }
+    if (!opponentTeam) return null;
     return team.id.localeCompare(opponentTeam.id) < 0 ? 1 : 2;
-  }, [team, opponentTeam]);
+  }, [team, opponentTeam, games]);
 
   const wantsField = (g: Game): boolean => ourSide === 1 ? g.team1Wants : g.team2Wants;
 
@@ -945,38 +955,59 @@ export default function LineupBuilderPage() {
                   {g && (canSchedule ? (
                     <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
                       <label className="text-muted">Start</label>
-                      <input
-                        type="time"
-                        step={300}
-                        disabled={saving || !!g.winnerId}
-                        defaultValue={(() => {
-                          if (!g.scheduledAt) return "";
-                          const d = new Date(g.scheduledAt);
-                          return isNaN(d.getTime()) ? "" : d.toTimeString().slice(0, 5);
-                        })()}
-                        onBlur={(e) => {
-                          const hhmm = e.target.value;
-                          if (!hhmm) {
-                            if (g.scheduledAt) setSchedule(g.id, { scheduledAt: null });
-                            return;
-                          }
-                          // Combine the time-of-day with the event's calendar
-                          // date. (HTML <input type="time"> only gives HH:MM.)
-                          // Defensive: if eventDate is missing or corrupt
-                          // (which has produced "Invalid Date" in the
-                          // wild), fall back to today's date — otherwise
-                          // base.toISOString() throws and we'd silently
-                          // ship "Invalid Date" downstream.
+                      {/* Two-select time picker — mirrors the Matches-tab
+                          schedule. iOS Safari ignores `step` on
+                          <input type="time">, so 5-min minutes are
+                          enforced via the option set here. */}
+                      {(() => {
+                        const cur = g.scheduledAt ? new Date(g.scheduledAt) : null;
+                        const curOk = cur && !isNaN(cur.getTime());
+                        const hh = curOk ? cur!.getHours() : null;
+                        const mm = curOk ? cur!.getMinutes() : null;
+                        const FIVE_MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+                        const HOURS = Array.from({ length: 24 }, (_, i) => i);
+                        const writeTime = (newHh: number, newMm: number) => {
                           let base = eventDate ? new Date(eventDate) : new Date();
                           if (isNaN(base.getTime())) base = new Date();
-                          const [hh, mm] = hhmm.split(":").map((s) => parseInt(s, 10));
-                          if (Number.isNaN(hh) || Number.isNaN(mm)) return;
-                          base.setHours(hh, mm, 0, 0);
-                          const iso = base.toISOString();
-                          if (iso !== g.scheduledAt) setSchedule(g.id, { scheduledAt: iso });
-                        }}
-                        className="border border-border rounded px-1.5 py-0.5 text-[11px]"
-                      />
+                          base.setHours(newHh, newMm, 0, 0);
+                          setSchedule(g.id, { scheduledAt: base.toISOString() });
+                        };
+                        return (
+                          <span className="inline-flex items-center gap-0.5 tabular-nums">
+                            <select
+                              value={hh == null ? "" : String(hh)}
+                              disabled={saving || !!g.winnerId}
+                              onChange={(e) => writeTime(parseInt(e.target.value, 10), mm ?? 0)}
+                              className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                            >
+                              <option value="" disabled>--</option>
+                              {HOURS.map((h) => (
+                                <option key={h} value={h}>{String(h).padStart(2, "0")}</option>
+                              ))}
+                            </select>
+                            <span className="text-[11px]">:</span>
+                            <select
+                              value={mm == null ? "" : String(mm)}
+                              disabled={saving || !!g.winnerId || hh == null}
+                              onChange={(e) => writeTime(hh ?? 0, parseInt(e.target.value, 10))}
+                              className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                            >
+                              <option value="" disabled>--</option>
+                              {FIVE_MINS.map((m) => (
+                                <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                              ))}
+                            </select>
+                            {hh != null && (
+                              <button
+                                type="button"
+                                title="Clear time"
+                                onClick={() => setSchedule(g.id, { scheduledAt: null })}
+                                className="text-muted hover:text-danger text-xs px-1"
+                              >✕</button>
+                            )}
+                          </span>
+                        );
+                      })()}
                       <label className="text-muted">Court</label>
                       <select
                         disabled={saving || !!g.winnerId}
