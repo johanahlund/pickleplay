@@ -13,8 +13,11 @@ export const metadata: Metadata = {
   description: "Organized play for racquet sports",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.png",
-    apple: "/apple-touch-icon.png",
+    // Versioned URLs so browsers fetch the new pickleball-glyph icon
+    // instead of serving the legacy paddle favicon from their (very
+    // aggressive) icon cache. Bump the `?v=` when icons change again.
+    icon: "/favicon.png?v=2",
+    apple: "/apple-touch-icon.png?v=2",
   },
   appleWebApp: {
     capable: true,
