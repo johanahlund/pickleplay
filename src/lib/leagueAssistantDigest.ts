@@ -204,18 +204,35 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
   // Rounds + match-days + games.
   lines.push("");
   lines.push("## Rounds & match-days");
+  // Format a DateTime as YYYY-MM-DD, appending HH:MM when the time
+  // looks meaningfully set (not the all-zeros placeholder produced
+  // when only a calendar date was picked). Runs server-side so the
+  // hour is UTC — captain-picked local times will appear shifted; the
+  // model is told this in the system prompt so it can caveat if asked.
+  const fmtDateTime = (d: Date | string | null | undefined): string => {
+    if (!d) return "not set";
+    const dt = typeof d === "string" ? new Date(d) : d;
+    const date = dt.toISOString().slice(0, 10);
+    const hh = dt.getUTCHours();
+    const mm = dt.getUTCMinutes();
+    if (hh === 0 && mm === 0) return date;
+    return `${date} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")} UTC`;
+  };
+
   for (const round of league.rounds) {
-    const window = [round.startDate, round.endDate].filter(Boolean).map((d) => new Date(d!).toLocaleDateString("en-CA")).join(" → ");
-    lines.push(`### Round ${round.roundNumber}${round.name ? ` — ${round.name}` : ""}${window ? ` (${window})` : ""} · ${round.status}`);
+    const roundWindow = round.startDate || round.endDate
+      ? `suggested window ${fmtDateTime(round.startDate)} → ${fmtDateTime(round.endDate)}`
+      : "no round window set";
+    lines.push(`### Round ${round.roundNumber}${round.name ? ` — ${round.name}` : ""} · ${roundWindow} · status ${round.status}`);
     if (round.events.length === 0) {
       lines.push("- _no match-days yet_");
       continue;
     }
     for (const ev of round.events) {
-      const dateStr = ev.date ? new Date(ev.date).toLocaleDateString("en-CA") : "—";
+      const dateStr = fmtDateTime(ev.date);
       const lineupRevealed = ev.lineupTotalLocked === true;
       const lineupTag = lineupRevealed ? "lineups revealed" : "lineups hidden (event not yet locked)";
-      lines.push(`- ${ev.name} · ${dateStr} · status ${ev.status} · ${lineupTag}`);
+      lines.push(`- ${ev.name} · selected date: ${dateStr} · status ${ev.status} · ${lineupTag}`);
       if (ev.leagueGames.length === 0) {
         lines.push("  _no games scheduled_");
         continue;
