@@ -16,6 +16,9 @@ const EVENT_DETAIL_RE = /^\/events\/[^/]+(\/.*)?$/;
 // /leagues/<id>/<sub>/* — sub-pages (sign-up, events, lineup) mount their
 // own hero-sub. /leagues/<id> itself still uses the global LightHeader.
 const LEAGUE_NESTED_RE = /^\/leagues\/[^/]+\/[^/].*$/;
+// Exceptions: sub-pages that we want to keep the global LightHeader on.
+// Match by suffix so paths like /leagues/xyz/assistant-logs still get it.
+const LEAGUE_NESTED_KEEP_GLOBAL_HEADER = ["/assistant-logs"];
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -234,7 +237,8 @@ export function Header() {
   // Build user summary for the avatar
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
-  const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname) || LEAGUE_NESTED_RE.test(pathname);
+  const isLeagueNested = LEAGUE_NESTED_RE.test(pathname) && !LEAGUE_NESTED_KEEP_GLOBAL_HEADER.some((suffix) => pathname.endsWith(suffix));
+  const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname) || isLeagueNested;
 
   // Reset main padding + header height var when header is hidden
   useEffect(() => {

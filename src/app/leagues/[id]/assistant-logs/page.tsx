@@ -25,6 +25,11 @@ interface ApiResponse {
   rows: QueryRow[];
 }
 
+interface LeagueLite {
+  name: string;
+  shortName: string | null;
+}
+
 /**
  * League organizer / app admin viewer for the jabberBrain Event Rules
  * Assistant chat logs. Read-only — surfaces what players ask plus any
@@ -34,6 +39,7 @@ export default function AssistantLogsPage() {
   const params = useParams();
   const leagueId = String(params?.id || "");
   const [data, setData] = useState<ApiResponse | null>(null);
+  const [league, setLeague] = useState<LeagueLite | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -43,15 +49,20 @@ export default function AssistantLogsPage() {
     if (!leagueId) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/leagues/${leagueId}/assistant-queries?limit=500`)
-      .then(async (r) => {
+    Promise.all([
+      fetch(`/api/leagues/${leagueId}/assistant-queries?limit=500`).then(async (r) => {
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
           throw new Error(j.error || `Failed (${r.status})`);
         }
         return r.json() as Promise<ApiResponse>;
+      }),
+      fetch(`/api/leagues/${leagueId}`).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([d, lg]) => {
+        setData(d);
+        if (lg) setLeague({ name: lg.name, shortName: lg.shortName ?? null });
       })
-      .then((d) => setData(d))
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
       .finally(() => setLoading(false));
   }, [leagueId]);
@@ -97,7 +108,12 @@ export default function AssistantLogsPage() {
       <Link href={`/leagues/${leagueId}`} className="text-sm text-action">&larr; League</Link>
 
       <div>
-        <h1 className="text-xl font-bold">Assistant chat logs</h1>
+        <h1 className="text-xl font-bold">
+          Assistant chat logs
+          {league && (
+            <span className="text-base font-medium text-muted"> · {league.shortName ?? league.name}</span>
+          )}
+        </h1>
         <p className="text-xs text-muted mt-0.5">
           Every question asked through the jabberBrain Event Rules Assistant and the answer it gave. Grouped by chat session.
         </p>
