@@ -467,6 +467,9 @@ export default function ClubsPage() {
                       <span className="text-blue-500"> · {males}♂</span>
                       <span className="text-pink-500"> · {females}♀</span>
                       <span> · {club._count.events} event{club._count.events !== 1 ? "s" : ""}</span>
+                      {(club.city || club.country) && (
+                        <span> · {[club.city, club.country].filter(Boolean).join(", ")}</span>
+                      )}
                     </div>
                   </div>
                   <span className="text-2xl text-muted">›</span>
@@ -620,8 +623,9 @@ export default function ClubsPage() {
                               {club.memberCount} member{club.memberCount !== 1 ? "s" : ""}
                               <span className="text-blue-500"> · {browseMales}♂</span>
                               <span className="text-pink-500"> · {browseFemales}♀</span>
-                              {club.city && <span> · {club.city}</span>}
-                              {club.country && !club.city && <span> · {club.country}</span>}
+                              {(club.city || club.country) && (
+                                <span> · {[club.city, club.country].filter(Boolean).join(", ")}</span>
+                              )}
                             </div>
                           </div>
                         </Link>
