@@ -177,7 +177,7 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
     const vice = t.viceCaptain?.name ? `vice ${t.viceCaptain.name}` : null;
     const club = t.club?.name ? `club ${t.club.name}` : null;
     const headerBits = [cap, vice, club].filter(Boolean).join(" · ");
-    lines.push(`- **${t.name}**${headerBits ? ` — ${headerBits}` : ""}`);
+    lines.push(`- ${t.name}${headerBits ? ` — ${headerBits}` : ""}`);
     if (t.players.length) {
       const roster = t.players
         .map((p) => p.player?.name)
@@ -218,7 +218,7 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
       const lineupTag = lineupRevealed
         ? "lineups locked & revealed"
         : `lineups hidden — ${lineupReadyTeamIds.length}/${totalTeams} captain(s) have locked`;
-      lines.push(`- **${ev.name}** · ${dateStr} · status ${ev.status} · ${lineupTag}`);
+      lines.push(`- ${ev.name} · ${dateStr} · status ${ev.status} · ${lineupTag}`);
       if (ev.leagueGames.length === 0) {
         lines.push("  _no games scheduled_");
         continue;

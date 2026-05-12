@@ -74,20 +74,24 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Reset on open/close. New conversationId every time the sheet opens
-  // so each chat session is a distinct group server-side.
+  // Conversation persists across close/reopen of the sheet — the user
+  // can dismiss the chat and come back to the same thread. We only
+  // mint a conversationId on first open, and abort any in-flight
+  // request (dropping the empty assistant placeholder) on close so a
+  // half-streamed reply doesn't show as a blank bubble next time.
   useEffect(() => {
     if (open) {
-      setConversationId(crypto.randomUUID());
+      setConversationId((cid) => cid || crypto.randomUUID());
     } else {
-      setMessages([]);
-      setInput("");
-      setError(null);
-      setExpanded(new Set());
-      setConversationId("");
       abortRef.current?.abort();
       abortRef.current = null;
       setStreaming(false);
+      setMessages((prev) => {
+        if (prev.length && prev[prev.length - 1]!.role === "assistant" && prev[prev.length - 1]!.content === "") {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
     }
   }, [open]);
 
@@ -99,12 +103,14 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Autoscroll to bottom on new content.
+  // Autoscroll to bottom on new content, and also when the sheet is
+  // reopened (so a returning user lands at the latest turn).
   useEffect(() => {
+    if (!open) return;
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, streaming]);
+  }, [open, messages, streaming]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
