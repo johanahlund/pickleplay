@@ -299,9 +299,9 @@ export default function ClubsPage() {
               autoFocus />
           </div>
           <div>
-            <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤10 chars, used in pills)</span></label>
-            <input type="text" value={newShortName} onChange={(e) => setNewShortName(e.target.value.slice(0, 10))}
-              maxLength={10}
+            <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤20 chars, used in pills)</span></label>
+            <input type="text" value={newShortName} onChange={(e) => setNewShortName(e.target.value.slice(0, 20))}
+              maxLength={20}
               placeholder="e.g. Tue Crew"
               className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50" />
           </div>

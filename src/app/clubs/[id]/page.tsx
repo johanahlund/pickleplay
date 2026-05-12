@@ -808,7 +808,11 @@ export default function ClubDetailPage() {
                 {clubPreview.logoUrl ? (
                   <img src={clubPreview.logoUrl} alt="" className="w-12 h-12 rounded-xl object-cover" />
                 ) : (
-                  <span className="text-3xl">{clubPreview.emoji}</span>
+                  // No logo yet — show a clean initial-square instead of
+                  // the default 🏓/🏟️ emoji, which reads as "ugly placeholder".
+                  <div className="w-12 h-12 rounded-xl bg-gray-100 border border-border flex items-center justify-center text-muted font-bold text-lg">
+                    {(clubPreview.name?.[0] || "·").toUpperCase()}
+                  </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -1227,11 +1231,11 @@ export default function ClubDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤10 chars, used in pills)</span></label>
+                <label className="block text-sm font-medium text-muted mb-1">Short Name <span className="text-muted font-normal">(≤20 chars, used in pills)</span></label>
                 <input
-                  type="text" value={editShortName} maxLength={10}
-                  onChange={(e) => { setEditShortName(e.target.value.slice(0, 10)); setClubDirty(true); }}
-                  placeholder={editName.slice(0, 10)}
+                  type="text" value={editShortName} maxLength={20}
+                  onChange={(e) => { setEditShortName(e.target.value.slice(0, 20)); setClubDirty(true); }}
+                  placeholder={editName.slice(0, 20)}
                   className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>

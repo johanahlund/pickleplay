@@ -58,7 +58,7 @@ export async function PATCH(
   if (name?.trim()) data.name = name.trim();
   if (shortName !== undefined) {
     data.shortName = typeof shortName === "string" && shortName.trim()
-      ? shortName.trim().slice(0, 10)
+      ? shortName.trim().slice(0, 20)
       : null;
   }
   if (emoji) data.emoji = emoji;

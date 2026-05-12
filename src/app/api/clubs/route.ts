@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
   const cleanShortName = typeof shortName === "string" && shortName.trim()
-    ? shortName.trim().slice(0, 10)
+    ? shortName.trim().slice(0, 20)
     : null;
   const validStatuses = ["draft", "active", "closed"];
   const cleanStatus = status && validStatuses.includes(status) ? status : "active";
