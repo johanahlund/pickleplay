@@ -15,6 +15,7 @@ interface SpeechRecognitionLike {
   lang: string;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
@@ -108,7 +109,22 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
        (window as unknown as WindowWithSpeech).webkitSpeechRecognition);
 
   const stopListening = useCallback(() => {
-    try { recognitionRef.current?.stop(); } catch { /* idempotent */ }
+    const rec = recognitionRef.current;
+    // Update UI state synchronously so the mic button reverts even on
+    // Safari, where onend can be delayed until the current utterance
+    // finalizes. Detach handlers so any late callbacks don't fight
+    // the new state (e.g. if the user starts a new session quickly).
+    setListening(false);
+    if (!rec) return;
+    rec.onresult = null;
+    rec.onend = null;
+    rec.onerror = null;
+    recognitionRef.current = null;
+    // abort() discards in-flight results immediately. stop() merely
+    // finalizes the current utterance — too gentle for "tap to stop".
+    // Some implementations only ship one of the two, so try both.
+    try { rec.abort?.(); } catch { /* ignore */ }
+    try { rec.stop(); } catch { /* ignore */ }
   }, []);
 
   // Conversation persists across close/reopen of the sheet — the user
