@@ -880,6 +880,10 @@ export default function LeagueDetailPage() {
   // Empty on initial render; populated after hydration to default-collapse
   // every team (honouring ?expandTeam=<id>). See effect below.
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  // Rounds tab: which round cards are expanded. Default — closest round
+  // to today is auto-expanded on first open (see useEffect below).
+  const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
+  const [roundsAutoScrolled, setRoundsAutoScrolled] = useState(false);
   // Tracks whether the standings expand/collapse-all button last
   // toggled into "all collapsed" state. The <details> elements are
   // uncontrolled, so this is just for the button's label/icon.
@@ -897,6 +901,35 @@ export default function LeagueDetailPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league?.id]);
+
+  // Rounds tab: pick the round whose start date is CLOSEST to today and
+  // auto-expand + scroll to it. Runs once when the rounds tab is opened
+  // (or league data first arrives if we're already on it).
+  useEffect(() => {
+    if (tab !== "rounds") return;
+    if (roundsAutoScrolled) return;
+    if (!league || !Array.isArray(league.rounds) || league.rounds.length === 0) return;
+    const today = Date.now();
+    let bestId: string | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const r of league.rounds) {
+      const ref = r.startDate ?? r.endDate;
+      if (!ref) continue;
+      const t = new Date(ref).getTime();
+      if (Number.isNaN(t)) continue;
+      const dist = Math.abs(t - today);
+      if (dist < bestDist) { bestDist = dist; bestId = r.id; }
+    }
+    if (!bestId && league.rounds.length > 0) bestId = league.rounds[0].id;
+    if (bestId) {
+      setExpandedRoundIds((prev) => prev.has(bestId!) ? prev : new Set([...prev, bestId!]));
+      setTimeout(() => {
+        const el = document.getElementById(`round-${bestId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }
+    setRoundsAutoScrolled(true);
+  }, [tab, league?.id, roundsAutoScrolled, league?.rounds]);
 
   // When returning from the per-player prefs editor with ?expandTeam, make
   // sure that team is open. When ?focus is set, scroll to it after the
@@ -997,6 +1030,8 @@ export default function LeagueDetailPage() {
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
+  // Inline toast for helper add/remove. Auto-clears after a few seconds.
+  const [helperFeedback, setHelperFeedback] = useState<{ kind: "added" | "removed" | "error"; name: string } | null>(null);
   const [showDeputyPicker, setShowDeputyPicker] = useState(false);
   const [deputySearch, setDeputySearch] = useState("");
   const [showTransferPicker, setShowTransferPicker] = useState(false);
@@ -1200,23 +1235,48 @@ export default function LeagueDetailPage() {
     fetchLeague();
   };
 
-  const addHelper = async (playerId: string) => {
-    await fetch(`/api/leagues/${id}/helpers`, {
+  const addHelper = async (playerId: string, playerName: string) => {
+    // Close the picker immediately, surface a brief "Added" toast at
+    // the top of the helpers card, and refresh in the background. No
+    // need to wait on the network round-trip — feels snappier.
+    setShowAddHelper(false);
+    setHelperSearch("");
+    setHelperFeedback({ kind: "added", name: playerName });
+    const r = await fetch(`/api/leagues/${id}/helpers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
-    setHelperSearch("");
+    if (!r.ok) {
+      setHelperFeedback({ kind: "error", name: playerName });
+    }
     fetchLeague();
+    // Auto-clear the toast after a few seconds.
+    setTimeout(() => setHelperFeedback(null), 3000);
   };
 
-  const removeHelper = async (playerId: string) => {
-    await fetch(`/api/leagues/${id}/helpers`, {
+  const removeHelper = async (playerId: string, playerName: string) => {
+    const ok = await confirm({
+      title: `Remove ${playerName} as helper?`,
+      message: `${playerName} will lose helper access to this league (managing rounds, events, captains, settings). They stay on the league as a regular participant if they are.`,
+      confirmText: "Remove helper",
+      cancelText: "Cancel",
+      danger: true,
+    });
+    if (!ok) return;
+    const r = await fetch(`/api/leagues/${id}/helpers`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
     });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      await alertDialog(d.error || "Failed to remove helper", "Error");
+      return;
+    }
+    setHelperFeedback({ kind: "removed", name: playerName });
     fetchLeague();
+    setTimeout(() => setHelperFeedback(null), 3000);
   };
 
   const startEditCategories = () => {
@@ -2084,7 +2144,7 @@ export default function LeagueDetailPage() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ createdById: p.id }),
                       });
-                      if (userId) await addHelper(userId);
+                      if (userId) await addHelper(userId, session?.user?.name || "you");
                       setShowTransferPicker(false);
                       fetchLeague();
                     }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
@@ -2139,6 +2199,17 @@ export default function LeagueDetailPage() {
         {/* Helpers */}
         <div className={`${frameClass} p-4 space-y-3`}>
           <h3 className="text-sm font-semibold">Helpers ({league.helpers?.length || 0})</h3>
+          {helperFeedback && (
+            <div className={`text-xs rounded-lg px-2.5 py-1.5 border ${
+              helperFeedback.kind === "error"
+                ? "text-rose-700 bg-rose-50 border-rose-200"
+                : "text-emerald-700 bg-emerald-50 border-emerald-200"
+            }`}>
+              {helperFeedback.kind === "added" && <>✓ Added <span className="font-medium">{helperFeedback.name}</span> as helper.</>}
+              {helperFeedback.kind === "removed" && <>✓ Removed <span className="font-medium">{helperFeedback.name}</span> as helper.</>}
+              {helperFeedback.kind === "error" && <>Couldn&apos;t update <span className="font-medium">{helperFeedback.name}</span>. Try again.</>}
+            </div>
+          )}
           <div className="space-y-1">
             {league.helpers?.map((h) => (
               <div key={h.id} className="flex items-center gap-2 py-1">
@@ -2147,7 +2218,7 @@ export default function LeagueDetailPage() {
                   <div className="text-sm font-medium truncate">{h.player.name}</div>
                   {h.player.email && <div className="text-[10px] text-muted truncate">{h.player.email}</div>}
                 </div>
-                <button onClick={() => removeHelper(h.playerId)} className="text-xs text-danger px-1 hover:underline">✕</button>
+                <button onClick={() => removeHelper(h.playerId, h.player.name)} className="text-xs text-danger px-1 hover:underline">✕</button>
               </div>
             ))}
             {(!league.helpers || league.helpers.length === 0) && <p className="text-xs text-muted">No helpers yet</p>}
@@ -2159,14 +2230,14 @@ export default function LeagueDetailPage() {
                 className="w-full border border-border rounded-lg px-2 py-1.5 text-sm mb-1" />
               <div className="max-h-40 overflow-y-auto space-y-0.5">
                 {playerSearchResults(helperSearch, [league.createdBy?.id || "", ...(league.helpers?.map((h) => h.playerId) || [])]).map((p) => (
-                  <button key={p.id} onClick={() => addHelper(p.id)}
+                  <button key={p.id} onClick={() => addHelper(p.id, p.name)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-left">
                     <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
                     <span className="text-sm">{p.name}</span>
                   </button>
                 ))}
               </div>
-              <button onClick={() => setShowAddHelper(false)} className="text-xs text-muted mt-1">Done</button>
+              <button onClick={() => setShowAddHelper(false)} className="text-xs text-muted mt-1">Cancel</button>
             </div>
           ) : (
             <button onClick={() => { setShowAddHelper(true); setHelperSearch(""); fetchPlayers(); }}
@@ -2896,9 +2967,23 @@ export default function LeagueDetailPage() {
       {/* ── Rounds Tab ── */}
       {tab === "rounds" && (
         <div className="space-y-3">
-          {league.rounds.map((round) => (
-            <div key={round.id} className={`${frameClass} overflow-hidden`}>
-              <div className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2">
+          {league.rounds.map((round) => {
+            const isExpanded = expandedRoundIds.has(round.id) || editingRoundId === round.id;
+            const toggleExpand = () => {
+              setExpandedRoundIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(round.id)) next.delete(round.id);
+                else next.add(round.id);
+                return next;
+              });
+            };
+            return (
+            <div key={round.id} id={`round-${round.id}`} className={`${frameClass} overflow-hidden`}>
+              <div
+                onClick={() => { if (editingRoundId !== round.id) toggleExpand(); }}
+                className="px-3 py-2 bg-gray-50 border-b border-border flex items-center justify-between gap-2 cursor-pointer hover:bg-gray-100"
+              >
+                <span className={`text-muted text-xs shrink-0 transition-transform inline-block ${isExpanded ? "rotate-90" : ""}`}>›</span>
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-semibold">{round.name || `Round ${round.roundNumber}`}</span>
                   {(round.startDate || round.endDate) && (
@@ -2918,17 +3003,19 @@ export default function LeagueDetailPage() {
                 })()}
                 {canEdit && editingRoundId !== round.id && (
                   <>
-                    <button onClick={() => setEditingRoundId(round.id)}
+                    <button onClick={(e) => { e.stopPropagation(); setEditingRoundId(round.id); }}
                       aria-label="Edit round"
                       className="text-xs text-muted hover:text-foreground rounded px-1.5 py-0.5">
                       <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
-                    <button onClick={() => deleteRound(round.id, round.name || `Round ${round.roundNumber}`)}
+                    <button onClick={(e) => { e.stopPropagation(); deleteRound(round.id, round.name || `Round ${round.roundNumber}`); }}
                       aria-label="Delete round"
                       className="text-xs text-danger hover:bg-red-50 rounded px-1.5 py-0.5">✕</button>
                   </>
                 )}
               </div>
+              {isExpanded && (
+              <>
               {editingRoundId === round.id && (
                 <div className="p-3">
                   <RoundForm
@@ -3065,8 +3152,11 @@ export default function LeagueDetailPage() {
                   />
                 );
               })()}
+              </>
+              )}
             </div>
-          ))}
+          );
+          })}
 
           {/* Add round — managers only */}
           {canEdit && (!showAddRound ? (

@@ -16,6 +16,7 @@ import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
 import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
 import { nameMatchesSearch } from "@/lib/searchUtil";
+import { copyText } from "@/lib/clipboard";
 
 // ── Long press to delete ──
 // `onDelete` is responsible for confirming via useConfirm before mutating;
@@ -1866,17 +1867,9 @@ export default function ClubDetailPage() {
                 // clipboard. Includes who is inviting, the club, and the
                 // join URL so recipients have full context.
                 const message =
-                  `${inviterName} invites you to join the club "${club.name}" on Rally — the pickleball app.\n\n` +
+                  `${inviterName} invites you to join the club "${club.name}" on FriendlyBall — the pickleball app.\n\n` +
                   `Tap the link to accept:\n${url}`;
-                let copied = false;
-                if (navigator.clipboard) {
-                  try {
-                    await navigator.clipboard.writeText(message);
-                    copied = true;
-                  } catch {
-                    copied = false;
-                  }
-                }
+                const copied = await copyText(message);
                 // Show a how-to popup with the exact text that was copied,
                 // plus a quick guide on where to paste it.
                 await alertDialog(
@@ -1886,9 +1879,6 @@ export default function ClubDetailPage() {
                   "Invite link ready",
                   { messageSize: "xs" },
                 );
-                if (!copied && !navigator.clipboard) {
-                  prompt("Copy this invite text:", message);
-                }
               }} className="text-xs text-action font-medium">Copy_Invite_Link</button>
             )}
           </div>

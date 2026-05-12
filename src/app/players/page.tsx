@@ -11,6 +11,7 @@ import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { COUNTRIES } from "@/lib/countries";
 import { nameMatchesSearch } from "@/lib/searchUtil";
+import { copyText } from "@/lib/clipboard";
 
 interface PlayerClub {
   id: string;
@@ -196,13 +197,13 @@ export default function PlayersPage() {
       }
 
       const claimUrl = `${window.location.origin}/claim/${data.token}`;
-      const shareText = `Hey ${player.name}! You've been added to Rally 🏓 Claim your account to track your stats: ${claimUrl}`;
+      const shareText = `Hey ${player.name}! You've been added to FriendlyBall 🏓 Claim your account to track your stats: ${claimUrl}`;
 
       // Try Web Share API first (mobile native share sheet)
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "Join Rally",
+            title: "Join FriendlyBall",
             text: shareText,
           });
           return;
@@ -212,9 +213,13 @@ export default function PlayersPage() {
       }
 
       // Fallback: copy to clipboard
-      await navigator.clipboard.writeText(shareText);
-      setCopiedId(player.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      const ok = await copyText(shareText);
+      if (ok) {
+        setCopiedId(player.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      } else {
+        await alertDialog(`Couldn't copy automatically. Here's the invite:\n\n${shareText}`);
+      }
     } finally {
       setInvitingId(null);
     }
@@ -233,12 +238,12 @@ export default function PlayersPage() {
       }
 
       const resetUrl = `${window.location.origin}/reset/${data.token}`;
-      const shareText = `Reset your Rally password here: ${resetUrl}`;
+      const shareText = `Reset your FriendlyBall password here: ${resetUrl}`;
 
       if (navigator.share) {
         try {
           await navigator.share({
-            title: "Rally Password Reset",
+            title: "FriendlyBall Password Reset",
             text: shareText,
           });
           return;
@@ -247,9 +252,13 @@ export default function PlayersPage() {
         }
       }
 
-      await navigator.clipboard.writeText(shareText);
-      setCopiedId(player.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      const ok = await copyText(shareText);
+      if (ok) {
+        setCopiedId(player.id);
+        setTimeout(() => setCopiedId(null), 2000);
+      } else {
+        await alertDialog(`Couldn't copy automatically. Here's the reset link:\n\n${shareText}`);
+      }
     } finally {
       setResettingId(null);
     }

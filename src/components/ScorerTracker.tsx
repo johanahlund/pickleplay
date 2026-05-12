@@ -9,7 +9,7 @@ interface RallyPlayer {
   photoUrl?: string | null;
 }
 
-interface RallyTrackerProps {
+interface ScorerTrackerProps {
   matchId: string;
   matchStatus: string;
   visible: boolean;
@@ -151,7 +151,7 @@ function findPlayer(court: CourtState, playerId: string): RallyPlayer {
   return { id: "", name: "?" };
 }
 
-export function RallyTracker({
+export function ScorerTracker({
   matchId,
   matchStatus,
   visible,
@@ -163,7 +163,7 @@ export function RallyTracker({
   onSubmitScore,
   onScoreChange,
   onClose,
-}: RallyTrackerProps) {
+}: ScorerTrackerProps) {
   const { isRally, targetScore } = parseFormat(scoringFormat);
   const { winByN, cap, goldenPoint } = parseWinBy(winBy);
   const isDoubles = team1Players.length === 2 && team2Players.length === 2;

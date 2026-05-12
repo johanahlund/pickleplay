@@ -1,4 +1,4 @@
-// Icon.tsx — Rally icon system
+// Icon.tsx — FriendlyBall icon system
 // 24×24, currentColor, stroke 2.25 for outdoor readability.
 // Usage: <Icon name="trophy" size={22} color="#16a34a" />
 

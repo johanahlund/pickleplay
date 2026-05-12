@@ -22,12 +22,13 @@ import { ClassesManager } from "@/components/ClassesManager";
 import { ClassStepFlow } from "@/components/class-steps/ClassStepFlow";
 import { SessionsManager } from "@/components/SessionsManager";
 import { CompetitionResults } from "@/components/CompetitionResults";
-import { RallyTracker } from "@/components/RallyTracker";
+import { ScorerTracker } from "@/components/ScorerTracker";
 import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 import { frameClass } from "@/components/Card";
 import { nameMatchesSearch } from "@/lib/searchUtil";
+import { copyText } from "@/lib/clipboard";
 import { COUNTRIES } from "@/lib/countries";
 
 interface Player {
@@ -573,11 +574,11 @@ export default function EventDetailPage() {
   const [allWaGroups, setAllWaGroups] = useState<{ id: string; name: string }[]>([]);
   const [newGroupName, setNewGroupName] = useState("");
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
-  const [rallyMatchId, setRallyMatchId] = useState<string | null>(null);
+  const [scorerMatchId, setScorerMatchId] = useState<string | null>(null);
   const [actionSheetMatchId, setActionSheetMatchId] = useState<string | null>(null);
   const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
-  const [rallyVisible, setRallyVisible] = useState(false);
-  const [rallyLiveScore, setRallyLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
+  const [scorerVisible, setScorerVisible] = useState(false);
+  const [scorerLiveScore, setScorerLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
 
   const isOwner = !!(event && userId && event.createdById === userId) && hasRole(viewRole, "event");
@@ -751,10 +752,13 @@ export default function EventDetailPage() {
   const sendToWhatsApp = (groupName: string) => {
     const text = buildWhatsAppMessage();
     const encoded = encodeURIComponent(text);
-    // Copy to clipboard as fallback
-    navigator.clipboard.writeText(text);
-    setCopiedGroupId(groupName);
-    setTimeout(() => setCopiedGroupId(null), 2000);
+    // Copy to clipboard as fallback (fire-and-forget — WhatsApp opens regardless)
+    copyText(text).then((ok) => {
+      if (ok) {
+        setCopiedGroupId(groupName);
+        setTimeout(() => setCopiedGroupId(null), 2000);
+      }
+    });
     // Open WhatsApp with pre-filled text
     window.open(`https://wa.me/?text=${encoded}`, "_blank");
   };
@@ -3971,7 +3975,7 @@ export default function EventDetailPage() {
     const showInputs = canScore && (isActive || isPaused || isEditing);
     const isNextMatch = nextMatchIdSet.has(match.id);
     const isCourtFree = courtFreeMatchIds.has(match.id);
-    const hasLiveScore = rallyMatchId === match.id && rallyLiveScore;
+    const hasLiveScore = scorerMatchId === match.id && scorerLiveScore;
 
     // Pickle detection: one team scored 0 in a completed match
     const isPickle = isCompleted && displayScore1 !== null && displayScore2 !== null && (displayScore1 === 0 || displayScore2 === 0) && (displayScore1 + displayScore2 > 0);
@@ -4028,8 +4032,8 @@ export default function EventDetailPage() {
           <div className="flex-1 min-w-0">
           {(() => {
             const renderTeamRow = (teamPlayers: MatchPlayer[], teamNum: 1 | 2, won: boolean, scoreVal: number | null) => {
-              const liveServerId = hasLiveScore ? rallyLiveScore?.serverId : undefined;
-              const liveReceiverId = hasLiveScore ? rallyLiveScore?.receiverId : undefined;
+              const liveServerId = hasLiveScore ? scorerLiveScore?.serverId : undefined;
+              const liveReceiverId = hasLiveScore ? scorerLiveScore?.receiverId : undefined;
               const p1 = teamPlayers[0];
               const p2 = teamPlayers[1];
               const nameColor = won && !isEditing ? "text-green-700" : "";
@@ -4064,7 +4068,7 @@ export default function EventDetailPage() {
                     {isCompleted && !isEditing ? (
                       <span className={`text-2xl font-bold min-w-[2.5rem] text-center block ${won ? "text-green-600" : "text-gray-400"}`}>{scoreVal}</span>
                     ) : hasLiveScore ? (
-                      <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? rallyLiveScore!.team1 : rallyLiveScore!.team2}</span>
+                      <span className="text-2xl font-bold min-w-[2.5rem] text-center block text-orange-500 tabular-nums">{teamNum === 1 ? scorerLiveScore!.team1 : scorerLiveScore!.team2}</span>
                     ) : showInputs ? (
                       <div onClick={(e) => e.stopPropagation()}>
                         <ScorePicker value={scores[match.id]?.[teamKey] ?? ""} targetScore={targetScore} winBy={matchWinBy}
@@ -4620,8 +4624,8 @@ export default function EventDetailPage() {
                   className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⏸️ Pause</button>
               )}
               {!isMatchCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
-                <button onClick={async () => { close(); if (match.scorerId === userId || (rallyMatchId === match.id && rallyLiveScore)) { setRallyMatchId(match.id); setRallyVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setRallyMatchId(match.id); setRallyVisible(true); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⚖️ Rally scorer</button>
+                <button onClick={async () => { close(); if (match.scorerId === userId || (scorerMatchId === match.id && scorerLiveScore)) { setScorerMatchId(match.id); setScorerVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setScorerMatchId(match.id); setScorerVisible(true); }}
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⚖️ Live scorer</button>
               )}
               {!isMatchCompleted && (
                 <button onClick={() => { setFocusedMatchId(match.id); close(); }}
@@ -4651,10 +4655,10 @@ export default function EventDetailPage() {
     if (!match || match.status === "completed") { setFocusedMatchId(null); return null; }
     const t1 = match.players.filter((p: MatchPlayer) => p.team === 1);
     const t2 = match.players.filter((p: MatchPlayer) => p.team === 2);
-    const liveT1 = rallyMatchId === match.id && rallyLiveScore ? rallyLiveScore.team1 : null;
-    const liveT2 = rallyMatchId === match.id && rallyLiveScore ? rallyLiveScore.team2 : null;
-    const liveServerId = rallyMatchId === match.id ? rallyLiveScore?.serverId : undefined;
-    const liveReceiverId = rallyMatchId === match.id ? rallyLiveScore?.receiverId : undefined;
+    const liveT1 = scorerMatchId === match.id && scorerLiveScore ? scorerLiveScore.team1 : null;
+    const liveT2 = scorerMatchId === match.id && scorerLiveScore ? scorerLiveScore.team2 : null;
+    const liveServerId = scorerMatchId === match.id ? scorerLiveScore?.serverId : undefined;
+    const liveReceiverId = scorerMatchId === match.id ? scorerLiveScore?.receiverId : undefined;
     const statusLabel = match.status === "active" ? "In Play" : match.status === "paused" ? "Paused" : "Pending";
 
     const renderFocusPlayer = (mp: MatchPlayer) => {
@@ -4729,9 +4733,9 @@ export default function EventDetailPage() {
     );
   };
 
-  const renderRallyTracker = () => {
-    if (!rallyMatchId || !event) return null;
-    const match = event.matches?.find((m: Match) => m.id === rallyMatchId);
+  const renderScorerTracker = () => {
+    if (!scorerMatchId || !event) return null;
+    const match = event.matches?.find((m: Match) => m.id === scorerMatchId);
     if (!match) return null;
     const team1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
     const team2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
@@ -4739,10 +4743,10 @@ export default function EventDetailPage() {
     const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
     const wb = cls?.winBy || "2";
     return (
-      <RallyTracker
+      <ScorerTracker
         matchId={match.id}
         matchStatus={match.status}
-        visible={rallyVisible}
+        visible={scorerVisible}
         team1Players={team1}
         team2Players={team2}
         scoringFormat={fmt}
@@ -4757,12 +4761,12 @@ export default function EventDetailPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
           });
-          setRallyMatchId(null);
-          setRallyVisible(false);
+          setScorerMatchId(null);
+          setScorerVisible(false);
           fetchEvent();
         }}
-        onScoreChange={(t1, t2, sid, rid) => setRallyLiveScore({ team1: t1, team2: t2, serverId: sid, receiverId: rid })}
-        onClose={() => setRallyVisible(false)}
+        onScoreChange={(t1, t2, sid, rid) => setScorerLiveScore({ team1: t1, team2: t2, serverId: sid, receiverId: rid })}
+        onClose={() => setScorerVisible(false)}
       />
     );
   };
@@ -4858,7 +4862,7 @@ export default function EventDetailPage() {
         )}
         {renderActionSheet()}
         {renderFocusedMatch()}
-        {renderRallyTracker()}
+        {renderScorerTracker()}
         </div>
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
@@ -5213,7 +5217,7 @@ export default function EventDetailPage() {
         </button>
       </div>
 
-      {renderRallyTracker()}
+      {renderScorerTracker()}
 
       {(isOwner || isAdmin) && (
         <button onClick={deleteEvent}

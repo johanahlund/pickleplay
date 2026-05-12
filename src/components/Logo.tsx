@@ -1,10 +1,11 @@
 // src/components/Logo.tsx
 //
-// Rally wordmark + swappable sport ball.
+// FriendlyBall wordmark + swappable sport ball.
 //
-// The ball is the brand system's sport slot: the same wordmark with a
-// different ball is immediately legible as `Rally for pickleball`, `Rally
-// for padel`, `Rally for tennis`.
+// The wordmark renders as "Friendly" + the ball — the ball glyph IS the
+// "Ball" half of the name. The same mark reads as
+// `FriendlyBall for pickleball`, `FriendlyBall for padel`,
+// `FriendlyBall for tennis` just by swapping the ball.
 //
 // Default ball alignment is "midline" — the ball sits centered with the
 // text x-height, which reads as motion rather than punctuation.
@@ -13,43 +14,56 @@
 //   <Logo size={20} color="#15803d" />                 // header, light bg
 //   <Logo size={20} color="#fff"    ball="pickle" />   // header, dark bg
 //   <Logo size={34} ball="padel" />                    // future sport
+//   <Logo size={20} wordmark="full" />                 // "FriendlyBall" + ball
 
 import React from "react";
 
-export type RallyBall =
+export type LogoBall =
   | "solid"
   | "pickle"
   | "tennis"
   | "padel"
   | "padel-blue";
 
-export type RallyBallAlign = "baseline" | "midline" | "cap" | "float";
+export type LogoBallAlign = "baseline" | "midline" | "cap" | "float";
+
+/** "full"  → "FriendlyBall" + ball glyph (default; name spelled out, ball = sport slot).
+ *  "split" → "Friendly" + ball glyph (ball stands in for "Ball"). */
+export type LogoWordmark = "split" | "full";
 
 export interface LogoProps {
   size?: number;                // font-size in px; the ball scales with it
   color?: string;               // wordmark text color
+  accentColor?: string;         // color for the "Ball" half when wordmark="full"
   weight?: number;              // 700–900, default 800
-  ball?: RallyBall;             // which sport's ball
+  ball?: LogoBall;              // which sport's ball
   ballColor?: string;           // only for `solid`
-  ballAlign?: RallyBallAlign;   // default "midline"
+  ballAlign?: LogoBallAlign;    // default "midline"
   ballScale?: number;           // ball size as fraction of font size
+  wordmark?: LogoWordmark;      // default "split"
   "aria-label"?: string;
 }
 
 export function Logo({
   size = 20,
   color = "#15803d",
+  accentColor,
   weight = 800,
   ball = "pickle",
   ballColor = "#84cc16",
   ballAlign = "midline",
-  ballScale = 0.48,
-  "aria-label": ariaLabel = "Rally",
+  ballScale,
+  wordmark = "full",
+  "aria-label": ariaLabel = "FriendlyBall",
 }: LogoProps) {
-  const ballSize = Math.round(size * ballScale);
+  // When the ball substitutes for the word "Ball" it has to read as a
+  // letterform, not punctuation — so scale it up by default. Even in the
+  // "full" wordmark the ball is the brand mark, so keep it generous.
+  const effectiveScale = ballScale ?? (wordmark === "split" ? 0.92 : 0.85);
+  const ballSize = Math.round(size * effectiveScale);
 
   // Offset (px) to move the ball UP from the text baseline.
-  const offsets: Record<RallyBallAlign, number> = {
+  const offsets: Record<LogoBallAlign, number> = {
     baseline: 0,
     midline: Math.round(size * 0.28 - ballSize / 2),
     cap:     Math.round(size * 0.62 - ballSize / 2),
@@ -74,7 +88,14 @@ export function Logo({
         gap: Math.max(2, Math.round(size * 0.04)),
       }}
     >
-      Rally
+      {wordmark === "full" ? (
+        <>
+          <span>Friendly</span>
+          <span style={accentColor ? { color: accentColor } : undefined}>Ball</span>
+        </>
+      ) : (
+        <span>Friendly</span>
+      )}
       <svg
         width={ballSize}
         height={ballSize}
@@ -96,7 +117,7 @@ function BallGlyph({
   kind,
   solidColor,
 }: {
-  kind: RallyBall;
+  kind: LogoBall;
   solidColor: string;
 }) {
   if (kind === "solid") {
@@ -141,5 +162,8 @@ function BallGlyph({
   }
   return null;
 }
+
+/** Back-compat alias for callers that imported the old name. */
+export type RallyBall = LogoBall;
 
 export default Logo;

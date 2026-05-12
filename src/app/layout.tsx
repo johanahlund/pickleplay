@@ -9,7 +9,7 @@ import { RoleProvider, RoleTogglePill } from "@/components/RoleToggle";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 
 export const metadata: Metadata = {
-  title: "Rally",
+  title: "FriendlyBall",
   description: "Organized play for racquet sports",
   manifest: "/manifest.json",
   icons: {
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Rally",
+    title: "FriendlyBall",
   },
 };
 

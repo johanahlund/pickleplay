@@ -5,7 +5,7 @@ import { describe, test, expect } from "vitest";
  * Tests parseWinBy and isGameWon with the "2_gp18" format.
  */
 
-// Mirrors the logic from RallyTracker.tsx
+// Mirrors the logic from ScorerTracker.tsx
 function parseWinBy(wb: string): { winByN: number; cap: number | null; goldenPoint: number | null } {
   const gpMatch = wb.match(/^(\d+)_gp(\d+)$/);
   if (gpMatch) return { winByN: parseInt(gpMatch[1]), cap: null, goldenPoint: parseInt(gpMatch[2]) };

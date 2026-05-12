@@ -70,7 +70,7 @@ export default function RegisterPage() {
       <div className="text-center">
         <div className="text-5xl mb-2">🏓</div>
         <h2 className="text-2xl font-bold">Create Account</h2>
-        <p className="text-muted text-sm mt-1">Join Rally to start tracking your games</p>
+        <p className="text-muted text-sm mt-1">Join FriendlyBall to start tracking your games</p>
       </div>
 
       <form onSubmit={handleSubmit} className={`${frameClass} p-4 space-y-4`}>

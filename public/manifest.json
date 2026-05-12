@@ -1,6 +1,6 @@
 {
-  "name": "Rally",
-  "short_name": "Rally",
+  "name": "FriendlyBall",
+  "short_name": "FriendlyBall",
   "description": "Organized play for racquet sports",
   "start_url": "/",
   "display": "standalone",
