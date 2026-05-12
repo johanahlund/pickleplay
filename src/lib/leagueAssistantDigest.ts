@@ -59,12 +59,13 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
               date: true,
               status: true,
               hostTeamId: true,
-              // Latch: true iff BOTH teams have set lineupReady. Once
-              // true it never resets. The assistant is open-access, so
-              // we treat unrevealed lineups as confidential and hide
-              // them until both captains have locked.
+              // Event-level latch: true once the event has revealed
+              // lineups. Never resets. The assistant is open-access, so
+              // we treat unrevealed lineups as confidential. Per-team
+              // lineupReady flags don't matter — the event-level lock
+              // is the only signal we use.
               lineupTotalLocked: true,
-              leagueTeams: { select: { teamId: true, points: true, lineupReady: true } },
+              leagueTeams: { select: { teamId: true, points: true } },
               leagueGames: {
                 select: {
                   id: true,
@@ -212,12 +213,8 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
     }
     for (const ev of round.events) {
       const dateStr = ev.date ? new Date(ev.date).toLocaleDateString("en-CA") : "—";
-      const lineupReadyTeamIds = ev.leagueTeams.filter((lt) => lt.lineupReady).map((lt) => lt.teamId);
-      const totalTeams = ev.leagueTeams.length;
       const lineupRevealed = ev.lineupTotalLocked === true;
-      const lineupTag = lineupRevealed
-        ? "lineups locked & revealed"
-        : `lineups hidden — ${lineupReadyTeamIds.length}/${totalTeams} captain(s) have locked`;
+      const lineupTag = lineupRevealed ? "lineups revealed" : "lineups hidden (event not yet locked)";
       lines.push(`- ${ev.name} · ${dateStr} · status ${ev.status} · ${lineupTag}`);
       if (ev.leagueGames.length === 0) {
         lines.push("  _no games scheduled_");
@@ -239,9 +236,9 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
         const kindTag = g.kind !== "league" ? ` [${g.kind}]` : "";
         lines.push(`  - ${g.category.name}${kindTag}: ${g.team1.name} vs ${g.team2.name}${score}${winner}`);
 
-        // Lineup line — confidential until BOTH teams locked.
+        // Lineup line — confidential until the event is locked.
         if (!lineupRevealed) {
-          lines.push(`    lineup: hidden until both captains lock their lineup`);
+          lines.push(`    lineup: hidden until the event is locked`);
           continue;
         }
         if (g.gamePlayers.length === 0) {
