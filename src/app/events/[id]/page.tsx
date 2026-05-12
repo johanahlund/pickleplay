@@ -2,10 +2,20 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import useSWR from "swr";
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
@@ -175,11 +185,25 @@ interface Event {
   round?: LeagueRoundLink | null;
   leagueTeams?: LeagueEventTeamLink[];
   hostTeamId?: string | null;
+  lineupTotalLocked?: boolean;
   // Flat list of league games (per-category match slots) for this event.
   // Used by the participants list to flag who is/isn't in a lineup yet.
   // gamePlayers is filtered server-side to the viewer's side until both
   // teams flip lineupReady, so this stays privacy-safe.
-  leagueGames?: { id: string; categoryId: string; gamePlayers: { playerId: string }[] }[];
+  leagueGames?: {
+    id: string;
+    categoryId: string;
+    team1Id: string;
+    team2Id: string;
+    team1Wants?: boolean | null;
+    team2Wants?: boolean | null;
+    slotNumber?: number;
+    kind?: "principal" | "league" | "extra";
+    scheduledAt?: string | null;
+    courtNum?: number | null;
+    winnerId?: string | null;
+    gamePlayers: { playerId: string; team?: number | null }[];
+  }[];
   // Linked social side event. Present (single item) on league events
   // where the operator opted into running a parallel social event.
   socialEvents?: { id: string; name: string; status: string }[];
@@ -404,6 +428,43 @@ function SwipeablePlayerRow({
   );
 }
 
+// ── DnD helpers for the league-event Schedule card (touch-friendly via
+// @dnd-kit). Each match card is a `ScheduleDraggable` that takes a grip
+// handle on the left edge; each court column is a `ScheduleDroppable`.
+function ScheduleDraggable({ id, children, dragging }: { id: string; children: ReactNode; dragging?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
+  const isMe = isDragging || !!dragging;
+  const style: React.CSSProperties = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: isMe ? 50 : undefined }
+    : {};
+  return (
+    <div ref={setNodeRef} style={style} className={`relative ${isMe ? "opacity-40" : ""}`}>
+      {/* Grip — the @dnd-kit activator. touchAction: none lets the
+          handle initiate a touch drag without the browser scrolling
+          the page. The rest of the card stays scrollable. */}
+      <div
+        {...attributes}
+        {...listeners}
+        style={{ touchAction: "none" }}
+        title="Drag to move"
+        className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-muted cursor-grab active:cursor-grabbing select-none rounded-l-lg hover:bg-gray-50"
+      >
+        <span className="text-[14px] leading-none">⠿</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ScheduleDroppable({ id, children, className, highlightClass }: { id: string; children: ReactNode; className?: string; highlightClass?: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`${className || ""} ${isOver ? (highlightClass || "ring-2 ring-blue-300 bg-blue-50") : ""}`}>
+      {children}
+    </div>
+  );
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -537,10 +598,33 @@ export default function EventDetailPage() {
   const [removingPlayers, setRemovingPlayers] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [matchTab, setMatchTab] = useState<"current" | "previous" | "paused" | "future">("current");
-  const [leagueFilter, setLeagueFilter] = useState<"all" | "principal" | "friendly" | "non-league">("all");
+  // Match filters on the Matches tab. Empty Set / null = no filter (show
+  // all). Kinds is multi-select via pills; gender + format are single-
+  // toggle (click again to clear).
+  const [matchKindFilter, setMatchKindFilter] = useState<Set<"principal" | "friendly" | "non-league">>(new Set());
+  const [matchGenderFilter, setMatchGenderFilter] = useState<"M" | "F" | null>(null);
+  const [matchFormatFilter, setMatchFormatFilter] = useState<"singles" | "doubles" | null>(null);
+  const [matchPlayerSearch, setMatchPlayerSearch] = useState("");
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
+  // Schedule view — default per-match duration used by the auto-fill
+  // button on the league-event Matches tab. User-adjustable.
+  const [scheduleDurationMin, setScheduleDurationMin] = useState(45);
+  // Drag-and-drop state for the league schedule. `scheduleDragId` is the
+  // game being dragged; `scheduleDragOverCol` is the court key (1..N or
+  // "unassigned") the cursor is currently over — used to highlight the
+  // drop target.
+  const [scheduleDragId, setScheduleDragId] = useState<string | null>(null);
+  // @dnd-kit sensors: PointerSensor handles mouse + pen + most modern
+  // touch; TouchSensor handles legacy touch with a press-and-hold delay
+  // so quick swipes still scroll the horizontal courts row.
+  const scheduleSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+  );
+  // Game id currently showing the court-picker popup. Null = no popup open.
+  const [courtPickerGameId, setCourtPickerGameId] = useState<string | null>(null);
   const [showAddMatch, setShowAddMatch] = useState(false);
   const [manualTeam1, setManualTeam1] = useState<string[]>([]);
   const [manualTeam2, setManualTeam2] = useState<string[]>([]);
@@ -3929,17 +4013,46 @@ export default function EventDetailPage() {
   };
 
   // ── Section: Rounds ──
-  const passesLeagueFilter = (m: Match) => {
-    if (leagueFilter === "all") return true;
-    if (leagueFilter === "non-league") return !m.leagueGame;
-    if (leagueFilter === "principal") return m.leagueGame?.kind === "principal";
-    if (leagueFilter === "friendly") return m.leagueGame ? m.leagueGame.kind !== "principal" : false;
+  // Category lookup for gender/format filtering. League games carry the
+  // category via leagueGame.category; non-league matches fall back to
+  // event.classes by classId.
+  const passesMatchFilters = (m: Match) => {
+    // Kind: empty Set = all kinds pass.
+    if (matchKindFilter.size > 0) {
+      const isPrincipal = m.leagueGame?.kind === "principal";
+      const isFriendly = !!m.leagueGame && m.leagueGame.kind !== "principal";
+      const isNonLeague = !m.leagueGame;
+      const ok = (matchKindFilter.has("principal") && isPrincipal)
+        || (matchKindFilter.has("friendly") && isFriendly)
+        || (matchKindFilter.has("non-league") && isNonLeague);
+      if (!ok) return false;
+    }
+    // Gender from category (league) or event class. "mix" passes any.
+    if (matchGenderFilter) {
+      const catGender = m.leagueGame?.category
+        ? (m.leagueGame.category as unknown as { gender?: string }).gender
+        : (event.classes?.find((c) => c.id === m.classId)?.gender ?? null);
+      if (catGender && catGender !== "mix" && catGender !== matchGenderFilter) return false;
+    }
+    // Format from category. Schema-level format is "singles"/"doubles".
+    if (matchFormatFilter) {
+      const catFormat = m.leagueGame?.category
+        ? (m.leagueGame.category as unknown as { format?: string }).format
+        : (event.classes?.find((c) => c.id === m.classId)?.format ?? null);
+      if (catFormat && catFormat !== matchFormatFilter) return false;
+    }
+    // Player-name search: any player on the match matches.
+    if (matchPlayerSearch.trim()) {
+      const q = matchPlayerSearch.trim().toLowerCase();
+      const hit = m.players.some((p) => p.player.name.toLowerCase().includes(q));
+      if (!hit) return false;
+    }
     return true;
   };
-  const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesLeagueFilter);
-  const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesLeagueFilter);
-  const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesLeagueFilter);
-  const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesLeagueFilter);
+  const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesMatchFilters);
+  const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesMatchFilters);
+  const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesMatchFilters);
+  const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesMatchFilters);
   // Sort key for league matches: scheduled time (set by the host captain on
   // the lineup builder) → court → fallback to round/court for non-league.
   const matchSortKey = (m: Match): [number, number, number] => {
@@ -4173,32 +4286,437 @@ export default function EventDetailPage() {
     );
   };
 
+  // Schedule view for league events: matches both teams ticked, grouped
+  // by court in a horizontal-scroll layout. Host captain / league admin
+  // can edit time + court per row. Auto-fill propagates a row's time +
+  // `scheduleDurationMin` down the same court until it hits another fixed
+  // time (so manually pinned matches act as anchors).
+  const renderLeagueSchedule = () => {
+    if (!event.round || (event.leagueTeams?.length ?? 0) !== 2) return null;
+    const allGames = event.leagueGames || [];
+    const baseGames = allGames.filter((g) => g.team1Wants && g.team2Wants);
+    if (baseGames.length === 0) return null;
+
+    const numCourts = event.numCourts || 2;
+    const cats = event.round.league.categories || [];
+    const catById = new Map(cats.map((c) => [c.id, c]));
+    const catName = (cid: string) => cats.find((c) => c.id === cid)?.name ?? "Category";
+    const catSort = new Map<string, number>(cats.map((c, i) => [c.id, (c as { sortOrder?: number }).sortOrder ?? i]));
+
+    const playerNameById = new Map<string, string>();
+    for (const ep of event.players) playerNameById.set(ep.player.id, ep.player.name);
+    for (const t of (event.round.league.teams || [])) {
+      for (const tp of t.players) {
+        const name = (tp as { player?: { name?: string } }).player?.name;
+        if (name) playerNameById.set(tp.playerId, name);
+      }
+    }
+    const teamShort = (tid: string) => {
+      const t = (event.leagueTeams || []).find((lt) => lt.teamId === tid);
+      return t?.team.name ?? "?";
+    };
+
+    // Apply the shared Matches-tab filters to the schedule too: kind,
+    // category gender, category format, and player-name search.
+    const games = baseGames.filter((g) => {
+      if (matchKindFilter.size > 0) {
+        const isPrincipal = g.kind === "principal";
+        const isFriendly = g.kind === "league" || g.kind === "extra";
+        const ok = (matchKindFilter.has("principal") && isPrincipal)
+          || (matchKindFilter.has("friendly") && isFriendly);
+        // Schedule has no "non-league" rows by construction.
+        if (!ok) return false;
+      }
+      const cat = catById.get(g.categoryId) as unknown as { gender?: string; format?: string } | undefined;
+      if (matchGenderFilter && cat?.gender && cat.gender !== "mix" && cat.gender !== matchGenderFilter) return false;
+      if (matchFormatFilter && cat?.format && cat.format !== matchFormatFilter) return false;
+      if (matchPlayerSearch.trim()) {
+        const q = matchPlayerSearch.trim().toLowerCase();
+        const hit = g.gamePlayers.some((gp) => {
+          const name = playerNameById.get(gp.playerId);
+          return name && name.toLowerCase().includes(q);
+        });
+        if (!hit) return false;
+      }
+      return true;
+    });
+
+    type G = NonNullable<typeof event.leagueGames>[number];
+    const sortGames = (arr: G[]) => arr.slice().sort((a, b) => {
+      const ta = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+      const tb = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+      if (ta !== tb) return ta - tb;
+      const ca = catSort.get(a.categoryId) ?? 0;
+      const cb = catSort.get(b.categoryId) ?? 0;
+      if (ca !== cb) return ca - cb;
+      return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
+    });
+
+    const buckets: Record<string, G[]> = { unassigned: [] };
+    for (let n = 1; n <= numCourts; n++) buckets[String(n)] = [];
+    for (const g of games) {
+      const key = (g.courtNum == null) ? "unassigned" : String(g.courtNum);
+      if (!buckets[key]) buckets[key] = [];
+      buckets[key].push(g);
+    }
+    for (const k of Object.keys(buckets)) buckets[k] = sortGames(buckets[k]);
+
+    // Permission: host captain/vice OR league organizer OR admin can edit.
+    const allLeagueTeams = event.round.league.teams || [];
+    const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
+    const isHostCaptain = !!userId && !!host && (host.captainId === userId || host.viceCaptainId === userId);
+    const canEditSchedule = isAdmin || isLeagueOrganizerOfEvent || isHostCaptain;
+
+    // Lineup visibility — pre-reveal show "Team A vs Team B"; post-reveal show players.
+    const revealed = !!event.lineupTotalLocked
+      || ((event.leagueTeams || []).length === 2 && (event.leagueTeams || []).every((lt) => lt.lineupReady));
+
+    // Optimistic local patcher — fire-and-forget API call, refetch in
+    // the background. Keeps the UI snappy even on slow networks.
+    const applyOptimistic = (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
+      setEvent((prev) => prev ? ({
+        ...prev,
+        leagueGames: (prev.leagueGames || []).map((x) => x.id === gameId ? { ...x, ...patch } : x),
+      }) : prev);
+    };
+    const patchSchedule = (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
+      applyOptimistic(gameId, patch);
+      // Fire-and-forget. Server validates + rejects on permission error.
+      void fetch(`/api/leagues/${event.round!.league.id}/events/${event.id}/games/${gameId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }).then((r) => {
+        if (!r.ok) {
+          r.json().catch(() => ({})).then((d) => alertDialog(d?.error || "Failed to update schedule"));
+        }
+      }).finally(() => { fetchEvent(); });
+    };
+
+    const onTimeChange = (g: G, hhmm: string) => {
+      if (!hhmm) { patchSchedule(g.id, { scheduledAt: null }); return; }
+      const base = event.date ? new Date(event.date) : new Date();
+      if (isNaN(base.getTime())) return;
+      const [hh, rawMm] = hhmm.split(":").map((s) => parseInt(s, 10));
+      if (Number.isNaN(hh) || Number.isNaN(rawMm)) return;
+      // Native time pickers ignore the `step` attribute — snap to nearest
+      // 5-minute boundary here; carry over when snap pushes to 60.
+      let snappedMm = Math.round(rawMm / 5) * 5;
+      let snappedHh = hh;
+      if (snappedMm === 60) { snappedMm = 0; snappedHh = (snappedHh + 1) % 24; }
+      base.setHours(snappedHh, snappedMm, 0, 0);
+      patchSchedule(g.id, { scheduledAt: base.toISOString() });
+    };
+
+    const onCourtChange = (g: G, raw: string) => {
+      const n = raw === "" ? null : parseInt(raw, 10);
+      patchSchedule(g.id, { courtNum: n });
+    };
+
+    const clearTime = (g: G) => {
+      patchSchedule(g.id, { scheduledAt: null });
+    };
+
+    // Auto-fill propagates from this row + duration onto subsequent rows
+    // on the SAME court that don't already have a time. Stops on a fixed
+    // time so manually pinned games act as anchors.
+    const autoFillDown = (g: G) => {
+      if (!g.scheduledAt || g.courtNum == null) return;
+      const list = buckets[String(g.courtNum)] || [];
+      const idx = list.findIndex((x) => x.id === g.id);
+      if (idx < 0) return;
+      let t = new Date(g.scheduledAt).getTime();
+      for (let i = idx + 1; i < list.length; i++) {
+        if (list[i].scheduledAt) break;
+        t += scheduleDurationMin * 60_000;
+        const iso = new Date(t).toISOString();
+        patchSchedule(list[i].id, { scheduledAt: iso });
+      }
+    };
+
+    const timeHHMM = (iso: string | null | undefined) => {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    };
+
+    // Cross-reference Match scores for completed games. Match has
+    // `leagueGame` relation; we build a Map keyed by leagueGame.id.
+    const matchByLeagueGameId = new Map<string, Match>();
+    for (const m of event.matches) {
+      if (m.leagueGame?.id) matchByLeagueGameId.set(m.leagueGame.id, m);
+    }
+    const teamScoresFor = (g: G): { t1: number | null; t2: number | null } => {
+      const m = matchByLeagueGameId.get(g.id);
+      if (!m) return { t1: null, t2: null };
+      const p1 = m.players.find((p) => p.team === 1);
+      const p2 = m.players.find((p) => p.team === 2);
+      return {
+        t1: p1?.score ?? null,
+        t2: p2?.score ?? null,
+      };
+    };
+    // Group revealed players by side: any gamePlayer whose id is in
+    // team1's roster is team1; rest is team2. (Pre-reveal players are
+    // hidden by the server-side filter — we get empty arrays then.)
+    const team1RosterIds = new Set(
+      (event.round.league.teams || []).find((t) => t.id === (event.leagueTeams || [])[0]?.teamId)?.players.map((p) => p.playerId) || [],
+    );
+    const playersBySide = (g: G) => {
+      const t1Id = g.team1Id;
+      const team1RostId = (event.round!.league.teams || []).find((t) => t.id === t1Id)?.players.map((p) => p.playerId);
+      const t1Roster = new Set(team1RostId || []);
+      const a: string[] = [], b: string[] = [];
+      for (const gp of g.gamePlayers) {
+        const name = playerNameById.get(gp.playerId) || "?";
+        // Prefer the explicit team tag (1/2) set server-side; fall back
+        // to roster heuristics for legacy rows where team is null.
+        const t = gp.team;
+        if (t === 1) a.push(name);
+        else if (t === 2) b.push(name);
+        else if (t1Roster.has(gp.playerId)) a.push(name);
+        else b.push(name);
+      }
+      return { team1: a, team2: b };
+    };
+    // Silence unused — keeping for potential future use.
+    void team1RosterIds;
+
+    const renderGameRow = (g: G) => {
+      const hhmm = timeHHMM(g.scheduledAt);
+      const { t1: t1Score, t2: t2Score } = teamScoresFor(g);
+      const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
+      return (
+        <ScheduleDraggable key={g.id} id={g.id} dragging={scheduleDragId === g.id}>
+        <div
+          className="border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white"
+        >
+          <div className="flex items-center gap-1.5">
+            {canEditSchedule ? (
+              <input
+                type="time"
+                step={300}
+                value={hhmm}
+                onChange={(e) => onTimeChange(g, e.target.value)}
+                onClick={(e) => {
+                  const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                  try { el.showPicker?.(); } catch { /* fallback */ }
+                }}
+                className="no-picker-icon border border-border rounded px-1 py-0.5 text-[11px] w-[60px] cursor-pointer"
+              />
+            ) : (
+              <span className="text-[11px] font-semibold tabular-nums w-[60px]">
+                {hhmm || <span className="text-muted font-normal">—</span>}
+              </span>
+            )}
+            {canEditSchedule && hhmm && (
+              <>
+                <button
+                  type="button"
+                  title="Clear time"
+                  onClick={() => clearTime(g)}
+                  className="text-muted hover:text-danger text-xs px-1"
+                >✕</button>
+                <button
+                  type="button"
+                  title={`Auto-fill subsequent times on this court (+${scheduleDurationMin}m each, stops at next fixed time)`}
+                  onClick={() => autoFillDown(g)}
+                  className="text-action hover:underline text-[10px] px-1 font-semibold"
+                >↓ fill</button>
+              </>
+            )}
+            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full border ${g.kind === "principal" ? "border-emerald-400 text-emerald-700 bg-emerald-50" : g.kind === "league" ? "border-blue-400 text-blue-700 bg-blue-50" : "border-gray-300 text-muted bg-gray-50"}`}>
+              {g.kind === "principal" ? "P" : g.kind === "league" ? "L" : "F"}
+            </span>
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">{catName(g.categoryId)}</div>
+          {/* Two team rows. Always rendered so each card has the same
+              shape, leaving a fixed-width slot on the right for the
+              eventual score. Pre-reveal we show just the team name;
+              post-reveal we add the player names below. */}
+          <div className="space-y-1">
+            <div className="flex items-baseline gap-1.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-foreground truncate">{teamShort(g.team1Id)}</div>
+                {sides.team1.length > 0 && (
+                  <div className="text-[10px] text-muted leading-tight truncate">{sides.team1.join(", ")}</div>
+                )}
+              </div>
+              <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
+                {t1Score != null ? t1Score : <span className="text-muted/40 font-normal">—</span>}
+              </div>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-foreground truncate">{teamShort(g.team2Id)}</div>
+                {sides.team2.length > 0 && (
+                  <div className="text-[10px] text-muted leading-tight truncate">{sides.team2.join(", ")}</div>
+                )}
+              </div>
+              <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
+                {t2Score != null ? t2Score : <span className="text-muted/40 font-normal">—</span>}
+              </div>
+            </div>
+          </div>
+          {canEditSchedule && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCourtPickerGameId(courtPickerGameId === g.id ? null : g.id)}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${g.courtNum != null ? "border-blue-400 bg-blue-50 text-blue-700" : "border-border bg-gray-50 text-muted"} hover:brightness-95`}
+              >
+                <span>{g.courtNum != null ? `Court ${g.courtNum}` : "no court"}</span>
+                <span className="text-[9px] opacity-70">▾</span>
+              </button>
+              {courtPickerGameId === g.id && (
+                <>
+                  {/* Backdrop closes the popup on outside click. */}
+                  <div className="fixed inset-0 z-30" onClick={() => setCourtPickerGameId(null)} />
+                  <div className="absolute z-40 mt-1 left-0 bg-white border border-border rounded-lg shadow-lg p-2 flex flex-wrap gap-1.5 w-[180px]">
+                    <button
+                      type="button"
+                      onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, ""); }}
+                      className={`w-9 h-9 rounded-md border text-[11px] font-medium ${g.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
+                      title="No court"
+                    >—</button>
+                    {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, String(n)); }}
+                        className={`w-9 h-9 rounded-md border text-sm font-bold ${g.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
+                      >{n}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        </ScheduleDraggable>
+      );
+    };
+
+    const handleDragEnd = (e: DragEndEvent) => {
+      setScheduleDragId(null);
+      const gid = e.active.id ? String(e.active.id) : null;
+      const overId = e.over?.id != null ? String(e.over.id) : null;
+      if (!gid || !overId) return;
+      const g = games.find((x) => x.id === gid);
+      if (!g) return;
+      const targetCourt = overId === "unassigned" ? null : parseInt(overId, 10);
+      const currentCourt = g.courtNum ?? null;
+      if (targetCourt === currentCourt) return;
+      patchSchedule(gid, { courtNum: targetCourt });
+    };
+
+    return (
+      <DndContext sensors={scheduleSensors} onDragStart={(e) => setScheduleDragId(String(e.active.id))} onDragCancel={() => setScheduleDragId(null)} onDragEnd={handleDragEnd}>
+      <div className={`${frameClass} p-3 space-y-2`}>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="text-base font-bold">Schedule</div>
+          {canEditSchedule && (
+            <label className="text-[11px] text-muted flex items-center gap-1">
+              Per match
+              <input
+                type="number"
+                min={5} max={180} step={5}
+                value={scheduleDurationMin}
+                onChange={(e) => setScheduleDurationMin(Math.max(5, parseInt(e.target.value || "45", 10)))}
+                className="border border-border rounded px-1.5 py-0.5 text-[11px] w-14 tabular-nums"
+              />
+              <span>min</span>
+            </label>
+          )}
+        </div>
+        <div className="flex gap-2 overflow-x-auto -mx-3 px-3 pb-2">
+          {(buckets["unassigned"].length > 0 || scheduleDragId) && (
+            <ScheduleDroppable id="unassigned" className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5 transition-colors">
+              <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Unassigned</div>
+              {buckets["unassigned"].length === 0 ? (
+                <div className="text-[10px] text-muted italic px-1">drop here to unassign</div>
+              ) : (
+                buckets["unassigned"].map(renderGameRow)
+              )}
+            </ScheduleDroppable>
+          )}
+          {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
+            <ScheduleDroppable key={n} id={String(n)} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5 transition-colors">
+              <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Court {n}</div>
+              {(buckets[String(n)] || []).length === 0 ? (
+                <div className="text-[10px] text-muted italic px-1">empty</div>
+              ) : (
+                (buckets[String(n)] || []).map(renderGameRow)
+              )}
+            </ScheduleDroppable>
+          ))}
+        </div>
+      </div>
+      </DndContext>
+    );
+  };
+
   const renderRounds = () => (
     <div>
       <AppHeader
         variant="hero-sub"
         back={{ label: heroTitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
         meta="Matches"
-        action={canManage ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
+        action={canManage && !event.round ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
       />
 
       <div className="px-4 space-y-3 pt-3">
-        {event.round && (
-          <div className="flex gap-1 overflow-x-auto -mx-1 px-1">
+        {/* Matches-tab filters — empty selection = all. Pills toggle on/off
+            so users can stack filters. Search field goes on its own row. */}
+        <div className="space-y-2">
+          <ClearInput value={matchPlayerSearch} onChange={setMatchPlayerSearch} placeholder="Search player..." className="text-base" />
+          <div className="flex gap-1 flex-wrap items-center">
+            {event.round && ([
+              { v: "principal" as const, label: "🏆 Principal" },
+              { v: "friendly" as const,  label: "⚪ Friendly" },
+              { v: "non-league" as const, label: "Non-league" },
+            ]).map((f) => {
+              const active = matchKindFilter.has(f.v);
+              return (
+                <button
+                  key={f.v}
+                  onClick={() => {
+                    const next = new Set(matchKindFilter);
+                    if (next.has(f.v)) next.delete(f.v); else next.add(f.v);
+                    setMatchKindFilter(next);
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${active ? "bg-selected text-white" : "bg-gray-100 text-muted"}`}
+                >{f.label}</button>
+              );
+            })}
+            {/* Gender pills */}
             {([
-              { v: "all", label: "All" },
-              { v: "principal", label: "🏆 Principal" },
-              { v: "friendly", label: "⚪ Friendly" },
-              { v: "non-league", label: "Non-league" },
-            ] as const).map((f) => (
+              { v: "M" as const, label: "♂" },
+              { v: "F" as const, label: "♀" },
+            ]).map((g) => (
+              <button
+                key={g.v}
+                onClick={() => setMatchGenderFilter((cur) => cur === g.v ? null : g.v)}
+                title={g.v === "M" ? "Men" : "Women"}
+                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${matchGenderFilter === g.v ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}
+              >{g.label}</button>
+            ))}
+            {/* Format pills */}
+            {([
+              { v: "doubles" as const, label: "👥", title: "Doubles" },
+              { v: "singles" as const, label: "👤", title: "Singles" },
+            ]).map((f) => (
               <button
                 key={f.v}
-                onClick={() => setLeagueFilter(f.v)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${leagueFilter === f.v ? "bg-black text-white" : "bg-gray-100 text-muted"}`}
+                onClick={() => setMatchFormatFilter((cur) => cur === f.v ? null : f.v)}
+                title={f.title}
+                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${matchFormatFilter === f.v ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}
               >{f.label}</button>
             ))}
           </div>
-        )}
+        </div>
+        {renderLeagueSchedule()}
         {/* Active — orange */}
         {activeMatches.length > 0 && (
           <div className="bg-orange-50 -mx-4 px-4 py-3 border-y border-orange-200">
@@ -5014,6 +5532,29 @@ export default function EventDetailPage() {
         const prefRows = cats
           .map((c) => ({ cat: c, p: prefs[c.id] }))
           .filter(({ p }) => p && p.level !== "no");
+        // Categories the user is actually assigned to in the lineup +
+        // partner names (gamePlayers on the same team, excluding self).
+        // Pre-reveal the server filters gamePlayers to your own side so
+        // the partner lookup is safe to do client-side.
+        const myTeamRosterIds = new Set(myTeam.players.map((p) => p.playerId));
+        const playerNameById = new Map<string, string>();
+        for (const ep of event.players) playerNameById.set(ep.player.id, ep.player.name);
+        for (const t of allLeagueTeams) {
+          for (const tp of t.players) {
+            const name = (tp as { player?: { name?: string } }).player?.name;
+            if (name) playerNameById.set(tp.playerId, name);
+          }
+        }
+        const myGames = (event.leagueGames ?? [])
+          .filter((g) => g.gamePlayers.some((gp) => gp.playerId === userId))
+          .map((g) => {
+            const cat = cats.find((c) => c.id === g.categoryId);
+            const partners = g.gamePlayers
+              .filter((gp) => gp.playerId !== userId && myTeamRosterIds.has(gp.playerId))
+              .map((gp) => playerNameById.get(gp.playerId) || "?");
+            return { cat, partners, scheduledAt: g.scheduledAt ?? null, courtNum: g.courtNum ?? null };
+          })
+          .filter((x): x is { cat: NonNullable<typeof x.cat>; partners: string[]; scheduledAt: string | null; courtNum: number | null } => !!x.cat);
         return (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start justify-between gap-2">
             <div className="text-sm text-emerald-900 flex-1 min-w-0">
@@ -5023,21 +5564,54 @@ export default function EventDetailPage() {
               {intent === "playing" && (
                 <>
                   <div><strong>You&apos;re signed up to this event</strong> for {myTeam.name}.</div>
-                  {prefRows.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5">
-                      <div className="text-[11px] text-muted">Categories you&apos;d play:</div>
-                      {prefRows.map(({ cat, p }) => {
-                        const isPrefer = p!.level === "prefer";
-                        return (
-                          <div key={cat.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
-                            <span>{cat.name}</span>
-                            {p!.note && <span className="text-muted font-normal italic"> ({p!.note})</span>}
-                          </div>
-                        );
-                      })}
-                      <div className="text-[10px] text-muted italic mt-0.5">The captain decides who actually plays each match.</div>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-muted mb-0.5">Categories you are willing to play</div>
+                      {prefRows.length === 0 ? (
+                        <div className="text-[11px] text-muted italic">None picked.</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {prefRows.map(({ cat, p }) => {
+                            const isPrefer = p!.level === "prefer";
+                            return (
+                              <div key={cat.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
+                                <span>{cat.name}</span>
+                                {p!.note && <span className="text-muted font-normal italic"> ({p!.note})</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <div className="min-w-0 border-l border-emerald-200 pl-3">
+                      <div className="text-[11px] text-muted mb-0.5">Categories you play</div>
+                      {myGames.length === 0 ? (
+                        <div className="text-[11px] text-muted italic">Not picked yet.</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {myGames.map(({ cat, partners, scheduledAt, courtNum }) => {
+                            const time = scheduledAt
+                              ? new Date(scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                              : null;
+                            const courtLabel = courtNum != null ? `Court ${courtNum}` : null;
+                            const slot = [time, courtLabel].filter(Boolean).join(" · ");
+                            return (
+                              <div key={cat.id} className="text-[11px] text-emerald-700 font-bold">
+                                <div>{cat.name}</div>
+                                {partners.length > 0 && (
+                                  <div className="text-[11px] text-muted font-normal">with {partners.join(", ")}</div>
+                                )}
+                                {slot && (
+                                  <div className="text-[11px] text-muted font-normal">{slot}</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-muted italic mt-1">The captain decides who actually plays each match.</div>
                 </>
               )}
               {intent === "attending" && (
@@ -5061,28 +5635,65 @@ export default function EventDetailPage() {
         );
       })()}
 
-      {/* Captain/vice "Build lineup" CTA — visible to captains or vice of
-          either of the two playing teams (or to league organizers). Routes
-          to the slot/checkbox grid where they declare which matches their
-          team will play and assign players. */}
-      {event.round && userId && (() => {
+      {/* Lineup card — always shown on league events with 2 teams. Shows
+          per-team lock status + event-wide reveal status. Captain/vice of
+          a playing team additionally gets the "Build lineup" CTA. */}
+      {event.round && (event.leagueTeams?.length ?? 0) === 2 && (() => {
         const allLeagueTeams = event.round!.league.teams || [];
         const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
-        const myCaptainTeam = allLeagueTeams
+        const myCaptainTeam = userId ? allLeagueTeams
           .filter((t) => playingTeamIds.includes(t.id))
-          .find((t) => t.captainId === userId || t.viceCaptainId === userId);
-        if (!myCaptainTeam) return null;
+          .find((t) => t.captainId === userId || t.viceCaptainId === userId) : null;
+        const eventLocked = !!event.lineupTotalLocked;
         return (
-          <Link
-            href={`/leagues/${event.round!.league.id}/events/${event.id}/lineup/${myCaptainTeam.id}`}
-            className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between gap-2 hover:bg-blue-100"
-          >
-            <div className="text-sm text-blue-900">
-              <div><strong>Build lineup</strong> for {myCaptainTeam.name}</div>
-              <div className="text-[11px] text-muted">Tick the matches your team wants to play, then assign players.</div>
+          <div className={`${frameClass} p-3 space-y-2`}>
+            <div className="flex items-center justify-between">
+              <div className="text-base font-bold">Lineup</div>
+              {eventLocked ? (
+                <span className="text-sm font-semibold text-emerald-700 flex items-center gap-1">
+                  <span className="text-lg leading-none">🔒</span>
+                  Locked · revealed
+                </span>
+              ) : (
+                <span className="text-sm text-muted flex items-center gap-1">
+                  <span className="text-lg leading-none opacity-40">🔓</span>
+                  Hidden until both teams lock
+                </span>
+              )}
             </div>
-            <span className="text-blue-700 text-lg">→</span>
-          </Link>
+            <div className="space-y-1">
+              {(event.leagueTeams || []).map((et) => (
+                <div key={et.teamId} className="flex items-center justify-between text-xs">
+                  <span className="text-foreground">{et.team.name}</span>
+                  {et.lineupReady ? (
+                    <span className="text-emerald-700 font-medium flex items-center gap-1">
+                      <span className="text-[10px] leading-none">🔒</span>
+                      Locked
+                    </span>
+                  ) : (
+                    <span className="text-muted flex items-center gap-1">
+                      <span className="text-[10px] leading-none opacity-40">🔓</span>
+                      Unlocked
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {myCaptainTeam && (
+              <Link
+                href={`/leagues/${event.round!.league.id}/events/${event.id}/lineup/${myCaptainTeam.id}`}
+                className="block mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 hover:bg-blue-100"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-blue-900">
+                    <div><strong>Build lineup</strong> for {myCaptainTeam.name}</div>
+                    <div className="text-[11px] text-muted">Tick the matches your team wants to play, then assign players.</div>
+                  </div>
+                  <span className="text-blue-700 text-lg">→</span>
+                </div>
+              </Link>
+            )}
+          </div>
         );
       })()}
 
