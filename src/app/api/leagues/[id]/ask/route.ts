@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { buildLeagueAssistantDigest } from "@/lib/leagueAssistantDigest";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -35,8 +36,11 @@ const SYSTEM_PROMPT = [
   "The document's language is irrelevant — match the USER's language, not the document's. Translate rule text from the document into the user's language as needed. Never mix languages in one reply.",
   "",
   "## Source",
-  "Answer questions strictly using the attached league document(s). The document may be in any language.",
-  "When the document does NOT cover the question: say so plainly in one short sentence (in the user's language). Do not invent rules. Suggest the user ask the league organizers.",
+  "You have two sources of truth:",
+  "1. The attached league document(s) — rules, regulations, schedule, etc. May be in any language.",
+  "2. A live LEAGUE DATA digest at the start of the first user turn — teams, rosters, captains, rounds, match-days, scheduled and played games (with lineups + winners + scores), and a computed standings table. Use this for ANY question about specific matches, teams, players, scores, standings, lineups, or schedule. The data was snapshotted at the start of this chat — say so if the user asks how fresh it is.",
+  "If the digest doesn't have a specific result yet (game shown as 'pending' or no lineup), say plainly that the result is not in yet. Don't invent scores or winners.",
+  "When neither source covers the question: say so plainly in one short sentence (in the user's language). Suggest the user ask the league organizers.",
   "",
   "## Response format (CRITICAL)",
   "Reply like a chatbot — keep it SHORT.",
@@ -154,9 +158,9 @@ export async function POST(
     },
   });
   if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 });
-  if (league.documents.length === 0) {
-    return NextResponse.json({ error: "No documents are enabled for the assistant on this league" }, { status: 400 });
-  }
+  // PDFs are optional — the assistant can still answer match/standings
+  // questions from the live league-data digest alone.
+  const hasPdfs = league.documents.length > 0;
 
   // Snapshot the docs we'll feed to the model. Fetching them is moved
   // inside the stream body so we can emit a heartbeat byte first and
@@ -166,7 +170,8 @@ export async function POST(
   // Citations are only allowed when every assistant doc is also shown
   // to users — otherwise a "§4.A" reference would point to text the
   // user has no way to read. Strictest reasonable interpretation of
-  // "don't cite unless visible".
+  // "don't cite unless visible". When there are no PDFs at all,
+  // citations are moot — disable to keep prompts clean.
   const citationsAllowed = docs.length > 0 && docs.every((d) => d.showToUsers);
   const systemPrompt = SYSTEM_PROMPT + "\n\n" + (citationsAllowed ? CITATION_DIRECTIVE_ALLOWED : CITATION_DIRECTIVE_DISALLOWED);
 
@@ -199,34 +204,53 @@ export async function POST(
 
       try {
         // 1. Fetch PDFs from Vercel Blob (slowest part on cold start).
-        sendPing("fetching-docs");
         const docBlocks: Anthropic.Messages.DocumentBlockParam[] = [];
-        for (let i = 0; i < docs.length; i++) {
-          const doc = docs[i]!;
-          const resp = await fetch(doc.url);
-          if (!resp.ok) {
-            throw new Error(`Failed to fetch document ${doc.name}`);
+        if (hasPdfs) {
+          sendPing("fetching-docs");
+          for (let i = 0; i < docs.length; i++) {
+            const doc = docs[i]!;
+            const resp = await fetch(doc.url);
+            if (!resp.ok) {
+              throw new Error(`Failed to fetch document ${doc.name}`);
+            }
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const base64 = buf.toString("base64");
+            const isLast = i === docs.length - 1;
+            docBlocks.push({
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: base64 },
+              title: doc.name,
+              // Cache the document blocks so re-asks on the same league are cheap.
+              ...(isLast ? { cache_control: { type: "ephemeral" } } : {}),
+            });
+            sendPing(`doc-${i + 1}-of-${docs.length}`);
           }
-          const buf = Buffer.from(await resp.arrayBuffer());
-          const base64 = buf.toString("base64");
-          const isLast = i === docs.length - 1;
-          docBlocks.push({
-            type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: base64 },
-            title: doc.name,
-            // Cache the document blocks so re-asks on the same league are cheap.
-            ...(isLast ? { cache_control: { type: "ephemeral" } } : {}),
-          });
-          sendPing(`doc-${i + 1}-of-${docs.length}`);
         }
 
-        // 2. Assemble messages with documents prepended on first user turn.
+        // 2. Snapshot the live league data (teams, rosters, rounds,
+        //    match-days, games + lineups + winners, standings). Goes
+        //    in as a text block on the first user turn so the model
+        //    can answer match/score/standings questions.
+        sendPing("fetching-league-data");
+        const digest = await buildLeagueAssistantDigest(id);
+        const digestBlock: Anthropic.Messages.TextBlockParam | null = digest
+          ? {
+              type: "text",
+              text: `BELOW IS A SNAPSHOT OF THE LEAGUE'S LIVE DATA (teams, rosters, rounds, match-days, games, standings). Use it for any specific match/team/player/score/standings question.\n\n${digest}`,
+              // Cache the digest too — within a chat session it doesn't
+              // change, so subsequent turns reuse the cached version.
+              cache_control: { type: "ephemeral" },
+            }
+          : null;
+
+        // 3. Assemble messages: first user turn gets PDFs + digest +
+        //    the actual question. Subsequent turns are plain text.
         const anthMessages: Anthropic.Messages.MessageParam[] = messages.map((m, idx) => {
           if (idx === 0 && m.role === "user") {
-            return {
-              role: "user",
-              content: [...docBlocks, { type: "text", text: m.content }],
-            };
+            const content: Anthropic.Messages.ContentBlockParam[] = [...docBlocks];
+            if (digestBlock) content.push(digestBlock);
+            content.push({ type: "text", text: m.content });
+            return { role: "user", content };
           }
           return { role: m.role, content: m.content };
         });
