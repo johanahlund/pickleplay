@@ -5,6 +5,8 @@ import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
 import { usePollingRefresh } from "@/lib/hooks";
+import { ShareInviteModal } from "./ShareInviteModal";
+import { buildAppInviteMessage } from "@/lib/inviteShare";
 
 const APP_VERSION = "5.3.0";
 // Routes whose pages render their own header chrome (AppHeader hero or
@@ -129,6 +131,8 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [appInviteOpen, setAppInviteOpen] = useState(false);
+  const [appInviteMessage, setAppInviteMessage] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<{ id: string; title: string; body?: string | null; linkUrl?: string | null; read: boolean; createdAt: string }[]>([]);
 
@@ -253,6 +257,22 @@ export function Header() {
     return null;
   }
 
+  // App-level "invite a friend" — only meaningful for logged-in users
+  // (we need a name for the inviter line). For guests we just hide the
+  // header button entirely.
+  const handleAppInvite = session?.user
+    ? () => {
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        setAppInviteMessage(
+          buildAppInviteMessage({
+            inviterName: session.user?.name || "A friend",
+            signupUrl: `${origin}/register`,
+          }),
+        );
+        setAppInviteOpen(true);
+      }
+    : undefined;
+
   return (
     <>
       <div>
@@ -263,11 +283,19 @@ export function Header() {
             initial: userInitial,
             href: "/profile",
           }}
+          onInvite={handleAppInvite}
         />
       </div>
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
+      <ShareInviteModal
+        open={appInviteOpen}
+        message={appInviteMessage}
+        title="Invite a friend to FriendlyBall"
+        emailSubject="Try FriendlyBall"
+        onClose={() => setAppInviteOpen(false)}
+      />
     </>
   );
 }

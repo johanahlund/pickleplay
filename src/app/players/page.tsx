@@ -11,6 +11,7 @@ import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { COUNTRIES } from "@/lib/countries";
 import { withInstallTip } from "@/lib/inviteShare";
+import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
 
@@ -65,6 +66,7 @@ export default function PlayersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [inviteShare, setInviteShare] = useState<{ message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
 
   useHideBottomNav(!!editingId);
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -202,27 +204,16 @@ export default function PlayersPage() {
         `Hi ${player.name}, you've been added to FriendlyBall. Claim your account to track your stats:\n\n${claimUrl}`,
       );
 
-      // Try Web Share API first (mobile native share sheet)
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: "Join FriendlyBall",
-            text: shareText,
-          });
-          return;
-        } catch {
-          // User cancelled or share failed — fall through to clipboard
-        }
-      }
-
-      // Fallback: copy to clipboard
-      const ok = await copyText(shareText);
-      if (ok) {
-        setCopiedId(player.id);
-        setTimeout(() => setCopiedId(null), 2000);
-      } else {
-        await alertDialog(`Couldn't copy automatically. Here's the invite:\n\n${shareText}`);
-      }
+      // Open our share chooser instead of navigator.share. The native
+      // sheet doesn't include WhatsApp on macOS, which makes it useless
+      // for the primary intended channel. The chooser offers WhatsApp
+      // (deep-linked to the player's phone when known), Copy, and Email.
+      setInviteShare({
+        message: shareText,
+        phone: player.phone ?? null,
+        title: `Invite ${player.name}`,
+        emailSubject: `Join FriendlyBall — ${player.name}`,
+      });
     } finally {
       setInvitingId(null);
     }
@@ -697,6 +688,15 @@ export default function PlayersPage() {
           </div>
         );
       })()}
+
+      <ShareInviteModal
+        open={!!inviteShare}
+        message={inviteShare?.message ?? ""}
+        phone={inviteShare?.phone ?? null}
+        title={inviteShare?.title}
+        emailSubject={inviteShare?.emailSubject}
+        onClose={() => setInviteShare(null)}
+      />
     </div>
   );
 }

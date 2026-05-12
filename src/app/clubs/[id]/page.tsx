@@ -11,6 +11,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
 import { withInstallTip } from "@/lib/inviteShare";
+import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
@@ -356,6 +357,7 @@ export default function ClubDetailPage() {
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inviteShare, setInviteShare] = useState<{ message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
   // Tab is URL-synced via useSearchParams. setTab writes via
   // history.replaceState; the effect below reflects URL → state on
   // soft navigation (back/forward, header tab links).
@@ -1868,22 +1870,19 @@ export default function ClubDetailPage() {
                 const invite = await r.json();
                 const url = `${window.location.origin}/clubs/join/${invite.token}`;
                 const inviterName = session?.user?.name || "A club member";
-                // Pre-formatted message — what actually lands on the
-                // clipboard. Includes who is inviting, the club, the
-                // join URL, and the Add-to-Home-Screen install tip so
-                // recipients can save the app after signing in.
+                // Open the share chooser (WhatsApp / Copy / Email) — no
+                // phone known for a generic invite, so WhatsApp opens
+                // with the contact picker.
                 const message = withInstallTip(
                   `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`,
                 );
-                const copied = await copyText(message);
-                await alertDialog(
-                  copied
-                    ? `${message}\n\n— — —\n\nCopied. Paste into WhatsApp, email, or any chat.`
-                    : `${message}\n\n— — —\n\nSelect and copy the text above to share.`,
-                  "Invite link",
-                  { messageSize: "xs" },
-                );
-              }} className="text-xs text-action font-medium">Copy_Invite_Link</button>
+                setInviteShare({
+                  message,
+                  phone: null,
+                  title: `Invite to ${club.name}`,
+                  emailSubject: `Join ${club.name} on FriendlyBall`,
+                });
+              }} className="text-xs text-action font-medium">Invite</button>
             )}
           </div>
 
@@ -2041,6 +2040,15 @@ export default function ClubDetailPage() {
       )}
 
       {/* Settings tab removed — club info is now via ℹ icon */}
+
+      <ShareInviteModal
+        open={!!inviteShare}
+        message={inviteShare?.message ?? ""}
+        phone={inviteShare?.phone ?? null}
+        title={inviteShare?.title}
+        emailSubject={inviteShare?.emailSubject}
+        onClose={() => setInviteShare(null)}
+      />
     </div>
   );
 }

@@ -67,6 +67,11 @@ interface AppHeaderProps {
 
   /** Avatar initial + href for the avatar menu. */
   user?: { initial: string; avatarUrl?: string; href?: string };
+
+  /** When set, render an "Invite a friend to the app" icon button in
+   * the header's right-hand action row (next to the bell). Called on
+   * tap. The parent typically opens a share modal. */
+  onInvite?: () => void;
 }
 
 export function AppHeader({
@@ -79,14 +84,15 @@ export function AppHeader({
   isAdmin,
   notifications,
   user,
+  onInvite,
 }: AppHeaderProps) {
   if (variant === "hero-sub") {
-    return <HeroSubHeader {...{ title, meta, back, action, notifications, user }} />;
+    return <HeroSubHeader {...{ title, meta, back, action, notifications, user, onInvite }} />;
   }
   return variant === "hero" ? (
-    <HeroHeader {...{ title, meta, status, back, notifications, user }} />
+    <HeroHeader {...{ title, meta, status, back, notifications, user, onInvite }} />
   ) : (
-    <LightHeader {...{ back, title, isAdmin, notifications, user }} />
+    <LightHeader {...{ back, title, isAdmin, notifications, user, onInvite }} />
   );
 }
 export default AppHeader;
@@ -164,14 +170,33 @@ function HeaderActions({
   avatarBg,
   badge,
   user,
+  onInvite,
 }: {
   color: string;
   avatarBg: string;
   badge?: number;
   user?: { initial: string; avatarUrl?: string; href?: string };
+  onInvite?: () => void;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      {onInvite && (
+        <button
+          type="button"
+          onClick={onInvite}
+          aria-label="Invite a friend to FriendlyBall"
+          title="Invite a friend"
+          style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", lineHeight: 0 }}
+        >
+          {/* Share-arrow + plus icon: distinct from the bell. */}
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="6" cy="12" r="2.4" stroke={color} strokeWidth={1.8} />
+            <circle cx="17" cy="6" r="2.4" stroke={color} strokeWidth={1.8} />
+            <circle cx="17" cy="18" r="2.4" stroke={color} strokeWidth={1.8} />
+            <path d="M8 11l7-4M8 13l7 4" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
       <Link
         href="/notifications"
         style={{ position: "relative", lineHeight: 0 }}
@@ -283,7 +308,8 @@ function LightHeader({
   isAdmin,
   notifications,
   user,
-}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user">) {
+  onInvite,
+}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user" | "onInvite">) {
   const hasBack = !!back;
   const ref = useRef<HTMLElement | null>(null);
   useHeaderHeightSync(ref);
@@ -319,6 +345,7 @@ function LightHeader({
             avatarBg="#16a34a"
             badge={notifications}
             user={user}
+            onInvite={onInvite}
           />
         </div>
       </div>
@@ -366,7 +393,8 @@ function HeroHeader({
   back,
   notifications,
   user,
-}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user">) {
+  onInvite,
+}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user" | "onInvite">) {
   const statusStyles: Record<HeaderStatus, { bg: string; fg: string; dot: string }> = {
     draft:     { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#fde68a" },
     open:      { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#bef264" },
@@ -408,6 +436,7 @@ function HeroHeader({
           avatarBg="rgba(255,255,255,0.22)"
           badge={notifications}
           user={user}
+          onInvite={onInvite}
         />
       </div>
       {back && (
@@ -488,7 +517,8 @@ function HeroSubHeader({
   action,
   notifications,
   user,
-}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user">) {
+  onInvite,
+}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user" | "onInvite">) {
   const actionEl = action ? (
     action.onClick ? (
       <button
@@ -571,6 +601,7 @@ function HeroSubHeader({
             avatarBg="rgba(255,255,255,0.22)"
             badge={notifications}
             user={user}
+            onInvite={onInvite}
           />
         </div>
       </div>
