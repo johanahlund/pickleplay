@@ -626,14 +626,10 @@ export default function EventDetailPage() {
   // game being dragged; `scheduleDragOverCol` is the court key (1..N or
   // "unassigned") the cursor is currently over — used to highlight the
   // drop target.
-  const [scheduleDragId, setScheduleDragId] = useState<string | null>(null);
-  // @dnd-kit sensors: PointerSensor handles mouse + pen + most modern
-  // touch; TouchSensor handles legacy touch with a press-and-hold delay
-  // so quick swipes still scroll the horizontal courts row.
-  const scheduleSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
-  );
+  // The card the user is currently moving via the inline ↑↓←→ D-pad.
+  // Replaces the previous drag-and-drop affordance which was unreliable
+  // on iPad Safari and fought with horizontal scroll.
+  const [movingScheduleId, setMovingScheduleId] = useState<string | null>(null);
   // Game id currently showing the court-picker popup. Null = no popup open.
   const [courtPickerGameId, setCourtPickerGameId] = useState<string | null>(null);
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -4524,13 +4520,64 @@ export default function EventDetailPage() {
     // Silence unused — keeping for potential future use.
     void team1RosterIds;
 
+    // ── Movement helpers (replaces drag-and-drop) ──
+    // Each card has a toggle button on the left edge. Toggling it open
+    // reveals a 4-direction D-pad anchored to the card; the user clicks
+    // arrows to nudge the card up/down within a court column or left/
+    // right across columns. The card retains visual focus across moves
+    // because the popover travels with it.
+    const movePosition = (g: G, delta: 1 | -1) => {
+      const cur = g.courtNum ?? null;
+      const col = sortGames(games.filter((x) => (x.courtNum ?? null) === cur));
+      const idx = col.findIndex((x) => x.id === g.id);
+      if (idx < 0) return;
+      const targetIdx = idx + delta;
+      if (targetIdx < 0 || targetIdx >= col.length) return;
+      const swapped = [...col];
+      [swapped[idx], swapped[targetIdx]] = [swapped[targetIdx], swapped[idx]];
+      for (let i = 0; i < swapped.length; i++) {
+        patchSchedule(swapped[i].id, { displayOrder: i });
+      }
+    };
+    const moveCourt = (g: G, delta: 1 | -1) => {
+      const cur = g.courtNum ?? null;
+      // Column ordering: unassigned (null) → 1 → 2 → … → N
+      let newCourt: number | null;
+      if (delta === -1) {
+        if (cur === null) return;        // already in unassigned (leftmost)
+        newCourt = cur === 1 ? null : cur - 1;
+      } else {
+        if (cur === numCourts) return;   // already in last court
+        newCourt = cur === null ? 1 : cur + 1;
+      }
+      const newCol = sortGames(games.filter((x) => (x.courtNum ?? null) === newCourt));
+      patchSchedule(g.id, { courtNum: newCourt, displayOrder: newCol.length });
+    };
+    const colOf = (g: G) => sortGames(games.filter((x) => (x.courtNum ?? null) === (g.courtNum ?? null)));
+
     const renderGameRow = (g: G) => {
       const hhmm = timeHHMM(g.scheduledAt);
       const { t1: t1Score, t2: t2Score } = teamScoresFor(g);
       const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
+      const isMoving = movingScheduleId === g.id;
+      const col = colOf(g);
+      const colIdx = col.findIndex((x) => x.id === g.id);
+      const canUp = colIdx > 0;
+      const canDown = colIdx >= 0 && colIdx < col.length - 1;
+      const canLeft = (g.courtNum ?? null) !== null;
+      const canRight = (g.courtNum ?? null) !== numCourts;
       return (
-        <ScheduleDraggable key={g.id} id={g.id} enabled={canEditSchedule} dragging={scheduleDragId === g.id}>
-        <ScheduleDroppable id={`card:${g.id}`} className="border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white">
+        <div key={g.id} className={`relative border rounded-lg p-2 pl-7 space-y-1.5 bg-white ${isMoving ? "border-action ring-2 ring-action/30" : "border-border"}`}>
+        {canEditSchedule && (
+          <button
+            type="button"
+            onClick={() => setMovingScheduleId(isMoving ? null : g.id)}
+            title={isMoving ? "Done moving" : "Move this match"}
+            className={`absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-[14px] select-none rounded-l-lg ${isMoving ? "bg-action text-white" : "text-muted hover:text-foreground hover:bg-gray-50"}`}
+          >
+            {isMoving ? "✕" : "⇆"}
+          </button>
+        )}
         <div className="contents">
           <div className="flex items-center gap-1.5">
             {canEditSchedule ? (
@@ -4667,55 +4714,38 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
-        </ScheduleDroppable>
-        </ScheduleDraggable>
+        {isMoving && (
+          <>
+            {/* Backdrop to dismiss on outside tap. */}
+            <div className="fixed inset-0 z-30" onClick={() => setMovingScheduleId(null)} />
+            {/* D-pad — large tap targets, anchored under the card so
+                the user can keep clicking the same screen area as the
+                card travels with each move. */}
+            <div className="absolute z-40 left-1/2 -translate-x-1/2 top-full mt-1 bg-white border-2 border-action shadow-xl rounded-xl p-2">
+              <div className="grid grid-cols-3 gap-1.5">
+                <div />
+                <button type="button" disabled={!canUp} onClick={() => movePosition(g, -1)}
+                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">↑</button>
+                <div />
+                <button type="button" disabled={!canLeft} onClick={() => moveCourt(g, -1)}
+                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">←</button>
+                <button type="button" onClick={() => setMovingScheduleId(null)}
+                  className="w-11 h-11 rounded-lg bg-action text-white hover:brightness-110 text-sm font-semibold flex items-center justify-center">Done</button>
+                <button type="button" disabled={!canRight} onClick={() => moveCourt(g, 1)}
+                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">→</button>
+                <div />
+                <button type="button" disabled={!canDown} onClick={() => movePosition(g, 1)}
+                  className="w-11 h-11 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold flex items-center justify-center">↓</button>
+                <div />
+              </div>
+            </div>
+          </>
+        )}
+        </div>
       );
     };
 
-    const handleDragEnd = (e: DragEndEvent) => {
-      setScheduleDragId(null);
-      const gid = e.active.id ? String(e.active.id) : null;
-      const overId = e.over?.id != null ? String(e.over.id) : null;
-      if (!gid || !overId) return;
-      const g = games.find((x) => x.id === gid);
-      if (!g) return;
-
-      // Drop on a specific card → "insert before target". Determines the
-      // target column from the target card's courtNum and renumbers the
-      // displayOrder for every game in that column. Works for both
-      // intra-court (reorder) and cross-court (move + insert).
-      if (overId.startsWith("card:")) {
-        const targetId = overId.slice(5);
-        if (targetId === gid) return;
-        const target = games.find((x) => x.id === targetId);
-        if (!target) return;
-        const targetCourt = target.courtNum ?? null;
-        // Build the new ordering: take the target column's games minus
-        // the dragged one, then insert the dragged at target's index.
-        const colGames = sortGames(games.filter((x) => (x.courtNum ?? null) === targetCourt && x.id !== gid));
-        const idx = colGames.findIndex((x) => x.id === targetId);
-        const newOrder = idx < 0 ? [...colGames, g] : [...colGames.slice(0, idx), g, ...colGames.slice(idx)];
-        for (let i = 0; i < newOrder.length; i++) {
-          const x = newOrder[i];
-          const patch: { courtNum?: number | null; displayOrder?: number } = { displayOrder: i };
-          if ((x.courtNum ?? null) !== targetCourt) patch.courtNum = targetCourt;
-          patchSchedule(x.id, patch);
-        }
-        return;
-      }
-
-      // Drop on a court column (header / empty area). Moves the dragged
-      // card to that column and appends it at the end (highest order).
-      const targetCourt = overId === "unassigned" ? null : parseInt(overId, 10);
-      const currentCourt = g.courtNum ?? null;
-      if (targetCourt === currentCourt) return;
-      const colGames = sortGames(games.filter((x) => (x.courtNum ?? null) === targetCourt && x.id !== gid));
-      const newOrder = colGames.length;
-      patchSchedule(gid, { courtNum: targetCourt, displayOrder: newOrder });
-    };
-
     return (
-      <DndContext sensors={scheduleSensors} onDragStart={(e) => setScheduleDragId(String(e.active.id))} onDragCancel={() => setScheduleDragId(null)} onDragEnd={handleDragEnd}>
       <div className={`${frameClass} p-3 space-y-2`}>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-base font-bold">Schedule</div>
@@ -4734,29 +4764,28 @@ export default function EventDetailPage() {
           )}
         </div>
         <div className="flex gap-2 overflow-x-auto -mx-3 px-3 pb-2">
-          {(buckets["unassigned"].length > 0 || scheduleDragId) && (
-            <ScheduleDroppable id="unassigned" className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5 transition-colors">
+          {(buckets["unassigned"].length > 0 || movingScheduleId) && (
+            <div className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
               <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Unassigned</div>
               {buckets["unassigned"].length === 0 ? (
-                <div className="text-[10px] text-muted italic px-1">drop here to unassign</div>
+                <div className="text-[10px] text-muted italic px-1">use ← to move a match here</div>
               ) : (
                 buckets["unassigned"].map(renderGameRow)
               )}
-            </ScheduleDroppable>
+            </div>
           )}
           {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
-            <ScheduleDroppable key={n} id={String(n)} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5 transition-colors">
+            <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
               <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Court {n}</div>
               {(buckets[String(n)] || []).length === 0 ? (
                 <div className="text-[10px] text-muted italic px-1">empty</div>
               ) : (
                 (buckets[String(n)] || []).map(renderGameRow)
               )}
-            </ScheduleDroppable>
+            </div>
           ))}
         </div>
       </div>
-      </DndContext>
     );
   };
 
