@@ -59,7 +59,12 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
               date: true,
               status: true,
               hostTeamId: true,
-              leagueTeams: { select: { teamId: true, points: true } },
+              // Latch: true iff BOTH teams have set lineupReady. Once
+              // true it never resets. The assistant is open-access, so
+              // we treat unrevealed lineups as confidential and hide
+              // them until both captains have locked.
+              lineupTotalLocked: true,
+              leagueTeams: { select: { teamId: true, points: true, lineupReady: true } },
               leagueGames: {
                 select: {
                   id: true,
@@ -207,7 +212,13 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
     }
     for (const ev of round.events) {
       const dateStr = ev.date ? new Date(ev.date).toLocaleDateString("en-CA") : "—";
-      lines.push(`- **${ev.name}** · ${dateStr} · status ${ev.status}`);
+      const lineupReadyTeamIds = ev.leagueTeams.filter((lt) => lt.lineupReady).map((lt) => lt.teamId);
+      const totalTeams = ev.leagueTeams.length;
+      const lineupRevealed = ev.lineupTotalLocked === true;
+      const lineupTag = lineupRevealed
+        ? "lineups locked & revealed"
+        : `lineups hidden — ${lineupReadyTeamIds.length}/${totalTeams} captain(s) have locked`;
+      lines.push(`- **${ev.name}** · ${dateStr} · status ${ev.status} · ${lineupTag}`);
       if (ev.leagueGames.length === 0) {
         lines.push("  _no games scheduled_");
         continue;
@@ -218,8 +229,28 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
         return kindRank(a.kind) - kindRank(b.kind);
       });
       for (const g of sortedGames) {
-        // Group this game's lineup by team so the model can answer
-        // "who played for X" without cross-referencing rosters.
+        let score = "";
+        if (g.match?.players?.length) {
+          const t1 = g.match.players.filter((p) => p.team === 1).reduce((s, p) => Math.max(s, p.score), 0);
+          const t2 = g.match.players.filter((p) => p.team === 2).reduce((s, p) => Math.max(s, p.score), 0);
+          if (t1 || t2) score = ` ${t1}-${t2}`;
+        }
+        const winner = g.winner?.name ? ` → winner ${g.winner.name}` : g.winnerId ? "" : " (pending)";
+        const kindTag = g.kind !== "league" ? ` [${g.kind}]` : "";
+        lines.push(`  - ${g.category.name}${kindTag}: ${g.team1.name} vs ${g.team2.name}${score}${winner}`);
+
+        // Lineup line — confidential until BOTH teams locked.
+        if (!lineupRevealed) {
+          lines.push(`    lineup: hidden until both captains lock their lineup`);
+          continue;
+        }
+        if (g.gamePlayers.length === 0) {
+          lines.push(`    lineup: not yet assigned`);
+          continue;
+        }
+
+        // Group this game's revealed lineup by team so the model can
+        // answer "who played for X" without cross-referencing rosters.
         const team1Players: string[] = [];
         const team2Players: string[] = [];
         const otherPlayers: string[] = [];
@@ -232,27 +263,11 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
           else if (teamName === g.team2.name) team2Players.push(name);
           else otherPlayers.push(name);
         }
-
-        let score = "";
-        if (g.match?.players?.length) {
-          const t1 = g.match.players.filter((p) => p.team === 1).reduce((s, p) => Math.max(s, p.score), 0);
-          const t2 = g.match.players.filter((p) => p.team === 2).reduce((s, p) => Math.max(s, p.score), 0);
-          if (t1 || t2) score = ` ${t1}-${t2}`;
-        }
-        const winner = g.winner?.name ? ` → winner ${g.winner.name}` : g.winnerId ? "" : " (pending)";
-        const kindTag = g.kind !== "league" ? ` [${g.kind}]` : "";
-        lines.push(`  - ${g.category.name}${kindTag}: ${g.team1.name} vs ${g.team2.name}${score}${winner}`);
-
-        // Lineup line — explicit so the model never guesses.
-        if (g.gamePlayers.length === 0) {
-          lines.push(`    lineup: not yet assigned`);
-        } else {
-          const parts: string[] = [];
-          if (team1Players.length) parts.push(`${g.team1.name}: ${team1Players.join(" + ")}`);
-          if (team2Players.length) parts.push(`${g.team2.name}: ${team2Players.join(" + ")}`);
-          if (otherPlayers.length) parts.push(`other: ${otherPlayers.join(" + ")}`);
-          lines.push(`    lineup: ${parts.join(" | ")}`);
-        }
+        const parts: string[] = [];
+        if (team1Players.length) parts.push(`${g.team1.name}: ${team1Players.join(" + ")}`);
+        if (team2Players.length) parts.push(`${g.team2.name}: ${team2Players.join(" + ")}`);
+        if (otherPlayers.length) parts.push(`other: ${otherPlayers.join(" + ")}`);
+        lines.push(`    lineup: ${parts.join(" | ")}`);
       }
     }
   }

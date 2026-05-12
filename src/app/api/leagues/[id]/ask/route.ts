@@ -40,7 +40,7 @@ const SYSTEM_PROMPT = [
   "1. The attached league document(s) — rules, regulations, schedule, etc. May be in any language.",
   "2. A live LEAGUE DATA digest at the start of the first user turn — teams, rosters, captains, rounds, match-days, scheduled and played games (with lineups + winners + scores), and a computed standings table. Use this for ANY question about specific matches, teams, players, scores, standings, lineups, or schedule. The data was snapshotted at the start of this chat — say so if the user asks how fresh it is.",
   "If the digest doesn't have a specific result yet (game shown as 'pending') or the lineup says 'not yet assigned', say plainly that the result/lineup is not in yet. Don't invent scores, winners, or player names.",
-  "When asked about a team's lineup for a specific game, look at the `lineup:` line under that game in the digest. Each lineup is grouped by team using `TeamName: player + player`, so you can answer directly without cross-referencing rosters. If a game's lineup is `not yet assigned`, say so plainly.",
+  "When asked about a team's lineup for a specific game, look at the `lineup:` line under that game in the digest. Each lineup is grouped by team using `TeamName: player + player`, so you can answer directly without cross-referencing rosters. If a game's lineup is `not yet assigned`, say so plainly. If a game's lineup is `hidden until both captains lock their lineup`, say plainly that the lineup is locked from view until both captains have submitted theirs — NEVER guess or reconstruct the lineup from team rosters in that case.",
   "When neither source covers the question: say so plainly in one short sentence (in the user's language). Suggest the user ask the league organizers.",
   "",
   "## Response format (CRITICAL)",
@@ -90,6 +90,15 @@ const SYSTEM_PROMPT = [
 const CITATION_DIRECTIVE_ALLOWED = [
   "## Citations (final rule)",
   "When relevant, cite the rule section in the body (e.g. \"§4.A\", \"Section 6 — Grande Final\"). Keep citations short and inline.",
+].join("\n");
+
+// Pinned at the very end of every system prompt so it's the final
+// instruction the model reads. Multilingual drift (answering in PT
+// when the user asked in EN, because the document/team names are PT)
+// is the most common failure mode — reinforce the rule here.
+const LANGUAGE_FINAL_CHECK = [
+  "## Final language check (ABSOLUTE)",
+  "Before sending your reply, verify it is written in the SAME language as the user's most recent question (the LAST `user` turn). The document language, team names, player names, and prior turns do NOT change this. If the user's last question is in English, your reply must be in English — even if every team and player name in the data is Portuguese. If it's in Portuguese, reply in Portuguese. Match the user's language. No exceptions.",
 ].join("\n");
 
 const CITATION_DIRECTIVE_DISALLOWED = [
@@ -174,7 +183,12 @@ export async function POST(
   // "don't cite unless visible". When there are no PDFs at all,
   // citations are moot — disable to keep prompts clean.
   const citationsAllowed = docs.length > 0 && docs.every((d) => d.showToUsers);
-  const systemPrompt = SYSTEM_PROMPT + "\n\n" + (citationsAllowed ? CITATION_DIRECTIVE_ALLOWED : CITATION_DIRECTIVE_DISALLOWED);
+  const systemPrompt =
+    SYSTEM_PROMPT +
+    "\n\n" +
+    (citationsAllowed ? CITATION_DIRECTIVE_ALLOWED : CITATION_DIRECTIVE_DISALLOWED) +
+    "\n\n" +
+    LANGUAGE_FINAL_CHECK;
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
