@@ -140,6 +140,18 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
   }
   const standings = Array.from(rows.values()).sort((a, b) => b.points - a.points || b.catWins - a.catWins || a.name.localeCompare(b.name));
 
+  // playerId → which team they belong to. Lets us split a game's
+  // lineup ("Alice + Bob + Carla + David") into the two team groups
+  // ("Setúbal: Alice + Bob | Oeiras: Carla + David") so the model
+  // never has to cross-reference rosters to answer "who played for X".
+  const playerToTeamName = new Map<string, string>();
+  for (const t of league.teams) {
+    for (const p of t.players) {
+      const pid = p.player?.id;
+      if (pid) playerToTeamName.set(pid, t.name);
+    }
+  }
+
   // ── Format as markdown ────────────────────────────────────────────
   const lines: string[] = [];
   lines.push(`# League data: ${league.name}${league.shortName ? ` (${league.shortName})` : ""}`);
@@ -206,10 +218,21 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
         return kindRank(a.kind) - kindRank(b.kind);
       });
       for (const g of sortedGames) {
-        const players = g.gamePlayers
-          .map((p) => p.player?.name)
-          .filter((n): n is string => Boolean(n));
-        const lineup = players.length ? ` — lineup: ${players.join(" + ")}` : "";
+        // Group this game's lineup by team so the model can answer
+        // "who played for X" without cross-referencing rosters.
+        const team1Players: string[] = [];
+        const team2Players: string[] = [];
+        const otherPlayers: string[] = [];
+        for (const gp of g.gamePlayers) {
+          const name = gp.player?.name;
+          if (!name) continue;
+          const pid = gp.player?.id;
+          const teamName = pid ? playerToTeamName.get(pid) : undefined;
+          if (teamName === g.team1.name) team1Players.push(name);
+          else if (teamName === g.team2.name) team2Players.push(name);
+          else otherPlayers.push(name);
+        }
+
         let score = "";
         if (g.match?.players?.length) {
           const t1 = g.match.players.filter((p) => p.team === 1).reduce((s, p) => Math.max(s, p.score), 0);
@@ -218,7 +241,18 @@ export async function buildLeagueAssistantDigest(leagueId: string): Promise<stri
         }
         const winner = g.winner?.name ? ` → winner ${g.winner.name}` : g.winnerId ? "" : " (pending)";
         const kindTag = g.kind !== "league" ? ` [${g.kind}]` : "";
-        lines.push(`  - ${g.category.name}${kindTag}: ${g.team1.name} vs ${g.team2.name}${score}${winner}${lineup}`);
+        lines.push(`  - ${g.category.name}${kindTag}: ${g.team1.name} vs ${g.team2.name}${score}${winner}`);
+
+        // Lineup line — explicit so the model never guesses.
+        if (g.gamePlayers.length === 0) {
+          lines.push(`    lineup: not yet assigned`);
+        } else {
+          const parts: string[] = [];
+          if (team1Players.length) parts.push(`${g.team1.name}: ${team1Players.join(" + ")}`);
+          if (team2Players.length) parts.push(`${g.team2.name}: ${team2Players.join(" + ")}`);
+          if (otherPlayers.length) parts.push(`other: ${otherPlayers.join(" + ")}`);
+          lines.push(`    lineup: ${parts.join(" | ")}`);
+        }
       }
     }
   }
