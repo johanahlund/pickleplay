@@ -221,6 +221,13 @@ function toTimeInput(iso: string) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// Compact label for a league category in narrow UI ("Mixed Doubles" →
+// "Mixed", "Men's Doubles" → "Men's"). "Singles"-style names are left
+// alone since the noun is already unambiguous.
+function shortCategoryName(name: string): string {
+  return name.replace(/\s+Doubles\s*$/i, "").trim() || name;
+}
+
 function speakMatch(match: Match, event: Event) {
   if (!("speechSynthesis" in window)) return;
   const team1 = match.players.filter((p) => p.team === 1);
@@ -5564,9 +5571,9 @@ export default function EventDetailPage() {
               {intent === "playing" && (
                 <>
                   <div><strong>You&apos;re signed up to this event</strong> for {myTeam.name}.</div>
-                  <div className="mt-2 grid grid-cols-2 gap-3">
+                  <div className="mt-2 grid grid-cols-[1fr_2fr] gap-3">
                     <div className="min-w-0">
-                      <div className="text-[11px] text-muted mb-0.5">Categories you are willing to play</div>
+                      <div className="text-[11px] text-muted mb-0.5">Preferred categories</div>
                       {prefRows.length === 0 ? (
                         <div className="text-[11px] text-muted italic">None picked.</div>
                       ) : (
@@ -5575,7 +5582,7 @@ export default function EventDetailPage() {
                             const isPrefer = p!.level === "prefer";
                             return (
                               <div key={cat.id} className={`text-[11px] ${isPrefer ? "text-emerald-700 font-bold" : "text-foreground"}`}>
-                                <span>{cat.name}</span>
+                                <span>{shortCategoryName(cat.name)}</span>
                                 {p!.note && <span className="text-muted font-normal italic"> ({p!.note})</span>}
                               </div>
                             );
@@ -5584,7 +5591,11 @@ export default function EventDetailPage() {
                       )}
                     </div>
                     <div className="min-w-0 border-l border-emerald-200 pl-3">
-                      <div className="text-[11px] text-muted mb-0.5">Categories you play</div>
+                      <div className="text-[11px] text-muted mb-0.5 grid grid-cols-[1fr_auto_auto] gap-x-2">
+                        <span>Categories you play</span>
+                        <span className="text-right w-10">Time</span>
+                        <span className="text-right w-8">Court</span>
+                      </div>
                       {myGames.length === 0 ? (
                         <div className="text-[11px] text-muted italic">Not picked yet.</div>
                       ) : (
@@ -5592,18 +5603,18 @@ export default function EventDetailPage() {
                           {myGames.map(({ cat, partners, scheduledAt, courtNum }) => {
                             const time = scheduledAt
                               ? new Date(scheduledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                              : null;
-                            const courtLabel = courtNum != null ? `Court ${courtNum}` : null;
-                            const slot = [time, courtLabel].filter(Boolean).join(" · ");
+                              : "TBD";
+                            const court = courtNum != null ? String(courtNum) : "TBD";
                             return (
-                              <div key={cat.id} className="text-[11px] text-emerald-700 font-bold">
-                                <div>{cat.name}</div>
-                                {partners.length > 0 && (
-                                  <div className="text-[11px] text-muted font-normal">with {partners.join(", ")}</div>
-                                )}
-                                {slot && (
-                                  <div className="text-[11px] text-muted font-normal">{slot}</div>
-                                )}
+                              <div key={cat.id} className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-baseline text-[11px]">
+                                <span className="truncate">
+                                  <span className="text-emerald-700 font-bold">{shortCategoryName(cat.name)}</span>
+                                  {partners.length > 0 && (
+                                    <span className="text-muted font-normal"> w {partners.join(", ")}</span>
+                                  )}
+                                </span>
+                                <span className="text-right w-10 tabular-nums text-muted font-normal">{time}</span>
+                                <span className="text-right w-8 tabular-nums text-muted font-normal">{court}</span>
                               </div>
                             );
                           })}
