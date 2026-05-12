@@ -2,6 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+// Minimal typing for the Web Speech API — not in the standard DOM lib.
+// We use `unknown` and narrow inside handlers; the surface we touch is
+// tiny so this beats pulling in a heavy types package.
+interface WindowWithSpeech {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }>;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -71,8 +93,23 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
   // Generated fresh each time the sheet opens; groups Q&A rows from the
   // same chat session for the assistant-logs viewer.
   const [conversationId, setConversationId] = useState<string>("");
+  // Voice input via Web Speech API. `listening` drives the mic button
+  // state; baseInputRef holds the user's pre-existing typed text so
+  // we can append (not overwrite) the recognized transcript.
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const baseInputRef = useRef<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const speechSupported =
+    typeof window !== "undefined" &&
+    !!((window as unknown as WindowWithSpeech).SpeechRecognition ||
+       (window as unknown as WindowWithSpeech).webkitSpeechRecognition);
+
+  const stopListening = useCallback(() => {
+    try { recognitionRef.current?.stop(); } catch { /* idempotent */ }
+  }, []);
 
   // Conversation persists across close/reopen of the sheet — the user
   // can dismiss the chat and come back to the same thread. We only
@@ -201,6 +238,50 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
       abortRef.current = null;
     }
   }, [leagueId, messages, streaming, conversationId]);
+
+  const startListening = useCallback(() => {
+    if (!speechSupported || listening || streaming) return;
+    const w = window as unknown as WindowWithSpeech;
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) return;
+    const rec = new Ctor();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-US";
+    // Capture existing typed text so dictated words append, not overwrite.
+    baseInputRef.current = input.trim();
+    rec.onresult = (event) => {
+      let interim = "";
+      let newFinal = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]!;
+        const transcript = result[0]?.transcript ?? "";
+        if (result.isFinal) newFinal += transcript;
+        else interim += transcript;
+      }
+      if (newFinal) {
+        const sep = baseInputRef.current ? " " : "";
+        baseInputRef.current = (baseInputRef.current + sep + newFinal.trim()).trim();
+      }
+      const sep = baseInputRef.current && interim ? " " : "";
+      setInput((baseInputRef.current + sep + interim.trim()).trim());
+    };
+    rec.onend = () => { setListening(false); recognitionRef.current = null; };
+    rec.onerror = () => { setListening(false); recognitionRef.current = null; };
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  }, [speechSupported, listening, streaming, input]);
+
+  // Stop recognition when the sheet closes or the component unmounts.
+  useEffect(() => {
+    if (!open) stopListening();
+  }, [open, stopListening]);
+  useEffect(() => () => { stopListening(); }, [stopListening]);
 
   if (!open) return null;
 
@@ -346,14 +427,33 @@ export function RulesChatSheet({ open, onClose, leagueId, leagueName }: Props) {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                stopListening();
                 send(input);
               }
             }}
-            placeholder="Ask a question in any language…"
+            placeholder={listening ? "Listening… tap mic to stop" : "Ask a question in any language…"}
             rows={1}
             disabled={streaming}
             className="flex-1 resize-none border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-action max-h-32"
           />
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={() => (listening ? stopListening() : startListening())}
+              disabled={streaming}
+              aria-label={listening ? "Stop voice input" : "Start voice input"}
+              title={listening ? "Stop voice input" : "Voice input"}
+              className={`shrink-0 w-10 h-[38px] rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                listening ? "bg-red-500 text-white animate-pulse" : "bg-gray-100 text-foreground hover:bg-gray-200"
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="2" width="6" height="11" rx="3" />
+                <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+              </svg>
+            </button>
+          )}
           <button
             type="submit"
             disabled={!input.trim() || streaming}
