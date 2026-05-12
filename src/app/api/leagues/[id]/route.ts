@@ -79,6 +79,7 @@ export async function GET(
                   gamePlayers: {
                     select: {
                       playerId: true,
+                      team: true,
                       player: { select: { id: true, name: true } },
                     },
                   },

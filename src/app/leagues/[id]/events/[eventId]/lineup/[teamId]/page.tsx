@@ -21,7 +21,7 @@ interface Game {
   winnerId: string | null;
   scheduledAt?: string | null;
   courtNum?: number | null;
-  gamePlayers: { playerId: string; player: { id: string; name: string } }[];
+  gamePlayers: { playerId: string; team?: number | null; player: { id: string; name: string } }[];
 }
 interface Signup {
   playerId: string;
@@ -79,6 +79,33 @@ export default function LineupBuilderPage() {
   // for more.
   const [extraSlots, setExtraSlots] = useState<Record<string, number>>({});
   const [picker, setPicker] = useState<PickerTarget | null>(null);
+  // Search query for the player picker. Resets to empty whenever the
+  // picker (re-)opens.
+  const [pickerSearch, setPickerSearch] = useState("");
+  useEffect(() => { if (!picker) setPickerSearch(""); }, [picker]);
+  // Player ids whose pill should pulse/highlight on the match card —
+  // used to give the captain instant visual confirmation when an
+  // assignment lands. Cleared automatically after ~2 seconds.
+  const [recentlyChangedPids, setRecentlyChangedPids] = useState<Set<string>>(new Set());
+  const flashPlayers = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setRecentlyChangedPids((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    setTimeout(() => {
+      setRecentlyChangedPids((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    }, 2000);
+  }, []);
+  // Toggle for the single Expand/Collapse-all button above the category
+  // cards. Mirrors the rounds/standings pattern: imperatively sets each
+  // <details data-category-card> `open` attribute via querySelectorAll.
+  const [categoriesAllCollapsed, setCategoriesAllCollapsed] = useState(false);
 
   const isAppAdmin = userRole === "admin";
   const isOrganizer = isAppAdmin || (!!userId && (leagueOrg.createdById === userId || leagueOrg.deputyId === userId));
@@ -200,14 +227,38 @@ export default function LineupBuilderPage() {
   }, [games]);
 
   // Players belonging to this row's "our side" only — the opponent's
-  // players are revealed below their column.
+  // players are revealed below their column. Prefer the explicit `team`
+  // field (1 | 2) on each game-player row; fall back to roster heuristics
+  // for legacy rows where team is null (pre-migration data).
   const ourPlayersForGame = (g: Game): { id: string; name: string }[] => {
     const rosterIds = new Set(roster.map((p) => p.id));
-    return g.gamePlayers.filter((gp) => rosterIds.has(gp.playerId)).map((gp) => gp.player);
+    return g.gamePlayers
+      .filter((gp) => {
+        const t = (gp as { team?: number | null }).team;
+        if (t === 1 || t === 2) return t === ourSide;
+        return rosterIds.has(gp.playerId);
+      })
+      .map((gp) => gp.player);
   };
   const oppPlayersForGame = (g: Game): { id: string; name: string }[] => {
-    const rosterIds = new Set(roster.map((p) => p.id));
-    return g.gamePlayers.filter((gp) => !rosterIds.has(gp.playerId)).map((gp) => gp.player);
+    const oppRosterIds = opponentRosterIds;
+    const ourRosterIds = new Set(roster.map((p) => p.id));
+    return g.gamePlayers
+      .filter((gp) => {
+        const t = (gp as { team?: number | null }).team;
+        if (t === 1 || t === 2) return t !== ourSide;
+        // Legacy null-team row:
+        // - In OUR roster → ours, hide from opp column.
+        // - In OPP roster → opp, show.
+        // - Otherwise (friendly extra with unknown side): post-lock
+        //   show as opp (data is settled; better to surface than hide).
+        //   Pre-lock keep hidden to avoid the original "social player
+        //   showed up as opponent" misclassification.
+        if (ourRosterIds.has(gp.playerId)) return false;
+        if (oppRosterIds.has(gp.playerId)) return true;
+        return lineupTotalLocked;
+      })
+      .map((gp) => gp.player);
   };
 
   const isDoubles = (cat: Category) => cat.format === "doubles";
@@ -313,16 +364,42 @@ export default function LineupBuilderPage() {
 
   const assignPlayers = async (gameId: string, playerIds: string[]) => {
     // Optimistic: replace our team's players locally, leave opponent rows.
+    // Tag each new gamePlayer with `team: ourSide` so the read-side
+    // helpers (`ourPlayersForGame`) pick non-roster friendly extras up
+    // as ours without waiting for the server refetch — otherwise the
+    // newly-picked pill wouldn't appear instantly on the card.
     const snapshot = games;
-    const rosterIds = new Set(roster.map((p) => p.id));
+    // Identify which ids are NEW vs the previous state so we can flash
+    // just those pills on the match card for ~2s of UX feedback.
+    const prevGame = games.find((g) => g.id === gameId);
+    const prevOurIds = prevGame
+      ? prevGame.gamePlayers.filter((gp) => {
+          const t = gp.team;
+          if (t === 1 || t === 2) return t === ourSide;
+          return roster.some((r) => r.id === gp.playerId);
+        }).map((gp) => gp.playerId)
+      : [];
+    const newlyAdded = playerIds.filter((pid) => !prevOurIds.includes(pid));
+    flashPlayers(newlyAdded);
     setGames((prev) => prev.map((g) => {
       if (g.id !== gameId) return g;
-      const oppPlayers = g.gamePlayers.filter((gp) => !rosterIds.has(gp.playerId));
-      const ourPlayers = playerIds.map((pid) => {
-        const known = roster.find((p) => p.id === pid);
-        return { playerId: pid, player: { id: pid, name: known?.name ?? "…" } };
+      // Drop any existing rows on our side (by team tag, with a roster
+      // fallback for legacy rows) — mirrors the server-side delete.
+      const ourRosterIds = new Set(roster.map((p) => p.id));
+      const remaining = g.gamePlayers.filter((gp) => {
+        const t = gp.team;
+        if (t === 1 || t === 2) return t !== ourSide;
+        return !ourRosterIds.has(gp.playerId);
       });
-      return { ...g, gamePlayers: [...oppPlayers, ...ourPlayers] };
+      const ourPlayers = playerIds.map((pid) => {
+        // Best-effort name lookup across roster + signups so the optimistic
+        // pill shows the real name (not "…") even for non-roster picks.
+        const fromRoster = roster.find((p) => p.id === pid);
+        const fromSignup = signups.find((s) => s.playerId === pid)?.player;
+        const name = fromRoster?.name ?? fromSignup?.name ?? "…";
+        return { playerId: pid, team: ourSide ?? null, player: { id: pid, name } };
+      });
+      return { ...g, gamePlayers: [...remaining, ...ourPlayers] };
     }));
     await postOptimistic(
       { action: "assign_players", gameId, playerIds },
@@ -332,6 +409,45 @@ export default function LineupBuilderPage() {
 
   const setReady = async (ready: boolean) => {
     if (!team) return;
+    // Pre-lock validation: every ticked slot on OUR side must have the
+    // right number of players (1 for singles, 2 for doubles/mix). Mixed
+    // doubles further requires one of each gender.
+    if (ready) {
+      const problems: string[] = [];
+      for (const g of games) {
+        const ourWants = ourSide === 1 ? g.team1Wants : g.team2Wants;
+        if (!ourWants) continue;
+        const cat = categories.find((c) => c.id === g.categoryId);
+        if (!cat) continue;
+        const ours = ourPlayersForGame(g);
+        const needed = cat.format === "doubles" ? 2 : 1;
+        if (ours.length === 0) {
+          problems.push(`${cat.name} match ${g.slotNumber}: no players picked`);
+          continue;
+        }
+        if (ours.length < needed) {
+          problems.push(`${cat.name} match ${g.slotNumber}: only ${ours.length} of ${needed} players picked`);
+          continue;
+        }
+        if (cat.gender === "mix" && cat.format === "doubles") {
+          const ourFull = ours
+            .map((p) => roster.find((r) => r.id === p.id))
+            .filter((p): p is PlayerLite => !!p);
+          const males = ourFull.filter((p) => p.gender === "M").length;
+          const females = ourFull.filter((p) => p.gender === "F").length;
+          if (!(males >= 1 && females >= 1)) {
+            problems.push(`${cat.name} match ${g.slotNumber}: mixed doubles needs one ♂ and one ♀`);
+          }
+        }
+      }
+      if (problems.length > 0) {
+        await alertDialog(
+          `Fix these before locking:\n\n• ${problems.join("\n• ")}\n\nUntick the match or finish picking players.`,
+          "Lineup not ready",
+        );
+        return;
+      }
+    }
     const snapshot = readyByTeam;
     setReadyByTeam((prev) => ({ ...prev, [team.id]: ready }));
     await postOptimistic(
@@ -595,7 +711,7 @@ export default function LineupBuilderPage() {
                 className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap ${
                   myReady ? "bg-gray-200 text-foreground" : "bg-action text-white"
                 } disabled:opacity-50`}
-              >{myReady ? "Re-open" : "Team Lineup Finalized"}</button>
+              >{myReady ? "Re-open" : "Lock Team Lineup"}</button>
             </div>
           );
         })()}
@@ -627,6 +743,28 @@ export default function LineupBuilderPage() {
         })()}
       </div>
 
+      {/* Single Expand/Collapse-all toggle for category cards. Mirrors
+          the rounds/standings pattern: imperatively flips each
+          <details data-category-card> open attribute. */}
+      {categories.length > 0 && (
+        <div className="flex justify-end mb-1">
+          <button
+            type="button"
+            onClick={() => {
+              const els = document.querySelectorAll<HTMLDetailsElement>("[data-category-card]");
+              const next = categoriesAllCollapsed; // currently collapsed → open all
+              els.forEach((el) => { el.open = next; });
+              setCategoriesAllCollapsed(!next);
+            }}
+            className="text-xs text-muted hover:text-foreground flex items-center gap-1 px-2 py-1"
+            title={categoriesAllCollapsed ? "Expand all" : "Collapse all"}
+          >
+            <span className="text-[10px]">{categoriesAllCollapsed ? "▼" : "▲"}</span>
+            {categoriesAllCollapsed ? "Expand all" : "Collapse all"}
+          </button>
+        </div>
+      )}
+
       {categories.map((cat) => {
         const max = cat.maxPerEvent ?? 1;
         const existingSlots = games
@@ -652,21 +790,29 @@ export default function LineupBuilderPage() {
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
 
         return (
-          <div key={cat.id} className={`${frameClass} shadow-sm p-3 space-y-2 border-l-4 border-l-action/60`}>
-            <div className="flex items-baseline justify-between gap-2 pb-1.5 border-b border-border/70 -mx-3 px-3">
-              <div className="text-base font-bold">{cat.name}</div>
+          <details key={cat.id} data-category-card open className={`${frameClass} shadow-sm border-l-4 border-l-action/60 group overflow-hidden`}>
+            <summary className="flex items-baseline justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 list-none">
+              <div className="flex items-center gap-2">
+                <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
+                <div className="text-base font-bold">{cat.name}</div>
+              </div>
               <div className="flex items-baseline gap-2">
                 <div className="text-[11px] text-muted">{cat.format} · max {max}</div>
                 {canAddMore && !ourLocked && (
                   <button
                     type="button"
                     disabled={saving}
-                    onClick={() => setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) + 1 }))}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) + 1 }));
+                    }}
                     className="text-[11px] text-action font-medium hover:underline disabled:opacity-50"
                   >+ Add match</button>
                 )}
               </div>
-            </div>
+            </summary>
+            <div className="px-3 pb-3 pt-1.5 space-y-2 border-t border-border/70">
 
             {slots.map((slotNum) => {
               const g = gameByKey.get(`${cat.id}:${slotNum}`);
@@ -695,7 +841,7 @@ export default function LineupBuilderPage() {
                         if (g && ourWants) toggleSlot(cat.id, slotNum, false);
                         setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
                       }}
-                      className="absolute top-1 right-1 text-danger hover:bg-red-50 rounded w-5 h-5 flex items-center justify-center text-xs leading-none"
+                      className="absolute -top-2 -right-2 z-10 bg-white border border-red-200 text-danger hover:bg-red-50 rounded-full w-5 h-5 flex items-center justify-center text-[11px] leading-none shadow-sm"
                     >✕</button>
                   )}
                   <div className="flex items-center justify-between">
@@ -868,9 +1014,15 @@ export default function LineupBuilderPage() {
                           matter how few/many pills are rendered. */}
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                          {ourPlayers.map((p) => (
-                            <span key={p.id} className="px-2 py-1 rounded-full bg-action/10 text-foreground text-xs">{p.name}</span>
-                          ))}
+                          {ourPlayers.map((p) => {
+                            const flashing = recentlyChangedPids.has(p.id);
+                            return (
+                              <span
+                                key={p.id}
+                                className={`px-2 py-1 rounded-full text-xs transition-all duration-500 ${flashing ? "bg-action text-white ring-2 ring-action/40 shadow-sm" : "bg-action/10 text-foreground"}`}
+                              >{p.name}</span>
+                            );
+                          })}
                         </div>
                         <button
                           type="button"
@@ -906,7 +1058,8 @@ export default function LineupBuilderPage() {
               );
             })}
 
-          </div>
+            </div>
+          </details>
         );
       })}
 
@@ -929,10 +1082,12 @@ export default function LineupBuilderPage() {
         // Always hide already-picked players from the pools below — they
         // live in the "Selected" panel at the top. Also drops same-gender
         // candidates when this is a mixed-doubles second-slot scenario.
+        const searchQ = pickerSearch.trim().toLowerCase();
         const filterMix = <T extends PlayerLite>(arr: T[]): T[] => {
           return arr.filter((p) => {
             if (currentIds.includes(p.id)) return false;
             if (excludeGender && p.gender === excludeGender) return false;
+            if (searchQ && !p.name.toLowerCase().includes(searchQ)) return false;
             return true;
           });
         };
@@ -1048,7 +1203,10 @@ export default function LineupBuilderPage() {
               onClick={(e) => e.stopPropagation()}
               onTouchMove={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-2 sticky top-0 bg-card pt-1 pb-2 -mt-1 z-10">
+              {/* Sticky header that spans edge-to-edge (cancels the
+                  parent's p-3) so scrolled content can't bleed through
+                  the padded gap above. */}
+              <div className="sticky top-0 z-20 bg-card -mx-3 -mt-3 px-3 pt-3 pb-2 mb-2 border-b border-border/60 flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Pick player — {cat.name} match {picker.slotNumber}</h3>
                 <button onClick={close} className="text-muted text-sm">Done</button>
               </div>
@@ -1119,6 +1277,24 @@ export default function LineupBuilderPage() {
                   Friendly match — anyone signed up to the event can play (except the opposing team&apos;s roster).
                 </div>
               )}
+              {/* Name-search across all pools. Empty = no filter. */}
+              <div className="relative mb-2">
+                <input
+                  type="text"
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Search player..."
+                  className="w-full border border-border rounded-lg px-2.5 py-1.5 text-sm bg-white"
+                />
+                {pickerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPickerSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-muted hover:text-foreground px-2 text-sm"
+                  >✕</button>
+                )}
+              </div>
               <div className="space-y-3">
                 <Section title="Recommended" hint="signed up + prefer/ok" players={filterMix(pools.recommended)} />
                 {bothReady && pools.opponentSignups.length > 0 ? (

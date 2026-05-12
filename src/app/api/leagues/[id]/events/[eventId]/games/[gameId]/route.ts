@@ -83,7 +83,7 @@ export async function PATCH(
 
   // Schedule fields: only the host team's captain/vice or a league
   // organizer (or app admin) may set them. The away team can't.
-  if (body.scheduledAt !== undefined || body.courtNum !== undefined) {
+  if (body.scheduledAt !== undefined || body.courtNum !== undefined || body.displayOrder !== undefined) {
     const user = await requireAuth();
     const isAppAdmin = user.role === "admin";
     const league = game.event.round?.league;
@@ -113,6 +113,13 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid courtNum" }, { status: 400 });
       }
       data.courtNum = n;
+    }
+    if (body.displayOrder !== undefined) {
+      const o = body.displayOrder === null ? null : Number(body.displayOrder);
+      if (o !== null && Number.isNaN(o)) {
+        return NextResponse.json({ error: "Invalid displayOrder" }, { status: 400 });
+      }
+      data.displayOrder = o;
     }
   }
 

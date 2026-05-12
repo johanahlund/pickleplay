@@ -737,6 +737,11 @@ model LeagueGame {
   // Both optional; the round-event matches view sorts by them.
   scheduledAt DateTime?
   courtNum    Int?
+  // Manual ordering within a court column for the Matches-tab schedule.
+  // Drag-and-drop writes integers per column; lower = earlier in the
+  // list. Sort uses (displayOrder asc NULLS LAST, then scheduledAt asc,
+  // then category/slot for stability).
+  displayOrder Int?
   createdById String? // audit — captain or organizer who first ticked this slot
 
   event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -756,6 +761,10 @@ model LeagueGamePlayer {
   id           String @id @default(cuid())
   leagueGameId String
   playerId     String
+  // Side of the game this player belongs to (1 = team1, 2 = team2).
+  // Optional for back-compat with rows created before this field existed;
+  // when null, the client falls back to roster-based heuristics.
+  team         Int?
 
   leagueGame LeagueGame @relation(fields: [leagueGameId], references: [id], onDelete: Cascade)
   player     Player     @relation(fields: [playerId], references: [id])

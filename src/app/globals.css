@@ -62,6 +62,17 @@ input, select, textarea {
   font-size: 16px !important; /* Prevent zoom on iOS */
 }
 
+/* Time input variant that hides the native clock indicator. Apply with
+   className="no-picker-icon" — usually paired with onClick handlers that
+   call showPicker() to open the OS picker on field click. */
+input[type="time"].no-picker-icon::-webkit-calendar-picker-indicator {
+  display: none;
+  -webkit-appearance: none;
+}
+input[type="time"].no-picker-icon::-webkit-time-picker-indicator {
+  display: none;
+}
+
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }

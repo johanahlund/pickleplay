@@ -201,6 +201,7 @@ interface Event {
     kind?: "principal" | "league" | "extra";
     scheduledAt?: string | null;
     courtNum?: number | null;
+    displayOrder?: number | null;
     winnerId?: string | null;
     gamePlayers: { playerId: string; team?: number | null }[];
   }[];
@@ -438,26 +439,29 @@ function SwipeablePlayerRow({
 // ── DnD helpers for the league-event Schedule card (touch-friendly via
 // @dnd-kit). Each match card is a `ScheduleDraggable` that takes a grip
 // handle on the left edge; each court column is a `ScheduleDroppable`.
-function ScheduleDraggable({ id, children, dragging }: { id: string; children: ReactNode; dragging?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
+function ScheduleDraggable({ id, children, dragging, enabled }: { id: string; children: ReactNode; dragging?: boolean; enabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled: !enabled });
   const isMe = isDragging || !!dragging;
   const style: React.CSSProperties = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: isMe ? 50 : undefined }
     : {};
   return (
     <div ref={setNodeRef} style={style} className={`relative ${isMe ? "opacity-40" : ""}`}>
-      {/* Grip — the @dnd-kit activator. touchAction: none lets the
-          handle initiate a touch drag without the browser scrolling
-          the page. The rest of the card stays scrollable. */}
-      <div
-        {...attributes}
-        {...listeners}
-        style={{ touchAction: "none" }}
-        title="Drag to move"
-        className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-muted cursor-grab active:cursor-grabbing select-none rounded-l-lg hover:bg-gray-50"
-      >
-        <span className="text-[14px] leading-none">⠿</span>
-      </div>
+      {/* Grip — the @dnd-kit activator. Only rendered when `enabled` so
+          read-only viewers (e.g. away-team captain) can't initiate
+          drag. touchAction: none lets the handle start a touch drag
+          without the browser scrolling the page. */}
+      {enabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          style={{ touchAction: "none" }}
+          title="Drag to move"
+          className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-muted cursor-grab active:cursor-grabbing select-none rounded-l-lg hover:bg-gray-50"
+        >
+          <span className="text-[14px] leading-none">⠿</span>
+        </div>
+      )}
       {children}
     </div>
   );
@@ -1512,16 +1516,39 @@ export default function EventDetailPage() {
           <div className="flex items-center justify-between px-3.5" style={{ height: 48 }}>
             <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
           </div>
+          {/* Back link: mirror the loaded view's logic — league events
+              link back to the league's Rounds tab with the short league
+              name; otherwise back to /events. Otherwise the skeleton
+              flashes "Events" before swapping to "[LeagueShort]". */}
           <div className="px-4 pt-0.5">
-            <Link href="/events" className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
-              <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-              Events
-            </Link>
+            {showPreview && preview.round?.league ? (
+              <Link href={`/leagues/${preview.round.league.id}?tab=rounds`} className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
+                <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                {leagueShortName(preview.round.league)}
+              </Link>
+            ) : (
+              <Link href="/events" className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
+                <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                Events
+              </Link>
+            )}
           </div>
           <div className="px-4 pt-1 pb-2">
             {showPreview ? (
               <>
-                <h2 className="text-2xl font-extrabold" style={{ letterSpacing: "-0.02em" }}>{preview.name}</h2>
+                {/* Title: for league events the stored event.name is the
+                    long "{league}: {teams} — {round}" string. The league
+                    is already in the back chevron, so the hero only
+                    needs the match-day-specific bit. */}
+                <h2 className="text-2xl font-extrabold" style={{ letterSpacing: "-0.02em" }}>
+                  {preview.round
+                    ? (() => {
+                        const teamNames = (preview.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+                        const roundLabel = preview.round.name || `Round ${preview.round.roundNumber}`;
+                        return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
+                      })()
+                    : preview.name}
+                </h2>
                 <p className="text-sm text-white/80 mt-2">
                   {preview.club && `${(preview.club.shortName?.trim() || preview.club.name)} · `}
                   {new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
@@ -4349,7 +4376,13 @@ export default function EventDetailPage() {
     });
 
     type G = NonNullable<typeof event.leagueGames>[number];
+    // Sort priority: manual displayOrder (NULLS LAST) > scheduledAt asc
+    // > category sort > slotNumber. The displayOrder slot lets the user
+    // drag a card up/down without changing its time.
     const sortGames = (arr: G[]) => arr.slice().sort((a, b) => {
+      const oa = a.displayOrder ?? Number.POSITIVE_INFINITY;
+      const ob = b.displayOrder ?? Number.POSITIVE_INFINITY;
+      if (oa !== ob) return oa - ob;
       const ta = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
       const tb = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
       if (ta !== tb) return ta - tb;
@@ -4380,13 +4413,14 @@ export default function EventDetailPage() {
 
     // Optimistic local patcher — fire-and-forget API call, refetch in
     // the background. Keeps the UI snappy even on slow networks.
-    const applyOptimistic = (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
+    type SchedulePatch = { scheduledAt?: string | null; courtNum?: number | null; displayOrder?: number | null };
+    const applyOptimistic = (gameId: string, patch: SchedulePatch) => {
       setEvent((prev) => prev ? ({
         ...prev,
         leagueGames: (prev.leagueGames || []).map((x) => x.id === gameId ? { ...x, ...patch } : x),
       }) : prev);
     };
-    const patchSchedule = (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
+    const patchSchedule = (gameId: string, patch: SchedulePatch) => {
       applyOptimistic(gameId, patch);
       // Fire-and-forget. Server validates + rejects on permission error.
       void fetch(`/api/leagues/${event.round!.league.id}/events/${event.id}/games/${gameId}`, {
@@ -4495,23 +4529,55 @@ export default function EventDetailPage() {
       const { t1: t1Score, t2: t2Score } = teamScoresFor(g);
       const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
       return (
-        <ScheduleDraggable key={g.id} id={g.id} dragging={scheduleDragId === g.id}>
-        <div
-          className="border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white"
-        >
+        <ScheduleDraggable key={g.id} id={g.id} enabled={canEditSchedule} dragging={scheduleDragId === g.id}>
+        <ScheduleDroppable id={`card:${g.id}`} className="border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white">
+        <div className="contents">
           <div className="flex items-center gap-1.5">
             {canEditSchedule ? (
-              <input
-                type="time"
-                step={300}
-                value={hhmm}
-                onChange={(e) => onTimeChange(g, e.target.value)}
-                onClick={(e) => {
-                  const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
-                  try { el.showPicker?.(); } catch { /* fallback */ }
-                }}
-                className="no-picker-icon border border-border rounded px-1 py-0.5 text-[11px] w-[60px] cursor-pointer"
-              />
+              // Two-select time picker. We can't use <input type="time">
+              // because iOS Safari ignores `step` and shows a per-minute
+              // wheel. With native <select>s the minutes column is exactly
+              // the 5-min set we define.
+              (() => {
+                const [hhStr, mmStr] = hhmm ? hhmm.split(":") : ["", ""];
+                const hh = hhStr === "" ? null : parseInt(hhStr, 10);
+                const mm = mmStr === "" ? null : parseInt(mmStr, 10);
+                const FIVE_MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+                const HOURS = Array.from({ length: 24 }, (_, i) => i);
+                const setHour = (newHh: number) => {
+                  const minute = mm == null ? 0 : mm;
+                  onTimeChange(g, `${String(newHh).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+                };
+                const setMinute = (newMm: number) => {
+                  if (hh == null) return; // need an hour first
+                  onTimeChange(g, `${String(hh).padStart(2, "0")}:${String(newMm).padStart(2, "0")}`);
+                };
+                return (
+                  <span className="inline-flex items-center gap-0.5 tabular-nums">
+                    <select
+                      value={hh == null ? "" : String(hh)}
+                      onChange={(e) => setHour(parseInt(e.target.value, 10))}
+                      className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                    >
+                      <option value="" disabled>--</option>
+                      {HOURS.map((h) => (
+                        <option key={h} value={h}>{String(h).padStart(2, "0")}</option>
+                      ))}
+                    </select>
+                    <span className="text-[11px]">:</span>
+                    <select
+                      value={mm == null ? "" : String(mm)}
+                      onChange={(e) => setMinute(parseInt(e.target.value, 10))}
+                      className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                    >
+                      <option value="" disabled>--</option>
+                      {FIVE_MINS.map((m) => (
+                        <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                      ))}
+                    </select>
+                  </span>
+                );
+              })()
             ) : (
               <span className="text-[11px] font-semibold tabular-nums w-[60px]">
                 {hhmm || <span className="text-muted font-normal">—</span>}
@@ -4601,6 +4667,7 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
+        </ScheduleDroppable>
         </ScheduleDraggable>
       );
     };
@@ -4612,10 +4679,39 @@ export default function EventDetailPage() {
       if (!gid || !overId) return;
       const g = games.find((x) => x.id === gid);
       if (!g) return;
+
+      // Drop on a specific card → "insert before target". Determines the
+      // target column from the target card's courtNum and renumbers the
+      // displayOrder for every game in that column. Works for both
+      // intra-court (reorder) and cross-court (move + insert).
+      if (overId.startsWith("card:")) {
+        const targetId = overId.slice(5);
+        if (targetId === gid) return;
+        const target = games.find((x) => x.id === targetId);
+        if (!target) return;
+        const targetCourt = target.courtNum ?? null;
+        // Build the new ordering: take the target column's games minus
+        // the dragged one, then insert the dragged at target's index.
+        const colGames = sortGames(games.filter((x) => (x.courtNum ?? null) === targetCourt && x.id !== gid));
+        const idx = colGames.findIndex((x) => x.id === targetId);
+        const newOrder = idx < 0 ? [...colGames, g] : [...colGames.slice(0, idx), g, ...colGames.slice(idx)];
+        for (let i = 0; i < newOrder.length; i++) {
+          const x = newOrder[i];
+          const patch: { courtNum?: number | null; displayOrder?: number } = { displayOrder: i };
+          if ((x.courtNum ?? null) !== targetCourt) patch.courtNum = targetCourt;
+          patchSchedule(x.id, patch);
+        }
+        return;
+      }
+
+      // Drop on a court column (header / empty area). Moves the dragged
+      // card to that column and appends it at the end (highest order).
       const targetCourt = overId === "unassigned" ? null : parseInt(overId, 10);
       const currentCourt = g.courtNum ?? null;
       if (targetCourt === currentCourt) return;
-      patchSchedule(gid, { courtNum: targetCourt });
+      const colGames = sortGames(games.filter((x) => (x.courtNum ?? null) === targetCourt && x.id !== gid));
+      const newOrder = colGames.length;
+      patchSchedule(gid, { courtNum: targetCourt, displayOrder: newOrder });
     };
 
     return (

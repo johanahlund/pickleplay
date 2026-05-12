@@ -282,29 +282,38 @@ export async function POST(
     }
 
     // Drop the acting team's existing assignments, then add the new ones.
+    // Side is derived from the captain's teamId against the game's team1/2
+    // ids — used to tag each LeagueGamePlayer.team field on insert/update.
+    // Without the side tag, non-roster "friendly extras" couldn't be
+    // attributed to a team and showed up in the opposing column.
     const ourTeamId = ctx.captainTeamId;
+    const ourSide: 1 | 2 = game.team1Id === ourTeamId ? 1 : 2;
     const roster = await prisma.leagueTeamPlayer.findMany({
       where: { teamId: ourTeamId },
       select: { playerId: true },
     });
     const rosterSet = new Set(roster.map((r) => r.playerId));
-    const existing = await prisma.leagueGamePlayer.findMany({
-      where: { leagueGameId: gameId },
-      select: { id: true, playerId: true },
+    // Delete every row currently on our side (covers both roster picks
+    // and friendly extras). Falls back to "roster match" for legacy rows
+    // where team is null — keeps backward compat with pre-migration data.
+    await prisma.leagueGamePlayer.deleteMany({
+      where: {
+        leagueGameId: gameId,
+        OR: [
+          { team: ourSide },
+          { team: null, playerId: { in: [...rosterSet] } },
+        ],
+      },
     });
-    const toRemove = existing.filter((gp) => rosterSet.has(gp.playerId));
-    if (toRemove.length > 0) {
-      await prisma.leagueGamePlayer.deleteMany({
-        where: { id: { in: toRemove.map((gp) => gp.id) } },
-      });
-    }
     for (const pid of playerIds as string[]) {
       // Allow off-roster substitutes (e.g. emergency fill-in) — skip the
-      // membership check. Captains pick from "All sign-ups" pool.
+      // membership check. Captains pick from "All sign-ups" pool. Always
+      // tag the row with `team` so the read side knows which column to
+      // render the player in.
       await prisma.leagueGamePlayer.upsert({
         where: { leagueGameId_playerId: { leagueGameId: gameId, playerId: pid } },
-        create: { leagueGameId: gameId, playerId: pid },
-        update: {},
+        create: { leagueGameId: gameId, playerId: pid, team: ourSide },
+        update: { team: ourSide },
       });
     }
 
