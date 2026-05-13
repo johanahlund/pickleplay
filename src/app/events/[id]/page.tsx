@@ -1996,12 +1996,13 @@ export default function EventDetailPage() {
       };
     });
 
-    // Earliest scheduledAt across all games → "doors" time hint.
-    const allTimes = games
-      .map((g) => g.scheduledAt ? new Date(g.scheduledAt).getTime() : null)
-      .filter((t): t is number => t !== null);
-    const doorsTimeText = allTimes.length > 0
-      ? new Date(Math.min(...allTimes)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    // Event start time — read straight from event.date (the time the
+    // organizer set in Event Data), not the earliest court schedule.
+    // The first court can be later than doors-open, and the organizer
+    // owns the canonical "show up at" time.
+    const eventStart = event.date ? new Date(event.date) : null;
+    const doorsTimeText = eventStart && !isNaN(eventStart.getTime())
+      ? eventStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : null;
 
     const dateText = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -4921,14 +4922,21 @@ export default function EventDetailPage() {
       type Slot = { gameId: string; startMs: number; categoryId: string };
       const timelines: Record<number, Slot[]> = {};
       for (let c = 1; c <= numCourts; c++) timelines[c] = [];
+      // Track each player's previous-match END time AND the court
+      // they were on. Same-court back-to-back matches don't need a
+      // travel buffer; crossing courts does.
       const playerLastEnd = new Map<string, number>();
+      const playerLastCourt = new Map<string, number>();
       for (const g of baseGames) {
         if (g.scheduleAnchored && g.scheduledAt && g.courtNum != null) {
           const s = new Date(g.scheduledAt).getTime();
           timelines[g.courtNum]?.push({ gameId: g.id, startMs: s, categoryId: g.categoryId });
           for (const gp of g.gamePlayers) {
             const prev = playerLastEnd.get(gp.playerId) ?? -Infinity;
-            if (s + durMs > prev) playerLastEnd.set(gp.playerId, s + durMs);
+            if (s + durMs > prev) {
+              playerLastEnd.set(gp.playerId, s + durMs);
+              playerLastCourt.set(gp.playerId, g.courtNum);
+            }
           }
         }
       }
@@ -4937,49 +4945,59 @@ export default function EventDetailPage() {
         if (iso) return new Date(iso).getTime();
         return event.date ? new Date(event.date).getTime() : Date.now();
       };
-      // Lexicographic priority per match:
-      //   1) fewest player conflicts on this court,
-      //   2) earliest match END time on this court (LPT-style:
-      //      minimises the overall event makespan by pushing each
-      //      match to the court that finishes soonest), then
-      //   3) most matches already on this court for the same category
-      //      (gentle clustering, only used as a tiebreaker so it can
-      //      never trap matches on one court).
+      // For each match: pick the court that BALANCES the load most
+      // (fewest matches on it) — primary priority — with earliest
+      // finish as a tiebreak. Player conflicts are RESOLVED by
+      // delaying the start past every assigned player's previous
+      // match end (+ travel BUFFER when crossing courts; 0 buffer
+      // for the same court since the player is already there).
+      //
+      // Why this beats the old "lowest conflict score" model:
+      // stacking all matches on a single court trivially keeps the
+      // conflict score at 0 (consecutive same-court matches don't
+      // overlap by construction), so the previous algorithm got
+      // trapped on one court. Treating spread as the goal and
+      // shifting start times for conflicts gives natural balance
+      // AND zero overlaps.
       for (const g of sorted) {
         let bestCourt = 1;
         let bestStart = 0;
         let bestEnd = Number.POSITIVE_INFINITY;
-        let bestConflict = Number.POSITIVE_INFINITY;
+        let bestLoad = Number.POSITIVE_INFINITY;
         let bestSameCat = -1;
         for (let c = 1; c <= numCourts; c++) {
           const tl = timelines[c]!.slice().sort((a, b) => a.startMs - b.startMs);
           const lastEnd = tl.length > 0 ? tl[tl.length - 1]!.startMs + durMs : courtStartMs(c);
-          const startMs = Math.max(lastEnd, courtStartMs(c));
-          const endMs = startMs + durMs;
-          let conflict = 0;
+          let startMs = Math.max(lastEnd, courtStartMs(c));
+          // Resolve player conflicts by shifting start forward.
           for (const gp of g.gamePlayers) {
             const pe = playerLastEnd.get(gp.playerId) ?? -Infinity;
-            const gap = startMs - pe;
-            if (gap < 0) conflict += 1000;
-            else if (gap < BUFFER_MS) conflict += 100;
+            const sameCourt = playerLastCourt.get(gp.playerId) === c;
+            const minStart = sameCourt ? pe : pe + BUFFER_MS;
+            if (minStart > startMs) startMs = minStart;
           }
+          const endMs = startMs + durMs;
+          const load = tl.length;
           const sameCat = tl.filter((t) => t.categoryId === g.categoryId).length;
           const better =
-            conflict < bestConflict
-            || (conflict === bestConflict && endMs < bestEnd)
-            || (conflict === bestConflict && endMs === bestEnd && sameCat > bestSameCat);
+            load < bestLoad
+            || (load === bestLoad && endMs < bestEnd)
+            || (load === bestLoad && endMs === bestEnd && sameCat > bestSameCat);
           if (better) {
             bestCourt = c;
             bestStart = startMs;
             bestEnd = endMs;
-            bestConflict = conflict;
+            bestLoad = load;
             bestSameCat = sameCat;
           }
         }
         timelines[bestCourt]!.push({ gameId: g.id, startMs: bestStart, categoryId: g.categoryId });
         for (const gp of g.gamePlayers) {
           const prev = playerLastEnd.get(gp.playerId) ?? -Infinity;
-          if (bestStart + durMs > prev) playerLastEnd.set(gp.playerId, bestStart + durMs);
+          if (bestStart + durMs > prev) {
+            playerLastEnd.set(gp.playerId, bestStart + durMs);
+            playerLastCourt.set(gp.playerId, bestCourt);
+          }
         }
       }
       const assignments: { gameId: string; courtNum: number; displayOrder: number }[] = [];
