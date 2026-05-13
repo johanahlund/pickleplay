@@ -39,7 +39,7 @@ export default function LeaguesPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Leagues</h2>
         {canCreate && (
-          <Link href="/leagues/new" className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm">+ League</Link>
+          <Link href="/leagues/new" className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors">+ League</Link>
         )}
       </div>
 

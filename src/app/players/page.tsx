@@ -332,7 +332,7 @@ export default function PlayersPage() {
         {isAdmin && (
           <Link
             href="/players/new"
-            className="bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark transition-colors"
+            className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
           >
             + Player
           </Link>

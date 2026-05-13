@@ -281,7 +281,7 @@ export default function ClubsPage() {
               <button onClick={() => setShowCreate(!showCreate)}
                 className={showCreate
                   ? "text-muted text-sm font-medium px-3 py-2"
-                  : "bg-action text-white px-4 py-2 rounded-lg font-medium text-sm active:bg-action-dark"}>
+                  : "text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"}>
                 {showCreate ? "Cancel" : "+ Club"}
               </button>
             );
