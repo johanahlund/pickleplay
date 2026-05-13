@@ -827,7 +827,7 @@ export default function LineupBuilderPage() {
               <div className="flex-1 text-xs">
                 <div className="font-medium">{primary}</div>
                 <div className="text-[10px] text-muted">
-                  {opponentTeam?.name || "Opponent"}: {oppReady ? "✓ locked" : "unlocked"}
+                  {opponentTeam?.name || "Opponent"}: {oppReady ? <>🔒 locked</> : "unlocked"}
                   {totalLocked && <span className="ml-2 text-emerald-700">· lineups revealed</span>}
                 </div>
               </div>
