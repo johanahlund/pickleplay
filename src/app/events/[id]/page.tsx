@@ -5724,16 +5724,16 @@ export default function EventDetailPage() {
           <div className="mt-3 flex items-end gap-6 flex-wrap">
             <div>
               <div className="text-[11px] text-muted mb-1">Per match (min)</div>
-              <DurationStepper
-                compact
-                value={eventDurationOverride}
-                onChange={(next) => setEventDurationOverride(next)}
-                min={5}
-                max={180}
-              />
-              {eventDurationOverride == null && (
-                <div className="text-[10px] text-muted mt-0.5">↳ {inheritedDurationMin} (round / league default)</div>
-              )}
+              <div className="flex items-center gap-2">
+                <DurationStepper
+                  compact
+                  value={eventDurationOverride}
+                  onChange={(next) => setEventDurationOverride(next)}
+                  min={5}
+                  max={180}
+                />
+                <span className="text-[10px] text-muted">round / league: {inheritedDurationMin} min</span>
+              </div>
             </div>
             <div className="flex-1 min-w-0">
               <button
@@ -5800,6 +5800,9 @@ export default function EventDetailPage() {
               )}
             </div>
           </div>
+        )}
+        {canEditSchedule && (
+          <p className="text-[10px] text-muted">– = inherit from round / league. Per-category overrides live in the Category overrides panel above.</p>
         )}
         {canEditSchedule && (
           arrangePreview ? (
