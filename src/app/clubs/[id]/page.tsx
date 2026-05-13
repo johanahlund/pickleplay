@@ -19,6 +19,7 @@ import { frameClass } from "@/components/Card";
 import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 
 // ── Long press to delete ──
 // `onDelete` is responsible for confirming via useConfirm before mutating;
@@ -193,7 +194,6 @@ function SwipeableMemberRow({
   isOwner,
   isGlobalAdmin,
   isSelf,
-  showContact,
   onRemove,
   onRoleChange,
 }: {
@@ -202,7 +202,6 @@ function SwipeableMemberRow({
   isOwner: boolean;
   isGlobalAdmin: boolean;
   isSelf: boolean;
-  showContact: boolean;
   onRemove: () => void;
   onRoleChange: (role: string) => void;
 }) {
@@ -281,13 +280,14 @@ function SwipeableMemberRow({
           </div>
         )}
       </div>
-      {p.phone && showContact && (
+      {p.phone && (
         <a
           href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
           target="_blank" rel="noopener noreferrer"
-          className="text-green-500 text-sm w-6 text-center"
+          className="shrink-0 inline-flex"
           onClick={(e) => e.stopPropagation()}
-        >💬</a>
+          aria-label={`WhatsApp ${p.name}`}
+        ><WhatsAppIcon /></a>
       )}
       {/* Rating shown only after the member has played at least 20
           matches. Before that the rating isn't statistically meaningful;

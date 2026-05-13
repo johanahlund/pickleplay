@@ -18,6 +18,125 @@ export async function canSeeEmails(userId: string | null | undefined, role: stri
   return !!m;
 }
 
+// ── WhatsApp visibility ──
+//
+// Each player picks a tier on their profile. Tiers are cumulative —
+// "clubMembers" implies "clubAdmins", and so on. Self + app admin always
+// see the number regardless of tier.
+//
+//   none            — only self + app admin
+//   clubAdmins      — + owners/admins of clubs the target is a member of
+//   clubMembers     — + fellow club members + league teammates
+//   eventOrganizers — + organizers of events the target is signed up for
+//   everyone        — any authenticated user
+export type WhatsAppVisibility =
+  | "none"
+  | "clubAdmins"
+  | "clubMembers"
+  | "eventOrganizers"
+  | "everyone";
+
+export const WHATSAPP_VISIBILITIES: WhatsAppVisibility[] = [
+  "none",
+  "clubAdmins",
+  "clubMembers",
+  "eventOrganizers",
+  "everyone",
+];
+
+export type ViewerMemberships = {
+  id: string;
+  role: string;
+  adminClubIds: Set<string>;
+  memberClubIds: Set<string>;
+  teamIds: Set<string>;
+  organizedEventIds: Set<string>;
+};
+
+/**
+ * Fetch the viewer's memberships in one round trip. Used by the
+ * canSeeWhatsApp checker across list endpoints (players, club members,
+ * event players). Cheap: four small queries on indexed columns.
+ */
+export async function getViewerMemberships(
+  userId: string,
+  role: string,
+): Promise<ViewerMemberships> {
+  const [clubMembers, teams, organizedEvents, eventHelpers] = await Promise.all([
+    prisma.clubMember.findMany({
+      where: { playerId: userId },
+      select: { clubId: true, role: true },
+    }),
+    prisma.leagueTeamPlayer.findMany({
+      where: { playerId: userId },
+      select: { teamId: true },
+    }),
+    prisma.event.findMany({
+      where: { createdById: userId },
+      select: { id: true },
+    }),
+    prisma.eventHelper.findMany({
+      where: { playerId: userId },
+      select: { eventId: true },
+    }),
+  ]);
+  const adminClubIds = new Set<string>();
+  const memberClubIds = new Set<string>();
+  for (const m of clubMembers) {
+    memberClubIds.add(m.clubId);
+    if (m.role === "owner" || m.role === "admin") adminClubIds.add(m.clubId);
+  }
+  return {
+    id: userId,
+    role,
+    adminClubIds,
+    memberClubIds,
+    teamIds: new Set(teams.map((t) => t.teamId)),
+    organizedEventIds: new Set([
+      ...organizedEvents.map((e) => e.id),
+      ...eventHelpers.map((h) => h.eventId),
+    ]),
+  };
+}
+
+export type WhatsAppTargetCtx = {
+  id: string;
+  whatsappVisibility: string | null | undefined;
+  clubIds: string[];
+  teamIds: string[];
+  signedUpEventIds: string[];
+};
+
+/**
+ * Decide whether `viewer` should see `target`'s WhatsApp number.
+ * Pure function once memberships are fetched — safe to call in a tight
+ * loop across hundreds of players.
+ */
+export function canSeeWhatsApp(viewer: ViewerMemberships, target: WhatsAppTargetCtx): boolean {
+  if (viewer.id === target.id) return true;
+  if (viewer.role === "admin") return true;
+
+  // Default to the most-common tier for legacy rows that pre-date the
+  // setting. Keep this in sync with the schema default.
+  const tier = (target.whatsappVisibility || "clubMembers") as WhatsAppVisibility;
+  if (tier === "everyone") return true;
+  if (tier === "none") return false;
+
+  const isClubAdmin = target.clubIds.some((c) => viewer.adminClubIds.has(c));
+  if (tier === "clubAdmins") return isClubAdmin;
+
+  const isClubMember = target.clubIds.some((c) => viewer.memberClubIds.has(c));
+  const isTeammate = target.teamIds.some((t) => viewer.teamIds.has(t));
+  if (tier === "clubMembers") return isClubAdmin || isClubMember || isTeammate;
+
+  const isEventOrganizer = target.signedUpEventIds.some((e) => viewer.organizedEventIds.has(e));
+  if (tier === "eventOrganizers") {
+    return isClubAdmin || isClubMember || isTeammate || isEventOrganizer;
+  }
+
+  return false;
+}
+
 /**
  * Recursively strips `email` (and any `email`-keyed property) from a JSON-shaped
  * object/array. Mutates a deep clone — does NOT modify the input.

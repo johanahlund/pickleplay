@@ -291,6 +291,16 @@ export async function PATCH(
     }
     data.visibility = body.visibility;
   }
+  if (body.matchDurationMin !== undefined) {
+    const v = body.matchDurationMin;
+    if (v === null) {
+      data.matchDurationMin = null;
+    } else if (typeof v === "number" && v >= 5 && v <= 240) {
+      data.matchDurationMin = Math.round(v);
+    } else {
+      return NextResponse.json({ error: "matchDurationMin must be null or 5-240" }, { status: 400 });
+    }
+  }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const league = await prisma.league.update({ where: { id }, data });

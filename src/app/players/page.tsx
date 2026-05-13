@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -14,6 +14,7 @@ import { withInstallTip } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 
 interface PlayerClub {
   id: string;
@@ -46,6 +47,7 @@ interface Player {
   canCreateLeagues?: boolean;
   canCreateClubs?: boolean;
   country?: string | null;
+  duprRating?: number | null;
   clubs?: PlayerClub[];
   leagueTeams?: PlayerLeagueTeam[];
   _count?: { matchPlayers: number };
@@ -87,6 +89,14 @@ export default function PlayersPage() {
   const [countryDefaultApplied, setCountryDefaultApplied] = useState(false);
   // Admin-only "Grant permissions" popup. Holds the target player id when open.
   const [grantTargetId, setGrantTargetId] = useState<string | null>(null);
+  // Player ids whose clubs/ligas list is expanded past the 3-row cap.
+  const [expandedClubs, setExpandedClubs] = useState<Set<string>>(new Set());
+  const toggleExpandClubs = (id: string) =>
+    setExpandedClubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
 
   const { viewRole } = useViewRole();
   const isAdmin = session?.user?.role === "admin" && hasRole(viewRole, "admin");
@@ -466,81 +476,162 @@ export default function PlayersPage() {
                 </div>
               ) : (
                 <div>
-                  <div className="flex items-start gap-3">
-                    <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {p.gender && (
-                          <span className={`text-sm shrink-0 ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
-                            {p.gender === "M" ? "♂" : "♀"}
-                          </span>
-                        )}
-                        <span className="font-semibold text-lg">{p.name}</span>
-                        {p.role === "admin" && (
-                          <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
-                            Admin
-                          </span>
-                        )}
-                        {p.canCreateLeagues && p.role !== "admin" && (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create leagues">
-                            🏆 League
-                          </span>
-                        )}
-                        {p.canCreateClubs && p.role !== "admin" && (
-                          <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create clubs">
-                            🏟️ Club
-                          </span>
-                        )}
-                        {isUnclaimed(p) && (
-                          <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
-                            Unclaimed
-                          </span>
-                        )}
-                        {p.phone && (isAdmin || session?.user?.id === p.id) && (
-                          <a
-                            href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-500 text-sm hover:text-green-600"
-                            onClick={(e) => e.stopPropagation()}
-                            title={p.phone}
-                          >
-                            💬
-                          </a>
-                        )}
-                      </div>
-                      <div className="text-base text-muted">
-                        {/* Hide wins/losses from the general list. Rating is
-                            also hidden until we settle on ranking model
-                            (DUPR + app rating + min matches played, TBD) —
-                            shown only to app admins for now. */}
-                        {isAdmin && <>{Math.round(p.rating)}</>}
-                        {p.email && (isAdmin || session?.user?.id === p.id) && <span className={`${isAdmin ? "ml-1.5" : ""} text-xs`}>{isAdmin ? "· " : ""}{p.email}</span>}
-                      </div>
-                    </div>
-                    {((p.clubs || []).length > 0 || (p.leagueTeams || []).length > 0) && (
-                      <div className="flex flex-col items-end gap-0.5 shrink-0 max-w-[45%]">
-                        {(p.clubs || []).map((c) => (
-                          <span
-                            key={c.id}
-                            className="text-[10px] bg-gray-100 text-foreground px-2 py-0.5 rounded-full font-medium truncate"
-                            title={`${c.name} (${c.role})`}
-                          >
-                            {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
-                          </span>
-                        ))}
-                        {(p.leagueTeams || []).map((lt) => (
-                          <span
-                            key={lt.teamId}
-                            className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium truncate"
-                            title={`${lt.leagueName}${lt.season ? ` (${lt.season})` : ""} — ${lt.teamName}`}
-                          >
-                            🏆 {shortLeagueName(lt.leagueName)} · {lt.teamName}
+                  {(() => {
+                    // Combined clubs + ligas as a single right-justified
+                    // stack. First item lives on row 2 (next to the stats);
+                    // the rest fall to row 3+. Capped at 3 with an expand
+                    // toggle when there's more.
+                    type Badge = { key: string; node: ReactNode };
+                    const clubBadges: Badge[] = (p.clubs || []).map((c) => ({
+                      key: `c-${c.id}`,
+                      node: (
+                        <span
+                          className="text-[10px] bg-gray-100 text-foreground px-2 py-0.5 rounded-full font-medium truncate max-w-[60vw]"
+                          title={`${c.name} (${c.role})`}
+                        >
+                          {c.role === "owner" ? "👑 " : c.role === "admin" ? "⭐ " : ""}{c.name}
+                        </span>
+                      ),
+                    }));
+                    const ligaBadges: Badge[] = (p.leagueTeams || []).map((lt) => ({
+                      key: `l-${lt.teamId}`,
+                      node: (
+                        <span
+                          className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium truncate max-w-[60vw]"
+                          title={`${lt.leagueName}${lt.season ? ` (${lt.season})` : ""} — ${lt.teamName}`}
+                        >
+                          🏆 {shortLeagueName(lt.leagueName)} · {lt.teamName}
+                        </span>
+                      ),
+                    }));
+                    const allBadges = [...clubBadges, ...ligaBadges];
+                    const CAP = 3;
+                    const expanded = expandedClubs.has(p.id);
+                    const showAll = expanded || allBadges.length <= CAP;
+                    const visible = showAll ? allBadges : allBadges.slice(0, CAP);
+                    const remaining = allBadges.length - visible.length;
+
+                    // Stats line: club rank (n/a in global list), app
+                    // rating (admin-only for now), DUPR. Each piece is
+                    // optional; if all are absent the line is empty but
+                    // we still render the row so the first club stays
+                    // right-aligned on row 2.
+                    const statsParts: ReactNode[] = [];
+                    if (isAdmin) {
+                      statsParts.push(
+                        <span key="app" className="tabular-nums">
+                          <span className="text-muted/70">App </span>{Math.round(p.rating)}
+                        </span>
+                      );
+                    }
+                    if (p.duprRating != null) {
+                      statsParts.push(
+                        <span key="dupr" className="tabular-nums">
+                          <span className="text-muted/70">DUPR </span>{p.duprRating.toFixed(2)}
+                        </span>
+                      );
+                    }
+                    const statsLine = statsParts.length > 0 ? (
+                      <div className="flex items-center gap-2 text-[11px] text-muted">
+                        {statsParts.map((part, i) => (
+                          <span key={i} className="flex items-center gap-2">
+                            {i > 0 && <span className="text-muted/40">·</span>}
+                            {part}
                           </span>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    ) : null;
+
+                    return (
+                      <div className="flex items-start gap-3">
+                        <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="md" />
+                        <div className="flex-1 min-w-0">
+                          {/* Row 1: gender · name · role pills · Unclaimed icon · WhatsApp */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {p.gender && (
+                              <span className={`text-sm shrink-0 ${p.gender === "M" ? "text-blue-500" : "text-pink-500"}`}>
+                                {p.gender === "M" ? "♂" : "♀"}
+                              </span>
+                            )}
+                            <span className="font-semibold text-lg">{p.name}</span>
+                            {p.role === "admin" && (
+                              <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                                Admin
+                              </span>
+                            )}
+                            {p.canCreateLeagues && p.role !== "admin" && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create leagues">
+                                🏆 League
+                              </span>
+                            )}
+                            {p.canCreateClubs && p.role !== "admin" && (
+                              <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-medium" title="Can create clubs">
+                                🏟️ Club
+                              </span>
+                            )}
+                            {isUnclaimed(p) && (
+                              <span
+                                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-100 text-amber-700 shrink-0"
+                                title="Unclaimed — no account yet"
+                                aria-label="Unclaimed"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                                  <path d="M12 17h.01" />
+                                </svg>
+                              </span>
+                            )}
+                            {p.phone && (
+                              <a
+                                href={`https://wa.me/${p.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 inline-flex"
+                                onClick={(e) => e.stopPropagation()}
+                                title={`WhatsApp ${p.name}`}
+                                aria-label={`WhatsApp ${p.name}`}
+                              >
+                                <WhatsAppIcon />
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Rows 2+: stats left, clubs/ligas right (stacked) */}
+                          {(statsLine || allBadges.length > 0 || (p.email && (isAdmin || session?.user?.id === p.id))) && (
+                            <div className="mt-1 space-y-0.5">
+                              {(statsLine || visible[0]) && (
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    {statsLine}
+                                  </div>
+                                  {visible[0]?.node}
+                                </div>
+                              )}
+                              {visible.slice(1).map((b) => (
+                                <div key={b.key} className="flex justify-end">
+                                  {b.node}
+                                </div>
+                              ))}
+                              {(remaining > 0 || (expanded && allBadges.length > CAP)) && (
+                                <div className="flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpandClubs(p.id)}
+                                    className="text-[10px] text-action px-2 py-0.5 rounded-full hover:bg-action/5 active:bg-action/10 transition-colors"
+                                  >
+                                    {expanded ? "Show less" : `+${remaining} more`}
+                                  </button>
+                                </div>
+                              )}
+                              {p.email && (isAdmin || session?.user?.id === p.id) && (
+                                <div className="text-[11px] text-muted truncate">{p.email}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {isAdmin && (
                     <div className="flex items-center gap-1 mt-2 ml-12 flex-wrap">
                       {isUnclaimed(p) && (

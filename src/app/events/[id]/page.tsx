@@ -4881,12 +4881,13 @@ export default function EventDetailPage() {
                   if (hh == null) return; // need an hour first
                   onTimeChange(g, `${String(hh).padStart(2, "0")}:${String(newMm).padStart(2, "0")}`);
                 };
+                const isAnchored = !!g.scheduleAnchored;
                 return (
-                  <span className="inline-flex items-center gap-0.5 tabular-nums">
+                  <span className={`inline-flex items-center gap-0.5 tabular-nums rounded ${isAnchored ? "px-0.5 ring-1 ring-blue-300 bg-blue-50" : ""}`}>
                     <select
                       value={hh == null ? "" : String(hh)}
                       onChange={(e) => setHour(parseInt(e.target.value, 10))}
-                      className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                      className={`border border-border rounded px-0.5 py-0.5 text-[11px] cursor-pointer ${isAnchored ? "bg-blue-50 text-blue-900 font-semibold" : "bg-white"}`}
                     >
                       <option value="" disabled>--</option>
                       {HOURS.map((h) => (
@@ -4897,7 +4898,7 @@ export default function EventDetailPage() {
                     <select
                       value={mm == null ? "" : String(mm)}
                       onChange={(e) => setMinute(parseInt(e.target.value, 10))}
-                      className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                      className={`border border-border rounded px-0.5 py-0.5 text-[11px] cursor-pointer ${isAnchored ? "bg-blue-50 text-blue-900 font-semibold" : "bg-white"}`}
                     >
                       <option value="" disabled>--</option>
                       {FIVE_MINS.map((m) => (
@@ -4908,7 +4909,8 @@ export default function EventDetailPage() {
                 );
               })()
             ) : (
-              <span className="text-[11px] font-semibold tabular-nums w-[60px]">
+              <span className={`text-[11px] font-semibold tabular-nums w-[60px] ${g.scheduleAnchored ? "text-blue-700" : ""}`}>
+                {g.scheduleAnchored && hhmm && <span aria-hidden className="mr-0.5">📌</span>}
                 {hhmm || <span className="text-muted font-normal">—</span>}
               </span>
             )}
@@ -5069,6 +5071,17 @@ export default function EventDetailPage() {
                 >+</button>
               </div>
               <span>min</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/recalc-schedule`, { method: "POST" });
+                    fetchEvent();
+                  } catch { /* silent */ }
+                }}
+                title="Re-run the auto-schedule for every court using current durations + start times. Anchored matches keep their times."
+                className="ml-2 text-[10px] text-action font-semibold hover:underline"
+              >Recalc now</button>
             </div>
           )}
         </div>

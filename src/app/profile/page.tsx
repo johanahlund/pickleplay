@@ -38,6 +38,7 @@ export default function ProfilePage() {
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editGender, setEditGender] = useState<string | null>(null);
+  const [editWhatsappVisibility, setEditWhatsappVisibility] = useState<string>("clubMembers");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,7 @@ export default function ProfilePage() {
         setEditPhone(playerData.phone || "");
         setEditEmail(playerData.email || "");
         setEditGender(playerData.gender || null);
+        setEditWhatsappVisibility(playerData.whatsappVisibility || "clubMembers");
       }
       setLoading(false);
     });
@@ -133,6 +135,42 @@ export default function ProfilePage() {
               <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
                 placeholder="+CC 123 456 789"
                 className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              {editPhone.trim() && (
+                <div className="mt-2 space-y-1">
+                  <div className="text-[10px] text-muted">Who can see my WhatsApp icon?</div>
+                  <div className="space-y-1">
+                    {[
+                      { value: "none", label: "Nobody", hint: "Only me" },
+                      { value: "clubAdmins", label: "Club admins", hint: "Owners/admins of my clubs" },
+                      { value: "clubMembers", label: "Club + team", hint: "Fellow members + teammates" },
+                      { value: "eventOrganizers", label: "+ Event organizers", hint: "Organizers of events I joined" },
+                      { value: "everyone", label: "Everyone", hint: "Any signed-in user" },
+                    ].map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`flex items-start gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                          editWhatsappVisibility === opt.value
+                            ? "border-action bg-action/5"
+                            : "border-border hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="whatsappVisibility"
+                          value={opt.value}
+                          checked={editWhatsappVisibility === opt.value}
+                          onChange={() => setEditWhatsappVisibility(opt.value)}
+                          className="mt-0.5 accent-action"
+                        />
+                        <span className="flex-1">
+                          <span className="block text-xs font-medium">{opt.label}</span>
+                          <span className="block text-[10px] text-muted">{opt.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs text-muted mb-0.5">Gender</label>
@@ -157,7 +195,7 @@ export default function ProfilePage() {
                 await fetch(`/api/players/${userId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim(), gender: editGender }),
+                  body: JSON.stringify({ name: editName.trim(), email: editEmail.trim(), phone: editPhone.trim(), gender: editGender, whatsappVisibility: editWhatsappVisibility }),
                 });
                 setSaving(false);
                 setEditing(false);

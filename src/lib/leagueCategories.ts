@@ -27,6 +27,17 @@ export interface CategoryInput {
   winBy: CategoryWinBy;
   status: CategoryStatus;
   maxPerEvent: number | null;
+  /** Per-category override of the inherited (event → round → league)
+   * default match duration. Null = inherit. */
+  matchDurationMin: number | null;
+}
+
+function parseMatchDuration(val: unknown): number | null | "invalid" {
+  if (val === null || val === undefined || val === "") return null;
+  const n = typeof val === "number" ? val : parseInt(String(val), 10);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return "invalid";
+  if (n < 5 || n > 240) return "invalid";
+  return n;
 }
 
 function parseMaxPerEvent(val: unknown): number | null | "invalid" {
@@ -101,9 +112,12 @@ export function validateCategoryInput(raw: unknown): ValidationResult {
   const maxPerEvent = parseMaxPerEvent(r.maxPerEvent);
   if (maxPerEvent === "invalid") return { ok: false, error: "Invalid maxPerEvent" };
 
+  const matchDurationMin = parseMatchDuration(r.matchDurationMin);
+  if (matchDurationMin === "invalid") return { ok: false, error: "matchDurationMin must be 5-240" };
+
   return {
     ok: true,
-    data: { name, format, gender, ageGroup, skillMin, skillMax, scoringFormat, winBy, status, maxPerEvent },
+    data: { name, format, gender, ageGroup, skillMin, skillMax, scoringFormat, winBy, status, maxPerEvent, matchDurationMin },
   };
 }
 
@@ -165,6 +179,11 @@ export function validateCategoryPatch(raw: unknown): PartialValidationResult {
     const v = parseMaxPerEvent(r.maxPerEvent);
     if (v === "invalid") return { ok: false, error: "Invalid maxPerEvent" };
     data.maxPerEvent = v;
+  }
+  if (r.matchDurationMin !== undefined) {
+    const v = parseMatchDuration(r.matchDurationMin);
+    if (v === "invalid") return { ok: false, error: "matchDurationMin must be 5-240" };
+    data.matchDurationMin = v;
   }
 
   return { ok: true, data };

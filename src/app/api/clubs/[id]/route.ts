@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
+import { requireAuth, canSeeEmails, stripEmailsDeep, getViewerMemberships, canSeeWhatsApp } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // Get club details (login required; emails stripped for non-owners/non-admins)
@@ -16,7 +16,18 @@ export async function GET(
     where: { id },
     include: {
       members: {
-        include: { player: { select: { id: true, name: true, emoji: true, rating: true, gender: true, phone: true, photoUrl: true, wins: true, losses: true, role: true } } },
+        include: {
+          player: {
+            select: {
+              id: true, name: true, emoji: true, rating: true, gender: true,
+              phone: true, photoUrl: true, wins: true, losses: true, role: true,
+              whatsappVisibility: true,
+              clubMembers: { select: { clubId: true } },
+              leagueTeamPlayers: { select: { teamId: true } },
+              eventPlayers: { select: { eventId: true } },
+            },
+          },
+        },
         orderBy: { player: { name: "asc" } },
       },
       whatsappGroups: { orderBy: { name: "asc" } },
@@ -29,8 +40,37 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Gate phone per-member via the target's whatsappVisibility setting.
+  // Strip the per-target membership lists from the response — they're
+  // only fetched to feed canSeeWhatsApp and shouldn't leak to the client.
+  const viewerMemberships = await getViewerMemberships(user.id, user.role);
+  type RawMemberPlayer = {
+    id: string; name: string; emoji: string; rating: number; gender: string | null;
+    phone: string | null; photoUrl: string | null; wins: number; losses: number; role: string;
+    whatsappVisibility: string;
+    clubMembers: { clubId: string }[];
+    leagueTeamPlayers: { teamId: string }[];
+    eventPlayers: { eventId: string }[];
+  };
+  const scrubbed = {
+    ...club,
+    members: club.members.map((m) => {
+      const player = m.player as RawMemberPlayer;
+      const allowWhatsApp = canSeeWhatsApp(viewerMemberships, {
+        id: player.id,
+        whatsappVisibility: player.whatsappVisibility,
+        clubIds: player.clubMembers.map((c) => c.clubId),
+        teamIds: player.leagueTeamPlayers.map((t) => t.teamId),
+        signedUpEventIds: player.eventPlayers.map((e) => e.eventId),
+      });
+      const { clubMembers: _cm, leagueTeamPlayers: _lt, eventPlayers: _ep, whatsappVisibility: _vis, phone, ...rest } = player;
+      void _cm; void _lt; void _ep; void _vis;
+      return { ...m, player: { ...rest, phone: allowWhatsApp ? phone : null } };
+    }),
+  };
+
   const allowed = await canSeeEmails(user.id, user.role);
-  return NextResponse.json(allowed ? club : stripEmailsDeep(club));
+  return NextResponse.json(allowed ? scrubbed : stripEmailsDeep(scrubbed));
 }
 
 // Update club

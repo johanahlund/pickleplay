@@ -123,7 +123,7 @@ export async function PATCH(
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  const { roundId, name, startDate, endDate, configOverride, categoriesOverride, status } = body;
+  const { roundId, name, startDate, endDate, configOverride, categoriesOverride, status, matchDurationMin } = body;
   if (!roundId) return NextResponse.json({ error: "roundId required" }, { status: 400 });
 
   const existing = await prisma.leagueRound.findUnique({ where: { id: roundId }, select: { leagueId: true } });
@@ -140,6 +140,15 @@ export async function PATCH(
   if (configOverride !== undefined) data.configOverride = configOverride === null ? Prisma.DbNull : configOverride;
   if (categoriesOverride !== undefined) data.categoriesOverride = categoriesOverride === null ? Prisma.DbNull : categoriesOverride;
   if (status !== undefined && ["setup", "active"].includes(status)) data.status = status;
+  if (matchDurationMin !== undefined) {
+    if (matchDurationMin === null) {
+      data.matchDurationMin = null;
+    } else if (typeof matchDurationMin === "number" && matchDurationMin >= 5 && matchDurationMin <= 240) {
+      data.matchDurationMin = Math.round(matchDurationMin);
+    } else {
+      return NextResponse.json({ error: "matchDurationMin must be null or 5-240" }, { status: 400 });
+    }
+  }
 
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 

@@ -39,7 +39,7 @@ interface LeagueTeam {
   players: { id: string; playerId: string; player: Player }[];
   _count: { players: number };
 }
-interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number; maxPerEvent: number | null }
+interface LeagueCategory { id: string; name: string; format: string; gender: string; ageGroup: string; skillMin: number | null; skillMax: number | null; scoringFormat: string; winBy: string; status: string; sortOrder: number; maxPerEvent: number | null; matchDurationMin: number | null }
 interface LeagueGame {
   id: string; categoryId: string;
   slotNumber: number;
@@ -69,6 +69,7 @@ interface LeagueRound {
   configOverride: Record<string, unknown> | null;
   categoriesOverride: unknown[] | null;
   status: string;
+  matchDurationMin: number | null;
   events: LeagueRoundEvent[];
 }
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
@@ -78,6 +79,9 @@ interface League {
   clubId?: string | null;
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
   config: { maxRoster?: number; maxPointsPerMatchDay?: number; minMatchDaysForPlayoff?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
+  /** League-wide default match duration in minutes, used by the
+   *  auto-schedule (rounds + events + categories can override). */
+  matchDurationMin?: number | null;
   rulesPdfUrl?: string | null;
   rulesPdfName?: string | null;
   documents?: { id: string; url: string; name: string; mimeType: string; sizeBytes: number; includeInAssistant?: boolean; showToUsers?: boolean }[];
@@ -349,6 +353,8 @@ interface RoundFormValues {
   startDate: string;
   endDate: string;
   status: "setup" | "active";
+  /** Round-level override of the league default match duration. Null = inherit. */
+  matchDurationMin: number | null;
   configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   // Each row is either an existing league category (id present, optional
   // override fields) or a brand-new round-only category (id absent, all
@@ -394,6 +400,9 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   const [start, setStart] = useState(initial.startDate);
   const [end, setEnd] = useState(initial.endDate);
   const [status, setStatus] = useState<RoundFormValues["status"]>(initial.status);
+  const [matchDurationOverride, setMatchDurationOverride] = useState<string>(
+    initial.matchDurationMin != null ? String(initial.matchDurationMin) : "",
+  );
 
   const cfg = initial.configOverride;
   const [useFormatOverride, setUseFormatOverride] = useState(!!cfg);
@@ -507,8 +516,13 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       }
     }
 
+    const matchDurationMin = matchDurationOverride.trim() === ""
+      ? null
+      : Math.max(5, Math.min(240, parseInt(matchDurationOverride, 10) || 0)) || null;
+
     await onSubmit({
       roundNumber, name, startDate: start, endDate: end, status,
+      matchDurationMin,
       configOverride, categoriesOverride,
     });
   };
@@ -555,6 +569,20 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
             ? "Only league admins can see this round."
             : "Visible to everyone. Phase (Scheduled / In progress / Completed) is derived from the dates."}
         </p>
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <label className="block text-xs text-muted mb-1">Override match duration for this round (min)</label>
+        <input
+          type="number"
+          value={matchDurationOverride}
+          onChange={(e) => setMatchDurationOverride(e.target.value)}
+          min={5}
+          max={240}
+          placeholder="inherit from league"
+          className="w-40 border border-border rounded-lg px-2 py-1.5 text-sm"
+        />
+        <p className="text-[10px] text-muted mt-1">Leave empty to use the league default. Categories can still override further.</p>
       </div>
 
       <div className="border-t border-border pt-3">
@@ -1027,6 +1055,7 @@ export default function LeagueDetailPage() {
   const [editMinMatchDays, setEditMinMatchDays] = useState("2");
   const [editMaxMatchesPerEvent, setEditMaxMatchesPerEvent] = useState("");
   const [editAllowCrossCategory, setEditAllowCrossCategory] = useState(true);
+  const [editMatchDuration, setEditMatchDuration] = useState("45");
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -1195,6 +1224,7 @@ export default function LeagueDetailPage() {
     setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
     setEditMaxMatchesPerEvent(league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "");
     setEditAllowCrossCategory(league.config?.allowCrossCategoryPlay !== false);
+    setEditMatchDuration(String(league.matchDurationMin ?? 45));
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -1223,6 +1253,7 @@ export default function LeagueDetailPage() {
           maxMatchesPerEvent: editMaxMatchesPerEvent.trim() === "" ? null : parseInt(editMaxMatchesPerEvent, 10) || null,
           allowCrossCategoryPlay: editAllowCrossCategory,
         },
+        matchDurationMin: editMatchDuration.trim() === "" ? null : Math.max(5, Math.min(240, parseInt(editMatchDuration, 10) || 45)),
         deputyId: editDeputyId || null,
       }),
     });
@@ -1301,6 +1332,7 @@ export default function LeagueDetailPage() {
         winBy: cat.winBy,
         status: cat.status,
         maxPerEvent: cat.maxPerEvent ?? null,
+        matchDurationMin: cat.matchDurationMin ?? null,
       }),
     });
     if (!r.ok) {
@@ -1524,6 +1556,7 @@ export default function LeagueDetailPage() {
       name: v.name.trim() || undefined,
       startDate: v.startDate || undefined,
       endDate: v.endDate || undefined,
+      matchDurationMin: v.matchDurationMin,
       configOverride: v.configOverride,
       categoriesOverride: v.categoriesOverride,
     });
@@ -1784,6 +1817,12 @@ export default function LeagueDetailPage() {
                 className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
               <p className="text-[10px] text-muted mt-1">Minimum match days a player must have appeared in to be eligible for the playoff/Grande Final.</p>
             </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Default match duration (min)</label>
+              <input type="number" value={editMatchDuration} onChange={(e) => { setEditMatchDuration(e.target.value); setDirty(true); }} min={5} max={240}
+                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
+              <p className="text-[10px] text-muted mt-1">Includes warmup. Used by the auto-schedule. Rounds, events, and categories can override.</p>
+            </div>
           </div>
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
@@ -1880,17 +1919,47 @@ export default function LeagueDetailPage() {
             </select>
           </div></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs text-muted mb-1">Scoring</label>{scoringSelect(cat.scoringFormat, (v) => updateCat("scoringFormat", v))}</div><div><label className="block text-xs text-muted mb-1">Win by</label>{winBySelect(cat.winBy, (v) => updateCat("winBy", v))}</div></div>
-          <div>
-            <label className="block text-xs text-muted mb-1">Max matches per event <span className="opacity-70 font-normal">(empty = no cap)</span></label>
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={cat.maxPerEvent ?? ""}
-              onChange={(e) => updateCat("maxPerEvent", e.target.value === "" ? null : (parseInt(e.target.value, 10) || 0))}
-              placeholder="—"
-              className="w-20 border border-border rounded-lg px-3 py-2 text-sm"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted mb-1">Max matches / event <span className="opacity-70 font-normal">(empty = no cap)</span></label>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={cat.maxPerEvent ?? ""}
+                onChange={(e) => updateCat("maxPerEvent", e.target.value === "" ? null : (parseInt(e.target.value, 10) || 0))}
+                placeholder="—"
+                className="w-20 border border-border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Match duration (min)</label>
+              {cat.matchDurationMin == null ? (
+                <button
+                  type="button"
+                  onClick={() => updateCat("matchDurationMin", 45)}
+                  className="px-3 py-2 text-xs text-action font-medium rounded-lg border border-dashed border-border hover:bg-gray-50"
+                >+ override</button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={5}
+                    max={240}
+                    value={cat.matchDurationMin}
+                    onChange={(e) => updateCat("matchDurationMin", e.target.value === "" ? 5 : Math.max(5, Math.min(240, parseInt(e.target.value, 10) || 45)))}
+                    className="w-20 border border-border rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => updateCat("matchDurationMin", null)}
+                    title="Clear override, inherit from event/round/league"
+                    className="text-muted hover:text-danger text-sm px-1"
+                  >✕</button>
+                </div>
+              )}
+              <p className="text-[10px] text-muted mt-1">Overrides event/round/league default for this category.</p>
+            </div>
           </div>
           {editFooter(async () => { await saveCategoryEdit(cat); fetchLeague(); }, "categories")}
           <button onClick={async () => { await deleteCategory(cat.id); setDirty(false); setEditSection("categories"); }}
@@ -3026,6 +3095,7 @@ export default function LeagueDetailPage() {
                       startDate: round.startDate ? round.startDate.slice(0, 10) : "",
                       endDate: round.endDate ? round.endDate.slice(0, 10) : "",
                       status: round.status === "active" ? "active" : "setup",
+                      matchDurationMin: round.matchDurationMin ?? null,
                       configOverride: (round.configOverride as RoundFormValues["configOverride"]) ?? null,
                       categoriesOverride: (round.categoriesOverride as RoundFormValues["categoriesOverride"]) ?? null,
                     }}
@@ -3173,6 +3243,7 @@ export default function LeagueDetailPage() {
                 startDate: "",
                 endDate: "",
                 status: "setup",
+                matchDurationMin: null,
                 configOverride: null,
                 categoriesOverride: null,
               }}

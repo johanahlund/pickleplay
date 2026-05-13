@@ -40,6 +40,14 @@ model Player {
   // Profile
   gender   String? // "M" | "F"
   phone    String? // WhatsApp number
+  /// Who can see the WhatsApp icon next to this player's name.
+  /// Tiered (most → least private):
+  ///   "none"            — only self + app admin
+  ///   "clubAdmins"      — + owners/admins of clubs the player is in
+  ///   "clubMembers"     — + fellow club members + league teammates
+  ///   "eventOrganizers" — + organizers of events the player is signed up for
+  ///   "everyone"        — any authenticated user
+  whatsappVisibility String @default("clubMembers")
   photoUrl String?
   /// ISO 3166-1 alpha-2 country code (e.g. "PT", "ES"). Self-set on
   /// profile; used as a coarse server-side filter on the players list.

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireAdmin, canSeeEmails } from "@/lib/auth";
+import { requireAuth, requireAdmin, canSeeEmails, getViewerMemberships, canSeeWhatsApp, WHATSAPP_VISIBILITIES } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -13,18 +13,36 @@ export async function GET(
   const { id } = await params;
   const player = await prisma.player.findUnique({
     where: { id },
-    select: { id: true, name: true, email: true, phone: true, gender: true, photoUrl: true, rating: true, emoji: true },
+    select: {
+      id: true, name: true, email: true, phone: true, gender: true,
+      photoUrl: true, rating: true, emoji: true, whatsappVisibility: true,
+      clubMembers: { select: { clubId: true } },
+      leagueTeamPlayers: { select: { teamId: true } },
+      eventPlayers: { select: { eventId: true } },
+    },
   });
   if (!player) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  // Strip email unless viewer is the player themselves, admin, or club owner/admin
   const isSelf = user.id === id;
   const allowEmail = isSelf || (await canSeeEmails(user.id, user.role));
-  if (!allowEmail) {
-    const { email: _e, ...rest } = player;
-    void _e;
-    return NextResponse.json(rest);
-  }
-  return NextResponse.json(player);
+  const viewerMemberships = await getViewerMemberships(user.id, user.role);
+  const allowWhatsApp = canSeeWhatsApp(viewerMemberships, {
+    id: player.id,
+    whatsappVisibility: player.whatsappVisibility,
+    clubIds: player.clubMembers.map((c) => c.clubId),
+    teamIds: player.leagueTeamPlayers.map((t) => t.teamId),
+    signedUpEventIds: player.eventPlayers.map((e) => e.eventId),
+  });
+  // Strip the membership lists from the response — they were only fetched
+  // to compute the WhatsApp gate. Self always sees their own visibility
+  // setting; other viewers don't need it.
+  const { clubMembers: _cm, leagueTeamPlayers: _lt, eventPlayers: _ep, whatsappVisibility, phone, email, ...rest } = player;
+  void _cm; void _lt; void _ep;
+  return NextResponse.json({
+    ...rest,
+    ...(allowEmail ? { email } : {}),
+    phone: allowWhatsApp ? phone : null,
+    ...(isSelf ? { whatsappVisibility } : {}),
+  });
 }
 
 export async function DELETE(
@@ -91,9 +109,9 @@ export async function PATCH(
     }
   }
 
-  const { name, emoji, gender, phone, email, canCreateLeagues, canCreateClubs, country } = await req.json();
+  const { name, emoji, gender, phone, email, canCreateLeagues, canCreateClubs, country, whatsappVisibility } = await req.json();
 
-  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null; email?: string | null; canCreateLeagues?: boolean; canCreateClubs?: boolean; country?: string | null } = {};
+  const data: { name?: string; emoji?: string; gender?: string | null; phone?: string | null; email?: string | null; canCreateLeagues?: boolean; canCreateClubs?: boolean; country?: string | null; whatsappVisibility?: string } = {};
   if (name !== undefined) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "Name required" }, { status: 400 });
@@ -143,6 +161,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Only app admins can grant club creation" }, { status: 403 });
     }
     data.canCreateClubs = !!canCreateClubs;
+  }
+  if (whatsappVisibility !== undefined) {
+    // Only self or app admin can change WhatsApp visibility — it's a
+    // personal privacy setting, not something club/team managers should
+    // override.
+    if (!isSelf && !isAdmin) {
+      return NextResponse.json({ error: "Only the player can change their WhatsApp visibility" }, { status: 403 });
+    }
+    if (!(WHATSAPP_VISIBILITIES as readonly string[]).includes(whatsappVisibility)) {
+      return NextResponse.json({ error: "Invalid whatsappVisibility" }, { status: 400 });
+    }
+    data.whatsappVisibility = whatsappVisibility;
   }
   if (country !== undefined) {
     // Whitelist against the canonical country list. Strings are stored

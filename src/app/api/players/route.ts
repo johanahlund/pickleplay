@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, canSeeEmails } from "@/lib/auth";
+import { requireAuth, canSeeEmails, getViewerMemberships, canSeeWhatsApp } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 interface AddPlayerCtx {
@@ -134,6 +134,8 @@ export async function GET(req: Request) {
       canCreateLeagues: true,
       canCreateClubs: true,
       country: true,
+      duprRating: true,
+      whatsappVisibility: true,
       passwordHash: true, // only used to derive hasAccount below
       _count: { select: { matchPlayers: true } },
       clubMembers: {
@@ -153,6 +155,7 @@ export async function GET(req: Request) {
           },
         },
       },
+      eventPlayers: { select: { eventId: true } },
     },
     });
   } catch (err) {
@@ -167,23 +170,42 @@ export async function GET(req: Request) {
   }
 
   const allowEmail = await canSeeEmails(user.id, user.role);
+  const viewerMemberships = await getViewerMemberships(user.id, user.role);
 
   // Strip passwordHash, add hasAccount flag, optionally strip email, flatten
   // club memberships into a lightweight `clubs` array, plus league-team
-  // memberships into a lightweight `leagueTeams` array.
+  // memberships into a lightweight `leagueTeams` array. WhatsApp number is
+  // gated per target via the player's whatsappVisibility setting.
   type ClubMembership = { role: string; club: { id: string; name: string; emoji: string } };
   type TeamPlayer = { team: { id: string; name: string; league: { id: string; name: string; season: string | null } } };
+  type EventPlayerRef = { eventId: string };
   const safe = players.map((p) => {
-    const { passwordHash, email, clubMembers, leagueTeamPlayers, ...rest } = p as {
+    const { id, passwordHash, email, clubMembers, leagueTeamPlayers, eventPlayers, whatsappVisibility, phone, ...rest } = p as {
+      id: string;
       passwordHash: string | null;
       email: string | null;
       clubMembers: ClubMembership[];
       leagueTeamPlayers: TeamPlayer[];
+      eventPlayers: EventPlayerRef[];
+      whatsappVisibility: string;
+      phone: string | null;
       [k: string]: unknown;
     };
+    const targetClubIds = clubMembers.map((m) => m.club.id);
+    const targetTeamIds = leagueTeamPlayers.map((tp) => tp.team.id);
+    const targetEventIds = eventPlayers.map((ep) => ep.eventId);
+    const allowWhatsApp = canSeeWhatsApp(viewerMemberships, {
+      id,
+      whatsappVisibility,
+      clubIds: targetClubIds,
+      teamIds: targetTeamIds,
+      signedUpEventIds: targetEventIds,
+    });
     return {
+      id,
       ...rest,
       ...(allowEmail ? { email } : {}),
+      phone: allowWhatsApp ? phone : null,
       hasAccount: !!passwordHash,
       clubs: clubMembers.map((m) => ({
         id: m.club.id,
