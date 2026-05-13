@@ -7286,18 +7286,30 @@ export default function EventDetailPage() {
         <button onClick={() => setActiveSection("rounds")} className={rowClass}>
           <span className="text-base font-bold text-foreground flex-1 text-left">Matches</span>
           <span className="text-sm font-medium">
-            {event.matches.length === 0
-              ? "None"
-              : (() => {
-                  const completed = event.matches.filter((m) => m.status === "completed").length;
-                  const pending = event.matches.filter((m) => m.status === "pending").length;
-                  const active = event.matches.filter((m) => m.status === "active").length;
-                  const parts = [];
-                  if (completed > 0) parts.push(`${completed} played`);
-                  if (active > 0) parts.push(`${active} active`);
-                  if (pending > 0) parts.push(`${pending} pending`);
-                  return parts.join(", ");
-                })()}
+            {(() => {
+              const completed = event.matches.filter((m) => m.status === "completed").length;
+              const pending = event.matches.filter((m) => m.status === "pending").length;
+              const active = event.matches.filter((m) => m.status === "active").length;
+              // For league events: also count planned leagueGames (both
+              // teams ticked, no winner) that haven't yet spawned a
+              // Match row. Otherwise the card says "None" while
+              // lineups are filled. Cross-reference event.matches by
+              // leagueGame.id so we don't double-count.
+              const matchedLeagueGameIds = new Set(
+                event.matches.map((m) => m.leagueGame?.id).filter((id): id is string => !!id),
+              );
+              const planned = event.round
+                ? (event.leagueGames || []).filter((g) =>
+                    g.team1Wants && g.team2Wants && !g.winnerId && !matchedLeagueGameIds.has(g.id),
+                  ).length
+                : 0;
+              const parts: string[] = [];
+              if (completed > 0) parts.push(`${completed} played`);
+              if (active > 0) parts.push(`${active} active`);
+              if (pending > 0) parts.push(`${pending} pending`);
+              if (planned > 0) parts.push(`${planned} planned`);
+              return parts.length > 0 ? parts.join(", ") : "None";
+            })()}
           </span>
         </button>
       </div>
