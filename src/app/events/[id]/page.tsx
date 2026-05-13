@@ -4964,6 +4964,7 @@ export default function EventDetailPage() {
         let bestStart = 0;
         let bestEnd = Number.POSITIVE_INFINITY;
         let bestLoad = Number.POSITIVE_INFINITY;
+        let bestMaxWait = Number.POSITIVE_INFINITY;
         let bestSameCat = -1;
         for (let c = 1; c <= numCourts; c++) {
           const tl = timelines[c]!.slice().sort((a, b) => a.startMs - b.startMs);
@@ -4978,16 +4979,37 @@ export default function EventDetailPage() {
           }
           const endMs = startMs + durMs;
           const load = tl.length;
+          // Worst-case wait this placement imposes on any of the
+          // match's players (gap between THIS start and their
+          // previous-match end). A player who hasn't played yet
+          // contributes 0 — first match is "free". Bucketed to 5-min
+          // increments so close differences don't drown out makespan.
+          let maxWait = 0;
+          for (const gp of g.gamePlayers) {
+            const pe = playerLastEnd.get(gp.playerId) ?? -Infinity;
+            if (pe > -Infinity) {
+              const w = Math.max(0, startMs - pe);
+              if (w > maxWait) maxWait = w;
+            }
+          }
+          const maxWaitBucket = Math.floor(maxWait / (5 * 60_000));
           const sameCat = tl.filter((t) => t.categoryId === g.categoryId).length;
+          // Lexicographic priorities:
+          //   1) fewest matches on the court (spread)
+          //   2) shortest player wait (clusters each player's matches)
+          //   3) earliest finish (makespan)
+          //   4) same-category clustering
           const better =
             load < bestLoad
-            || (load === bestLoad && endMs < bestEnd)
-            || (load === bestLoad && endMs === bestEnd && sameCat > bestSameCat);
+            || (load === bestLoad && maxWaitBucket < Math.floor(bestMaxWait / (5 * 60_000)))
+            || (load === bestLoad && maxWaitBucket === Math.floor(bestMaxWait / (5 * 60_000)) && endMs < bestEnd)
+            || (load === bestLoad && maxWaitBucket === Math.floor(bestMaxWait / (5 * 60_000)) && endMs === bestEnd && sameCat > bestSameCat);
           if (better) {
             bestCourt = c;
             bestStart = startMs;
             bestEnd = endMs;
             bestLoad = load;
+            bestMaxWait = maxWait;
             bestSameCat = sameCat;
           }
         }
