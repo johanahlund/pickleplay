@@ -792,13 +792,13 @@ export default function LineupBuilderPage() {
           </div>
         )}
 
-        {/* Lineup-lock state. Five distinct UI states:
+        {/* Lineup-lock state. Six distinct UI states:
               1. Pre-reveal, nobody ready → "Mark as done when final."
               2. Pre-reveal, I'm ready, opponent isn't → "Waiting for {opp}"
               3. Both ready → reveal-latch fires → "Lineups revealed and locked."
               4. Post-reveal, both unlocked → "Joint editing — mutual unlock."
-              5. Post-reveal, one side unlocked → "waiting on the
-                 opposing team to unlock for joint editing"
+              5. Post-reveal, ONLY I unlocked → "You unlocked. Ask {opp}…"
+              6. Post-reveal, ONLY opp unlocked → "{opp} unlocked. Re-open…"
             The latched `lineupTotalLocked` distinguishes pre/post-reveal. */}
         {(() => {
           const myReady = team ? !!readyByTeam[team.id] : false;
@@ -806,6 +806,8 @@ export default function LineupBuilderPage() {
           const totalLocked = lineupTotalLocked;
           const bothReady = myReady && oppReady;
           const bothUnlocked = !myReady && !oppReady;
+          const myName = team?.name || "Your team";
+          const oppName = opponentTeam?.name || "the opposing team";
 
           let bg = "bg-gray-50 border-border";
           let primary = "Mark as done when your lineup is final.";
@@ -814,18 +816,22 @@ export default function LineupBuilderPage() {
             primary = totalLocked
               ? "Lineups revealed and locked."
               : "Both teams done picking — lineups revealed.";
-          } else if (totalLocked) {
-            bg = bothUnlocked
-              ? "bg-blue-50 border-blue-200"
-              : "bg-amber-50 border-amber-200";
-            primary = bothUnlocked
-              ? "Joint editing open — both teams unlocked."
-              : myReady
-                ? `Waiting on ${opponentTeam?.name || "the opposing team"} to unlock for joint editing.`
-                : `waiting on ${opponentTeam?.name || "the opposing team"} to unlock for joint editing`;
+          } else if (totalLocked && bothUnlocked) {
+            bg = "bg-blue-50 border-blue-200";
+            primary = "Joint editing open — both teams unlocked.";
+          } else if (totalLocked && myReady && !oppReady) {
+            // State 6: opp re-opened after reveal; they want to edit.
+            bg = "bg-amber-50 border-amber-200";
+            primary = `${oppName} re-opened their lineup. Re-open yours too for joint editing.`;
+          } else if (totalLocked && !myReady && oppReady) {
+            // State 5: I'm the one who re-opened — opp is still locked.
+            // From this side: lock yours to refinalize, or ask opp to
+            // unlock so you can edit together.
+            bg = "bg-amber-50 border-amber-200";
+            primary = `${oppName} has locked their lineup. Lock yours to refinalize the match, or ask ${oppName} to unlock for joint editing.`;
           } else if (myReady) {
             bg = "bg-amber-50 border-amber-200";
-            primary = `Waiting for ${opponentTeam?.name || "opponent"}…`;
+            primary = `Waiting for ${oppName}…`;
           }
 
           return (
@@ -833,7 +839,9 @@ export default function LineupBuilderPage() {
               <div className="flex-1 text-xs">
                 <div className="font-medium">{primary}</div>
                 <div className="text-[10px] text-muted">
-                  {opponentTeam?.name || "Opponent"}: {oppReady ? <>🔒 locked</> : "unlocked"}
+                  <span>{myName}: {myReady ? <>🔒 locked</> : "unlocked"}</span>
+                  <span className="mx-1.5">·</span>
+                  <span>{oppName}: {oppReady ? <>🔒 locked</> : "unlocked"}</span>
                   {totalLocked && <span className="ml-2 text-emerald-700">· lineups revealed</span>}
                 </div>
               </div>
