@@ -10,6 +10,8 @@ import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { resolveRoundCategories, resolveRoundConfig, type LeagueCategoryShape } from "@/lib/leagueRound";
 import { frameClass } from "@/components/Card";
 import { leagueShortName } from "@/lib/leagueDisplay";
+import { buildMatchDayShare, type MatchDayShareGame } from "@/lib/inviteShare";
+import { ShareInviteModal } from "@/components/ShareInviteModal";
 
 interface PlayerLite { id: string; name: string; photoUrl?: string | null; gender?: string | null; duprRating?: number | null }
 interface Category extends LeagueCategoryShape { id: string }
@@ -141,6 +143,10 @@ export default function LineupBuilderPage() {
   // Per-game format-override edit panel state. Key = gameId; absence
   // means panel closed. Value holds the in-progress select choices.
   const [formatEdits, setFormatEdits] = useState<Record<string, { scoringFormat: string; winBy: string }>>({});
+  // Match-day schedule share — opens the same WhatsApp / Copy / Email
+  // chooser as the event page's trophy button, built straight from
+  // the locally-loaded lineup data so the user stays on this page.
+  const [scheduleShare, setScheduleShare] = useState<{ message: string; title: string } | null>(null);
   const [savingFormatId, setSavingFormatId] = useState<string | null>(null);
   const [readyByTeam, setReadyByTeam] = useState<Record<string, boolean>>({});
   // Latched cross-team reveal — true the moment both teams' lineupReady
@@ -739,17 +745,99 @@ export default function LineupBuilderPage() {
     const parts = [eventLocation, dateStr].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : undefined;
   })();
+  /**
+   * Build the WhatsApp-ready schedule from the lineup-page state and
+   * open the share modal in place. We don't have Match score rows
+   * here (lineup page doesn't fetch /matches), so completed games
+   * show "✅ <winner>" without the score line — same shape as the
+   * event page, just minus the digits.
+   */
+  const openScheduleShare = () => {
+    const categoryById = new Map(categories.map((c) => [c.id, c.name]));
+    const hostName = hostTeamId && team && hostTeamId === team.id
+      ? team.name
+      : opponentTeam?.name ?? null;
+    const guestName = hostTeamId && team && hostTeamId === team.id
+      ? opponentTeam?.name ?? null
+      : team?.name ?? null;
+    const team1Id = hostTeamId
+      ?? (team && opponentTeam
+        ? (team.id < opponentTeam.id ? team.id : opponentTeam.id)
+        : null);
+
+    const shortName = (full: string): string => {
+      const parts = full.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0];
+      const last = parts[parts.length - 1];
+      return `${parts[0]} ${last[0]}.`;
+    };
+
+    const shareGames: MatchDayShareGame[] = games.map((g) => {
+      const t1Names = g.gamePlayers
+        .filter((gp) => gp.team === 1)
+        .map((gp) => shortName(gp.player.name));
+      const t2Names = g.gamePlayers
+        .filter((gp) => gp.team === 2)
+        .map((gp) => shortName(gp.player.name));
+      let winnerTeam: 1 | 2 | null = null;
+      if (g.winnerId) {
+        winnerTeam = g.winnerId === g.team1Id ? 1 : g.winnerId === g.team2Id ? 2 : null;
+      }
+      return {
+        courtNum: g.courtNum ?? null,
+        scheduledAt: g.scheduledAt ?? null,
+        categoryName: categoryById.get(g.categoryId) || "—",
+        team1PlayerNames: t1Names,
+        team2PlayerNames: t2Names,
+        team1Score: null,
+        team2Score: null,
+        winnerTeam,
+      };
+    });
+
+    // Map the host/guest names onto team1/team2 in the same way the
+    // event page does. We don't have hostTeamId per-game so we use
+    // the match-day host as team1 for every game.
+    const team1Name = team1Id && team1Id === hostTeamId ? hostName : guestName;
+    const team2Name = team1Name === hostName ? guestName : hostName;
+
+    const allTimes = shareGames
+      .map((g) => g.scheduledAt ? new Date(g.scheduledAt).getTime() : null)
+      .filter((t): t is number => t !== null);
+    const doorsTimeText = allTimes.length > 0
+      ? new Date(Math.min(...allTimes)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : null;
+
+    const dateText = eventDate
+      ? new Date(eventDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+      : "";
+    const roundLabel = roundName || (roundNumber != null ? `Round ${roundNumber}` : null);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+    const message = buildMatchDayShare({
+      leagueName: leagueName || "League",
+      roundLabel,
+      team1Name,
+      team2Name,
+      dateText,
+      doorsTimeText,
+      locationText: eventLocation,
+      eventUrl: `${origin}/events/${eventId}`,
+      games: shareGames,
+    });
+    setScheduleShare({
+      message,
+      title: roundLabel ? `Share match-day · ${roundLabel}` : "Share match-day",
+    });
+  };
+
   const headerEl = (
     <AppHeader
       variant="hero-sub"
       title={headerTitle}
       meta={headerMeta}
       back={{ label: "Back to event", onClick: back }}
-      // 📣 — route to the Matches tab on the event detail page with a
-      // `?share=schedule` flag so the share modal auto-opens on arrival.
-      // The lineup page doesn't load the full schedule context locally,
-      // so we hand off to the event page that already builds the share.
-      onShareSchedule={() => router.push(`/events/${eventId}?section=rounds&share=schedule`)}
+      onShareSchedule={openScheduleShare}
       shareScheduleLabel="Share match-day schedule"
     />
   );
@@ -1734,6 +1822,13 @@ export default function LineupBuilderPage() {
         );
       })()}
     </div>
+    <ShareInviteModal
+      open={!!scheduleShare}
+      message={scheduleShare?.message ?? ""}
+      title={scheduleShare?.title || "Share match-day"}
+      emailSubject={scheduleShare?.title || "Match-day schedule"}
+      onClose={() => setScheduleShare(null)}
+    />
     </>
   );
 }
