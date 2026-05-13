@@ -429,7 +429,9 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
   const [catDurations, setCatDurations] = useState<Record<string, number>>(initial.categoryDurationOverrides || {});
 
   const cfg = initial.configOverride;
-  const [useFormatOverride, setUseFormatOverride] = useState(!!cfg);
+  // Pure UI state — whether the Customize-Format panel is expanded.
+  // Save logic auto-detects whether configOverride should be set.
+  const [formatSectionOpen, setFormatSectionOpen] = useState(!!cfg);
   const [maxPts, setMaxPts] = useState(cfg?.maxPointsPerMatchDay != null ? String(cfg.maxPointsPerMatchDay) : "");
   const [maxMatches, setMaxMatches] = useState(cfg?.maxMatchesPerEvent != null ? String(cfg.maxMatchesPerEvent) : "");
   const [crossCat, setCrossCat] = useState<"inherit" | "allow" | "deny">(
@@ -504,7 +506,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
     maxPts: initial.configOverride?.maxPointsPerMatchDay != null ? String(initial.configOverride.maxPointsPerMatchDay) : "",
     maxMatches: initial.configOverride?.maxMatchesPerEvent != null ? String(initial.configOverride.maxMatchesPerEvent) : "",
     crossCat: initial.configOverride?.allowCrossCategoryPlay === true ? "allow" : initial.configOverride?.allowCrossCategoryPlay === false ? "deny" : "inherit",
-    useFormatOverride: !!initial.configOverride,
+    // formatSectionOpen is pure UI — not part of the dirty snapshot.
     // catSectionOpen is pure UI — not part of the dirty snapshot.
     catOverrides: initialCatMap,
     customCats: initialCustomCats,
@@ -513,7 +515,6 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
     roundNumber, name, start, end, status,
     matchDuration, catDurations,
     maxPts, maxMatches, crossCat,
-    useFormatOverride,
     catOverrides, customCats,
   });
   const isDirty = currentSnapshot !== initialSnapshot;
@@ -524,8 +525,12 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
   // opens add/edit) and stays put until they save or cancel.
 
   const handleSave = async () => {
+    // Auto-detect whether the round needs a configOverride. Triggers
+    // when any of the format fields has been customised away from the
+    // 'inherit' (= empty / 'inherit') state.
+    const hasFormatChanges = maxPts.trim() !== "" || maxMatches.trim() !== "" || crossCat !== "inherit";
     let configOverride: RoundFormValues["configOverride"] = null;
-    if (useFormatOverride) {
+    if (hasFormatChanges) {
       const c: NonNullable<RoundFormValues["configOverride"]> = {};
       const mp = parseInt(maxPts, 10);
       const mm = parseInt(maxMatches, 10);
@@ -664,12 +669,32 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
       </div>
 
       <div className="border-t border-border pt-3">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={useFormatOverride}
-            onChange={(e) => setUseFormatOverride(e.target.checked)} className="rounded" />
+        <button
+          type="button"
+          onClick={() => setFormatSectionOpen((v) => !v)}
+          className="w-full flex items-center gap-2 text-left"
+          aria-expanded={formatSectionOpen}
+        >
+          <span className={`text-muted text-xs transition-transform ${formatSectionOpen ? "rotate-90" : ""}`}>▸</span>
           <span className="text-sm"><span className="font-bold">Customize Format</span> for this round</span>
-        </label>
-        {useFormatOverride && (
+        </button>
+        {!formatSectionOpen && (() => {
+          // Compact summary of any format overrides currently set.
+          const bits: string[] = [];
+          if (maxPts.trim() !== "") bits.push(`max pts: ${maxPts}`);
+          if (maxMatches.trim() !== "") bits.push(`max matches/event: ${maxMatches}`);
+          if (crossCat === "allow") bits.push("cross-cat: allow");
+          else if (crossCat === "deny") bits.push("cross-cat: deny");
+          if (bits.length === 0) return null;
+          return (
+            <ul className="mt-1.5 pl-6 space-y-0.5 text-[11px] text-muted">
+              {bits.map((b, i) => (
+                <li key={i}>{b}</li>
+              ))}
+            </ul>
+          );
+        })()}
+        {formatSectionOpen && (
           <div className="mt-2 space-y-2 pl-6">
             <div className="flex gap-2">
               <div className="flex-1">
@@ -969,15 +994,19 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
 
       {/* Bottom action row only renders when there's something to act on
           (edit mode + dirty, or add mode). The top-right 'Close round
-          data' link is always there as the escape route otherwise. */}
+          data' link is always there as the escape route otherwise. The
+          divider line makes clear these buttons commit the WHOLE round
+          data, not just the section above them. */}
       {(mode === "add" || isDirty) && (
-        <div className="flex gap-2">
-          <button onClick={handleSave} disabled={!roundNumber}
-            className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-            {mode === "add" ? "Add Round" : "Save"}
-          </button>
-          <button onClick={onCancel}
-            className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+        <div className="border-t border-border pt-3">
+          <div className="flex gap-2">
+            <button onClick={handleSave} disabled={!roundNumber}
+              className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+              {mode === "add" ? "Add Round" : "Save"}
+            </button>
+            <button onClick={onCancel}
+              className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+          </div>
         </div>
       )}
       </div>
