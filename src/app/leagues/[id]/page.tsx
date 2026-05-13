@@ -161,7 +161,7 @@ function clampPositiveInt(raw: string, max: number): string {
 function ScoringSelect({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
+      {placeholder !== undefined && <option value="" style={{ fontSize: 10 }}>{placeholder}</option>}
       <optgroup label="Normal — 1 Set"><option value="1x7">1 set to 7</option><option value="1x9">1 set to 9</option><option value="1x11">1 set to 11</option><option value="1x15">1 set to 15</option></optgroup>
       <optgroup label="Normal — Best of 3"><option value="3x11">Bo3 to 11</option><option value="3x15">Bo3 to 15</option></optgroup>
       <optgroup label="Rally — 1 Set"><option value="1xR15">Rally to 15</option><option value="1xR21">Rally to 21</option></optgroup>
@@ -172,7 +172,7 @@ function ScoringSelect({ value, onChange, className, placeholder }: { value: str
 function WinBySelect({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
+      {placeholder !== undefined && <option value="" style={{ fontSize: 10 }}>{placeholder}</option>}
       <option value="1">1</option><option value="2">2</option>
       <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
       <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
@@ -657,21 +657,15 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                     <input type="checkbox" checked={o.included} onChange={(e) => update({ included: e.target.checked })} className="rounded" />
                     <span className={`text-sm flex-1 truncate ${!o.included ? "text-muted italic" : ""}`}>
                       {c.name}
-                      {!o.included && <span className="ml-1 text-[10px] not-italic">— will not be played in this round</span>}
+                      <span className="ml-1 text-[10px] not-italic text-muted">
+                        — {o.included ? "will be played in this round" : "will not be played in this round"}
+                      </span>
                     </span>
                     {o.included && (
-                      <>
-                        <DurationStepper
-                          value={dur ?? null}
-                          compact
-                          label={`Match duration override for ${c.name}`}
-                          onChange={onDurChange}
-                        />
-                        <button onClick={() => update({ expanded: !o.expanded })}
-                          className="text-[10px] text-action font-medium">
-                          {o.expanded ? "Hide" : "Edit"}
-                        </button>
-                      </>
+                      <button onClick={() => update({ expanded: !o.expanded })}
+                        className="text-[10px] text-action font-medium">
+                        {o.expanded ? "Hide" : "Edit"}
+                      </button>
                     )}
                   </div>
                   {o.included && o.expanded && (
@@ -681,13 +675,13 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                           <label className="block text-[10px] text-muted">Name</label>
                           <input value={o.name} onChange={(e) => update({ name: e.target.value })}
                             placeholder={c.name}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70" />
                         </div>
                         <div className="w-32">
                           <label className="block text-[10px] text-muted">Age group</label>
                           <select value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
                             className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="">{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
+                            <option value="" style={{ fontSize: 10 }}>{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
                             {AGE_OPTS.filter((a) => a !== c.ageGroup).map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
                           </select>
                         </div>
@@ -697,7 +691,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                           <label className="block text-[10px] text-muted">Skill min</label>
                           <select value={o.skillMin} onChange={(e) => update({ skillMin: e.target.value })}
                             className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="">{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
+                            <option value="" style={{ fontSize: 10 }}>{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
@@ -705,7 +699,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                           <label className="block text-[10px] text-muted">Skill max</label>
                           <select value={o.skillMax} onChange={(e) => update({ skillMax: e.target.value })}
                             className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="">{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
+                            <option value="" style={{ fontSize: 10 }}>{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
@@ -732,8 +726,19 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                           <input type="number" min={0} value={o.maxPerEvent}
                             onChange={(e) => update({ maxPerEvent: e.target.value })}
                             placeholder={c.maxPerEvent != null ? `Inherit (${c.maxPerEvent})` : "Inherit (no cap)"}
-                            className="w-full border border-border rounded px-2 py-1 text-xs" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70" />
                         </div>
+                      </div>
+                      <div className="flex gap-2 items-end">
+                        <div>
+                          <label className="block text-[10px] text-muted">Match duration (min)</label>
+                          <DurationStepper
+                            value={dur ?? null}
+                            label={`Match duration override for ${c.name}`}
+                            onChange={onDurChange}
+                          />
+                        </div>
+                        <span className="text-[9px] text-muted pb-1.5">– = inherit from round / league default</span>
                       </div>
                     </div>
                   )}
