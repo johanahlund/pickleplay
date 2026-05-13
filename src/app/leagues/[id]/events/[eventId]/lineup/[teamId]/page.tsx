@@ -180,7 +180,7 @@ export default function LineupBuilderPage() {
         for (const id of ids) next.delete(id);
         return next;
       });
-    }, 2000);
+    }, 5000);
   }, []);
   // Toggle for the single Expand/Collapse-all button above the category
   // cards. Mirrors the rounds/standings pattern: imperatively sets each
@@ -1644,7 +1644,7 @@ export default function LineupBuilderPage() {
                       {selectedPlayers.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => { setPicker(null); void assignPlayers(g.id, []); }}
+                          onClick={() => { void assignPlayers(g.id, []); }}
                           className="text-[11px] text-danger font-medium hover:underline"
                         >Clear all</button>
                       )}
@@ -1659,7 +1659,6 @@ export default function LineupBuilderPage() {
                             type="button"
                             onClick={() => {
                               const next = currentIds.filter((x) => x !== p.id);
-                              setPicker(null);
                               void assignPlayers(g.id, next);
                             }}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-action/10 text-foreground text-xs border border-action/30 hover:bg-action/15"
