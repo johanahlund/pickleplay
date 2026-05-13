@@ -4439,6 +4439,74 @@ export default function EventDetailPage() {
     }
     for (const k of Object.keys(buckets)) buckets[k] = sortGames(buckets[k]);
 
+    // ── Scheduling conflict detection ───────────────────────────────
+    // Two flavors, evaluated per-player against the schedule:
+    //   • overlap — same player has two scheduled games whose time
+    //     windows [start, start + duration) overlap. Impossible to play.
+    //   • rushed  — different courts, positive gap < BUFFER_MIN. Player
+    //     has to sprint between courts; flag as a soft warning.
+    // Games without scheduledAt or courtNum are ignored — they aren't
+    // really scheduled yet, so they can't conflict.
+    const BUFFER_MIN = 10;
+    const durationMs = scheduleDurationMin * 60_000;
+    const bufferMs = BUFFER_MIN * 60_000;
+    type ConflictKind = "overlap" | "rushed";
+    interface PerGameConflict {
+      playerId: string;
+      playerName: string;
+      otherGameId: string;
+      kind: ConflictKind;
+      gapMin: number; // negative ⇒ overlapping
+    }
+    interface SummaryConflict {
+      playerId: string;
+      playerName: string;
+      kind: ConflictKind;
+      gapMin: number;
+      a: G;
+      b: G;
+    }
+    const conflictsByGame = new Map<string, PerGameConflict[]>();
+    const conflictSummary: SummaryConflict[] = [];
+    const playerGames = new Map<string, G[]>();
+    for (const g of games) {
+      if (!g.scheduledAt || g.courtNum == null) continue;
+      for (const gp of g.gamePlayers) {
+        const list = playerGames.get(gp.playerId) || [];
+        list.push(g);
+        playerGames.set(gp.playerId, list);
+      }
+    }
+    for (const [playerId, plist] of playerGames.entries()) {
+      if (plist.length < 2) continue;
+      const sorted = plist.slice().sort((x, y) =>
+        new Date(x.scheduledAt!).getTime() - new Date(y.scheduledAt!).getTime(),
+      );
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const a = sorted[i]!;
+        const b = sorted[i + 1]!;
+        const aStart = new Date(a.scheduledAt!).getTime();
+        const aEnd = aStart + durationMs;
+        const bStart = new Date(b.scheduledAt!).getTime();
+        const gapMs = bStart - aEnd;
+        let kind: ConflictKind | null = null;
+        if (gapMs < 0) kind = "overlap";
+        else if (a.courtNum !== b.courtNum && gapMs < bufferMs) kind = "rushed";
+        if (!kind) continue;
+        const playerName = playerNameById.get(playerId) || "Player";
+        const gapMin = Math.round(gapMs / 60_000);
+        for (const pair of [{ self: a, other: b }, { self: b, other: a }]) {
+          const arr = conflictsByGame.get(pair.self.id) || [];
+          arr.push({ playerId, playerName, otherGameId: pair.other.id, kind, gapMin });
+          conflictsByGame.set(pair.self.id, arr);
+        }
+        conflictSummary.push({ playerId, playerName, kind, gapMin, a, b });
+      }
+    }
+    const hasConflicts = conflictSummary.length > 0;
+    const overlapCount = conflictSummary.filter((c) => c.kind === "overlap").length;
+    const rushedCount = conflictSummary.length - overlapCount;
+
     // Permission: host captain/vice OR league organizer OR admin can edit.
     const allLeagueTeams = event.round.league.teams || [];
     const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
@@ -4645,8 +4713,16 @@ export default function EventDetailPage() {
           </div>
         );
       }
+      const rowConflicts = conflictsByGame.get(g.id) || [];
+      const rowHasOverlap = rowConflicts.some((c) => c.kind === "overlap");
+      const rowHasRushed = !rowHasOverlap && rowConflicts.some((c) => c.kind === "rushed");
+      const conflictBorder = rowHasOverlap
+        ? "border-red-400 ring-1 ring-red-200"
+        : rowHasRushed
+          ? "border-amber-400 ring-1 ring-amber-200"
+          : "border-border";
       return (
-        <div key={g.id} className="relative border border-border rounded-lg p-2 pl-7 space-y-1.5 bg-white">
+        <div key={g.id} className={`relative ${conflictBorder} border rounded-lg p-2 pl-7 space-y-1.5 bg-white`}>
         {canEditSchedule && (
           <button
             type="button"
@@ -4803,6 +4879,30 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
+        {rowConflicts.length > 0 && (() => {
+          // Dedupe by player + kind for the inline pill — one player
+          // could appear in multiple cross-references but we just want
+          // a short summary on this card.
+          const seen = new Set<string>();
+          const items = rowConflicts.filter((c) => {
+            const key = `${c.playerId}:${c.kind}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          return (
+            <div className={`text-[10px] rounded px-1.5 py-0.5 ${rowHasOverlap ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+              <span aria-hidden>⚠ </span>
+              {items.map((c, i) => (
+                <span key={`${c.playerId}-${i}`}>
+                  {i > 0 ? "; " : ""}
+                  <span className="font-semibold">{c.playerName}</span>{" "}
+                  {c.kind === "overlap" ? "overlap" : `${c.gapMin}m gap`}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
         </div>
       );
     };
@@ -4837,6 +4937,42 @@ export default function EventDetailPage() {
             </div>
           )}
         </div>
+        {hasConflicts && (
+          <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+              <span aria-hidden>⚠</span>
+              <span>
+                {conflictSummary.length} player {conflictSummary.length === 1 ? "conflict" : "conflicts"}
+                {overlapCount > 0 && rushedCount > 0
+                  ? ` (${overlapCount} overlapping, ${rushedCount} rushed)`
+                  : overlapCount > 0
+                    ? " (overlapping)"
+                    : " (rushed)"}
+              </span>
+            </div>
+            <ul className="space-y-0.5 text-[11px] text-amber-900">
+              {conflictSummary.map((c, i) => {
+                const aT = c.a.scheduledAt ? timeHHMM(c.a.scheduledAt) : "?";
+                const bT = c.b.scheduledAt ? timeHHMM(c.b.scheduledAt) : "?";
+                const aCourt = c.a.courtNum != null ? `C${c.a.courtNum}` : "—";
+                const bCourt = c.b.courtNum != null ? `C${c.b.courtNum}` : "—";
+                const verb = c.kind === "overlap" ? "overlap" : `rushed ${c.gapMin}m gap`;
+                return (
+                  <li key={`${c.playerId}-${i}`}>
+                    <span className="font-semibold">{c.playerName}</span>
+                    {" — "}
+                    <span className={c.kind === "overlap" ? "text-red-700 font-medium" : ""}>{verb}</span>
+                    {" — "}
+                    {catName(c.a.categoryId)} {aT}/{aCourt} ↔ {catName(c.b.categoryId)} {bT}/{bCourt}
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-[10px] text-amber-800 mt-1">
+              Match duration assumed to be {scheduleDurationMin} min; rushed warns when the gap between matches on different courts is under {BUFFER_MIN} min.
+            </p>
+          </div>
+        )}
         <div className="flex gap-2 overflow-x-auto -mx-3 px-3 pb-2">
           {/* Hide empty columns from display. The D-pad ← → arrows are
               still enabled based on the full column range (1..N), so
