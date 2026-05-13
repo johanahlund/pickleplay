@@ -891,6 +891,12 @@ export default function EventDetailPage() {
   // request here and a separate effect fires it once the event is
   // ready.
   const pendingShareRef = useRef<string | null>(null);
+  // Bridge so the URL-share auto-open effect can call
+  // openScheduleShare without violating the temporal dead zone — the
+  // function is defined further down in the component body. We
+  // re-assign on every render so the ref always points at the
+  // latest closure (which captures the freshest `event`).
+  const openScheduleShareRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!searchParams || handledInitialSectionRef.current) return;
     const s = searchParams.get("section");
@@ -904,6 +910,24 @@ export default function EventDetailPage() {
     if (share) pendingShareRef.current = share;
     if (typeof id === "string") router.replace(`/events/${id}`);
   }, [searchParams, id, router]);
+  // Auto-open the schedule share when arriving with `?share=schedule`
+  // in the URL (e.g. tapped 📣 on the lineup page). Waits for `event`
+  // to be loaded since openScheduleShare reads from it. Fires once
+  // then clears the ref so a later state change doesn't re-open.
+  // MUST live above the loading/error early returns — calling it
+  // conditionally tripped React error #310 (rendered more hooks than
+  // during the previous render).
+  useEffect(() => {
+    const evt = swrEvent.data as Event | undefined;
+    if (!evt || !evt.round || !pendingShareRef.current) return;
+    if (pendingShareRef.current === "schedule") {
+      pendingShareRef.current = null;
+      // Defer to a microtask so openScheduleShare is in scope and
+      // reads the up-to-date `event` snapshot.
+      queueMicrotask(() => openScheduleShareRef.current?.());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swrEvent.data]);
   // Auto-dismiss the green banner ~4s after it appears.
   useEffect(() => {
     if (!addedToast) return;
@@ -1993,19 +2017,9 @@ export default function EventDetailPage() {
       title: `Share match-day · ${roundLabel}`,
     });
   };
-  // Auto-open the schedule share when arriving with `?share=schedule`
-  // in the URL (e.g. tapped 📣 on the lineup page). Waits for `event`
-  // to be loaded since openScheduleShare reads from it. Fires once
-  // then clears the ref so a later state change doesn't re-open.
-  useEffect(() => {
-    if (!event || !event.round || !pendingShareRef.current) return;
-    if (pendingShareRef.current === "schedule") {
-      pendingShareRef.current = null;
-      openScheduleShare();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event]);
-
+  // Expose the current closure to the URL-share auto-open effect that
+  // had to be hoisted above the early-return guards (React #310 fix).
+  openScheduleShareRef.current = openScheduleShare;
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
       <AppHeader
