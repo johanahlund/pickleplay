@@ -278,7 +278,8 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
   const roundSuffix = ctx.roundLabel ? ` — ${ctx.roundLabel}` : "";
   heading.push(`🏆 *${ctx.leagueName}${roundSuffix}*`);
   if (ctx.team1Name && ctx.team2Name) {
-    heading.push(`${ctx.team1Name} vs ${ctx.team2Name}`);
+    // team1 is the host (helper normalises this upstream).
+    heading.push(`${ctx.team1Name} hosting ${ctx.team2Name}`);
   }
   heading.push(`📅 ${ctx.dateText}${ctx.doorsTimeText ? ` · Starts ${ctx.doorsTimeText}` : ""}`);
   if (ctx.locationText) heading.push(`📍 ${ctx.locationText}`);
@@ -325,6 +326,9 @@ type MatchDayEventPayload = {
   id: string;
   date: string | Date;
   locationId?: string | null;
+  /** Host team id — drives "Home hosting Away" ordering in the title
+   *  and the per-game player layout (home side always shown first). */
+  hostTeamId?: string | null;
   club?: { name: string; locations?: { id: string; name: string }[] | null } | null;
   leagueTeams?: { team: { id: string; name: string } }[] | null;
   /** Event sign-ups — used to resolve non-roster friendly-extra names. */
@@ -403,6 +407,8 @@ export function buildMatchDayShareFromEvent(
     rosterByTeamId.set(t.id, new Set(t.players.map((tp) => tp.playerId)));
   }
 
+  const hostTeamId = evt.hostTeamId ?? null;
+
   const games: MatchDayShareGame[] = (evt.leagueGames || []).map((g) => {
     const t1Roster = rosterByTeamId.get(g.team1Id) ?? new Set<string>();
     const t2Roster = rosterByTeamId.get(g.team2Id) ?? new Set<string>();
@@ -426,16 +432,20 @@ export function buildMatchDayShareFromEvent(
     } else if (match && team1Score != null && team2Score != null && team1Score !== team2Score) {
       winnerTeam = team1Score > team2Score ? 1 : 2;
     }
+    // Normalise so the host team's players are ALWAYS team1 in the
+    // share, regardless of which team the data model happens to call
+    // team1. Swap names + scores + winnerTeam in lockstep.
+    const swap = hostTeamId != null && g.team2Id === hostTeamId;
     return {
       courtNum: g.courtNum ?? null,
       scheduledAt: g.scheduledAt ?? null,
       categoryName: categoryById.get(g.categoryId) || "—",
       slotNumber: g.slotNumber ?? null,
-      team1PlayerNames: t1Names,
-      team2PlayerNames: t2Names,
-      team1Score,
-      team2Score,
-      winnerTeam,
+      team1PlayerNames: swap ? t2Names : t1Names,
+      team2PlayerNames: swap ? t1Names : t2Names,
+      team1Score: swap ? team2Score : team1Score,
+      team2Score: swap ? team1Score : team2Score,
+      winnerTeam: swap && winnerTeam ? (winnerTeam === 1 ? 2 : 1) : winnerTeam,
     };
   });
 
@@ -458,8 +468,18 @@ export function buildMatchDayShareFromEvent(
         ? `${evt.club.name} · ${selectedLocation.name}`
         : selectedLocation.name)
     : evt.club?.name ?? null;
-  const team1Name = evt.leagueTeams?.[0]?.team.name ?? null;
-  const team2Name = evt.leagueTeams?.[1]?.team.name ?? null;
+  // Surface host team first in the header line. When hostTeamId is
+  // unknown, fall back to the API's array order so the share still
+  // renders something sensible.
+  const teamsArr = evt.leagueTeams || [];
+  const hostTeam = hostTeamId != null
+    ? teamsArr.find((lt) => lt.team.id === hostTeamId)?.team ?? null
+    : null;
+  const guestTeam = hostTeam
+    ? teamsArr.find((lt) => lt.team.id !== hostTeam.id)?.team ?? null
+    : null;
+  const team1Name = hostTeam?.name ?? teamsArr[0]?.team.name ?? null;
+  const team2Name = hostTeam ? guestTeam?.name ?? null : teamsArr[1]?.team.name ?? null;
   const roundLabel = evt.round.name || `Round ${evt.round.roundNumber}`;
 
   const message = buildMatchDayShare({

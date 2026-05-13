@@ -748,17 +748,31 @@ export default function LineupBuilderPage() {
   })();
   /**
    * Fetch the full event payload and build the same WhatsApp-ready
-   * schedule the event page produces. The lineup-page state doesn't
-   * include match scores, so a fresh /api/events/[id] fetch is the
-   * price we pay for identical output regardless of where the user
-   * taps the trophy glyph.
+   * schedule the event page produces. Opens the modal immediately
+   * with a placeholder title so the tap has instant visual feedback;
+   * the body switches from a spinner to the real text once the fetch
+   * resolves. The lineup-page state doesn't include match scores,
+   * so a fresh /api/events/[id] fetch is the price we pay for
+   * identical output regardless of where the user taps the trophy.
    */
   const openScheduleShare = async () => {
     if (sharePending) return;
+    // Instant feedback — open the modal with a best-effort title
+    // built from local state. The full message arrives below.
+    const placeholderRound = roundName || (roundNumber != null ? `Round ${roundNumber}` : null);
+    const placeholderTitle = placeholderRound
+      ? `Share match-day · ${placeholderRound}`
+      : "Share match-day";
+    setScheduleShare({ message: "", title: placeholderTitle });
     setSharePending(true);
     try {
       const r = await fetch(`/api/events/${eventId}`);
-      if (!r.ok) return;
+      if (!r.ok) {
+        // Surface an error to the user instead of leaving the modal
+        // hanging in the spinner state forever.
+        setScheduleShare({ message: "Couldn't load this match-day. Try again.", title: placeholderTitle });
+        return;
+      }
       const evt = await r.json();
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const result = buildMatchDayShareFromEvent(evt, origin);
@@ -1764,6 +1778,7 @@ export default function LineupBuilderPage() {
       message={scheduleShare?.message ?? ""}
       title={scheduleShare?.title || "Share match-day"}
       emailSubject={scheduleShare?.title || "Match-day schedule"}
+      loading={sharePending}
       onClose={() => setScheduleShare(null)}
     />
     </>

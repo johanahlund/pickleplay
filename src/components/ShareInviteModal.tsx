@@ -17,6 +17,10 @@ interface Props {
   title?: string;
   /** Optional email subject for the Email action. */
   emailSubject?: string;
+  /** When true, show a spinner in the message area and disable the
+   *  action buttons. Lets callers open the modal as instant feedback
+   *  for the tap while the message text is still being prepared. */
+  loading?: boolean;
   onClose: () => void;
 }
 
@@ -33,7 +37,7 @@ function sanitizePhone(p?: string | null): string {
  * macOS), so we present an explicit three-way choice that works
  * uniformly on every platform.
  */
-export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", onClose }: Props) {
+export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", loading = false, onClose }: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -69,16 +73,29 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
         </div>
 
         <div className="mb-3 max-h-32 overflow-y-auto rounded-lg bg-gray-50 border border-border p-2 text-[11px] text-foreground whitespace-pre-wrap break-words">
-          {message}
+          {loading ? (
+            <div className="flex items-center gap-2 py-2 text-muted">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+              <span>Preparing message…</span>
+            </div>
+          ) : (
+            message
+          )}
         </div>
 
         <div className="space-y-2">
           <a
-            href={whatsappUrl}
+            href={loading ? undefined : whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => setTimeout(onClose, 200)}
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#25D366] text-white text-sm font-semibold active:opacity-90"
+            onClick={(e) => {
+              if (loading) { e.preventDefault(); return; }
+              setTimeout(onClose, 200);
+            }}
+            aria-disabled={loading}
+            className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#25D366] text-white text-sm font-semibold ${
+              loading ? "opacity-50 pointer-events-none" : "active:opacity-90"
+            }`}
           >
             <WhatsAppIcon className="w-4 h-4 [&_path]:fill-white" />
             <span>WhatsApp{phoneDigits ? "" : " — pick contact"}</span>
@@ -86,11 +103,12 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
           <button
             type="button"
             onClick={handleCopy}
+            disabled={loading}
             className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
               copied
                 ? "bg-emerald-500 text-white"
                 : "bg-sky-100 text-sky-800 hover:bg-sky-200 active:bg-sky-300"
-            }`}
+            } disabled:opacity-50 disabled:hover:bg-sky-100`}
             aria-label="Copy invite text to clipboard"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -100,9 +118,15 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
             <span>{copied ? "Copied — paste anywhere" : "Copy invite text"}</span>
           </button>
           <a
-            href={mailUrl}
-            onClick={() => setTimeout(onClose, 200)}
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 active:bg-slate-900 transition-colors"
+            href={loading ? undefined : mailUrl}
+            onClick={(e) => {
+              if (loading) { e.preventDefault(); return; }
+              setTimeout(onClose, 200);
+            }}
+            aria-disabled={loading}
+            className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-semibold transition-colors ${
+              loading ? "opacity-50 pointer-events-none" : "hover:bg-slate-800 active:bg-slate-900"
+            }`}
             aria-label="Send invite via email"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
