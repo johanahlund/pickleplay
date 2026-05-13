@@ -1179,7 +1179,7 @@ export default function LineupBuilderPage() {
                     <p className="text-[11px] text-amber-700 mt-1">{opponentTeam?.name ?? "Opponent"} wants to play this match — tick to confirm.</p>
                   )}
                   {ourWants && !oppWants && (
-                    <p className="text-[11px] text-muted mt-1">You ticked this slot. Waiting for {opponentTeam?.name ?? "the opponent"} to tick too.</p>
+                    <p className="text-[11px] text-muted mt-1">{opponentTeam?.name ?? "Opponent"} hasn&apos;t ticked yet — they can see you want to play this match.</p>
                   )}
                 </div>
               );
