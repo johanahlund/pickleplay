@@ -203,7 +203,7 @@ export default function NewLeaguePage() {
 
         <div className="flex gap-2">
           <button onClick={handleCreate} disabled={!name.trim() || creating}
-            className="flex-1 bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            className="flex-1 bg-white border border-action text-action py-2.5 rounded-lg font-semibold hover:bg-action/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {creating ? "Creating..." : "Create League"}
           </button>
           <button

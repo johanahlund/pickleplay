@@ -227,7 +227,7 @@ function NewPlayerPageInner() {
           <button
             onClick={handleSave}
             disabled={saving || !canAdd}
-            className="flex-1 bg-action text-white py-2.5 rounded-lg font-semibold active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-white border border-action text-action py-2.5 rounded-lg font-semibold hover:bg-action/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? "Adding..." : "Add Player"}
           </button>

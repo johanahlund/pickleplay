@@ -11,7 +11,7 @@ const defaultTabs = [
   { href: "/clubs", label: "Clubs", iconName: "clubs" },
   { href: "/leagues", label: "Leagues", iconName: "trophy" },
   { href: "/events", label: "Events", iconName: "calendar" },
-  { href: "/matches", label: "Matches", iconName: "paddle" },
+  { href: "/matches", label: "My Matches", iconName: "paddle" },
 ];
 
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset"];
