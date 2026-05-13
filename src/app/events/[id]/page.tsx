@@ -670,6 +670,41 @@ export default function EventDetailPage() {
   const [catOverridesOpen, setCatOverridesOpen] = useState(false);
   const [editedCatOverrides, setEditedCatOverrides] = useState<Record<string, number>>({});
   const [savingCatOverrides, setSavingCatOverrides] = useState(false);
+  // Optimistic overlay for per-court start times. Keys are the court
+  // number as a string; value `null` means "user just cleared this".
+  // The displayed courtStartTimes merges these on top of the server
+  // copy so picker changes take effect immediately while the PATCH +
+  // server-side recalc finishes in the background.
+  const [optimisticCourtStartTimes, setOptimisticCourtStartTimes] =
+    useState<Record<string, string | null>>({});
+  // Counter for schedule-affecting mutations in flight. When >0, the
+  // matches view shows a "Recalculating schedule…" spinner so the
+  // operator knows the server is reflowing court timelines.
+  const [recalcInFlight, setRecalcInFlight] = useState(0);
+  // Debounce + abort plumbing for the schedule recalc. We don't fire
+  // the PATCH right when the operator twiddles a start-time select —
+  // they often touch several pickers in a row. Instead, snapshot the
+  // latest desired courtStartTimes payload and start a 1 s timer; if
+  // they click again, reset it. If they click any match's "move"
+  // (reposition) icon, abandon the pending PATCH entirely — the
+  // server-side recalc would clobber their manual placement.
+  const recalcTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recalcAbortRef = useRef<AbortController | null>(null);
+  const pendingCourtStartTimesRef = useRef<Record<string, string> | null>(null);
+  const cancelPendingRecalc = useCallback(() => {
+    if (recalcTimerRef.current) {
+      clearTimeout(recalcTimerRef.current);
+      recalcTimerRef.current = null;
+    }
+    if (recalcAbortRef.current) {
+      recalcAbortRef.current.abort();
+      recalcAbortRef.current = null;
+    }
+    pendingCourtStartTimesRef.current = null;
+    // Don't touch the optimistic court-start overlay — the operator's
+    // entered times stay visible until SWR mutate replaces them.
+    setRecalcInFlight(0);
+  }, []);
   // Game id currently showing the court-picker popup. Null = no popup open.
   const [courtPickerGameId, setCourtPickerGameId] = useState<string | null>(null);
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -4485,29 +4520,81 @@ export default function EventDetailPage() {
     const numCourts = event.numCourts || 2;
     // Court start times: ISO string per court number. Recalc on the
     // server keys off these to compute scheduledAt for every match.
-    const courtStartTimes: Record<string, string> = (event.courtStartTimes || {}) as Record<string, string>;
-    const writeCourtStart = async (n: number, iso: string | null) => {
+    // Merge optimistic local overrides on top of the server copy so
+    // the operator's picker change shows instantly while the PATCH +
+    // recalc finishes in the background. A null override means the
+    // user just cleared that court's start time.
+    const serverCourtStartTimes: Record<string, string> = (event.courtStartTimes || {}) as Record<string, string>;
+    const courtStartTimes: Record<string, string> = (() => {
+      const merged: Record<string, string> = { ...serverCourtStartTimes };
+      for (const [k, v] of Object.entries(optimisticCourtStartTimes)) {
+        if (v === null) delete merged[k];
+        else merged[k] = v;
+      }
+      return merged;
+    })();
+    // Schedule the PATCH 1 s after the LAST courtStartTimes edit. Each
+    // call replaces the pending payload so the operator can twiddle
+    // pickers rapidly without burning N recalcs. The operator gets
+    // immediate optimistic UI; the server-side reflow trails behind.
+    const scheduleRecalc = (nextTimes: Record<string, string>) => {
+      pendingCourtStartTimesRef.current = nextTimes;
+      // The user is the active driver; reset the timer.
+      if (recalcTimerRef.current) clearTimeout(recalcTimerRef.current);
+      // Mark a recalc as "queued" so the spinner shows during the
+      // debounce window too — otherwise the operator sees a 1 s gap
+      // where nothing acknowledges their edit.
+      setRecalcInFlight(1);
+      recalcTimerRef.current = setTimeout(async () => {
+        const payload = pendingCourtStartTimesRef.current;
+        pendingCourtStartTimesRef.current = null;
+        recalcTimerRef.current = null;
+        if (!payload) return;
+        const controller = new AbortController();
+        recalcAbortRef.current = controller;
+        try {
+          await fetch(`/api/events/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ courtStartTimes: payload }),
+            signal: controller.signal,
+          });
+          if (controller.signal.aborted) return;
+          await swrEvent.mutate();
+        } catch (err) {
+          if ((err as { name?: string })?.name === "AbortError") return;
+          // Network/server failure — surface but don't loop.
+          // eslint-disable-next-line no-console
+          console.error("courtStartTimes recalc failed", err);
+        } finally {
+          if (recalcAbortRef.current === controller) recalcAbortRef.current = null;
+          // Drop the optimistic overlay only after SWR mutate returns
+          // — otherwise the picker briefly flashes the previous value.
+          setOptimisticCourtStartTimes({});
+          setRecalcInFlight(0);
+        }
+      }, 1000);
+    };
+    const writeCourtStart = (n: number, iso: string | null) => {
       const next: Record<string, string> = { ...courtStartTimes };
       if (iso) next[String(n)] = iso;
       else delete next[String(n)];
-      await fetch(`/api/events/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courtStartTimes: next }),
-      });
-      fetchEvent();
+      // Optimistic: paint the new time immediately so the operator
+      // doesn't see "ages" of stale state while the server recalcs.
+      setOptimisticCourtStartTimes((prev) => ({ ...prev, [String(n)]: iso }));
+      scheduleRecalc(next);
     };
-    const copyCourt1StartToAll = async () => {
+    const copyCourt1StartToAll = () => {
       const c1 = courtStartTimes["1"];
       if (!c1) return;
       const next: Record<string, string> = { ...courtStartTimes };
       for (let i = 2; i <= numCourts; i++) next[String(i)] = c1;
-      await fetch(`/api/events/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courtStartTimes: next }),
+      setOptimisticCourtStartTimes((prev) => {
+        const out = { ...prev };
+        for (let i = 2; i <= numCourts; i++) out[String(i)] = c1;
+        return out;
       });
-      fetchEvent();
+      scheduleRecalc(next);
     };
     const cats = event.round.league.categories || [];
     const catById = new Map(cats.map((c) => [c.id, c]));
@@ -4686,6 +4773,45 @@ export default function EventDetailPage() {
     const hasConflicts = conflictSummary.length > 0;
     const overlapCount = conflictSummary.filter((c) => c.kind === "overlap").length;
     const rushedCount = conflictSummary.length - overlapCount;
+
+    // Color-code each (a, b) conflict pair so the operator can match
+    // a summary line to its two cards at a glance. Key is order-
+    // independent so the same pair gets the same color regardless of
+    // which match is "a" vs "b".
+    const pairKeyOf = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+    const PAIR_PALETTE: { dot: string; ring: string }[] = [
+      { dot: "bg-rose-500", ring: "ring-rose-300" },
+      { dot: "bg-amber-500", ring: "ring-amber-300" },
+      { dot: "bg-emerald-500", ring: "ring-emerald-300" },
+      { dot: "bg-sky-500", ring: "ring-sky-300" },
+      { dot: "bg-violet-500", ring: "ring-violet-300" },
+      { dot: "bg-fuchsia-500", ring: "ring-fuchsia-300" },
+      { dot: "bg-cyan-500", ring: "ring-cyan-300" },
+      { dot: "bg-lime-500", ring: "ring-lime-300" },
+    ];
+    const pairColorByKey = new Map<string, typeof PAIR_PALETTE[number]>();
+    {
+      let i = 0;
+      for (const c of conflictSummary) {
+        const key = pairKeyOf(c.a.id, c.b.id);
+        if (!pairColorByKey.has(key)) {
+          pairColorByKey.set(key, PAIR_PALETTE[i % PAIR_PALETTE.length]!);
+          i++;
+        }
+      }
+    }
+    // Per match: every pair key it's part of (a card can be in
+    // multiple pairs if 2+ players sharing different opponents both
+    // collide with it). Used by the card renderer to stack chips.
+    const pairKeysByGame = new Map<string, string[]>();
+    for (const c of conflictSummary) {
+      const key = pairKeyOf(c.a.id, c.b.id);
+      for (const id of [c.a.id, c.b.id]) {
+        const arr = pairKeysByGame.get(id) || [];
+        if (!arr.includes(key)) arr.push(key);
+        pairKeysByGame.set(id, arr);
+      }
+    }
 
     // Permission: host captain/vice OR league organizer OR admin can edit.
     const allLeagueTeams = event.round.league.teams || [];
@@ -4901,12 +5027,34 @@ export default function EventDetailPage() {
         : rowHasRushed
           ? "border-amber-400 ring-1 ring-amber-200"
           : "border-border";
+      const rowPairKeys = pairKeysByGame.get(g.id) || [];
       return (
         <div key={g.id} className={`relative ${conflictBorder} border rounded-lg p-2 pl-7 space-y-1.5 bg-white`}>
+        {rowPairKeys.length > 0 && (
+          <div className="absolute top-1 right-1 flex gap-0.5 z-10">
+            {rowPairKeys.map((k) => {
+              const color = pairColorByKey.get(k);
+              return (
+                <span
+                  key={k}
+                  title="Conflict pair — same colored dot on the other match"
+                  className={`inline-block w-2 h-2 rounded-full ring-2 ${color?.dot ?? "bg-amber-400"} ${color?.ring ?? "ring-amber-200"}`}
+                  aria-hidden
+                />
+              );
+            })}
+          </div>
+        )}
         {canEditSchedule && (
           <button
             type="button"
-            onClick={() => setMovingScheduleId(g.id)}
+            onClick={() => {
+              // Operator is about to manually reposition a match —
+              // any pending/in-flight courtStartTimes recalc would
+              // overwrite that, so drop it.
+              cancelPendingRecalc();
+              setMovingScheduleId(g.id);
+            }}
             title="Move this match"
             className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center select-none rounded-l-lg text-muted hover:text-foreground hover:bg-gray-50"
           >
@@ -5230,6 +5378,12 @@ export default function EventDetailPage() {
             </div>
           </div>
         )}
+        {recalcInFlight > 0 && (
+          <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 p-2.5 flex items-center gap-2 text-[12px] text-blue-900">
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+            <span>Recalculating schedule…</span>
+          </div>
+        )}
         {hasConflicts && (
           <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
@@ -5250,13 +5404,20 @@ export default function EventDetailPage() {
                 const aCourt = c.a.courtNum != null ? `C${c.a.courtNum}` : "—";
                 const bCourt = c.b.courtNum != null ? `C${c.b.courtNum}` : "—";
                 const verb = c.kind === "overlap" ? "overlap" : `rushed ${c.gapMin}m gap`;
+                const pairColor = pairColorByKey.get(pairKeyOf(c.a.id, c.b.id));
                 return (
-                  <li key={`${c.playerId}-${i}`}>
-                    <span className="font-semibold">{c.playerName}</span>
-                    {" — "}
-                    <span className={c.kind === "overlap" ? "text-red-700 font-medium" : ""}>{verb}</span>
-                    {" — "}
-                    {catName(c.a.categoryId)} {aT}/{aCourt} ↔ {catName(c.b.categoryId)} {bT}/{bCourt}
+                  <li key={`${c.playerId}-${i}`} className="flex items-center gap-1.5">
+                    <span
+                      className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${pairColor?.dot ?? "bg-amber-400"}`}
+                      aria-hidden
+                    />
+                    <span>
+                      <span className="font-semibold">{c.playerName}</span>
+                      {" — "}
+                      <span className={c.kind === "overlap" ? "text-red-700 font-medium" : ""}>{verb}</span>
+                      {" — "}
+                      {catName(c.a.categoryId)} {aT}/{aCourt} ↔ {catName(c.b.categoryId)} {bT}/{bCourt}
+                    </span>
                   </li>
                 );
               })}
