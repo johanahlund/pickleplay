@@ -662,6 +662,12 @@ export default function EventDetailPage() {
   // default → 45). User edits write back to Event.matchDurationMin,
   // which triggers the server-side auto-recalc of every court.
   const [scheduleDurationMin, setScheduleDurationMin] = useState(45);
+  // Event-level explicit override of matchDurationMin, separate from
+  // the effective `scheduleDurationMin` (which always carries a usable
+  // number via the round→league→45 cascade). null = "inherit"; the
+  // stepper renders that as "–" with the inherited value as a hint.
+  const [eventDurationOverride, setEventDurationOverride] = useState<number | null>(null);
+  const [inheritedDurationMin, setInheritedDurationMin] = useState<number>(45);
   // Drag-and-drop state for the league schedule. `scheduleDragId` is the
   // game being dragged; `scheduleDragOverCol` is the court key (1..N or
   // "unassigned") the cursor is currently over — used to highlight the
@@ -803,35 +809,50 @@ export default function EventDetailPage() {
   useEffect(() => {
     const evt = swrEvent.data as Event | undefined;
     if (!evt) return;
-    const effective = evt.matchDurationMin
-      ?? evt.round?.matchDurationMin
+    const inherited = evt.round?.matchDurationMin
       ?? evt.round?.league?.matchDurationMin
       ?? 45;
+    setInheritedDurationMin(inherited);
+    setEventDurationOverride(evt.matchDurationMin ?? null);
+    const effective = evt.matchDurationMin ?? inherited;
     if (durationLastServerRef.current !== effective) {
       durationLastServerRef.current = effective;
       setScheduleDurationMin(effective);
     }
   }, [swrEvent.data]);
-  // Debounced save: when the local duration diverges from what we last
-  // saw from the server, PATCH the event after 600ms of stillness.
-  // PATCH triggers recalcAllCourtsAndPersist server-side; we then
-  // revalidate to pick up the new scheduledAt values.
+  // Debounced save: when the explicit override diverges from server
+  // truth, PATCH the event after 600ms of stillness. Override = null
+  // means "clear", and the server's effective duration falls back to
+  // the round/league cascade automatically.
+  const overrideLastServerRef = useRef<number | null | undefined>(undefined);
   useEffect(() => {
-    if (durationLastServerRef.current === null) return;
-    if (durationLastServerRef.current === scheduleDurationMin) return;
+    const evt = swrEvent.data as Event | undefined;
+    if (!evt) return;
+    const serverOverride = evt.matchDurationMin ?? null;
+    if (overrideLastServerRef.current === undefined) {
+      overrideLastServerRef.current = serverOverride;
+    }
+  }, [swrEvent.data]);
+  useEffect(() => {
+    if (overrideLastServerRef.current === undefined) return;
+    if (overrideLastServerRef.current === eventDurationOverride) return;
     const t = setTimeout(async () => {
       try {
         await fetch(`/api/events/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ matchDurationMin: scheduleDurationMin }),
+          body: JSON.stringify({ matchDurationMin: eventDurationOverride }),
         });
-        durationLastServerRef.current = scheduleDurationMin;
+        overrideLastServerRef.current = eventDurationOverride;
+        // Effective duration follows the override; otherwise inherited.
+        const effective = eventDurationOverride ?? inheritedDurationMin;
+        durationLastServerRef.current = effective;
+        setScheduleDurationMin(effective);
         fetchEvent();
       } catch { /* silent — user can adjust again if it didn't take */ }
     }, 600);
     return () => clearTimeout(t);
-  }, [scheduleDurationMin, id, fetchEvent]);
+  }, [eventDurationOverride, inheritedDurationMin, id, fetchEvent]);
 
   // Re-open the Add Players picker when returning from "+ New App
   // User". The API has already attached the new player; we just need
@@ -4831,14 +4852,25 @@ export default function EventDetailPage() {
         if (iso) return new Date(iso).getTime();
         return event.date ? new Date(event.date).getTime() : Date.now();
       };
+      // Lexicographic priority per match:
+      //   1) fewest player conflicts on this court,
+      //   2) earliest match END time on this court (LPT-style:
+      //      minimises the overall event makespan by pushing each
+      //      match to the court that finishes soonest), then
+      //   3) most matches already on this court for the same category
+      //      (gentle clustering, only used as a tiebreaker so it can
+      //      never trap matches on one court).
       for (const g of sorted) {
         let bestCourt = 1;
-        let bestScore = Infinity;
         let bestStart = 0;
+        let bestEnd = Number.POSITIVE_INFINITY;
+        let bestConflict = Number.POSITIVE_INFINITY;
+        let bestSameCat = -1;
         for (let c = 1; c <= numCourts; c++) {
           const tl = timelines[c]!.slice().sort((a, b) => a.startMs - b.startMs);
           const lastEnd = tl.length > 0 ? tl[tl.length - 1]!.startMs + durMs : courtStartMs(c);
           const startMs = Math.max(lastEnd, courtStartMs(c));
+          const endMs = startMs + durMs;
           let conflict = 0;
           for (const gp of g.gamePlayers) {
             const pe = playerLastEnd.get(gp.playerId) ?? -Infinity;
@@ -4847,14 +4879,16 @@ export default function EventDetailPage() {
             else if (gap < BUFFER_MS) conflict += 100;
           }
           const sameCat = tl.filter((t) => t.categoryId === g.categoryId).length;
-          const loadMins = (startMs - courtStartMs(c)) / 60_000;
-          // Score: conflicts dominate, then category clustering (negative
-          // bonus pulls score down), with a light load-balance tiebreak.
-          const score = conflict - sameCat * 10 + loadMins * 0.1;
-          if (score < bestScore) {
-            bestScore = score;
+          const better =
+            conflict < bestConflict
+            || (conflict === bestConflict && endMs < bestEnd)
+            || (conflict === bestConflict && endMs === bestEnd && sameCat > bestSameCat);
+          if (better) {
             bestCourt = c;
             bestStart = startMs;
+            bestEnd = endMs;
+            bestConflict = conflict;
+            bestSameCat = sameCat;
           }
         }
         timelines[bestCourt]!.push({ gameId: g.id, startMs: bestStart, categoryId: g.categoryId });
@@ -5455,12 +5489,31 @@ export default function EventDetailPage() {
                     type="button"
                     title="Anchored — this start time is fixed and the auto-scheduler chains the next matches forward from here. Click to release the anchor and let this match's time be auto-derived."
                     onClick={async () => {
-                      await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/games/${g.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ scheduleAnchored: false }),
-                      });
-                      fetchEvent();
+                      // Flip the pin off in SWR's cache RIGHT AWAY so
+                      // the 📌 disappears the instant the operator
+                      // taps it — the PATCH + recalc round-trip used
+                      // to make this feel frozen.
+                      await swrEvent.mutate(
+                        (cur: Event | undefined) => {
+                          if (!cur) return cur;
+                          return {
+                            ...cur,
+                            leagueGames: (cur.leagueGames || []).map((x) =>
+                              x.id === g.id ? { ...x, scheduleAnchored: false } : x,
+                            ),
+                          };
+                        },
+                        { revalidate: false },
+                      );
+                      try {
+                        await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/games/${g.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ scheduleAnchored: false }),
+                        });
+                      } finally {
+                        fetchEvent();
+                      }
                     }}
                     className="text-[10px] px-1 hover:opacity-70"
                     aria-label="Anchor (click to release)"
@@ -5611,19 +5664,6 @@ export default function EventDetailPage() {
       <div className={`${frameClass} p-3 space-y-2`}>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="text-base font-bold">Schedule</div>
-          {canEditSchedule && (
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/recalc-schedule`, { method: "POST" });
-                  fetchEvent();
-                } catch { /* silent */ }
-              }}
-              title="Re-run the auto-schedule for every court using current durations + start times. Anchored matches keep their times."
-              className="text-[11px] text-white font-semibold bg-action hover:brightness-110 rounded-md px-2.5 py-1"
-            >Recalc</button>
-          )}
         </div>
         {canEditSchedule && (
           <div className="mt-3 flex items-end gap-6 flex-wrap">
@@ -5631,11 +5671,14 @@ export default function EventDetailPage() {
               <div className="text-[11px] text-muted mb-1">Per match (min)</div>
               <DurationStepper
                 compact
-                value={scheduleDurationMin}
-                onChange={(next) => { if (next != null) setScheduleDurationMin(next); }}
+                value={eventDurationOverride}
+                onChange={(next) => setEventDurationOverride(next)}
                 min={5}
                 max={180}
               />
+              {eventDurationOverride == null && (
+                <div className="text-[10px] text-muted mt-0.5">↳ {inheritedDurationMin} (round / league default)</div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <button
@@ -5882,6 +5925,11 @@ export default function EventDetailPage() {
         back={{ label: heroTitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
         meta="Matches"
         action={canManage && !event.round ? { label: "Pairing", onClick: () => router.push(`/events/${id}/pairing`) } : undefined}
+        onInvite={canManage && event.round ? () => setShareSheetOpen(true) : undefined}
+        inviteKind={canManage && event.round ? "E" : undefined}
+        inviteLabel={canManage && event.round ? "Share event invite" : undefined}
+        onShareSchedule={event.round ? openScheduleShare : undefined}
+        shareScheduleLabel={event.round ? "Share match-day schedule" : undefined}
       />
 
       <div className="px-4 space-y-3 pt-3">
@@ -6320,6 +6368,11 @@ export default function EventDetailPage() {
           back={{ label: backLabel, subtitle: backSubtitle, href: `/events/${id}`, onClick: () => setActiveSection("overview") }}
           meta="Participants"
           action={canManage ? { label: "+/- Player", onClick: () => { setBulkSelectMode(true); setBulkSearch(""); setBulkGenderFilter(null); fetchAllPlayers(); } } : undefined}
+          onInvite={canManage && event.round ? () => setShareSheetOpen(true) : undefined}
+          inviteKind={canManage && event.round ? "E" : undefined}
+          inviteLabel={canManage && event.round ? "Share event invite" : undefined}
+          onShareSchedule={event.round ? openScheduleShare : undefined}
+          shareScheduleLabel={event.round ? "Share match-day schedule" : undefined}
         />
         <div className="px-4">
           {renderPlayers()}
@@ -6537,6 +6590,11 @@ export default function EventDetailPage() {
             back={{ label: heroTitle, href: `/events/${id}`, onClick: handleBackToOverview }}
             meta={sectionMeta}
             action={sectionAction}
+            onInvite={canManage && event.round ? () => setShareSheetOpen(true) : undefined}
+            inviteKind={canManage && event.round ? "E" : undefined}
+            inviteLabel={canManage && event.round ? "Share event invite" : undefined}
+            onShareSchedule={event.round ? openScheduleShare : undefined}
+            shareScheduleLabel={event.round ? "Share match-day schedule" : undefined}
           />
         )}
         {/* Add-Player / Add-Guest mode keeps the event name visible in
