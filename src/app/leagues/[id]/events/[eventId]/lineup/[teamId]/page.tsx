@@ -835,16 +835,22 @@ export default function LineupBuilderPage() {
           .filter((g) => g.categoryId === cat.id)
           .map((g) => g.slotNumber);
         const maxExisting = Math.max(0, ...existingSlots);
-        // Base rows: at least 1 so every category lights up with its first
-        // match row pre-displayed (no need to tap "+ Add match" before
-        // starting). extraSlots can be NEGATIVE: the captain can ✕ that
-        // first row away — the category card stays, the slot disappears,
-        // and "+ Add match" brings it back. Existing games (maxExisting)
-        // floor the count so a row with a real game can't be hidden via ✕.
-        const baseRows = Math.max(maxExisting, 1);
+        // Visible slot count tracks the actual DB rows for this category.
+        // The pre-create path seeds slot 1 on event creation, so on a fresh
+        // event the user still sees the row. Once the row is deleted
+        // server-side (e.g. the opposite team unticks and nobody else
+        // wants the match), maxExisting drops to 0 and the placeholder
+        // disappears from BOTH teams' views — polling alone is enough.
+        //
+        // extraSlots overlays the user's local intent: + Add match
+        // increments, ✕ on an empty row decrements (negative values
+        // hide a pre-create row the captain isn't interested in). The
+        // outer Math.max(maxExisting, …) guarantees a row that exists
+        // in the DB always renders, so a freshly-created opponent
+        // match never gets clipped out by a stale negative extraSlots.
         const visibleSlotCount = Math.min(
           max,
-          Math.max(maxExisting, baseRows + (extraSlots[cat.id] || 0)),
+          Math.max(maxExisting, maxExisting + (extraSlots[cat.id] || 0)),
         );
         const slots = Array.from({ length: visibleSlotCount }, (_, i) => i + 1);
         const canAddMore = visibleSlotCount < max;
@@ -959,8 +965,12 @@ export default function LineupBuilderPage() {
                               await alertDialog(d.error || "Failed to remove match");
                               return;
                             }
+                            // Drop the game locally; maxExisting falls
+                            // by 1 and visibleSlotCount tracks it. We
+                            // intentionally do NOT decrement extraSlots
+                            // — any user-added empty slots they had
+                            // queued up should survive the removal.
                             setGames((prev) => prev.filter((x) => x.id !== g.id));
-                            setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.min(0, (prev[cat.id] || 0) - 1) }));
                           } finally {
                             setSaving(false);
                           }
