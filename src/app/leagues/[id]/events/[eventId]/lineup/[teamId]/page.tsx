@@ -1348,9 +1348,50 @@ export default function LineupBuilderPage() {
                     );
                   })()}
 
-                  {ourWants && g && (
+                  {ourWants && g && (() => {
+                    const needed = isDoubles(cat) ? 2 : 1;
+                    // Pull gender from the roster so we can specify
+                    // ♂/♀ in the warning (player pills only carry id +
+                    // name).
+                    const ourFull = ourPlayers
+                      .map((p) => roster.find((r) => r.id === p.id))
+                      .filter((p): p is PlayerLite => !!p);
+                    const males = ourFull.filter((p) => p.gender === "M").length;
+                    const females = ourFull.filter((p) => p.gender === "F").length;
+                    let missingLabel: string | null = null;
+                    if (ourPlayers.length < needed) {
+                      missingLabel = "needs players";
+                      if (cat.gender === "mix" && isDoubles(cat)) {
+                        const needM = males < 1;
+                        const needF = females < 1;
+                        if (needM && needF) missingLabel = "needs ♂ + ♀";
+                        else if (needM) missingLabel = "needs ♂";
+                        else if (needF) missingLabel = "needs ♀";
+                      } else if (cat.gender === "male") {
+                        missingLabel = "needs ♂";
+                      } else if (cat.gender === "female") {
+                        missingLabel = "needs ♀";
+                      } else {
+                        missingLabel = isDoubles(cat) ? "needs players" : "needs player";
+                      }
+                    } else if (cat.gender === "mix" && isDoubles(cat)) {
+                      // Right count but wrong mix — flag it too.
+                      if (males < 1) missingLabel = "needs ♂";
+                      else if (females < 1) missingLabel = "needs ♀";
+                    }
+                    return (
                     <div className="mt-2 space-y-1">
-                      <div className="text-[10px] uppercase tracking-wide text-muted">Your players</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-[10px] uppercase tracking-wide text-muted">Your players</div>
+                        {missingLabel && (
+                          <span
+                            title={`Tap + ${isDoubles(cat) ? "Partner" : "Pick"} to add`}
+                            className="text-[10px] text-amber-800 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5 font-semibold"
+                          >
+                            ⚠ {missingLabel}
+                          </span>
+                        )}
+                      </div>
                       {/* Pills row + a right-anchored action button. Pinning
                           the button to the right with ml-auto keeps it in
                           a consistent spot across all match cards, no
@@ -1377,7 +1418,8 @@ export default function LineupBuilderPage() {
                         </button>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {oppWants && (
                     <div className="mt-2">
