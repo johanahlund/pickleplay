@@ -6181,7 +6181,19 @@ export default function EventDetailPage() {
           );
         })()}
 
-        {event.matches.length === 0 && <p className="text-center py-8 text-muted text-sm">No matches yet</p>}
+        {event.matches.length === 0 && (() => {
+          // For a league event the lineup picker creates leagueGames
+          // (planned matches with both teams ticked) BEFORE any
+          // Match row exists. Render those above via
+          // renderLeagueSchedule, so we should only fall through to
+          // "No matches yet" when neither matches NOR planned league
+          // games exist.
+          const plannedLeague = event.round
+            ? (event.leagueGames || []).filter((g) => g.team1Wants && g.team2Wants).length
+            : 0;
+          if (plannedLeague > 0) return null;
+          return <p className="text-center py-8 text-muted text-sm">No matches yet</p>;
+        })()}
       </div>
     </div>
   );
