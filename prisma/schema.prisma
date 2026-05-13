@@ -217,6 +217,12 @@ model Event {
   /// Per-event override of the round (or league) default match duration
   /// used by the auto-schedule. Null = inherit from the round.
   matchDurationMin Int?
+  /// Per-event, per-category match-duration overrides. JSON map:
+  /// { [LeagueCategory.id]: minutes }. Takes precedence over the event
+  /// general matchDurationMin AND any round/league overrides for just
+  /// that category in this event. Edited in the schedule view's
+  /// "category overrides" panel.
+  categoryDurationOverrides Json?
   /// Per-court start times for the auto-schedule, keyed by court number
   /// as a string: { "1": "2026-05-17T13:00:00.000Z", "2": "…" }. Empty
   /// or missing keys → the auto-schedule won't place matches on that

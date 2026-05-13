@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireEventOwner, requireEventManager, canSeeEmails, stripEmailsDeep } from "@/lib/auth";
+import { requireAuth, requireEventOwner, requireEventManager, canSeeEmails, stripEmailsDeep, getViewerMemberships, canSeeWhatsApp } from "@/lib/auth";
 import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
@@ -17,8 +17,24 @@ export async function GET(
     include: {
       classes: true,
       sessions: { orderBy: { date: "asc" } },
-      // safePlayerSelect plus passwordHash so we can derive `hasAccount`.
-      players: { include: { player: { select: { ...safePlayerSelect, passwordHash: true } } } },
+      // safePlayerSelect plus passwordHash (→ hasAccount), plus the
+      // phone + visibility + membership data needed to compute the
+      // canSeeWhatsApp gate per-player below.
+      players: {
+        include: {
+          player: {
+            select: {
+              ...safePlayerSelect,
+              passwordHash: true,
+              phone: true,
+              whatsappVisibility: true,
+              clubMembers: { select: { clubId: true } },
+              leagueTeamPlayers: { select: { teamId: true } },
+              eventPlayers: { select: { eventId: true } },
+            },
+          },
+        },
+      },
       matches: {
         include: {
           players: { include: { player: { select: safePlayerSelect } } },
@@ -48,7 +64,21 @@ export async function GET(
                   // column can render roster names + the captain's
                   // "+ Add player" picker can list teammates who haven't
                   // signed up yet.
-                  players: { select: { playerId: true, player: { select: { id: true, name: true, photoUrl: true, gender: true, phone: true, passwordHash: true } } } },
+                  players: {
+                    select: {
+                      playerId: true,
+                      player: {
+                        select: {
+                          id: true, name: true, photoUrl: true, gender: true,
+                          phone: true, passwordHash: true,
+                          whatsappVisibility: true,
+                          clubMembers: { select: { clubId: true } },
+                          leagueTeamPlayers: { select: { teamId: true } },
+                          eventPlayers: { select: { eventId: true } },
+                        },
+                      },
+                    },
+                  },
                 },
               },
               helpers: { select: { playerId: true } },
@@ -217,6 +247,56 @@ export async function GET(
     }
   }
 
+  // Gate phone visibility per player. We selected the target's
+  // memberships above; combine with the viewer's memberships and
+  // canSeeWhatsApp to decide. Always strip the membership lists from
+  // the response payload — they were only fetched for the gate.
+  type WhatsAppPayload = {
+    id: string;
+    phone: string | null;
+    whatsappVisibility: string;
+    clubMembers: { clubId: string }[];
+    leagueTeamPlayers: { teamId: string }[];
+    eventPlayers: { eventId: string }[];
+  };
+  const scrubPhone = (
+    p: WhatsAppPayload,
+    viewer: Awaited<ReturnType<typeof getViewerMemberships>>,
+  ) => {
+    const allow = canSeeWhatsApp(viewer, {
+      id: p.id,
+      whatsappVisibility: p.whatsappVisibility,
+      clubIds: p.clubMembers.map((c) => c.clubId),
+      teamIds: p.leagueTeamPlayers.map((t) => t.teamId),
+      signedUpEventIds: p.eventPlayers.map((e) => e.eventId),
+    });
+    return allow ? p.phone : null;
+  };
+  const viewerMemberships = await getViewerMemberships(user.id, user.role);
+  // event.players[].player
+  for (const ep of event.players as unknown as { player: WhatsAppPayload }[]) {
+    const newPhone = scrubPhone(ep.player, viewerMemberships);
+    ep.player.phone = newPhone;
+    // Drop the per-target membership lists from the response.
+    delete (ep.player as Partial<WhatsAppPayload>).clubMembers;
+    delete (ep.player as Partial<WhatsAppPayload>).leagueTeamPlayers;
+    delete (ep.player as Partial<WhatsAppPayload>).eventPlayers;
+    delete (ep.player as Partial<WhatsAppPayload>).whatsappVisibility;
+  }
+  // event.round.league.teams[].players[].player (when present)
+  const leagueTeams = (event.round?.league as unknown as { teams?: { players: { player: WhatsAppPayload }[] }[] } | undefined)?.teams;
+  if (Array.isArray(leagueTeams)) {
+    for (const t of leagueTeams) {
+      for (const tp of t.players) {
+        tp.player.phone = scrubPhone(tp.player, viewerMemberships);
+        delete (tp.player as Partial<WhatsAppPayload>).clubMembers;
+        delete (tp.player as Partial<WhatsAppPayload>).leagueTeamPlayers;
+        delete (tp.player as Partial<WhatsAppPayload>).eventPlayers;
+        delete (tp.player as Partial<WhatsAppPayload>).whatsappVisibility;
+      }
+    }
+  }
+
   // Derive `hasAccount` and strip raw passwordHash from any player payload
   // we just included. Cheap recursive walk; never mutates the original
   // record types since the cast is at the response boundary.
@@ -309,6 +389,25 @@ export async function PATCH(
       eventData.courtStartTimes = out;
     } else {
       return NextResponse.json({ error: "courtStartTimes must be an object" }, { status: 400 });
+    }
+  }
+  if (body.categoryDurationOverrides !== undefined) {
+    const v = body.categoryDurationOverrides;
+    if (v === null) {
+      eventData.categoryDurationOverrides = null;
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
+      const out: Record<string, number> = {};
+      for (const [catId, raw] of Object.entries(v as Record<string, unknown>)) {
+        if (raw === null || raw === undefined || raw === "") continue;
+        const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 5 || n > 240) {
+          return NextResponse.json({ error: `categoryDurationOverrides[${catId}] must be 5-240` }, { status: 400 });
+        }
+        out[catId] = n;
+      }
+      eventData.categoryDurationOverrides = Object.keys(out).length > 0 ? out : null;
+    } else {
+      return NextResponse.json({ error: "categoryDurationOverrides must be an object" }, { status: 400 });
     }
   }
   if (date !== undefined) {
@@ -423,7 +522,7 @@ export async function PATCH(
   // Schedule inputs changed → recompute every court's match times.
   // Cheap (one query per court) and the only reliable way to keep the
   // chain in sync when default duration or court anchors move.
-  const scheduleTriggers = ["matchDurationMin", "courtStartTimes", "numCourts"];
+  const scheduleTriggers = ["matchDurationMin", "categoryDurationOverrides", "courtStartTimes", "numCourts"];
   if (scheduleTriggers.some((k) => k in eventData)) {
     try {
       const { recalcAllCourtsAndPersist } = await import("@/lib/leagueSchedule");

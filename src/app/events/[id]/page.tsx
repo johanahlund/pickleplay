@@ -39,6 +39,8 @@ import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 import { frameClass } from "@/components/Card";
+import { DurationStepper } from "@/components/DurationStepper";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
 import { COUNTRIES } from "@/lib/countries";
@@ -211,6 +213,8 @@ interface Event {
     gamePlayers: { playerId: string; team?: number | null }[];
   }[];
   matchDurationMin?: number | null;
+  /** Per-event per-category match-duration overrides. */
+  categoryDurationOverrides?: Record<string, number> | null;
   /** Per-court start times, keyed by court number as a string. */
   courtStartTimes?: Record<string, string> | null;
   // Linked social side event. Present (single item) on league events
@@ -278,7 +282,6 @@ function SwipeablePlayerRow({
   ep,
   canManage,
   hasMatches,
-  showContact,
   onPause,
   onRemove,
   onCheckIn,
@@ -289,7 +292,6 @@ function SwipeablePlayerRow({
   ep: { player: Player; status: string; skillLevel?: number | null };
   canManage: boolean;
   hasMatches: boolean;
-  showContact: boolean;
   onPause: () => void;
   onRemove: () => void;
   onCheckIn?: () => void;
@@ -402,15 +404,16 @@ function SwipeablePlayerRow({
           <button onClick={(e) => { e.stopPropagation(); onCheckIn(); }} className="text-[10px] bg-green-50 text-green-700 border border-green-300 px-1.5 py-0.5 rounded-full font-medium active:bg-green-200">Check in</button>
         ) : null}
       </span>
-      {ep.player.phone && showContact && (
+      {ep.player.phone && (
         <a
           href={`https://wa.me/${ep.player.phone.replace(/[^0-9+]/g, "").replace(/^\+/, "")}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-green-500 text-sm shrink-0"
+          className="shrink-0 inline-flex"
           onClick={(e) => e.stopPropagation()}
+          aria-label={`WhatsApp ${ep.player.name}`}
         >
-          💬
+          <WhatsAppIcon />
         </a>
       )}
       {/* Skill level */}
@@ -661,6 +664,12 @@ export default function EventDetailPage() {
   // Replaces the previous drag-and-drop affordance which was unreliable
   // on iPad Safari and fought with horizontal scroll.
   const [movingScheduleId, setMovingScheduleId] = useState<string | null>(null);
+  // Per-category duration overrides panel state. Edits are buffered
+  // locally until the operator clicks Save (different from the general
+  // duration stepper which auto-saves on debounce).
+  const [catOverridesOpen, setCatOverridesOpen] = useState(false);
+  const [editedCatOverrides, setEditedCatOverrides] = useState<Record<string, number>>({});
+  const [savingCatOverrides, setSavingCatOverrides] = useState(false);
   // Game id currently showing the court-picker popup. Null = no popup open.
   const [courtPickerGameId, setCourtPickerGameId] = useState<string | null>(null);
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -927,7 +936,42 @@ export default function EventDetailPage() {
   };
 
   const deleteEvent = async () => {
-    if (!await confirmDialog({ title: "Delete Event", message: "This will delete the event and all matches. This cannot be undone.", confirmText: "Delete", danger: true })) return;
+    const participants = event?.players?.length ?? 0;
+    const matches = event?.matches?.length ?? 0;
+    // First confirm — always.
+    const okFirst = await confirmDialog({
+      title: "Delete Event",
+      message:
+        matches > 0
+          ? `This event has ${participants} participant${participants === 1 ? "" : "s"} and ${matches} match${matches === 1 ? "" : "es"} with recorded data.`
+          : participants > 0
+            ? `This event has ${participants} signed-up participant${participants === 1 ? "" : "s"}.`
+            : "Delete this event? This cannot be undone.",
+      confirmText: matches > 0 || participants > 0 ? "Continue" : "Delete",
+      danger: true,
+    });
+    if (!okFirst) return;
+    // Second confirm only when the event isn't empty. For events with
+    // recorded matches the second step requires typing DELETE — this
+    // tier of destruction loses results that aren't recoverable.
+    if (matches > 0) {
+      const okStrong = await confirmDialog({
+        title: "Permanently delete event + matches?",
+        message: `${matches} recorded match${matches === 1 ? "" : "es"} will be lost forever, including scores. Type DELETE to confirm.`,
+        confirmText: "Delete",
+        danger: true,
+        requireType: "DELETE",
+      });
+      if (!okStrong) return;
+    } else if (participants > 0) {
+      const okSecond = await confirmDialog({
+        title: "Remove sign-ups + delete?",
+        message: `${participants} sign-up${participants === 1 ? "" : "s"} will be removed.`,
+        confirmText: "Delete",
+        danger: true,
+      });
+      if (!okSecond) return;
+    }
     await fetch(`/api/events/${id}`, { method: "DELETE" });
     router.push("/events");
   };
@@ -1763,6 +1807,9 @@ export default function EventDetailPage() {
         status={heroStatus}
         notifications={heroUnread}
         user={{ initial: userInitial, href: "/profile" }}
+        onInvite={canManage && event.round ? () => setShareSheetOpen(true) : undefined}
+        inviteKind={canManage && event.round ? "E" : undefined}
+        inviteLabel={canManage && event.round ? "Share event invite" : undefined}
       />
     </div>
   );
@@ -4120,7 +4167,6 @@ export default function EventDetailPage() {
               .filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
               .map((ep) => (
               <SwipeablePlayerRow key={ep.player.id} ep={ep} canManage={canManage} hasMatches={hasMatches}
-                showContact={isAdmin || ep.player.id === userId}
                 isSelf={ep.player.id === userId}
                 skillLevel={editSkillSource === "manual" ? ep.skillLevel : undefined}
                 onSkillLevel={editSkillSource === "manual" ? (lvl) => setSkillLevel(ep.player.id, lvl) : undefined}
@@ -5044,47 +5090,130 @@ export default function EventDetailPage() {
       );
     };
 
+    // Categories actually used in this event's games. Filters the
+    // league's full category list down to what the operator can
+    // meaningfully override here.
+    const usedCategoryIds = new Set(games.map((g) => g.categoryId));
+    const availableCategories = cats.filter((c) => usedCategoryIds.has(c.id));
+    const savedCatOverrides: Record<string, number> = (event.categoryDurationOverrides || {}) as Record<string, number>;
+
+    const openCatPanel = () => {
+      setEditedCatOverrides({ ...savedCatOverrides });
+      setCatOverridesOpen(true);
+    };
+    const closeCatPanel = () => {
+      setCatOverridesOpen(false);
+    };
+    const saveCatOverrides = async () => {
+      setSavingCatOverrides(true);
+      try {
+        await fetch(`/api/events/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryDurationOverrides: editedCatOverrides }),
+        });
+        fetchEvent();
+        setCatOverridesOpen(false);
+      } catch { /* silent */ } finally {
+        setSavingCatOverrides(false);
+      }
+    };
+
     return (
       <div className={`${frameClass} p-3 space-y-2`}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="text-base font-bold">Schedule</div>
           {canEditSchedule && (
-            <div className="text-[11px] text-muted flex items-center gap-1.5">
-              <span>Per match</span>
-              {/* +/- stepper — taps adjust by 5 minutes. No number keypad
-                  on mobile so the user can't break the 5-min rule. */}
-              <div className="inline-flex items-center border border-border rounded-lg overflow-hidden bg-white">
-                <button
-                  type="button"
-                  onClick={() => setScheduleDurationMin((v) => Math.max(5, v - 5))}
-                  disabled={scheduleDurationMin <= 5}
-                  aria-label="Decrease by 5 minutes"
-                  className="w-7 h-7 flex items-center justify-center text-foreground hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                >–</button>
-                <span className="w-9 text-center text-sm font-semibold text-foreground tabular-nums select-none">{scheduleDurationMin}</span>
-                <button
-                  type="button"
-                  onClick={() => setScheduleDurationMin((v) => Math.min(180, v + 5))}
-                  disabled={scheduleDurationMin >= 180}
-                  aria-label="Increase by 5 minutes"
-                  className="w-7 h-7 flex items-center justify-center text-foreground hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                >+</button>
-              </div>
-              <span>min</span>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/recalc-schedule`, { method: "POST" });
-                    fetchEvent();
-                  } catch { /* silent */ }
-                }}
-                title="Re-run the auto-schedule for every court using current durations + start times. Anchored matches keep their times."
-                className="ml-2 text-[10px] text-action font-semibold hover:underline"
-              >Recalc now</button>
-            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/recalc-schedule`, { method: "POST" });
+                  fetchEvent();
+                } catch { /* silent */ }
+              }}
+              title="Re-run the auto-schedule for every court using current durations + start times. Anchored matches keep their times."
+              className="text-[11px] text-white font-semibold bg-action hover:brightness-110 rounded-md px-2.5 py-1"
+            >Recalc</button>
           )}
         </div>
+        {canEditSchedule && (
+          <div className="mt-3 flex items-end gap-6 flex-wrap">
+            <div>
+              <div className="text-[11px] text-muted mb-1">Per match (min)</div>
+              <DurationStepper
+                value={scheduleDurationMin}
+                onChange={(next) => { if (next != null) setScheduleDurationMin(next); }}
+                min={5}
+                max={180}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => (catOverridesOpen ? closeCatPanel() : openCatPanel())}
+                className="text-[11px] text-action font-semibold hover:underline inline-flex items-center gap-1"
+                aria-expanded={catOverridesOpen}
+              >
+                <span className={`inline-block transition-transform ${catOverridesOpen ? "rotate-90" : ""}`}>▸</span>
+                <span>Category overrides{Object.keys(savedCatOverrides).length > 0 ? ` (${Object.keys(savedCatOverrides).length})` : ""}</span>
+              </button>
+              {/* Collapsed view: just the categories that already have an override. */}
+              {!catOverridesOpen && Object.keys(savedCatOverrides).length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
+                  {availableCategories
+                    .filter((c) => savedCatOverrides[c.id] != null)
+                    .map((c) => (
+                      <span key={c.id}>{c.name}: <span className="text-foreground font-semibold tabular-nums">{savedCatOverrides[c.id]}</span></span>
+                    ))}
+                </div>
+              )}
+              {/* Expanded view: stepper per available category + Save. */}
+              {catOverridesOpen && (
+                <div className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center max-w-sm">
+                  {availableCategories.length === 0 && (
+                    <span className="col-span-2 text-[11px] text-muted italic">No categories used in this event yet.</span>
+                  )}
+                  {availableCategories.flatMap((c) => {
+                    const v = editedCatOverrides[c.id];
+                    return [
+                      <div key={`label-${c.id}`} className="text-[11px] text-foreground truncate">
+                        <span className="text-muted">↳ </span>{c.name}
+                      </div>,
+                      <DurationStepper
+                        key={`step-${c.id}`}
+                        value={v ?? null}
+                        compact
+                        label={`Override duration for ${c.name}`}
+                        onChange={(next) => {
+                          setEditedCatOverrides((prev) => {
+                            const out = { ...prev };
+                            if (next == null) delete out[c.id];
+                            else out[c.id] = next;
+                            return out;
+                          });
+                        }}
+                      />,
+                    ];
+                  })}
+                  <div className="col-span-2 flex justify-end gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={closeCatPanel}
+                      className="text-[11px] text-muted font-medium px-2 py-1 hover:text-foreground"
+                    >Cancel</button>
+                    <button
+                      type="button"
+                      onClick={saveCatOverrides}
+                      disabled={savingCatOverrides}
+                      className="text-[11px] text-white font-semibold bg-action hover:brightness-110 rounded-md px-3 py-1 disabled:opacity-50"
+                    >{savingCatOverrides ? "Saving…" : "Save"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {hasConflicts && (
           <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
@@ -6246,15 +6375,14 @@ export default function EventDetailPage() {
         );
       })()}
 
-      {/* Share invite card — visible to event managers + league organizers
-          on league events. Opens a sheet with a paste-into-group message
-          plus per-unclaimed-player personal claim links. */}
+      {/* ShareSheet for league events — opened from the header share
+          icon (top-right, next to the bell). No dedicated body card;
+          the icon in the header is the single, consistent affordance
+          for "share invite" across every entity page. */}
       {canManage && event.round && (() => {
         const allLeagueTeams = event.round!.league.teams || [];
         const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
         const playingTeams = allLeagueTeams.filter((t) => playingTeamIds.includes(t.id));
-        // Pool: both teams' rosters. Each player tagged with their team
-        // name so the sheet's per-row hint says which team.
         type TeamLite = { id: string; name: string; players: { playerId: string; player: { id: string; name: string; phone?: string | null; passwordHash?: string | null } }[] };
         const recipients: ShareRecipient[] = [];
         for (const t of playingTeams as TeamLite[]) {
@@ -6268,8 +6396,6 @@ export default function EventDetailPage() {
             });
           }
         }
-        // Build the message context. eventUrl is the public detail page —
-        // existing users land directly, prospects go through signup.
         const origin = typeof window !== "undefined" ? window.location.origin : "";
         const eventUrl = `${origin}/events/${event.id}`;
         const dateStr = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -6280,7 +6406,8 @@ export default function EventDetailPage() {
         const teamNames = playingTeams.map((t) => t.name).join(" vs ");
         const ctx: EventInviteContext = {
           inviterName: session?.user?.name || "Your captain",
-          eventName: teamNames ? `${teamNames} — ${roundLbl}` : roundLbl,
+          // Round is already on the contextLine — don't repeat it here.
+          eventName: teamNames || roundLbl,
           whenText,
           locationText,
           organizerText: ownerName || null,
@@ -6291,30 +6418,15 @@ export default function EventDetailPage() {
         const buildPersonal = (r: ShareRecipient, claimUrl: string) =>
           buildEventInvitePersonal(ctx, { name: r.name, claimUrl });
         return (
-          <>
-            <button
-              type="button"
-              onClick={() => setShareSheetOpen(true)}
-              className={`${frameClass} p-3 w-full flex items-center justify-between gap-2 hover:bg-gray-50`}
-            >
-              <div className="flex-1 min-w-0 text-left">
-                <div className="text-base font-bold text-foreground">Share invite</div>
-                <div className="text-[11px] text-muted">
-                  Group message + personal links for unclaimed players.
-                </div>
-              </div>
-              <span className="text-action text-lg">↗</span>
-            </button>
-            <ShareSheet
-              open={shareSheetOpen}
-              onClose={() => setShareSheetOpen(false)}
-              title="Invite to this match-day"
-              blurb="Copy the group message into your WhatsApp group(s). Send each unclaimed player a personal link so they can claim their account."
-              groupMessage={groupMessage}
-              recipients={recipients}
-              buildPersonal={buildPersonal}
-            />
-          </>
+          <ShareSheet
+            open={shareSheetOpen}
+            onClose={() => setShareSheetOpen(false)}
+            title="Invite to this match-day"
+            blurb="Copy the group message into your WhatsApp group(s). Send each unclaimed player a personal link so they can claim their account."
+            groupMessage={groupMessage}
+            recipients={recipients}
+            buildPersonal={buildPersonal}
+          />
         );
       })()}
 
