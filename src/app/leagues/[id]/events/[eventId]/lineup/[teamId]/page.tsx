@@ -1168,11 +1168,18 @@ export default function LineupBuilderPage() {
                       </div>
                     </div>
                   )}
+                  {/* Cross-team wants summary. Schema stores team1Wants
+                      and team2Wants independently; each team only ever
+                      toggles its OWN field. The displayed message
+                      clarifies who has ticked. */}
                   {!ourWants && !oppWants && (
-                    <p className="text-[11px] text-muted mt-1">Neither team has picked this slot yet.</p>
+                    <p className="text-[11px] text-muted mt-1">Neither team has ticked this slot yet.</p>
                   )}
                   {!ourWants && oppWants && (
-                    <p className="text-[11px] text-amber-700 mt-1">Opponent is up for this — tick to play.</p>
+                    <p className="text-[11px] text-amber-700 mt-1">{opponentTeam?.name ?? "Opponent"} wants to play this match — tick to confirm.</p>
+                  )}
+                  {ourWants && !oppWants && (
+                    <p className="text-[11px] text-muted mt-1">You ticked this slot. Waiting for {opponentTeam?.name ?? "the opponent"} to tick too.</p>
                   )}
                 </div>
               );
