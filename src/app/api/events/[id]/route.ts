@@ -37,7 +37,8 @@ export async function GET(
           league: {
             select: {
               id: true, name: true, shortName: true, season: true, createdById: true, deputyId: true,
-              categories: { select: { id: true, name: true, format: true, gender: true }, orderBy: { sortOrder: "asc" } },
+              matchDurationMin: true,
+              categories: { select: { id: true, name: true, format: true, gender: true, matchDurationMin: true }, orderBy: { sortOrder: "asc" } },
               // For visibility checks: anyone on a team in the league should
               // be able to see the league-attached event regardless of its status.
               teams: {
@@ -47,7 +48,7 @@ export async function GET(
                   // column can render roster names + the captain's
                   // "+ Add player" picker can list teammates who haven't
                   // signed up yet.
-                  players: { select: { playerId: true, player: { select: { id: true, name: true, photoUrl: true, gender: true, passwordHash: true } } } },
+                  players: { select: { playerId: true, player: { select: { id: true, name: true, photoUrl: true, gender: true, phone: true, passwordHash: true } } } },
                 },
               },
               helpers: { select: { playerId: true } },
@@ -81,6 +82,7 @@ export async function GET(
           courtNum: true,
           displayOrder: true,
           winnerId: true,
+          scheduleAnchored: true,
           gamePlayers: { select: { playerId: true, team: true } },
         },
       },

@@ -19,6 +19,8 @@ import {
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
+import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
+import { buildEventInviteGroup, buildEventInvitePersonal, type EventInviteContext } from "@/lib/inviteShare";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -642,8 +644,14 @@ export default function EventDetailPage() {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [editOpenSignup, setEditOpenSignup] = useState(true);
   const [editVisibility, setEditVisibility] = useState("visible");
-  // Schedule view — default per-match duration used by the auto-fill
-  // button on the league-event Matches tab. User-adjustable.
+  // Share-invite sheet (event sign-up scenario). Holds the open flag —
+  // recipient pool + message text are derived from `event` at render
+  // time so they always reflect current data.
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  // Schedule view — effective default match duration. Initialized from
+  // the persisted cascade (event override → round override → league
+  // default → 45). User edits write back to Event.matchDurationMin,
+  // which triggers the server-side auto-recalc of every court.
   const [scheduleDurationMin, setScheduleDurationMin] = useState(45);
   // Drag-and-drop state for the league schedule. `scheduleDragId` is the
   // game being dragged; `scheduleDragOverCol` is the court key (1..N or
@@ -729,6 +737,44 @@ export default function EventDetailPage() {
 
   // fetchEvent = trigger SWR revalidation (used by existing code)
   const fetchEvent = useCallback(() => { swrEvent.mutate(); }, [swrEvent]);
+
+  // Sync the local duration slider from the persisted cascade whenever
+  // we load an event. Inheritance: event override → round override →
+  // league default → built-in 45. Refs guard against re-syncing once
+  // the user starts editing locally.
+  const durationLastServerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const evt = swrEvent.data as Event | undefined;
+    if (!evt) return;
+    const effective = evt.matchDurationMin
+      ?? evt.round?.matchDurationMin
+      ?? evt.round?.league?.matchDurationMin
+      ?? 45;
+    if (durationLastServerRef.current !== effective) {
+      durationLastServerRef.current = effective;
+      setScheduleDurationMin(effective);
+    }
+  }, [swrEvent.data]);
+  // Debounced save: when the local duration diverges from what we last
+  // saw from the server, PATCH the event after 600ms of stillness.
+  // PATCH triggers recalcAllCourtsAndPersist server-side; we then
+  // revalidate to pick up the new scheduledAt values.
+  useEffect(() => {
+    if (durationLastServerRef.current === null) return;
+    if (durationLastServerRef.current === scheduleDurationMin) return;
+    const t = setTimeout(async () => {
+      try {
+        await fetch(`/api/events/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matchDurationMin: scheduleDurationMin }),
+        });
+        durationLastServerRef.current = scheduleDurationMin;
+        fetchEvent();
+      } catch { /* silent — user can adjust again if it didn't take */ }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [scheduleDurationMin, id, fetchEvent]);
 
   // Re-open the Add Players picker when returning from "+ New App
   // User". The API has already attached the new player; we just need
@@ -4376,6 +4422,32 @@ export default function EventDetailPage() {
     if (baseGames.length === 0) return null;
 
     const numCourts = event.numCourts || 2;
+    // Court start times: ISO string per court number. Recalc on the
+    // server keys off these to compute scheduledAt for every match.
+    const courtStartTimes: Record<string, string> = (event.courtStartTimes || {}) as Record<string, string>;
+    const writeCourtStart = async (n: number, iso: string | null) => {
+      const next: Record<string, string> = { ...courtStartTimes };
+      if (iso) next[String(n)] = iso;
+      else delete next[String(n)];
+      await fetch(`/api/events/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courtStartTimes: next }),
+      });
+      fetchEvent();
+    };
+    const copyCourt1StartToAll = async () => {
+      const c1 = courtStartTimes["1"];
+      if (!c1) return;
+      const next: Record<string, string> = { ...courtStartTimes };
+      for (let i = 2; i <= numCourts; i++) next[String(i)] = c1;
+      await fetch(`/api/events/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courtStartTimes: next }),
+      });
+      fetchEvent();
+    };
     const cats = event.round.league.categories || [];
     const catById = new Map(cats.map((c) => [c.id, c]));
     const catName = (cid: string) => cats.find((c) => c.id === cid)?.name ?? "Category";
@@ -4842,6 +4914,22 @@ export default function EventDetailPage() {
             )}
             {canEditSchedule && hhmm && (
               <>
+                {g.scheduleAnchored && (
+                  <button
+                    type="button"
+                    title="Anchored — this start time is fixed and the auto-scheduler chains the next matches forward from here. Click to release the anchor and let this match's time be auto-derived."
+                    onClick={async () => {
+                      await fetch(`/api/leagues/${event.round!.league.id}/events/${id}/games/${g.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ scheduleAnchored: false }),
+                      });
+                      fetchEvent();
+                    }}
+                    className="text-[10px] px-1 hover:opacity-70"
+                    aria-label="Anchor (click to release)"
+                  >📌</button>
+                )}
                 <button
                   type="button"
                   title="Clear time"
@@ -5030,14 +5118,72 @@ export default function EventDetailPage() {
               {buckets["unassigned"].map(renderGameRow)}
             </div>
           )}
-          {Array.from({ length: numCourts }, (_, i) => i + 1)
-            .filter((n) => (buckets[String(n)] || []).length > 0)
-            .map((n) => (
+          {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => {
+            const startIso = courtStartTimes[String(n)];
+            const startD = startIso ? new Date(startIso) : null;
+            const startHh = startD ? startD.getHours() : null;
+            const startMm = startD ? startD.getMinutes() : null;
+            const HOURS = Array.from({ length: 24 }, (_, i) => i);
+            const FIVE_MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+            const setStart = (hh: number | null, mm: number | null) => {
+              if (hh == null || mm == null) {
+                writeCourtStart(n, null);
+                return;
+              }
+              const base = event.date ? new Date(event.date) : new Date();
+              base.setHours(hh, mm, 0, 0);
+              writeCourtStart(n, base.toISOString());
+            };
+            const colGames = buckets[String(n)] || [];
+            return (
               <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Court {n}</div>
-                {(buckets[String(n)] || []).map(renderGameRow)}
+                <div className="flex items-center justify-between gap-1 px-1">
+                  <span className="text-[10px] uppercase tracking-wider text-muted font-bold">Court {n}</span>
+                  {canEditSchedule && n === 1 && numCourts > 1 && startIso && (
+                    <button
+                      type="button"
+                      onClick={copyCourt1StartToAll}
+                      title="Apply Court 1 start time to all other courts"
+                      aria-label="Copy Court 1 start to all courts"
+                      className="text-[10px] text-action font-semibold hover:underline"
+                    >→ all</button>
+                  )}
+                </div>
+                {canEditSchedule && (
+                  <div className="flex items-center gap-0.5 px-1 text-[11px] tabular-nums">
+                    <span className="text-muted text-[10px] mr-1">starts</span>
+                    <select
+                      value={startHh == null ? "" : String(startHh)}
+                      onChange={(e) => setStart(parseInt(e.target.value, 10), startMm ?? 0)}
+                      className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px]"
+                    >
+                      <option value="">--</option>
+                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
+                    </select>
+                    <span>:</span>
+                    <select
+                      value={startMm == null ? "" : String(startMm)}
+                      onChange={(e) => setStart(startHh ?? 0, parseInt(e.target.value, 10))}
+                      disabled={startHh == null}
+                      className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px] disabled:bg-gray-100"
+                    >
+                      <option value="">--</option>
+                      {FIVE_MINS.map((m) => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+                    </select>
+                    {startIso && (
+                      <button type="button" onClick={() => writeCourtStart(n, null)} className="ml-1 text-muted hover:text-foreground text-[11px]" title="Clear start time">✕</button>
+                    )}
+                  </div>
+                )}
+                {!canEditSchedule && startIso && (
+                  <div className="px-1 text-[11px] text-muted">starts {String(startHh).padStart(2, "0")}:{String(startMm).padStart(2, "0")}</div>
+                )}
+                {colGames.length > 0 ? colGames.map(renderGameRow) : (
+                  <div className="text-[10px] text-muted/60 italic px-1">no matches yet</div>
+                )}
               </div>
-            ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -6084,6 +6230,78 @@ export default function EventDetailPage() {
               </Link>
             )}
           </div>
+        );
+      })()}
+
+      {/* Share invite card — visible to event managers + league organizers
+          on league events. Opens a sheet with a paste-into-group message
+          plus per-unclaimed-player personal claim links. */}
+      {canManage && event.round && (() => {
+        const allLeagueTeams = event.round!.league.teams || [];
+        const playingTeamIds = (event.leagueTeams || []).map((et) => et.teamId);
+        const playingTeams = allLeagueTeams.filter((t) => playingTeamIds.includes(t.id));
+        // Pool: both teams' rosters. Each player tagged with their team
+        // name so the sheet's per-row hint says which team.
+        type TeamLite = { id: string; name: string; players: { playerId: string; player: { id: string; name: string; phone?: string | null; passwordHash?: string | null } }[] };
+        const recipients: ShareRecipient[] = [];
+        for (const t of playingTeams as TeamLite[]) {
+          for (const tp of t.players) {
+            recipients.push({
+              id: tp.playerId,
+              name: tp.player.name,
+              phone: tp.player.phone ?? null,
+              hasAccount: !!tp.player.passwordHash,
+              hint: t.name,
+            });
+          }
+        }
+        // Build the message context. eventUrl is the public detail page —
+        // existing users land directly, prospects go through signup.
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const eventUrl = `${origin}/events/${event.id}`;
+        const dateStr = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+        const timeStr = new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+        const whenText = `${dateStr} · ${timeStr}`;
+        const locationText = event.club?.name || null;
+        const roundLbl = event.round!.name || `Round ${event.round!.roundNumber}`;
+        const teamNames = playingTeams.map((t) => t.name).join(" vs ");
+        const ctx: EventInviteContext = {
+          inviterName: session?.user?.name || "Your captain",
+          eventName: teamNames ? `${teamNames} — ${roundLbl}` : roundLbl,
+          whenText,
+          locationText,
+          organizerText: ownerName || null,
+          eventUrl,
+          contextLine: `${leagueShortName(event.round!.league)} · ${roundLbl}`,
+        };
+        const groupMessage = buildEventInviteGroup(ctx);
+        const buildPersonal = (r: ShareRecipient, claimUrl: string) =>
+          buildEventInvitePersonal(ctx, { name: r.name, claimUrl });
+        return (
+          <>
+            <button
+              type="button"
+              onClick={() => setShareSheetOpen(true)}
+              className={`${frameClass} p-3 w-full flex items-center justify-between gap-2 hover:bg-gray-50`}
+            >
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-base font-bold text-foreground">Share invite</div>
+                <div className="text-[11px] text-muted">
+                  Group message + personal links for unclaimed players.
+                </div>
+              </div>
+              <span className="text-action text-lg">↗</span>
+            </button>
+            <ShareSheet
+              open={shareSheetOpen}
+              onClose={() => setShareSheetOpen(false)}
+              title="Invite to this match-day"
+              blurb="Copy the group message into your WhatsApp group(s). Send each unclaimed player a personal link so they can claim their account."
+              groupMessage={groupMessage}
+              recipients={recipients}
+              buildPersonal={buildPersonal}
+            />
+          </>
         );
       })()}
 
