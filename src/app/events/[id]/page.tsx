@@ -711,6 +711,13 @@ export default function EventDetailPage() {
     // entered times stay visible until SWR mutate replaces them.
     setRecalcInFlight(0);
   }, []);
+  // Auto-arrange (deterministic schedule planner) state.
+  // policy: how to order the kind buckets. Friendly is always last.
+  // preview: per-gameId override map. When non-null the schedule grid
+  //   renders the proposed assignment, with Approve/Cancel banner.
+  const [arrangePolicy, setArrangePolicy] = useState<"principal-first" | "league-first">("principal-first");
+  const [arrangePreview, setArrangePreview] = useState<Record<string, { courtNum: number; displayOrder: number }> | null>(null);
+  const [arrangeApplying, setArrangeApplying] = useState(false);
   // Game id currently showing the court-picker popup. Null = no popup open.
   const [courtPickerGameId, setCourtPickerGameId] = useState<string | null>(null);
   const [showAddMatch, setShowAddMatch] = useState(false);
@@ -4720,6 +4727,12 @@ export default function EventDetailPage() {
 
     // Apply the shared Matches-tab filters to the schedule too: kind,
     // category gender, category format, and player-name search.
+    // Auto-arrange preview overlay: if active, swap each affected
+    // game's courtNum/displayOrder so the grid renders the proposal.
+    // We zero out scheduledAt for preview-touched rows so the
+    // approximate-time recompute below (against the new court order)
+    // takes effect — the server-side recalc on Approve will set the
+    // real times.
     const games = baseGames.filter((g) => {
       if (matchKindFilter.size > 0) {
         const isPrincipal = g.kind === "principal";
@@ -4741,6 +4754,15 @@ export default function EventDetailPage() {
         if (!hit) return false;
       }
       return true;
+    }).map((g) => {
+      if (!arrangePreview) return g;
+      const ov = arrangePreview[g.id];
+      if (!ov) return g;
+      // Drop scheduledAt so the approximate-time recompute below
+      // doesn't anchor against the OLD time when re-ordering for
+      // preview. Anchored matches were excluded from compute so they
+      // won't appear in the override map.
+      return { ...g, courtNum: ov.courtNum, displayOrder: ov.displayOrder, scheduledAt: null };
     });
 
     type G = NonNullable<typeof event.leagueGames>[number];
@@ -4759,6 +4781,166 @@ export default function EventDetailPage() {
       if (ca !== cb) return ca - cb;
       return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
     });
+
+    // ── Auto-arrange heuristic (deterministic schedule planner) ─────
+    // Greedy: order non-anchored real matches by (kind per policy →
+    // category → slot). For each, pick the court where it can start
+    // soonest without creating a player overlap/rushed conflict, with
+    // a same-category bonus so a court tends to host the same
+    // discipline back-to-back. Anchored matches are fixed points that
+    // the greedy walks around.
+    const computeArrangement = (
+      policy: "principal-first" | "league-first",
+    ): { gameId: string; courtNum: number; displayOrder: number }[] => {
+      const BUFFER_MS = 10 * 60_000;
+      const durMs = scheduleDurationMin * 60_000;
+      const kindIdx = (k: string | undefined) => {
+        if (k === "extra") return 99; // Friendly always last
+        if (policy === "principal-first") return k === "principal" ? 0 : 1;
+        return k === "league" ? 0 : 1;
+      };
+      const real = baseGames.filter((g) => !g.winnerId && !g.scheduleAnchored);
+      const sorted = real.slice().sort((a, b) => {
+        const ka = kindIdx(a.kind);
+        const kb = kindIdx(b.kind);
+        if (ka !== kb) return ka - kb;
+        const ca = catSort.get(a.categoryId) ?? 999;
+        const cb = catSort.get(b.categoryId) ?? 999;
+        if (ca !== cb) return ca - cb;
+        return (a.slotNumber ?? 0) - (b.slotNumber ?? 0);
+      });
+      // Per-court timeline pre-seeded with anchored matches as fixed
+      // entries. Each entry holds startMs + categoryId so the same-
+      // category bonus and projected-next-start work uniformly.
+      type Slot = { gameId: string; startMs: number; categoryId: string };
+      const timelines: Record<number, Slot[]> = {};
+      for (let c = 1; c <= numCourts; c++) timelines[c] = [];
+      const playerLastEnd = new Map<string, number>();
+      for (const g of baseGames) {
+        if (g.scheduleAnchored && g.scheduledAt && g.courtNum != null) {
+          const s = new Date(g.scheduledAt).getTime();
+          timelines[g.courtNum]?.push({ gameId: g.id, startMs: s, categoryId: g.categoryId });
+          for (const gp of g.gamePlayers) {
+            const prev = playerLastEnd.get(gp.playerId) ?? -Infinity;
+            if (s + durMs > prev) playerLastEnd.set(gp.playerId, s + durMs);
+          }
+        }
+      }
+      const courtStartMs = (c: number): number => {
+        const iso = courtStartTimes[String(c)];
+        if (iso) return new Date(iso).getTime();
+        return event.date ? new Date(event.date).getTime() : Date.now();
+      };
+      for (const g of sorted) {
+        let bestCourt = 1;
+        let bestScore = Infinity;
+        let bestStart = 0;
+        for (let c = 1; c <= numCourts; c++) {
+          const tl = timelines[c]!.slice().sort((a, b) => a.startMs - b.startMs);
+          const lastEnd = tl.length > 0 ? tl[tl.length - 1]!.startMs + durMs : courtStartMs(c);
+          const startMs = Math.max(lastEnd, courtStartMs(c));
+          let conflict = 0;
+          for (const gp of g.gamePlayers) {
+            const pe = playerLastEnd.get(gp.playerId) ?? -Infinity;
+            const gap = startMs - pe;
+            if (gap < 0) conflict += 1000;
+            else if (gap < BUFFER_MS) conflict += 100;
+          }
+          const sameCat = tl.filter((t) => t.categoryId === g.categoryId).length;
+          const loadMins = (startMs - courtStartMs(c)) / 60_000;
+          // Score: conflicts dominate, then category clustering (negative
+          // bonus pulls score down), with a light load-balance tiebreak.
+          const score = conflict - sameCat * 10 + loadMins * 0.1;
+          if (score < bestScore) {
+            bestScore = score;
+            bestCourt = c;
+            bestStart = startMs;
+          }
+        }
+        timelines[bestCourt]!.push({ gameId: g.id, startMs: bestStart, categoryId: g.categoryId });
+        for (const gp of g.gamePlayers) {
+          const prev = playerLastEnd.get(gp.playerId) ?? -Infinity;
+          if (bestStart + durMs > prev) playerLastEnd.set(gp.playerId, bestStart + durMs);
+        }
+      }
+      const assignments: { gameId: string; courtNum: number; displayOrder: number }[] = [];
+      for (let c = 1; c <= numCourts; c++) {
+        const tl = timelines[c]!.slice().sort((a, b) => a.startMs - b.startMs);
+        let order = 1;
+        for (const entry of tl) {
+          const orig = baseGames.find((x) => x.id === entry.gameId);
+          if (orig?.scheduleAnchored) continue;
+          assignments.push({ gameId: entry.gameId, courtNum: c, displayOrder: order++ });
+        }
+      }
+      return assignments;
+    };
+    const runArrange = () => {
+      const assignments = computeArrangement(arrangePolicy);
+      const map: Record<string, { courtNum: number; displayOrder: number }> = {};
+      for (const a of assignments) map[a.gameId] = { courtNum: a.courtNum, displayOrder: a.displayOrder };
+      setArrangePreview(map);
+    };
+    const cancelArrange = () => setArrangePreview(null);
+    const approveArrange = async () => {
+      if (!arrangePreview || !event.round) return;
+      const assignments = Object.entries(arrangePreview).map(([gameId, ov]) => ({
+        gameId, courtNum: ov.courtNum, displayOrder: ov.displayOrder,
+      }));
+      setArrangeApplying(true);
+      setRecalcInFlight((c) => c + 1);
+      try {
+        await fetch(`/api/leagues/${event.round.league.id}/events/${id}/games/bulk-arrange`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assignments }),
+        });
+        await swrEvent.mutate();
+        setArrangePreview(null);
+      } finally {
+        setArrangeApplying(false);
+        setRecalcInFlight((c) => c - 1);
+      }
+    };
+
+    // Preview-mode time projection: stamp approximate scheduledAt for
+    // every preview-affected match so both buckets and conflict
+    // detection reflect the proposal. Walk each court in displayOrder,
+    // advancing by the default scheduleDurationMin. Per-cat overrides
+    // get applied precisely on the server when the operator Approves.
+    if (arrangePreview) {
+      const previewDurMs = scheduleDurationMin * 60_000;
+      // Index games by id so we can mutate via replacement.
+      const byId = new Map(games.map((g) => [g.id, g] as const));
+      for (let n = 1; n <= numCourts; n++) {
+        const startIso = courtStartTimes[String(n)];
+        if (!startIso) continue;
+        const col = games
+          .filter((g) => g.courtNum === n)
+          .slice()
+          .sort((a, b) => {
+            const oa = a.displayOrder ?? Number.POSITIVE_INFINITY;
+            const ob = b.displayOrder ?? Number.POSITIVE_INFINITY;
+            return oa - ob;
+          });
+        let cursor = new Date(startIso).getTime();
+        for (const g of col) {
+          if (g.scheduleAnchored && g.scheduledAt) {
+            cursor = new Date(g.scheduledAt).getTime();
+          } else if (g.scheduledAt == null) {
+            byId.set(g.id, { ...g, scheduledAt: new Date(cursor).toISOString() } as G);
+          } else {
+            cursor = new Date(g.scheduledAt).getTime();
+          }
+          cursor += previewDurMs;
+        }
+      }
+      // Reflect projection back into the array (replace by id).
+      for (let i = 0; i < games.length; i++) {
+        const next = byId.get(games[i]!.id);
+        if (next && next !== games[i]) games[i] = next;
+      }
+    }
 
     const buckets: Record<string, G[]> = { unassigned: [] };
     for (let n = 1; n <= numCourts; n++) buckets[String(n)] = [];
@@ -5481,6 +5663,48 @@ export default function EventDetailPage() {
               )}
             </div>
           </div>
+        )}
+        {canEditSchedule && (
+          arrangePreview ? (
+            <div className="mb-2 rounded-xl border border-action/40 bg-action/5 p-2.5 flex items-center justify-between gap-2 text-[12px]">
+              <span className="font-semibold text-action">
+                Auto-arrange preview — Friendly matches always last. Review the schedule below.
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={cancelArrange}
+                  disabled={arrangeApplying}
+                  className="text-[11px] font-medium px-2 py-1 rounded-md text-muted hover:text-foreground hover:bg-white disabled:opacity-50"
+                >Cancel</button>
+                <button
+                  type="button"
+                  onClick={approveArrange}
+                  disabled={arrangeApplying}
+                  className="text-[11px] font-semibold bg-action text-white px-3 py-1 rounded-md hover:brightness-110 disabled:opacity-50"
+                >{arrangeApplying ? "Applying…" : "Approve"}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-2 rounded-xl border border-border bg-white p-2.5 flex items-center justify-between gap-2 text-[12px]">
+              <span className="font-semibold">Auto-arrange schedule</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={arrangePolicy}
+                  onChange={(e) => setArrangePolicy(e.target.value as "principal-first" | "league-first")}
+                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white"
+                >
+                  <option value="principal-first">Principal → League → Friendly</option>
+                  <option value="league-first">League → Principal → Friendly</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={runArrange}
+                  className="text-[11px] font-semibold border border-action text-action bg-white hover:bg-action/5 rounded-md px-3 py-1"
+                >Run</button>
+              </div>
+            </div>
+          )
         )}
         {recalcInFlight > 0 && (
           <div className="mb-2 rounded-xl border border-blue-200 bg-blue-50 p-2.5 flex items-center gap-2 text-[12px] text-blue-900">
