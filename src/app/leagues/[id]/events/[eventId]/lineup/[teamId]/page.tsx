@@ -422,14 +422,25 @@ export default function LineupBuilderPage() {
         // replaced by the server's row — we keep keys stable by category+slot.
         const t1 = team!.id.localeCompare(opponentTeam?.id || "") < 0 ? team!.id : (opponentTeam?.id || "");
         const t2 = t1 === team!.id ? (opponentTeam?.id || "") : team!.id;
-        // Mirror the server: first slot in a category becomes principal.
+        // Mirror the server's kind-selection logic so the optimistic
+        // UI doesn't flicker:
+        //   1. First slot in a category → principal.
+        //   2. Subsequent slots in the same category → league.
+        //   3. If the event-wide cap on principal+league is already
+        //      reached, fall back to "extra" (Friendly) — Friendly
+        //      doesn't count toward the cap.
         const hasPrincipal = prev.some((x) => x.categoryId === categoryId && x.kind === "principal");
+        let kind: "principal" | "league" | "extra" = hasPrincipal ? "league" : "principal";
+        if (maxMatchesPerEvent !== null) {
+          const countingNow = prev.filter((x) => x.kind === "principal" || x.kind === "league").length;
+          if (countingNow >= maxMatchesPerEvent) kind = "extra";
+        }
         const synthetic: Game = {
           id: `pending-${categoryId}-${slotNumber}`,
           categoryId, slotNumber,
           team1Id: t1, team2Id: t2,
           team1Wants: myAlphabeticalSide === 1, team2Wants: myAlphabeticalSide === 2,
-          kind: hasPrincipal ? "league" : "principal",
+          kind,
           winnerId: null, gamePlayers: [],
         };
         return [...prev, synthetic];
