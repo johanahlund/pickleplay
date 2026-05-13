@@ -5314,23 +5314,62 @@ export default function EventDetailPage() {
           ? "border-amber-400 ring-1 ring-amber-200"
           : "border-border";
       const rowPairKeys = pairKeysByGame.get(g.id) || [];
+      // Bucket each pair by the relative direction of the OTHER match,
+      // so the colored dot points the operator toward the conflicting
+      // card: top/bottom for same-court order; left/right for an
+      // adjacent court.
+      const dotsByEdge: Record<"top" | "bottom" | "left" | "right", string[]> = {
+        top: [], bottom: [], left: [], right: [],
+      };
+      for (const k of rowPairKeys) {
+        const [a, b] = k.split("|");
+        const otherId = a === g.id ? b : a;
+        if (!otherId) continue;
+        const other = games.find((x) => x.id === otherId);
+        if (!other) continue;
+        let edge: "top" | "bottom" | "left" | "right";
+        if (other.courtNum != null && g.courtNum != null && other.courtNum !== g.courtNum) {
+          edge = other.courtNum < g.courtNum ? "left" : "right";
+        } else {
+          const myOrd = g.displayOrder ?? Number.POSITIVE_INFINITY;
+          const otOrd = other.displayOrder ?? Number.POSITIVE_INFINITY;
+          edge = otOrd < myOrd ? "top" : "bottom";
+        }
+        dotsByEdge[edge].push(k);
+      }
+      const edgeClass: Record<"top" | "bottom" | "left" | "right", string> = {
+        top: "absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2",
+        bottom: "absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2",
+        left: "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2",
+        right: "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2",
+      };
+      const flexDir: Record<"top" | "bottom" | "left" | "right", string> = {
+        top: "flex-row gap-0.5",
+        bottom: "flex-row gap-0.5",
+        left: "flex-col gap-0.5",
+        right: "flex-col gap-0.5",
+      };
       return (
         <div key={g.id} className={`relative ${conflictBorder} border rounded-lg p-2 pl-7 space-y-1.5 bg-white`}>
-        {rowPairKeys.length > 0 && (
-          <div className="absolute top-1 right-1 flex gap-0.5 z-10">
-            {rowPairKeys.map((k) => {
-              const color = pairColorByKey.get(k);
-              return (
-                <span
-                  key={k}
-                  title="Conflict pair — same colored dot on the other match"
-                  className={`inline-block w-2 h-2 rounded-full ring-2 ${color?.dot ?? "bg-amber-400"} ${color?.ring ?? "ring-amber-200"}`}
-                  aria-hidden
-                />
-              );
-            })}
-          </div>
-        )}
+        {(Object.keys(dotsByEdge) as Array<keyof typeof dotsByEdge>).map((edge) => {
+          const keys = dotsByEdge[edge];
+          if (keys.length === 0) return null;
+          return (
+            <div key={edge} className={`${edgeClass[edge]} flex ${flexDir[edge]} z-10`}>
+              {keys.map((k) => {
+                const color = pairColorByKey.get(k);
+                return (
+                  <span
+                    key={k}
+                    title="Conflict pair — same colored dot on the other match"
+                    className={`block w-2.5 h-2.5 rounded-full ring-2 ${color?.dot ?? "bg-amber-400"} ${color?.ring ?? "ring-amber-200"}`}
+                    aria-hidden
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
         {canEditSchedule && (
           <button
             type="button"
@@ -5869,6 +5908,8 @@ export default function EventDetailPage() {
                 >{f.label}</button>
               );
             })}
+          </div>
+          <div className="flex gap-1 flex-wrap items-center">
             {/* Gender pills */}
             {([
               { v: "M" as const, label: "♂" },
