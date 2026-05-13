@@ -5443,7 +5443,12 @@ export default function EventDetailPage() {
         return (
           <div key={g.id} className="relative border-2 border-action rounded-lg p-1.5 bg-white shadow-sm ring-2 ring-action/20">
             <div className="text-[10px] text-center text-muted truncate px-1 mb-1">
-              {catName(g.categoryId)} · Match {g.slotNumber ?? "?"} · {teamShort(g.team1Id)} vs {teamShort(g.team2Id)}
+              {catName(g.categoryId)} · Match {g.slotNumber ?? "?"} · {(() => {
+                const homeIsTeam2 = event.hostTeamId != null && g.team2Id === event.hostTeamId;
+                const topId = homeIsTeam2 ? g.team2Id : g.team1Id;
+                const botId = homeIsTeam2 ? g.team1Id : g.team2Id;
+                return `${teamShort(topId)} vs ${teamShort(botId)}`;
+              })()}
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               <div />
@@ -5665,34 +5670,45 @@ export default function EventDetailPage() {
           <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
             {catName(g.categoryId)} <span className="text-muted/70">· Match {g.slotNumber ?? "?"}</span>
           </div>
-          {/* Two team rows. Always rendered so each card has the same
-              shape, leaving a fixed-width slot on the right for the
-              eventual score. Pre-reveal we show just the team name;
-              post-reveal we add the player names below. */}
-          <div className="space-y-1">
-            <div className="flex items-baseline gap-1.5">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-foreground truncate">{teamShort(g.team1Id)}</div>
-                {sides.team1.length > 0 && (
-                  <div className="text-[10px] text-muted leading-tight truncate">{sides.team1.join(", ")}</div>
-                )}
+          {/* Two team rows. Home team is always on top — the canonical
+              team1Id stored on each leagueGame is alphabetical, so we
+              swap when the away team happens to be team1. Score +
+              player list move with the team. */}
+          {(() => {
+            const homeIsTeam2 = event.hostTeamId != null && g.team2Id === event.hostTeamId;
+            const topId = homeIsTeam2 ? g.team2Id : g.team1Id;
+            const botId = homeIsTeam2 ? g.team1Id : g.team2Id;
+            const topPlayers = homeIsTeam2 ? sides.team2 : sides.team1;
+            const botPlayers = homeIsTeam2 ? sides.team1 : sides.team2;
+            const topScore = homeIsTeam2 ? t2Score : t1Score;
+            const botScore = homeIsTeam2 ? t1Score : t2Score;
+            return (
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-foreground truncate">{teamShort(topId)}</div>
+                    {topPlayers.length > 0 && (
+                      <div className="text-[10px] text-muted leading-tight truncate">{topPlayers.join(", ")}</div>
+                    )}
+                  </div>
+                  <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
+                    {topScore != null ? topScore : <span className="text-muted/40 font-normal">—</span>}
+                  </div>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-foreground truncate">{teamShort(botId)}</div>
+                    {botPlayers.length > 0 && (
+                      <div className="text-[10px] text-muted leading-tight truncate">{botPlayers.join(", ")}</div>
+                    )}
+                  </div>
+                  <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
+                    {botScore != null ? botScore : <span className="text-muted/40 font-normal">—</span>}
+                  </div>
+                </div>
               </div>
-              <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
-                {t1Score != null ? t1Score : <span className="text-muted/40 font-normal">—</span>}
-              </div>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-foreground truncate">{teamShort(g.team2Id)}</div>
-                {sides.team2.length > 0 && (
-                  <div className="text-[10px] text-muted leading-tight truncate">{sides.team2.join(", ")}</div>
-                )}
-              </div>
-              <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
-                {t2Score != null ? t2Score : <span className="text-muted/40 font-normal">—</span>}
-              </div>
-            </div>
-          </div>
+            );
+          })()}
           {canEditSchedule && (
             <div className="relative">
               <button
