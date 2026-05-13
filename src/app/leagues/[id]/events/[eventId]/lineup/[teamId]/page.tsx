@@ -858,6 +858,12 @@ export default function LineupBuilderPage() {
         // an event. Once a principal exists, the toggle for other slots
         // is blocked (host can demote it first to flip another).
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
+        // Count of "real" matches in this category — at least one team
+        // has expressed intent. Pre-create placeholder rows (both
+        // wants=false) don't count as matches yet.
+        const matchCount = games.filter((g) =>
+          g.categoryId === cat.id && (g.team1Wants || g.team2Wants),
+        ).length;
 
         return (
           <details key={cat.id} data-category-card className={`${frameClass} shadow-sm border-l-4 border-l-action/60 group overflow-hidden`}>
@@ -867,7 +873,7 @@ export default function LineupBuilderPage() {
                 <div className="text-base font-bold">{cat.name}</div>
               </div>
               <div className="flex items-baseline gap-2">
-                <div className="text-[11px] text-muted">{cat.format} · max {max}</div>
+                <div className="text-[11px] text-muted">{cat.format} · {matchCount} of max {max}</div>
                 {canAddMore && !ourLocked && (
                   <button
                     type="button"
