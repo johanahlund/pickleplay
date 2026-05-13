@@ -4440,34 +4440,51 @@ export default function EventDetailPage() {
     for (const k of Object.keys(buckets)) buckets[k] = sortGames(buckets[k]);
 
     // ── Scheduling conflict detection ───────────────────────────────
-    // Two flavors, evaluated per-player against the schedule:
-    //   • overlap — same player has two scheduled games whose time
-    //     windows [start, start + duration) overlap. Impossible to play.
-    //   • rushed  — different courts, positive gap < BUFFER_MIN. Player
-    //     has to sprint between courts; flag as a soft warning.
-    // Per-match duration is DERIVED from the schedule itself: the gap
-    // to the next match on the SAME court. That implicitly captures
-    // warmup time, since the captain set the next start accordingly.
-    // The last match on each court has no next, so it falls back to
-    // the operator-set `scheduleDurationMin` default.
+    // Models a realistic timeline that accounts for two things real
+    // play-days always have:
+    //   1. Matches run long. We pad each match's scheduled duration
+    //      by DELAY_PCT (default 70%) — generous on purpose, matches
+    //      go to long deuces, players talk, etc.
+    //   2. Delays stack. If the 14:00 match on Court 1 runs to 15:00,
+    //      the 14:30 match on the same court can't start until 15:00.
+    //      We propagate forward: each match's realistic start is
+    //      max(scheduled, previous-on-this-court realistic end).
+    //
+    // Per-match base duration is derived from the gap to the next
+    // match on the SAME court (implicitly includes warmup time, since
+    // the captain picked the next start accordingly). The last match
+    // on each court falls back to the operator-set scheduleDurationMin
+    // default.
+    //
+    // Conflicts are then evaluated per-player against the realistic
+    // windows:
+    //   • overlap — projected windows on different courts overlap.
+    //   • rushed  — different courts, positive gap < BUFFER_MIN.
+    // Same-court same-player consecutive matches can't overlap by
+    // construction (b.realStart ≥ a.realEnd), so they're skipped.
     const BUFFER_MIN = 10;
+    const DELAY_PCT = 0.7;
     const fallbackDurationMs = scheduleDurationMin * 60_000;
     const bufferMs = BUFFER_MIN * 60_000;
-    const durationByGame = new Map<string, number>();
+    const windowByGame = new Map<string, { realStart: number; realEnd: number; scheduledStart: number }>();
     for (let courtNum = 1; courtNum <= numCourts; courtNum++) {
       const col = (buckets[String(courtNum)] || [])
         .filter((g) => g.scheduledAt)
         .slice()
         .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
+      let prevRealEnd: number | null = null;
       for (let i = 0; i < col.length; i++) {
         const cur = col[i]!;
         const next = col[i + 1];
-        if (next) {
-          const dur = new Date(next.scheduledAt!).getTime() - new Date(cur.scheduledAt!).getTime();
-          durationByGame.set(cur.id, dur > 0 ? dur : fallbackDurationMs);
-        } else {
-          durationByGame.set(cur.id, fallbackDurationMs);
-        }
+        const scheduledStart = new Date(cur.scheduledAt!).getTime();
+        const baseDurMs = next
+          ? Math.max(0, new Date(next.scheduledAt!).getTime() - scheduledStart) || fallbackDurationMs
+          : fallbackDurationMs;
+        const realDurMs: number = baseDurMs * (1 + DELAY_PCT);
+        const realStart: number = prevRealEnd != null ? Math.max(scheduledStart, prevRealEnd) : scheduledStart;
+        const realEnd: number = realStart + realDurMs;
+        windowByGame.set(cur.id, { realStart, realEnd, scheduledStart });
+        prevRealEnd = realEnd;
       }
     }
     type ConflictKind = "overlap" | "rushed";
@@ -4505,14 +4522,17 @@ export default function EventDetailPage() {
       for (let i = 0; i < sorted.length - 1; i++) {
         const a = sorted[i]!;
         const b = sorted[i + 1]!;
-        const aStart = new Date(a.scheduledAt!).getTime();
-        const aDur = durationByGame.get(a.id) ?? fallbackDurationMs;
-        const aEnd = aStart + aDur;
-        const bStart = new Date(b.scheduledAt!).getTime();
-        const gapMs = bStart - aEnd;
+        // Same-court consecutive matches for the same player can't
+        // overlap once we propagate delays — b.realStart is already
+        // ≥ a.realEnd by construction. Skip to avoid noise.
+        if (a.courtNum === b.courtNum) continue;
+        const aWin = windowByGame.get(a.id);
+        const bWin = windowByGame.get(b.id);
+        if (!aWin || !bWin) continue;
+        const gapMs = bWin.realStart - aWin.realEnd;
         let kind: ConflictKind | null = null;
         if (gapMs < 0) kind = "overlap";
-        else if (a.courtNum !== b.courtNum && gapMs < bufferMs) kind = "rushed";
+        else if (gapMs < bufferMs) kind = "rushed";
         if (!kind) continue;
         const playerName = playerNameById.get(playerId) || "Player";
         const gapMin = Math.round(gapMs / 60_000);
@@ -4990,7 +5010,7 @@ export default function EventDetailPage() {
               })}
             </ul>
             <p className="text-[10px] text-amber-800 mt-1">
-              Match duration is derived from the gap to the next match on the same court (includes warmup). The last match on each court falls back to the {scheduleDurationMin}-min default. Rushed warns when the gap between matches on different courts is under {BUFFER_MIN} min.
+              Realistic timeline: each match is assumed to run {Math.round(DELAY_PCT * 100)}% longer than scheduled (base duration = gap to next match on the same court; {scheduleDurationMin}-min default for the last match). Delays cascade — a late start on a court pushes every following match on that court. Rushed warns when the projected gap between matches on different courts drops under {BUFFER_MIN} min.
             </p>
           </div>
         )}
