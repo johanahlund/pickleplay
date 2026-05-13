@@ -315,6 +315,30 @@ export async function POST(
       return NextResponse.json({ error: "Game does not involve your team" }, { status: 403 });
     }
 
+    // One player can only play ONE match per category. Reject the
+    // request if any of the requested playerIds already appears in
+    // ANOTHER match in this same category (any side). Matches the
+    // client-side picker check; this is the defensive backstop.
+    if ((playerIds as string[]).length > 0) {
+      const conflicts = await prisma.leagueGamePlayer.findMany({
+        where: {
+          playerId: { in: playerIds as string[] },
+          leagueGame: { eventId, categoryId: game.categoryId, NOT: { id: gameId } },
+        },
+        select: {
+          playerId: true,
+          leagueGame: { select: { slotNumber: true } },
+          player: { select: { name: true } },
+        },
+      });
+      if (conflicts.length > 0) {
+        const first = conflicts[0]!;
+        return NextResponse.json({
+          error: `${first.player?.name ?? "A player"} is already in match ${first.leagueGame.slotNumber} of this category. A player can only play one match per category.`,
+        }, { status: 400 });
+      }
+    }
+
     // Drop the acting team's existing assignments, then add the new ones.
     // Side is derived from the captain's teamId against the game's team1/2
     // ids — used to tag each LeagueGamePlayer.team field on insert/update.

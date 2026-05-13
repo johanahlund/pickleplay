@@ -971,9 +971,36 @@ export default function LineupBuilderPage() {
               const oppPlayers = g ? oppPlayersForGame(g) : [];
               const locked = !!g?.winnerId;
               const isPrincipal = g?.kind === "principal";
+              // Same-category duplicate detection. A player should
+              // only be on one match per category. If a roster player
+              // here is also assigned to another match in cat.id,
+              // flag the card — both sides count.
+              const duplicateNames: string[] = (() => {
+                if (!g) return [];
+                const names: string[] = [];
+                const seen = new Set<string>();
+                for (const gp of g.gamePlayers) {
+                  if (seen.has(gp.playerId)) continue;
+                  const other = games.find((x) =>
+                    x.id !== g.id
+                    && x.categoryId === cat.id
+                    && x.gamePlayers.some((p) => p.playerId === gp.playerId),
+                  );
+                  if (other) {
+                    seen.add(gp.playerId);
+                    names.push(gp.player?.name ?? "Player");
+                  }
+                }
+                return names;
+              })();
+              const hasDuplicate = duplicateNames.length > 0;
 
               return (
-                <div key={slotNum} className={`relative border rounded-lg p-2 ${isPrincipal ? "border-emerald-300 bg-emerald-50/40" : "border-border"}`}>
+                <div key={slotNum} className={`relative border rounded-lg p-2 ${
+                  hasDuplicate ? "border-red-400 bg-red-50/40 ring-1 ring-red-200"
+                  : isPrincipal ? "border-emerald-300 bg-emerald-50/40"
+                  : "border-border"
+                }`}>
                   {/* Top-right red ✕. Visibility differs by role:
                       - host captain / organizer (`canSchedule`) can ALWAYS
                         remove a match for housekeeping. We escalate the
@@ -1163,6 +1190,12 @@ export default function LineupBuilderPage() {
                       );
                     })()}
                   </div>
+
+                  {hasDuplicate && (
+                    <div className="mt-1 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                      ⚠ {duplicateNames.join(", ")} {duplicateNames.length === 1 ? "is" : "are"} already in another {cat.name} match. A player can only play one match per category — remove from one slot.
+                    </div>
+                  )}
 
                   {/* Schedule + format — read-only display for everyone.
                       Time and court are managed from the Matches page
@@ -1387,6 +1420,26 @@ export default function LineupBuilderPage() {
         };
         const close = () => setPicker(null);
         const choose = async (pid: string) => {
+          // One match per player per category. Block before mutating.
+          // Skip the check if the player is already on THIS slot
+          // (they're being deselected by the doubles toggle).
+          if (!currentIds.includes(pid)) {
+            const conflictGame = games.find((x) =>
+              x.id !== g.id
+              && x.categoryId === cat.id
+              && x.gamePlayers.some((gp) => gp.playerId === pid),
+            );
+            if (conflictGame) {
+              const playerName = pools.roster.find((p) => p.id === pid)?.name
+                || pools.allSignups.find((p) => p.id === pid)?.name
+                || "This player";
+              await alertDialog(
+                `${playerName} is already assigned to ${cat.name} match ${conflictGame.slotNumber}. A player can only play one match per category — remove them from that match first.`,
+                "Already in this category",
+              );
+              return;
+            }
+          }
           // Singles → replace. Doubles → toggle in/out. When 2 are already
           // picked AND the user taps an UNSELECTED player, bail with a
           // hint instead of silently replacing the oldest pick — the
