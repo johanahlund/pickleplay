@@ -23,6 +23,11 @@ interface Game {
   courtNum?: number | null;
   scoringFormatOverride?: string | null;
   winByOverride?: string | null;
+  // Per-side player counts attached by the events API BEFORE identity
+  // filtering, so the host captain can see the opposite team's investment
+  // pre-reveal without learning who those players are. Both default to 0.
+  team1PlayerCount?: number;
+  team2PlayerCount?: number;
   gamePlayers: { playerId: string; team?: number | null; player: { id: string; name: string } }[];
 }
 interface Signup {
@@ -285,6 +290,13 @@ export default function LineupBuilderPage() {
   const oppWantsForGame = (g: Game): boolean => {
     const s = mySideForGame(g);
     return s === 1 ? g.team2Wants : g.team1Wants;
+  };
+  // Opp's assigned-player count from the events API — visible even when
+  // identities are hidden pre-reveal. Powers the "type-to-confirm"
+  // escalation when the host removes a match the opponent has staffed.
+  const oppPlayerCountForGame = (g: Game): number => {
+    const s = mySideForGame(g);
+    return s === 1 ? (g.team2PlayerCount ?? 0) : (g.team1PlayerCount ?? 0);
   };
 
   // Build (categoryId → slotNumber → game) map.
@@ -880,15 +892,16 @@ export default function LineupBuilderPage() {
 
               return (
                 <div key={slotNum} className={`relative border rounded-lg p-2 ${isPrincipal ? "border-emerald-300 bg-emerald-50/40" : "border-border"}`}>
-                  {/* Top-right red ✕: hide this match row. Works whenever
-                      the captain hasn't assigned any of OUR players yet —
-                      including a ticked Match 1 that hasn't been filled.
-                      Untickes if we'd ticked, then hides the row. If the
-                      opponent is still up for this slot the row will
-                      stay visible (driven by the existing game). The
-                      category card itself always stays so "+ Add match"
-                      can bring the row back. */}
-                  {!locked && !ourLocked && ourPlayers.length === 0 && oppPlayers.length === 0 && (
+                  {/* Top-right red ✕. Visibility differs by role:
+                      - host captain / organizer (`canSchedule`) can ALWAYS
+                        remove a match for housekeeping. We escalate the
+                        confirm based on what the opponent has invested.
+                      - everyone else (away captain) can only ✕ when our
+                        own side has no players assigned — they're just
+                        unticking. */}
+                  {!locked && !ourLocked && ourPlayers.length === 0
+                    && (canSchedule || oppPlayers.length === 0)
+                    && (
                     <button
                       type="button"
                       aria-label="Remove this match"
@@ -897,21 +910,46 @@ export default function LineupBuilderPage() {
                         // Three paths:
                         //  1. No game row yet → just shrink the local visible-slots count.
                         //  2. Game exists AND we're authorised to schedule → DELETE
-                        //     the game on the server. Removes it for both teams.
+                        //     the game on the server. Three-tier confirm based on
+                        //     opp's investment (plain / red warning / type-to-confirm).
                         //  3. Game exists, away-team captain (no schedule auth) → only
                         //     un-tick our wants; the row may persist if the opponent
-                        //     still wants it. Matches the previous behaviour.
+                        //     still wants it.
                         if (!g) {
                           setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
                           return;
                         }
                         if (canSchedule) {
-                          const ok = await confirmDialog({
-                            title: `Remove ${cat.name} match ${slotNum}?`,
-                            message: "This deletes the match from the event for both teams.",
-                            confirmText: "Remove",
-                            danger: true,
-                          });
+                          const oppCount = oppPlayerCountForGame(g);
+                          const oppName = opponentTeam?.name ?? "the away team";
+                          // Tier 3 — opp has assigned players: type-to-confirm.
+                          // Tier 2 — opp has ticked (no players yet): red warning.
+                          // Tier 1 — opp hasn't engaged: plain confirm.
+                          let opts: Parameters<typeof confirmDialog>[0];
+                          if (oppCount > 0) {
+                            opts = {
+                              title: `Remove ${cat.name} match ${slotNum}?`,
+                              message: `⚠️ ${oppName} has assigned ${oppCount} player${oppCount === 1 ? "" : "s"} to this match. Removing it discards their lineup as well.`,
+                              confirmText: "Remove match",
+                              danger: true,
+                              requireType: "REMOVE",
+                            };
+                          } else if (oppWants) {
+                            opts = {
+                              title: `Remove ${cat.name} match ${slotNum}?`,
+                              message: `⚠️ ${oppName} has confirmed they want to play this match. Removing it discards their intent — please coordinate with them first.`,
+                              confirmText: "Remove anyway",
+                              danger: true,
+                            };
+                          } else {
+                            opts = {
+                              title: `Remove ${cat.name} match ${slotNum}?`,
+                              message: "This deletes the match from the event for both teams.",
+                              confirmText: "Remove",
+                              danger: true,
+                            };
+                          }
+                          const ok = await confirmDialog(opts);
                           if (!ok) return;
                           setSaving(true);
                           try {

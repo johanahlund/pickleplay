@@ -211,6 +211,12 @@ export async function GET(
   // Lineup secrecy: until BOTH teams in the match-day event mark themselves
   // "lineup ready", each team sees only its own players in leagueGames.
   // Organizers/helpers/admin always see both. Mirrors /api/leagues/[id].
+  //
+  // We always attach team1PlayerCount / team2PlayerCount BEFORE the
+  // identity filter. The lineup page needs the opposite side's count
+  // pre-reveal so the host captain's "delete match" dialog can escalate
+  // ("Opp has 2 players assigned — type REMOVE to confirm") without
+  // leaking who those players are.
   if (event.round?.league && Array.isArray(event.leagueGames)) {
     const league = event.round.league;
     const isAdminUser = user.role === "admin";
@@ -226,6 +232,28 @@ export async function GET(
       || (Array.isArray(event.leagueTeams)
         && event.leagueTeams.length === 2
         && event.leagueTeams.every((lt: { lineupReady: boolean | null }) => lt.lineupReady));
+    type GamePlayerLite = { playerId: string; team: number | null };
+    type LeagueGameLite = { team1Id: string; team2Id: string; gamePlayers: GamePlayerLite[] };
+    // Annotate every game with per-side counts (pre-filter). The
+    // legacy null-team fallback uses roster membership for stragglers
+    // from before the team field was populated.
+    type TeamRosterLite = { id: string; players: { playerId: string }[] };
+    const teamsForCount = (league.teams as TeamRosterLite[]) ?? [];
+    const rosterByTeam = new Map<string, Set<string>>(
+      teamsForCount.map((t) => [t.id, new Set(t.players.map((p) => p.playerId))]),
+    );
+    const countsBySide = (g: LeagueGameLite): { t1: number; t2: number } => {
+      let t1 = 0, t2 = 0;
+      const t1Roster = rosterByTeam.get(g.team1Id) ?? new Set<string>();
+      const t2Roster = rosterByTeam.get(g.team2Id) ?? new Set<string>();
+      for (const gp of g.gamePlayers) {
+        if (gp.team === 1) t1++;
+        else if (gp.team === 2) t2++;
+        else if (t1Roster.has(gp.playerId)) t1++;
+        else if (t2Roster.has(gp.playerId)) t2++;
+      }
+      return { t1, t2 };
+    };
     if (!isOrganizer && !revealed) {
       type TeamLite = { id: string; captainId: string | null; viceCaptainId: string | null; players: { playerId: string }[] };
       const myTeam = (league.teams as TeamLite[]).find((t) =>
@@ -235,15 +263,25 @@ export async function GET(
       );
       const myTeamId = myTeam?.id;
       const myTeammateIds = new Set((myTeam?.players ?? []).map((p) => p.playerId));
-      type LeagueGameLite = { team1Id: string; team2Id: string; gamePlayers: { playerId: string }[] };
-      event.leagueGames = (event.leagueGames as LeagueGameLite[]).map((g) => {
+      event.leagueGames = (event.leagueGames as unknown as LeagueGameLite[]).map((g) => {
+        const { t1, t2 } = countsBySide(g);
         const viewerIsInGame = myTeamId === g.team1Id || myTeamId === g.team2Id;
-        if (!viewerIsInGame) return { ...g, gamePlayers: [] };
+        if (!viewerIsInGame) return { ...g, gamePlayers: [], team1PlayerCount: t1, team2PlayerCount: t2 };
         return {
           ...g,
           gamePlayers: g.gamePlayers.filter((gp) => myTeammateIds.has(gp.playerId)),
+          team1PlayerCount: t1,
+          team2PlayerCount: t2,
         };
-      }) as typeof event.leagueGames;
+      }) as unknown as typeof event.leagueGames;
+    } else {
+      // Revealed or organizer view — no identity filter, but still
+      // expose the counts so clients have a single, consistent field
+      // to read regardless of viewer.
+      event.leagueGames = (event.leagueGames as unknown as LeagueGameLite[]).map((g) => {
+        const { t1, t2 } = countsBySide(g);
+        return { ...g, team1PlayerCount: t1, team2PlayerCount: t2 };
+      }) as unknown as typeof event.leagueGames;
     }
   }
 
