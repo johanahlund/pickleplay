@@ -629,7 +629,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
         <div className="flex items-end gap-3">
           <div>
             <div className="text-[11px] text-muted mb-1">All categories (min)</div>
-            <DurationStepper value={matchDuration} onChange={setMatchDuration} />
+            <DurationStepper compact value={matchDuration} onChange={setMatchDuration} />
           </div>
         </div>
         <p className="text-[10px] text-muted mt-2">– = inherit from league. Per-category overrides live in the Customize Categories section below.</p>
@@ -780,6 +780,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                         <div>
                           <label className="block text-[10px] text-muted">Match duration (min)</label>
                           <DurationStepper
+                            compact
                             value={dur ?? null}
                             label={`Match duration override for ${c.name}`}
                             onChange={onDurChange}
@@ -1945,6 +1946,7 @@ export default function LeagueDetailPage() {
             <div>
               <label className="block text-xs text-muted mb-1">Default match duration (min)</label>
               <DurationStepper
+                compact
                 value={editMatchDuration}
                 onChange={(next) => { setEditMatchDuration(next); setDirty(true); }}
               />
@@ -2062,6 +2064,7 @@ export default function LeagueDetailPage() {
             <div>
               <label className="block text-xs text-muted mb-1">Match duration (min)</label>
               <DurationStepper
+                compact
                 value={cat.matchDurationMin}
                 onChange={(next) => updateCat("matchDurationMin", next)}
               />

@@ -5144,6 +5144,7 @@ export default function EventDetailPage() {
             <div>
               <div className="text-[11px] text-muted mb-1">Per match (min)</div>
               <DurationStepper
+                compact
                 value={scheduleDurationMin}
                 onChange={(next) => { if (next != null) setScheduleDurationMin(next); }}
                 min={5}
