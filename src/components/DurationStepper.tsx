@@ -17,9 +17,10 @@ interface Props {
   defaultMin?: number;
   /** Optional aria label / tooltip. */
   label?: string;
-  /** When `compact`, the stepper renders as a small clickable chip
-   *  showing only the value; tapping reveals the -/+ buttons. Tap-
-   *  outside collapses. When false, the stepper is always expanded. */
+  /** When `compact` (the default), the stepper renders as a small
+   *  clickable chip showing only the value; tapping reveals the -/+
+   *  buttons. Tap-outside collapses. Set to `false` to render the
+   *  stepper always-expanded. */
   compact?: boolean;
 }
 
@@ -38,7 +39,7 @@ export function DurationStepper({
   max = 240,
   defaultMin = 45,
   label,
-  compact = false,
+  compact = true,
 }: Props) {
   const [expanded, setExpanded] = useState(!compact);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -57,13 +58,22 @@ export function DurationStepper({
 
   const display = value == null ? "–" : String(value);
 
+  // Snap-to-step on both directions. If the current value isn't already
+  // a multiple of `step` (e.g. an inherited 43), stepping down or up
+  // jumps to the nearest aligned multiple FIRST (40 or 45) instead of
+  // doing a raw ±5 (which would give 38 or 48). Once aligned, further
+  // taps move by full `step` increments.
   const stepDown = () => {
     if (value == null) return;
-    const next = value - step;
+    const flooredAlign = Math.floor(value / step) * step;
+    const next = flooredAlign === value ? value - step : flooredAlign;
     onChange(next < min ? null : next);
   };
   const stepUp = () => {
-    onChange(value == null ? defaultMin : Math.min(max, value + step));
+    if (value == null) { onChange(defaultMin); return; }
+    const ceiledAlign = Math.ceil(value / step) * step;
+    const next = ceiledAlign === value ? value + step : ceiledAlign;
+    onChange(Math.min(max, next));
   };
 
   if (compact && !expanded) {
