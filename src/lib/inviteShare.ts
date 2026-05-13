@@ -217,6 +217,10 @@ export interface MatchDayShareGame {
   team2Score?: number | null;
   /** 1 or 2 if the game has a winner; null/undefined otherwise. */
   winnerTeam?: 1 | 2 | null;
+  /** 1-based match number within the category (LeagueGame.slotNumber).
+   *  Appears in the share as "Match 1" / "Match 2" so captains can
+   *  distinguish two games of the same category. */
+  slotNumber?: number | null;
 }
 
 export interface MatchDayShareContext {
@@ -291,7 +295,8 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
     lines.push(`*${courtLabel}*`);
     for (const g of list) {
       lines.push("");
-      lines.push(`${fmtTime(g.scheduledAt)} · _${g.categoryName}_`);
+      const matchSuffix = g.slotNumber != null ? ` · Match ${g.slotNumber}` : "";
+      lines.push(`${fmtTime(g.scheduledAt)} · _${g.categoryName}_${matchSuffix}`);
       const t1 = g.team1PlayerNames.join(" + ") || "?";
       const t2 = g.team2PlayerNames.join(" + ") || "?";
       lines.push(`${t1}  vs  ${t2}`);
@@ -304,11 +309,6 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
       }
     }
   }
-
-  lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━");
-  lines.push("🔗 Live scores & full details:");
-  lines.push(ctx.eventUrl);
 
   return lines.join("\n");
 }
