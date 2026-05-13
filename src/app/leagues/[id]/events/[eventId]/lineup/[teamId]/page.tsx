@@ -1448,11 +1448,11 @@ export default function LineupBuilderPage() {
           if (!isDoubles(cat)) {
             next = [pid];
           } else if (currentIds.includes(pid)) {
-            // Tap a selected player → deselect. Close the picker so the
-            // captain sees the slot update and can re-open it to add a
-            // replacement explicitly.
+            // Tap a selected player → deselect. Keep the picker OPEN
+            // — the captain just freed a slot and almost always wants
+            // to pick a replacement next. They can dismiss the picker
+            // manually with the close button when done.
             next = currentIds.filter((x) => x !== pid);
-            setPicker(null);
             void assignPlayers(g.id, next);
             return;
           } else if (currentIds.length >= 2) {
