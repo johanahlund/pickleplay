@@ -399,6 +399,10 @@ interface RoundFormProps {
   initial: RoundFormValues;
   leagueCategories: LeagueCategory[];
   leagueConfig: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
+  /** League-wide default match duration (minutes). Surfaced next to the
+   *  round + per-category overrides as a small info hint so operators
+   *  can see what they're inheriting. */
+  leagueMatchDurationMin: number | null;
   onSubmit: (v: RoundFormValues) => Promise<void> | void;
   onCancel: () => void;
 }
@@ -415,7 +419,7 @@ type CatOverrideForm = {
   maxPerEvent: string;
 };
 
-function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, onCancel }: RoundFormProps) {
+function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchDurationMin, onSubmit, onCancel }: RoundFormProps) {
   const [roundNumber, setRoundNumber] = useState(initial.roundNumber);
   const [name, setName] = useState(initial.name);
   const [start, setStart] = useState(initial.startDate);
@@ -629,7 +633,10 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
         <div className="flex items-end gap-3">
           <div>
             <div className="text-[11px] text-muted mb-1">All categories (min)</div>
-            <DurationStepper compact value={matchDuration} onChange={setMatchDuration} />
+            <div className="flex items-center gap-2">
+              <DurationStepper compact value={matchDuration} onChange={setMatchDuration} />
+              <span className="text-[10px] text-muted">league: {leagueMatchDurationMin ?? 45} min</span>
+            </div>
           </div>
         </div>
         <p className="text-[10px] text-muted mt-2">– = inherit from league. Per-category overrides live in the Customize Categories section below.</p>
@@ -786,7 +793,14 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                             onChange={onDurChange}
                           />
                         </div>
-                        <span className="text-[9px] text-muted pb-1.5">– = inherit from round / league default</span>
+                        <span className="text-[9px] text-muted pb-1.5">
+                          inherit: {(() => {
+                            // Show what this category will inherit if duration stays "–":
+                            // round duration (when set) → league per-category → league default → 45.
+                            const inherited = matchDuration ?? c.matchDurationMin ?? leagueMatchDurationMin ?? 45;
+                            return `${inherited} min`;
+                          })()}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -1134,9 +1148,9 @@ export default function LeagueDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   // Numeric edit fields are stored as strings so the user can clear them
   // freely while typing. They are parsed to numbers on save.
-  const [editMaxRoster, setEditMaxRoster] = useState("14");
-  const [editMaxPoints, setEditMaxPoints] = useState("3");
-  const [editMinMatchDays, setEditMinMatchDays] = useState("2");
+  const [editMaxRoster, setEditMaxRoster] = useState("");
+  const [editMaxPoints, setEditMaxPoints] = useState("");
+  const [editMinMatchDays, setEditMinMatchDays] = useState("");
   const [editMaxMatchesPerEvent, setEditMaxMatchesPerEvent] = useState("");
   const [editAllowCrossCategory, setEditAllowCrossCategory] = useState(true);
   const [editMatchDuration, setEditMatchDuration] = useState<number | null>(45);
@@ -1303,9 +1317,9 @@ export default function LeagueDetailPage() {
     setEditStatus(normalizeLeagueStatus(league.status));
     setEditLeagueClubId(league.club?.id || league.clubId || "");
     setEditVisibility(league.visibility === "participants" ? "participants" : "public");
-    setEditMaxRoster(String(league.config?.maxRoster ?? 14));
-    setEditMaxPoints(String(league.config?.maxPointsPerMatchDay ?? 3));
-    setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
+    setEditMaxRoster(league.config?.maxRoster != null ? String(league.config.maxRoster) : "");
+    setEditMaxPoints(league.config?.maxPointsPerMatchDay != null ? String(league.config.maxPointsPerMatchDay) : "");
+    setEditMinMatchDays(league.config?.minMatchDaysForPlayoff != null ? String(league.config.minMatchDaysForPlayoff) : "");
     setEditMaxMatchesPerEvent(league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "");
     setEditAllowCrossCategory(league.config?.allowCrossCategoryPlay !== false);
     setEditMatchDuration(league.matchDurationMin ?? 45);
@@ -1331,9 +1345,9 @@ export default function LeagueDetailPage() {
         visibility: editVisibility,
         config: {
           ...(league.config || {}),
-          maxRoster: parseInt(editMaxRoster, 10) || 14,
-          maxPointsPerMatchDay: parseInt(editMaxPoints, 10) || 3,
-          minMatchDaysForPlayoff: editMinMatchDays.trim() === "" ? 0 : parseInt(editMinMatchDays, 10) || 0,
+          maxRoster: editMaxRoster.trim() === "" ? null : Math.max(1, Math.min(99, parseInt(editMaxRoster, 10) || 0)) || null,
+          maxPointsPerMatchDay: editMaxPoints.trim() === "" ? null : Math.max(1, Math.min(99, parseInt(editMaxPoints, 10) || 0)) || null,
+          minMatchDaysForPlayoff: editMinMatchDays.trim() === "" ? null : Math.max(0, parseInt(editMinMatchDays, 10) || 0),
           maxMatchesPerEvent: editMaxMatchesPerEvent.trim() === "" ? null : parseInt(editMaxMatchesPerEvent, 10) || null,
           allowCrossCategoryPlay: editAllowCrossCategory,
         },
@@ -1922,26 +1936,54 @@ export default function LeagueDetailPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-muted mb-1">Max Roster</label>
-              <input type="number" value={editMaxRoster} onChange={(e) => { setEditMaxRoster(e.target.value); setDirty(true); }} min={1}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              <input
+                type="number"
+                value={editMaxRoster}
+                onChange={(e) => { setEditMaxRoster(clampPositiveInt(e.target.value, 99)); setDirty(true); }}
+                min={1}
+                max={99}
+                placeholder="unlimited"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm placeholder:text-[11px] placeholder:opacity-70"
+              />
+              <p className="text-[10px] text-muted mt-1">Leave empty for unlimited. Max 99.</p>
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Max Pts / Match Day</label>
-              <input type="number" value={editMaxPoints} onChange={(e) => { setEditMaxPoints(clampPositiveInt(e.target.value, 99)); setDirty(true); }} min={1} max={99}
-                className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              <input
+                type="number"
+                value={editMaxPoints}
+                onChange={(e) => { setEditMaxPoints(clampPositiveInt(e.target.value, 99)); setDirty(true); }}
+                min={1}
+                max={99}
+                placeholder="unlimited"
+                className="w-full border border-border rounded-lg px-3 py-2 text-sm placeholder:text-[11px] placeholder:opacity-70"
+              />
+              <p className="text-[10px] text-muted mt-1">Leave empty for unlimited.</p>
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Max league matches / event</label>
-              <input type="number" value={editMaxMatchesPerEvent} onChange={(e) => { setEditMaxMatchesPerEvent(clampPositiveInt(e.target.value, 99)); setDirty(true); }} min={1} max={99}
-                placeholder="—"
-                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
+              <input
+                type="number"
+                value={editMaxMatchesPerEvent}
+                onChange={(e) => { setEditMaxMatchesPerEvent(clampPositiveInt(e.target.value, 99)); setDirty(true); }}
+                min={1}
+                max={99}
+                placeholder="unlimited"
+                className="w-20 border border-border rounded-lg px-3 py-2 text-sm placeholder:text-[11px] placeholder:opacity-70"
+              />
               <p className="text-[10px] text-muted mt-1">Cap for principal games per match-day. Empty = no cap.</p>
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Min match days for playoff</label>
-              <input type="number" value={editMinMatchDays} onChange={(e) => { setEditMinMatchDays(e.target.value); setDirty(true); }} min={0}
-                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
-              <p className="text-[10px] text-muted mt-1">Minimum match days a player must have appeared in to be eligible for the playoff/Grande Final.</p>
+              <input
+                type="number"
+                value={editMinMatchDays}
+                onChange={(e) => { setEditMinMatchDays(e.target.value); setDirty(true); }}
+                min={0}
+                placeholder="no restriction"
+                className="w-32 border border-border rounded-lg px-3 py-2 text-sm placeholder:text-[11px] placeholder:opacity-70"
+              />
+              <p className="text-[10px] text-muted mt-1">Minimum match days a player must have appeared in to be eligible for the playoff/Grande Final. Empty = no restriction.</p>
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Default match duration (min)</label>
@@ -3228,6 +3270,7 @@ export default function LeagueDetailPage() {
                     }}
                     leagueCategories={league.categories}
                     leagueConfig={league.config}
+                    leagueMatchDurationMin={league.matchDurationMin ?? null}
                     onSubmit={(v) => saveRound("edit", v, round.id)}
                     onCancel={() => setEditingRoundId(null)}
                   />
@@ -3377,6 +3420,7 @@ export default function LeagueDetailPage() {
               }}
               leagueCategories={league.categories}
               leagueConfig={league.config}
+              leagueMatchDurationMin={league.matchDurationMin ?? null}
               onSubmit={(v) => saveRound("add", v)}
               onCancel={() => setShowAddRound(false)}
             />
