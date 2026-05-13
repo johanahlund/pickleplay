@@ -54,7 +54,7 @@ export async function GET(
             select: {
               id: true, name: true, shortName: true, season: true, createdById: true, deputyId: true,
               matchDurationMin: true,
-              categories: { select: { id: true, name: true, format: true, gender: true, matchDurationMin: true }, orderBy: { sortOrder: "asc" } },
+              categories: { select: { id: true, name: true, format: true, gender: true, matchDurationMin: true, scoringFormat: true, winBy: true }, orderBy: { sortOrder: "asc" } },
               // For visibility checks: anyone on a team in the league should
               // be able to see the league-attached event regardless of its status.
               teams: {
@@ -113,6 +113,8 @@ export async function GET(
           displayOrder: true,
           winnerId: true,
           scheduleAnchored: true,
+          scoringFormatOverride: true,
+          winByOverride: true,
           gamePlayers: {
             select: {
               playerId: true,
@@ -467,6 +469,18 @@ export async function PATCH(
   }
   if (openSignup !== undefined) eventData.openSignup = !!openSignup;
   if (visibility !== undefined) eventData.visibility = visibility;
+  if (body.comments !== undefined) {
+    if (body.comments === null) {
+      eventData.comments = null;
+    } else if (typeof body.comments !== "string") {
+      return NextResponse.json({ error: "comments must be a string" }, { status: 400 });
+    } else {
+      // Trim trailing whitespace but keep internal newlines (operators
+      // use line breaks for readability in the WhatsApp share).
+      const trimmed = body.comments.replace(/\s+$/g, "");
+      eventData.comments = trimmed.length > 0 ? trimmed : null;
+    }
+  }
   if (body.status !== undefined) {
     // Stored values now: setup | open | closed. Legacy aliases
     // (visible/draft/completed/active) are normalised on the way in:

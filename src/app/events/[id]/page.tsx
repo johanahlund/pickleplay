@@ -172,6 +172,7 @@ interface Event {
   numCourts: number;
   openSignup: boolean;
   visibility: string;
+  comments?: string | null;
   createdById: string | null;
   createdBy?: { id: string; name: string; emoji: string } | null;
   players: { playerId?: string; player: Player; classId?: string | null; status: string; skillLevel?: number | null; signupPreferences?: Record<string, { level: "prefer" | "ok" | "no"; note?: string }> | null }[];
@@ -553,6 +554,7 @@ export default function EventDetailPage() {
   const [hasEdits, setHasEdits] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editComments, setEditComments] = useState("");
   const [editStatus, setEditStatus] = useState("setup");
   const [editCourts, setEditCourts] = useState(2);
   const [editLocationId, setEditLocationId] = useState<string | null>(null);
@@ -1370,6 +1372,7 @@ export default function EventDetailPage() {
     if (!event) return;
     setHasEdits(false);
     setEditName(event.name);
+    setEditComments(event.comments || "");
     setEditStatus(normalizeEventStatus(event.status));
     setEditCourts(event.numCourts);
     setEditDate(toDateInput(event.date));
@@ -1453,6 +1456,7 @@ export default function EventDetailPage() {
         openSignup: editOpenSignup,
         visibility: editVisibility,
         locationId: editLocationId,
+        comments: editComments.trim() === "" ? null : editComments,
       }),
     });
     // Persist the new Mode & Teams settings via the pairing settings
@@ -2196,6 +2200,17 @@ export default function EventDetailPage() {
           )}
         </div>
       )}
+      <div>
+        <label className="block text-sm font-medium text-muted mb-1">Comments</label>
+        <textarea
+          value={editComments}
+          onChange={(e) => { setEditComments(e.target.value); setHasEdits(true); }}
+          rows={3}
+          placeholder="Anything you want included in the match-day share — parking, bring lunch, dress code, …"
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-y"
+        />
+        <p className="text-[11px] text-muted mt-1">Shown on the event page and prepended to the match-day share.</p>
+      </div>
       {/* Competition toggle — local state + Save/Cancel flow */}
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-3 cursor-pointer">
@@ -6841,6 +6856,14 @@ export default function EventDetailPage() {
           </Link>
         );
       })()}
+      {/* Organizer comments — free-text shown near the top of the page
+          and prepended to the match-day share. Wraps on whitespace to
+          preserve manual line breaks. */}
+      {event.comments && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 whitespace-pre-wrap break-words">
+          {event.comments}
+        </div>
+      )}
       {/* League event sign-up CTA — only shown to a player who is on one
           of the two teams playing this match-day. Mentions which team and
           which intent (playing / attending only / can't come). */}

@@ -221,6 +221,35 @@ export interface MatchDayShareGame {
    *  Appears in the share as "Match 1" / "Match 2" so captains can
    *  distinguish two games of the same category. */
   slotNumber?: number | null;
+  /** Pre-formatted match format ("Bo3 to 11", "Rally 21 · cap18", …).
+   *  Empty/undefined omits the line. */
+  formatLabel?: string | null;
+}
+
+/** Short, WhatsApp-friendly format label.
+ *   - "1x11" → "1 to 11", "3x11" → "Bo3 to 11"
+ *   - rally formats → "Rally 21", "Bo3 R21"
+ *   - win-by-2 is the default → omitted entirely
+ *   - "1" → " · 1", "cap18" → " · cap18", "2_gp18" → " · GP18"
+ *
+ *  Public so callers preparing share contexts in other places can
+ *  produce a label matching what the match-day share renders.
+ */
+export function shortFormatLabel(scoring: string, winBy: string): string {
+  const SCORING: Record<string, string> = {
+    "1x7": "1 to 7", "1x9": "1 to 9", "1x11": "1 to 11", "1x15": "1 to 15", "1x21": "1 to 21",
+    "3x11": "Bo3 to 11", "3x15": "Bo3 to 15", "3x21": "Bo3 to 21",
+    "1xR15": "Rally 15", "1xR21": "Rally 21",
+    "3xR15": "Bo3 R15", "3xR21": "Bo3 R21",
+  };
+  const base = SCORING[scoring] ?? scoring;
+  if (!winBy || winBy === "2") return base;
+  if (winBy === "1") return `${base} · 1`;
+  const gp = winBy.match(/^2_gp(\d+)$/);
+  if (gp) return `${base} · GP${gp[1]}`;
+  const cap = winBy.match(/^cap(\d+)$/);
+  if (cap) return `${base} · cap${cap[1]}`;
+  return `${base} · ${winBy}`;
 }
 
 export interface MatchDayShareContext {
@@ -236,6 +265,9 @@ export interface MatchDayShareContext {
   doorsTimeText?: string | null;
   /** Venue line ("Setúbal Pickleball Club, Setúbal"). */
   locationText?: string | null;
+  /** Optional free-text event comments (organizer-written). Inserted
+   *  as a quoted block between the header and the courts. */
+  commentsText?: string | null;
   /** Public absolute URL to the event detail page. */
   eventUrl: string;
   games: MatchDayShareGame[];
@@ -284,7 +316,18 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
   heading.push(`📅 ${ctx.dateText}${ctx.doorsTimeText ? ` · Starts ${ctx.doorsTimeText}` : ""}`);
   if (ctx.locationText) heading.push(`📍 ${ctx.locationText}`);
 
-  const lines: string[] = [...heading, "", "━━━━━━━━━━━━━━━━━━━"];
+  const lines: string[] = [...heading];
+
+  // Optional free-text comments block — sits between the header and
+  // the first court. Each line gets prefixed with WhatsApp's `>`
+  // quote marker so it visually separates from the schedule body.
+  const commentsText = ctx.commentsText?.trim();
+  if (commentsText) {
+    lines.push("");
+    for (const line of commentsText.split(/\r?\n/)) {
+      lines.push(line.length > 0 ? `> ${line}` : ">");
+    }
+  }
 
   for (const c of courts) {
     const list = byCourt.get(c)!;
@@ -296,11 +339,17 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
     lines.push(`*${courtLabel}*`);
     for (const g of list) {
       lines.push("");
-      const matchSuffix = g.slotNumber != null ? ` · Match ${g.slotNumber}` : "";
-      lines.push(`${fmtTime(g.scheduledAt)} · _${g.categoryName}_${matchSuffix}`);
+      lines.push(fmtTime(g.scheduledAt));
+      const slotSuffix = g.slotNumber != null ? ` · ${g.slotNumber}` : "";
+      lines.push(`_${g.categoryName}_${slotSuffix}`);
+      if (g.formatLabel) lines.push(g.formatLabel);
       const t1 = g.team1PlayerNames.join(" + ") || "?";
       const t2 = g.team2PlayerNames.join(" + ") || "?";
-      lines.push(`${t1}  vs  ${t2}`);
+      // Home / vs / away on three lines — easier to scan on mobile
+      // than the single-line "A + B  vs  C + D" version.
+      lines.push(t1);
+      lines.push("vs");
+      lines.push(t2);
       if (g.winnerTeam && g.team1Score != null && g.team2Score != null) {
         const winnerNames = g.winnerTeam === 1 ? t1 : t2;
         const scoreText = g.winnerTeam === 1
@@ -326,6 +375,9 @@ type MatchDayEventPayload = {
   id: string;
   date: string | Date;
   locationId?: string | null;
+  /** Free-text comments shown on the event page + included in the
+   *  match-day share message. Optional. */
+  comments?: string | null;
   /** Host team id — drives "Home hosting Away" ordering in the title
    *  and the per-game player layout (home side always shown first). */
   hostTeamId?: string | null;
@@ -338,7 +390,7 @@ type MatchDayEventPayload = {
     roundNumber: number;
     league: {
       name: string;
-      categories?: { id: string; name: string }[] | null;
+      categories?: { id: string; name: string; scoringFormat?: string | null; winBy?: string | null }[] | null;
       teams?: { id: string; players: { playerId: string; player: { name: string } }[] }[] | null;
     };
   } | null;
@@ -355,6 +407,8 @@ type MatchDayEventPayload = {
     scheduledAt?: string | null;
     courtNum?: number | null;
     winnerId?: string | null;
+    scoringFormatOverride?: string | null;
+    winByOverride?: string | null;
     gamePlayers: { playerId: string; team?: number | null; player?: { id: string; name: string } }[];
   }[] | null;
 };
@@ -393,6 +447,11 @@ export function buildMatchDayShareFromEvent(
     shortName(playerById.get(gp.playerId) || gp.player?.name || "?");
 
   const categoryById = new Map(categories.map((c) => [c.id, c.name]));
+  // Per-category default scoring + win-by, used as the fallback when
+  // a LeagueGame has no per-game override.
+  const categoryFmtById = new Map(
+    categories.map((c) => [c.id, { scoring: c.scoringFormat ?? null, winBy: c.winBy ?? null }] as const),
+  );
   type MatchLite = { leagueGame?: { id: string } | null; players: { team: number; score: number }[] };
   const matchByGame = new Map<string, MatchLite>();
   for (const m of (evt.matches || []) as MatchLite[]) {
@@ -436,11 +495,18 @@ export function buildMatchDayShareFromEvent(
     // share, regardless of which team the data model happens to call
     // team1. Swap names + scores + winnerTeam in lockstep.
     const swap = hostTeamId != null && g.team2Id === hostTeamId;
+    // Resolve scoring format + win-by: per-game override beats the
+    // category default. Omit the label when neither is present.
+    const catFmt = categoryFmtById.get(g.categoryId);
+    const scoring = g.scoringFormatOverride || catFmt?.scoring || null;
+    const winBy = g.winByOverride || catFmt?.winBy || null;
+    const formatLabel = scoring ? shortFormatLabel(scoring, winBy || "2") : null;
     return {
       courtNum: g.courtNum ?? null,
       scheduledAt: g.scheduledAt ?? null,
       categoryName: categoryById.get(g.categoryId) || "—",
       slotNumber: g.slotNumber ?? null,
+      formatLabel,
       team1PlayerNames: swap ? t2Names : t1Names,
       team2PlayerNames: swap ? t1Names : t2Names,
       team1Score: swap ? team2Score : team1Score,
@@ -490,6 +556,7 @@ export function buildMatchDayShareFromEvent(
     dateText,
     doorsTimeText,
     locationText,
+    commentsText: evt.comments ?? null,
     eventUrl: `${origin}/events/${evt.id}`,
     games,
   });

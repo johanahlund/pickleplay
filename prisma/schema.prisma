@@ -235,6 +235,11 @@ model Event {
   speakerUserName     String? // display name
   pendingAnnouncement String? // text to speak, cleared after played
 
+  /// Free-text comments shown on the event page and prepended to the
+  /// match-day share message. Organizer-edited (event manager / admin
+  /// only via PATCH). Plain text; line breaks preserved when shared.
+  comments String?
+
   createdAt DateTime @default(now())
 
   createdById String?
