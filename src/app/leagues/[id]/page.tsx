@@ -992,23 +992,22 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
         )}
       </div>
 
-      {/* Bottom action row only renders when there's something to act on
-          (edit mode + dirty, or add mode). The top-right 'Close round
-          data' link is always there as the escape route otherwise. The
-          divider line makes clear these buttons commit the WHOLE round
-          data, not just the section above them. */}
-      {(mode === "add" || isDirty) && (
-        <div className="border-t border-border pt-3">
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={!roundNumber}
-              className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-              {mode === "add" ? "Add Round" : "Save"}
-            </button>
-            <button onClick={onCancel}
-              className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-          </div>
-        </div>
-      )}
+      </div>
+      {/* Bottom action row sits OUTSIDE the round-data card on purpose —
+          shares the same outer space as the top-right 'Close round data'
+          link, signalling that Save/Cancel commit the whole card, not
+          just the last section inside it. Always rendered; Save is
+          disabled + faded until there's something to commit. */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={!roundNumber || (mode === "edit" && !isDirty)}
+          className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {mode === "add" ? "Add Round" : "Save"}
+        </button>
+        <button onClick={onCancel}
+          className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
       </div>
     </div>
   );
