@@ -206,6 +206,15 @@ model Event {
   numCourts  Int       @default(2)
   openSignup Boolean   @default(true) // kept for backwards compat
   visibility String    @default("visible") // kept for backwards compat
+  /// Per-event override of the round (or league) default match duration
+  /// used by the auto-schedule. Null = inherit from the round.
+  matchDurationMin Int?
+  /// Per-court start times for the auto-schedule, keyed by court number
+  /// as a string: { "1": "2026-05-17T13:00:00.000Z", "2": "…" }. Empty
+  /// or missing keys → the auto-schedule won't place matches on that
+  /// court until the host captain sets a start. The arrow button in
+  /// the UI copies Court 1's value to all other courts.
+  courtStartTimes Json?
 
   // Speaker host
   speakerUserId       String? // player ID of the device acting as speaker
@@ -581,6 +590,11 @@ model League {
   createdById  String? // League Director
   deputyId     String? // Deputy Director
   createdAt    DateTime @default(now())
+  /// Default match duration in minutes, used by the auto-schedule.
+  /// Rounds can override this; events inherit (with their own optional
+  /// override); categories can override further. Always inclusive of
+  /// warmup — durations measure start-to-next-start on the same court.
+  matchDurationMin Int? @default(45)
 
   club                  Club?                        @relation("clubLeagues", fields: [clubId], references: [id])
   createdBy             Player?                      @relation("leagueCreator", fields: [createdById], references: [id])
@@ -660,6 +674,9 @@ model LeagueCategory {
   status        String @default("active") // "draft" | "active"
   sortOrder     Int    @default(0)
   maxPerEvent   Int? // max number of slots in this category per match-day event
+  /// Per-category override of the inherited (event → round → league)
+  /// default match duration. Null = use inherited default.
+  matchDurationMin Int?
 
   league League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   games  LeagueGame[]
@@ -684,6 +701,10 @@ model LeagueRound {
   //   active — published; the lifecycle (scheduled/in-progress/completed)
   //            is then derived from startDate/endDate at display time.
   status             String    @default("setup") // setup | active (legacy: "scheduled" still recognized as active)
+  /// Per-round override of the league's default match duration. Null →
+  /// inherit from the league. Events under this round inherit this
+  /// value (and can themselves override).
+  matchDurationMin   Int?
 
   league League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   events Event[]
@@ -742,6 +763,11 @@ model LeagueGame {
   // list. Sort uses (displayOrder asc NULLS LAST, then scheduledAt asc,
   // then category/slot for stability).
   displayOrder Int?
+  /// True when the operator manually set scheduledAt for this match
+  /// (e.g. inserted a lunch break or fixed a key match's time). The
+  /// auto-schedule preserves anchored times and chains subsequent
+  /// matches forward from each anchor. False = auto-derived.
+  scheduleAnchored Boolean @default(false)
   createdById String? // audit — captain or organizer who first ticked this slot
 
   event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)

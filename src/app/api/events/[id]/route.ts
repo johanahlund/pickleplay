@@ -276,6 +276,39 @@ export async function PATCH(
     if (typeof numCourts !== "number" || numCourts < 1) return NextResponse.json({ error: "numCourts must be positive" }, { status: 400 });
     eventData.numCourts = numCourts;
   }
+  if (body.matchDurationMin !== undefined) {
+    const v = body.matchDurationMin;
+    if (v === null) {
+      eventData.matchDurationMin = null;
+    } else if (typeof v === "number" && v >= 5 && v <= 240) {
+      eventData.matchDurationMin = Math.round(v);
+    } else {
+      return NextResponse.json({ error: "matchDurationMin must be null or 5-240" }, { status: 400 });
+    }
+  }
+  if (body.courtStartTimes !== undefined) {
+    const v = body.courtStartTimes;
+    if (v === null) {
+      eventData.courtStartTimes = null;
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
+      // Validate each entry is an ISO datetime (or null to clear).
+      const out: Record<string, string> = {};
+      for (const [k, val] of Object.entries(v)) {
+        if (val === null || val === "") continue;
+        if (typeof val !== "string") {
+          return NextResponse.json({ error: `courtStartTimes.${k} must be ISO datetime` }, { status: 400 });
+        }
+        const d = new Date(val);
+        if (isNaN(d.getTime())) {
+          return NextResponse.json({ error: `courtStartTimes.${k} is not a valid datetime` }, { status: 400 });
+        }
+        out[k] = d.toISOString();
+      }
+      eventData.courtStartTimes = out;
+    } else {
+      return NextResponse.json({ error: "courtStartTimes must be an object" }, { status: 400 });
+    }
+  }
   if (date !== undefined) {
     const parsed = new Date(date);
     if (isNaN(parsed.getTime())) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
@@ -383,6 +416,17 @@ export async function PATCH(
   // Update event-level fields
   if (Object.keys(eventData).length > 0) {
     await prisma.event.update({ where: { id }, data: eventData });
+  }
+
+  // Schedule inputs changed → recompute every court's match times.
+  // Cheap (one query per court) and the only reliable way to keep the
+  // chain in sync when default duration or court anchors move.
+  const scheduleTriggers = ["matchDurationMin", "courtStartTimes", "numCourts"];
+  if (scheduleTriggers.some((k) => k in eventData)) {
+    try {
+      const { recalcAllCourtsAndPersist } = await import("@/lib/leagueSchedule");
+      await recalcAllCourtsAndPersist(id);
+    } catch { /* logging failures must not break the response */ }
   }
 
   // Update default class fields

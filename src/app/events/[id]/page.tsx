@@ -89,10 +89,12 @@ interface Match {
 // and the two playing teams hang off Event.leagueTeams.
 interface LeagueRoundLink {
   id: string; roundNumber: number; name: string | null;
+  matchDurationMin?: number | null;
   league: {
     id: string; name: string; shortName?: string | null; season: string | null;
     createdById: string | null; deputyId: string | null;
-    categories?: { id: string; name: string; format: string; gender: string }[];
+    matchDurationMin?: number | null;
+    categories?: { id: string; name: string; format: string; gender: string; matchDurationMin?: number | null }[];
     teams?: {
       id: string;
       name: string;
@@ -203,8 +205,12 @@ interface Event {
     courtNum?: number | null;
     displayOrder?: number | null;
     winnerId?: string | null;
+    scheduleAnchored?: boolean;
     gamePlayers: { playerId: string; team?: number | null }[];
   }[];
+  matchDurationMin?: number | null;
+  /** Per-court start times, keyed by court number as a string. */
+  courtStartTimes?: Record<string, string> | null;
   // Linked social side event. Present (single item) on league events
   // where the operator opted into running a parallel social event.
   socialEvents?: { id: string; name: string; status: string }[];

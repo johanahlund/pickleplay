@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { recalcCourtAndPersist } from "@/lib/leagueSchedule";
 import { NextResponse } from "next/server";
 
 // Caller is allowed if app admin, league director/deputy, or captain/vice
@@ -49,6 +50,7 @@ export async function PATCH(
     where: { id: gameId },
     select: {
       eventId: true, categoryId: true, winnerId: true,
+      courtNum: true, // captured pre-update so we can recalc the old court on a move
       event: {
         select: {
           hostTeamId: true,
@@ -103,9 +105,17 @@ export async function PATCH(
           return NextResponse.json({ error: "Invalid scheduledAt — expected ISO datetime" }, { status: 400 });
         }
         data.scheduledAt = d;
+        // A manual time edit becomes an anchor: the auto-scheduler
+        // preserves it and chains subsequent matches forward.
+        if (body.scheduleAnchored === undefined) data.scheduleAnchored = true;
       } else {
         data.scheduledAt = null;
+        // Clearing the time also clears the anchor.
+        if (body.scheduleAnchored === undefined) data.scheduleAnchored = false;
       }
+    }
+    if (body.scheduleAnchored !== undefined) {
+      data.scheduleAnchored = !!body.scheduleAnchored;
     }
     if (body.courtNum !== undefined) {
       const n = body.courtNum === null || body.courtNum === "" ? null : Number(body.courtNum);
@@ -126,5 +136,23 @@ export async function PATCH(
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const updated = await prisma.leagueGame.update({ where: { id: gameId }, data });
+
+  // Auto-schedule recalc — if anything about court/order/time changed,
+  // re-derive scheduledAt for everything on the affected court(s).
+  const scheduleTouched =
+    "scheduledAt" in data || "courtNum" in data || "displayOrder" in data || "scheduleAnchored" in data;
+  if (scheduleTouched) {
+    try {
+      const newCourt = updated.courtNum;
+      const oldCourt = game.courtNum;
+      const touched = new Set<number>();
+      if (oldCourt != null) touched.add(oldCourt);
+      if (newCourt != null) touched.add(newCourt);
+      for (const courtNum of touched) {
+        await recalcCourtAndPersist(eventId, courtNum);
+      }
+    } catch { /* never break the write on a recalc hiccup */ }
+  }
+
   return NextResponse.json(updated);
 }
