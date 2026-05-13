@@ -2964,11 +2964,12 @@ export default function LeagueDetailPage() {
             </div>
             <div className="text-sm space-y-1">
               <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                <div><span className="text-xs text-muted">Max roster: </span><span className="font-medium">{league.config?.maxRoster ?? "—"}</span></div>
-                <div><span className="text-xs text-muted">Max pts / match day: </span><span className="font-medium">{league.config?.maxPointsPerMatchDay ?? "—"}</span></div>
-                <div><span className="text-xs text-muted">Max league matches / event: </span><span className="font-medium">{league.config?.maxMatchesPerEvent ?? "—"}</span></div>
-                <div><span className="text-xs text-muted">Min match days for playoff: </span><span className="font-medium">{league.config?.minMatchDaysForPlayoff ?? 2}</span></div>
-                <div className="col-span-2"><span className="text-xs text-muted">Cross-category play: </span><span className="font-medium">{league.config?.allowCrossCategoryPlay === false ? "Not allowed" : "Allowed"}</span></div>
+                <div><span className="text-xs text-muted">Max roster: </span><span className="font-medium">{league.config?.maxRoster ?? "unlimited"}</span></div>
+                <div><span className="text-xs text-muted">Max pts / match day: </span><span className="font-medium">{league.config?.maxPointsPerMatchDay ?? "unlimited"}</span></div>
+                <div><span className="text-xs text-muted">Max league matches / event: </span><span className="font-medium">{league.config?.maxMatchesPerEvent ?? "unlimited"}</span></div>
+                <div><span className="text-xs text-muted">Min match days for playoff: </span><span className="font-medium">{league.config?.minMatchDaysForPlayoff ?? "no restriction"}</span></div>
+                <div><span className="text-xs text-muted">Est. match time: </span><span className="font-medium">{league.matchDurationMin ?? 45} min</span></div>
+                <div><span className="text-xs text-muted">Cross-category play: </span><span className="font-medium">{league.config?.allowCrossCategoryPlay === false ? "Not allowed" : "Allowed"}</span></div>
               </div>
             </div>
           </div>
