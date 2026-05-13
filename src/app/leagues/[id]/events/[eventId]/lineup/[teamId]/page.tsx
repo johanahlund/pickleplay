@@ -930,7 +930,12 @@ export default function LineupBuilderPage() {
                 <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
                 <div className="text-base font-bold">{cat.name}</div>
               </div>
-              <div className="text-[11px] text-muted">{formatLabelShort(cat.scoringFormat, cat.winBy)} · {matchCount} of max {max}</div>
+              <div className="text-[11px] text-muted">
+                {formatLabelShort(cat.scoringFormat, cat.winBy)}
+                {" · "}
+                <span className="text-sm font-bold text-foreground">{matchCount}</span>
+                {" of max "}{max}
+              </div>
             </summary>
             <div className="px-3 pb-3 pt-1.5 space-y-2 border-t border-border/70">
 
