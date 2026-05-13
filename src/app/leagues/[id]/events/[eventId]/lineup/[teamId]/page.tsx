@@ -1058,10 +1058,8 @@ export default function LineupBuilderPage() {
                     };
                     return (
                       <div className="mt-2 text-[11px] text-muted flex items-center gap-2 flex-wrap">
-                        {timeStr && <span>⏰ {timeStr}</span>}
-                        {g.courtNum != null && <span>· Court {g.courtNum}</span>}
                         <span className={hasFormatOverride ? "text-violet-700 font-medium" : ""}>
-                          · {formatLabel(effectiveScoring, effectiveWinBy)}
+                          {formatLabel(effectiveScoring, effectiveWinBy)}
                         </span>
                         {canSchedule && !edit && !g.winnerId && (
                           <button
@@ -1119,6 +1117,15 @@ export default function LineupBuilderPage() {
                               onClick={closeEdit}
                               className="text-[10px] text-muted hover:text-foreground px-1"
                             >Cancel</button>
+                          </span>
+                        )}
+                        {/* Time + court pinned to the end of the row (right side
+                            on desktop, wraps below on narrow screens) so the row
+                            reads format-first, schedule-last. */}
+                        {(timeStr || g.courtNum != null) && (
+                          <span className="ml-auto inline-flex items-center gap-2 text-muted">
+                            {timeStr && <span>⏰ {timeStr}</span>}
+                            {g.courtNum != null && <span>Court {g.courtNum}</span>}
                           </span>
                         )}
                       </div>
