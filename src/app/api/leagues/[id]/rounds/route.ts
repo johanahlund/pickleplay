@@ -123,7 +123,7 @@ export async function PATCH(
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  const { roundId, name, startDate, endDate, configOverride, categoriesOverride, status, matchDurationMin } = body;
+  const { roundId, name, startDate, endDate, configOverride, categoriesOverride, status, matchDurationMin, categoryDurationOverrides } = body;
   if (!roundId) return NextResponse.json({ error: "roundId required" }, { status: 400 });
 
   const existing = await prisma.leagueRound.findUnique({ where: { id: roundId }, select: { leagueId: true } });
@@ -147,6 +147,25 @@ export async function PATCH(
       data.matchDurationMin = Math.round(matchDurationMin);
     } else {
       return NextResponse.json({ error: "matchDurationMin must be null or 5-240" }, { status: 400 });
+    }
+  }
+  if (categoryDurationOverrides !== undefined) {
+    if (categoryDurationOverrides === null) {
+      data.categoryDurationOverrides = Prisma.DbNull;
+    } else if (typeof categoryDurationOverrides === "object" && !Array.isArray(categoryDurationOverrides)) {
+      // Validate every entry: positive int 5-240, or null/undefined to drop.
+      const cleaned: Record<string, number> = {};
+      for (const [catId, raw] of Object.entries(categoryDurationOverrides as Record<string, unknown>)) {
+        if (raw === null || raw === undefined || raw === "") continue;
+        const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 5 || n > 240) {
+          return NextResponse.json({ error: `categoryDurationOverrides[${catId}] must be 5-240` }, { status: 400 });
+        }
+        cleaned[catId] = n;
+      }
+      data.categoryDurationOverrides = Object.keys(cleaned).length > 0 ? cleaned : Prisma.DbNull;
+    } else {
+      return NextResponse.json({ error: "categoryDurationOverrides must be an object" }, { status: 400 });
     }
   }
 

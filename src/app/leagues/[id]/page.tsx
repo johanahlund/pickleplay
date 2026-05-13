@@ -14,7 +14,11 @@ import { leagueShortName } from "@/lib/leagueDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
+import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
+import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
+import { buildLeagueInviteGroup, buildLeagueInvitePersonal, type LeagueInviteContext } from "@/lib/inviteShare";
 import { frameClass } from "@/components/Card";
+import { DurationStepper } from "@/components/DurationStepper";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { RulesChatSheet } from "@/components/RulesChatSheet";
 
@@ -70,6 +74,7 @@ interface LeagueRound {
   categoriesOverride: unknown[] | null;
   status: string;
   matchDurationMin: number | null;
+  categoryDurationOverrides: Record<string, number> | null;
   events: LeagueRoundEvent[];
 }
 interface LeagueHelperEntry { id: string; playerId: string; player: { id: string; name: string; email?: string | null; photoUrl?: string | null } }
@@ -355,6 +360,9 @@ interface RoundFormValues {
   status: "setup" | "active";
   /** Round-level override of the league default match duration. Null = inherit. */
   matchDurationMin: number | null;
+  /** Per-category round overrides. { [categoryId]: minutes }. Missing
+   *  entries / null values fall back to category/league/built-in. */
+  categoryDurationOverrides: Record<string, number>;
   configOverride: { maxPointsPerMatchDay?: number; maxMatchesPerEvent?: number; allowCrossCategoryPlay?: boolean } | null;
   // Each row is either an existing league category (id present, optional
   // override fields) or a brand-new round-only category (id absent, all
@@ -400,9 +408,8 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   const [start, setStart] = useState(initial.startDate);
   const [end, setEnd] = useState(initial.endDate);
   const [status, setStatus] = useState<RoundFormValues["status"]>(initial.status);
-  const [matchDurationOverride, setMatchDurationOverride] = useState<string>(
-    initial.matchDurationMin != null ? String(initial.matchDurationMin) : "",
-  );
+  const [matchDuration, setMatchDuration] = useState<number | null>(initial.matchDurationMin);
+  const [catDurations, setCatDurations] = useState<Record<string, number>>(initial.categoryDurationOverrides || {});
 
   const cfg = initial.configOverride;
   const [useFormatOverride, setUseFormatOverride] = useState(!!cfg);
@@ -516,13 +523,10 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       }
     }
 
-    const matchDurationMin = matchDurationOverride.trim() === ""
-      ? null
-      : Math.max(5, Math.min(240, parseInt(matchDurationOverride, 10) || 0)) || null;
-
     await onSubmit({
       roundNumber, name, startDate: start, endDate: end, status,
-      matchDurationMin,
+      matchDurationMin: matchDuration,
+      categoryDurationOverrides: catDurations,
       configOverride, categoriesOverride,
     });
   };
@@ -572,17 +576,34 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       </div>
 
       <div className="border-t border-border pt-3">
-        <label className="block text-xs text-muted mb-1">Override match duration for this round (min)</label>
-        <input
-          type="number"
-          value={matchDurationOverride}
-          onChange={(e) => setMatchDurationOverride(e.target.value)}
-          min={5}
-          max={240}
-          placeholder="inherit from league"
-          className="w-40 border border-border rounded-lg px-2 py-1.5 text-sm"
-        />
-        <p className="text-[10px] text-muted mt-1">Leave empty to use the league default. Categories can still override further.</p>
+        <div className="text-sm font-medium mb-2">Match durations (min)</div>
+        <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-center max-w-sm">
+          <span className="text-xs text-muted">All categories</span>
+          <DurationStepper value={matchDuration} onChange={setMatchDuration} />
+          {leagueCategories.flatMap((c) => {
+            const v = catDurations[c.id];
+            return [
+              <span key={`label-${c.id}`} className="text-xs text-foreground truncate">
+                <span className="text-muted">↳ </span>{c.name}
+              </span>,
+              <DurationStepper
+                key={`step-${c.id}`}
+                value={v ?? null}
+                compact
+                label={`Match duration override for ${c.name}`}
+                onChange={(next) => {
+                  setCatDurations((prev) => {
+                    const out = { ...prev };
+                    if (next == null) delete out[c.id];
+                    else out[c.id] = next;
+                    return out;
+                  });
+                }}
+              />,
+            ];
+          })}
+        </div>
+        <p className="text-[10px] text-muted mt-2">– on the general row inherits from the league. – on a category row inherits from the general row above. Tap a compact category chip to step it.</p>
       </div>
 
       <div className="border-t border-border pt-3">
@@ -841,6 +862,8 @@ export default function LeagueDetailPage() {
   // useEffect below, so the page still renders instantly from sessionStorage
   // after mount without a network round-trip.
   const [league, setLeague] = useState<League | null>(null);
+  // League share-invite sheet (top-right share icon in header).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || !cacheKey) return;
     try {
@@ -1557,6 +1580,9 @@ export default function LeagueDetailPage() {
       startDate: v.startDate || undefined,
       endDate: v.endDate || undefined,
       matchDurationMin: v.matchDurationMin,
+      categoryDurationOverrides: v.categoryDurationOverrides && Object.keys(v.categoryDurationOverrides).length > 0
+        ? v.categoryDurationOverrides
+        : null,
       configOverride: v.configOverride,
       categoriesOverride: v.categoriesOverride,
     });
@@ -1934,31 +1960,11 @@ export default function LeagueDetailPage() {
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Match duration (min)</label>
-              {cat.matchDurationMin == null ? (
-                <button
-                  type="button"
-                  onClick={() => updateCat("matchDurationMin", 45)}
-                  className="px-3 py-2 text-xs text-action font-medium rounded-lg border border-dashed border-border hover:bg-gray-50"
-                >+ override</button>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    min={5}
-                    max={240}
-                    value={cat.matchDurationMin}
-                    onChange={(e) => updateCat("matchDurationMin", e.target.value === "" ? 5 : Math.max(5, Math.min(240, parseInt(e.target.value, 10) || 45)))}
-                    className="w-20 border border-border rounded-lg px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => updateCat("matchDurationMin", null)}
-                    title="Clear override, inherit from event/round/league"
-                    className="text-muted hover:text-danger text-sm px-1"
-                  >✕</button>
-                </div>
-              )}
-              <p className="text-[10px] text-muted mt-1">Overrides event/round/league default for this category.</p>
+              <DurationStepper
+                value={cat.matchDurationMin}
+                onChange={(next) => updateCat("matchDurationMin", next)}
+              />
+              <p className="text-[10px] text-muted mt-1">– = inherit from event/round/league.</p>
             </div>
           </div>
           {editFooter(async () => { await saveCategoryEdit(cat); fetchLeague(); }, "categories")}
@@ -2590,11 +2596,27 @@ export default function LeagueDetailPage() {
             <h2 className="text-xl font-bold">{league.name}</h2>
             <span className="text-sm text-muted">Season {league.season || "—"}</span>
           </div>
-          {/* Right column: pen on top, status pill at the bottom. */}
-          <div className="flex flex-col items-end gap-1 shrink-0 self-stretch">
-            {canEdit ? (
-              <span className="text-muted"><PenIcon /></span>
-            ) : <span />}
+          {/* Right column: share + pen on top, status pill at the bottom. */}
+          <div className="flex flex-col items-end gap-2 shrink-0 self-stretch">
+            <div className="flex items-center gap-3">
+              {canEdit && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); setShareSheetOpen(true); }}
+                  className="inline-flex"
+                >
+                  <HeaderInviteIcon
+                    onClick={() => setShareSheetOpen(true)}
+                    kind="L"
+                    label="Share league invite"
+                    color="#334155"
+                    badgeFg="#fff"
+                  />
+                </span>
+              )}
+              {canEdit ? (
+                <span className="text-muted"><PenIcon /></span>
+              ) : <span />}
+            </div>
             <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full mt-auto ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
           </div>
         </div>
@@ -3096,6 +3118,7 @@ export default function LeagueDetailPage() {
                       endDate: round.endDate ? round.endDate.slice(0, 10) : "",
                       status: round.status === "active" ? "active" : "setup",
                       matchDurationMin: round.matchDurationMin ?? null,
+                      categoryDurationOverrides: (round.categoryDurationOverrides ?? {}) as Record<string, number>,
                       configOverride: (round.configOverride as RoundFormValues["configOverride"]) ?? null,
                       categoriesOverride: (round.categoriesOverride as RoundFormValues["categoriesOverride"]) ?? null,
                     }}
@@ -3244,6 +3267,7 @@ export default function LeagueDetailPage() {
                 endDate: "",
                 status: "setup",
                 matchDurationMin: null,
+                categoryDurationOverrides: {},
                 configOverride: null,
                 categoriesOverride: null,
               }}
@@ -3572,6 +3596,47 @@ export default function LeagueDetailPage() {
           )}
         </div>
       )}
+
+      {/* League share-invite sheet — opened from the share icon in the
+          header. Recipient pool: every rostered player across all teams
+          in the league. Unclaimed shown by default; "show all" toggle
+          inside the sheet reveals claimed members too. */}
+      {canEdit && (() => {
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const ctx: LeagueInviteContext = {
+          inviterName: session?.user?.name || "Your league organizer",
+          leagueName: league.name,
+          seasonText: league.season || null,
+          leagueUrl: `${origin}/leagues/${league.id}`,
+          blurb: league.description || null,
+        };
+        const groupMessage = buildLeagueInviteGroup(ctx);
+        const recipients: ShareRecipient[] = [];
+        for (const team of league.teams) {
+          for (const tp of team.players) {
+            recipients.push({
+              id: tp.playerId,
+              name: tp.player.name,
+              phone: null,
+              hasAccount: !!tp.player.hasAccount,
+              hint: team.name,
+            });
+          }
+        }
+        const buildPersonal = (r: ShareRecipient, claimUrl: string) =>
+          buildLeagueInvitePersonal(ctx, { name: r.name, claimUrl });
+        return (
+          <ShareSheet
+            open={shareSheetOpen}
+            onClose={() => setShareSheetOpen(false)}
+            title="Invite to this league"
+            blurb="Copy the group message into the relevant WhatsApp groups. Send each unclaimed player a personal link so they can claim their account."
+            groupMessage={groupMessage}
+            recipients={recipients}
+            buildPersonal={buildPersonal}
+          />
+        );
+      })()}
 
     </div>
   );

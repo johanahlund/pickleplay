@@ -713,6 +713,13 @@ model LeagueRound {
   /// inherit from the league. Events under this round inherit this
   /// value (and can themselves override).
   matchDurationMin   Int?
+  /// Per-category match-duration overrides for this round. JSON map:
+  /// { [LeagueCategory.id]: minutes }. Takes precedence over the round
+  /// general matchDurationMin AND the league-level
+  /// LeagueCategory.matchDurationMin. Use a missing/absent key (or null
+  /// value) to fall back to the next level. Edited via the per-category
+  /// stepper rows in the round form.
+  categoryDurationOverrides Json?
 
   league League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   events Event[]

@@ -21,21 +21,32 @@ export const BUILT_IN_DURATION_MIN = 45;
 
 interface DurationCascade {
   league: { matchDurationMin: number | null };
-  round: { matchDurationMin: number | null } | null;
+  round: {
+    matchDurationMin: number | null;
+    /** Round per-category override for THIS category (already looked up
+     *  by the caller). Takes precedence over event and below. */
+    categoryDurationMin?: number | null;
+  } | null;
   event: { matchDurationMin: number | null };
   category: { matchDurationMin: number | null };
 }
 
 /**
- * Resolve the effective match-duration (in minutes) for a single game,
- * applying the most-specific override that's set: category → event →
- * round → league → built-in.
+ * Resolve the effective match-duration (in minutes) for a single game.
+ * Cascade (most specific wins, top to bottom):
+ *   1. Event override                        → applies to the whole match-day
+ *   2. Round per-category override           → this round, this category
+ *   3. Round general override                → this round, any category
+ *   4. League per-category (LeagueCategory)  → this category, every event
+ *   5. League general                        → every event
+ *   6. 45 min built-in default
  */
 export function effectiveDurationMin(c: DurationCascade): number {
   return (
-    c.category.matchDurationMin
-    ?? c.event.matchDurationMin
+    c.event.matchDurationMin
+    ?? c.round?.categoryDurationMin
     ?? c.round?.matchDurationMin
+    ?? c.category.matchDurationMin
     ?? c.league.matchDurationMin
     ?? BUILT_IN_DURATION_MIN
   );
@@ -48,12 +59,17 @@ interface RecalcContext {
   leagueMatchDurationMin: number | null;
   /** Round override (null = inherit league). */
   roundMatchDurationMin: number | null;
+  /** Round per-category overrides: { [categoryId]: minutes }. Each key
+   *  overrides both the round general and the league per-category for
+   *  just that category in this round. */
+  roundCategoryDurationOverrides: Record<string, number | null>;
   /** Event override (null = inherit round). */
   eventMatchDurationMin: number | null;
 }
 
 interface GameForRecalc {
   id: string;
+  categoryId: string;
   courtNum: number | null;
   displayOrder: number | null;
   scheduledAt: Date | null;
@@ -97,9 +113,13 @@ export function recalcCourtSchedule(
   let cursor = new Date(startIso).getTime();
   const patches: { id: string; scheduledAt: Date | null }[] = [];
   for (const g of sorted) {
+    const roundCatOverride = ctx.roundCategoryDurationOverrides[g.categoryId] ?? null;
     const dur = effectiveDurationMin({
       league: { matchDurationMin: ctx.leagueMatchDurationMin },
-      round: ctx.roundMatchDurationMin != null ? { matchDurationMin: ctx.roundMatchDurationMin } : null,
+      round: {
+        matchDurationMin: ctx.roundMatchDurationMin,
+        categoryDurationMin: roundCatOverride,
+      },
       event: { matchDurationMin: ctx.eventMatchDurationMin },
       category: g.category,
     });
@@ -136,6 +156,7 @@ export async function recalcCourtAndPersist(eventId: string, courtNum: number): 
       round: {
         select: {
           matchDurationMin: true,
+          categoryDurationOverrides: true,
           league: { select: { matchDurationMin: true } },
         },
       },
@@ -143,6 +164,7 @@ export async function recalcCourtAndPersist(eventId: string, courtNum: number): 
         where: { courtNum },
         select: {
           id: true,
+          categoryId: true,
           courtNum: true,
           displayOrder: true,
           scheduledAt: true,
@@ -155,10 +177,12 @@ export async function recalcCourtAndPersist(eventId: string, courtNum: number): 
   if (!event || !event.round) return 0;
 
   const courtStartTimes = (event.courtStartTimes ?? {}) as Record<string, string>;
+  const roundCategoryDurationOverrides = (event.round.categoryDurationOverrides ?? {}) as Record<string, number | null>;
   const patches = recalcCourtSchedule(event.leagueGames, courtNum, {
     courtStartTimes,
     leagueMatchDurationMin: event.round.league.matchDurationMin,
     roundMatchDurationMin: event.round.matchDurationMin,
+    roundCategoryDurationOverrides,
     eventMatchDurationMin: event.matchDurationMin,
   });
   if (patches.length === 0) return 0;
