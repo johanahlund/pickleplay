@@ -480,7 +480,13 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
       }));
   }, [initial.categoriesOverride]);
 
-  const [useCategoriesOverride, setUseCategoriesOverride] = useState(!!initial.categoriesOverride);
+  // Pure UI state: whether the Customize-Categories section is
+  // expanded. Has NO data-model meaning anymore (the save logic
+  // derives whether overrides exist directly from catOverrides /
+  // catDurations / customCats). Opens by default when the round was
+  // saved with any category override so the operator sees what they
+  // configured.
+  const [catSectionOpen, setCatSectionOpen] = useState(!!initial.categoriesOverride);
   const [catOverrides, setCatOverrides] = useState<Record<string, CatOverrideForm>>(initialCatMap);
   const [customCats, setCustomCats] = useState<CustomCat[]>(initialCustomCats);
 
@@ -499,7 +505,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
     maxMatches: initial.configOverride?.maxMatchesPerEvent != null ? String(initial.configOverride.maxMatchesPerEvent) : "",
     crossCat: initial.configOverride?.allowCrossCategoryPlay === true ? "allow" : initial.configOverride?.allowCrossCategoryPlay === false ? "deny" : "inherit",
     useFormatOverride: !!initial.configOverride,
-    useCategoriesOverride: !!initial.categoriesOverride,
+    // catSectionOpen is pure UI — not part of the dirty snapshot.
     catOverrides: initialCatMap,
     customCats: initialCustomCats,
   }), [initial, initialCatMap, initialCustomCats]);
@@ -507,7 +513,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
     roundNumber, name, start, end, status,
     matchDuration, catDurations,
     maxPts, maxMatches, crossCat,
-    useFormatOverride, useCategoriesOverride,
+    useFormatOverride,
     catOverrides, customCats,
   });
   const isDirty = currentSnapshot !== initialSnapshot;
@@ -532,8 +538,23 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
       configOverride = c;
     }
 
+    // Auto-detect whether ANY category change exists. Triggers when any
+    // league category is unchecked (won't play), any per-cat field has
+    // a real override value, or any round-only custom category was added.
+    const hasCategoryChanges =
+      Object.values(catOverrides).some((o) =>
+        !o.included
+        || (o.name.trim() !== "")
+        || (o.ageGroup.trim() !== "")
+        || (o.skillMin.trim() !== "")
+        || (o.skillMax.trim() !== "")
+        || (o.scoringFormat.trim() !== "")
+        || (o.winBy.trim() !== "")
+        || (o.maxPerEvent.trim() !== ""),
+      )
+      || customCats.some((cc) => cc.name.trim());
     let categoriesOverride: RoundFormValues["categoriesOverride"] = null;
-    if (useCategoriesOverride) {
+    if (hasCategoryChanges) {
       categoriesOverride = [];
       for (const cat of leagueCategories) {
         const o = catOverrides[cat.id];
@@ -680,12 +701,59 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
       </div>
 
       <div className="border-t border-border pt-3">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={useCategoriesOverride}
-            onChange={(e) => setUseCategoriesOverride(e.target.checked)} className="rounded" />
+        {/* Expand/collapse the per-category customization area. Pure UI
+            toggle — has no data-model meaning. The save logic auto-
+            detects whether any overrides exist. When collapsed we show
+            a summary of categories that have overrides so the operator
+            can see at a glance what's customized. */}
+        <button
+          type="button"
+          onClick={() => setCatSectionOpen((v) => !v)}
+          className="w-full flex items-center gap-2 text-left"
+          aria-expanded={catSectionOpen}
+        >
+          <span className={`text-muted text-xs transition-transform ${catSectionOpen ? "rotate-90" : ""}`}>▸</span>
           <span className="text-sm"><span className="font-bold">Customize Categories</span> for this round</span>
-        </label>
-        {useCategoriesOverride && (
+        </button>
+        {!catSectionOpen && (() => {
+          // Build a per-category summary of any overrides currently
+          // configured (whether saved or unsaved). Doubles as a
+          // discoverability hint for the operator.
+          const lines: { catId: string; name: string; detail: string }[] = [];
+          for (const cat of leagueCategories) {
+            const o = catOverrides[cat.id];
+            const dur = catDurations[cat.id];
+            if (!o) continue;
+            if (!o.included) {
+              lines.push({ catId: cat.id, name: cat.name, detail: "won't play" });
+              continue;
+            }
+            const bits: string[] = [];
+            if (dur != null) bits.push(`${dur} min`);
+            if (o.name.trim()) bits.push(`name: ${o.name.trim()}`);
+            if (o.ageGroup.trim()) bits.push(o.ageGroup.trim());
+            if (o.skillMin.trim() || o.skillMax.trim()) bits.push(`${o.skillMin || "—"}-${o.skillMax || "—"}`);
+            if (o.scoringFormat.trim()) bits.push(o.scoringFormat.trim());
+            if (o.winBy.trim()) bits.push(`win by ${o.winBy.trim()}`);
+            if (o.maxPerEvent.trim()) bits.push(`max ${o.maxPerEvent.trim()}/event`);
+            if (bits.length > 0) lines.push({ catId: cat.id, name: cat.name, detail: bits.join(" · ") });
+          }
+          for (const cc of customCats) {
+            if (cc.name.trim()) lines.push({ catId: `custom:${cc.localId}`, name: cc.name.trim(), detail: "round-only category" });
+          }
+          if (lines.length === 0) return null;
+          return (
+            <ul className="mt-1.5 pl-6 space-y-0.5 text-[11px] text-muted">
+              {lines.map((l) => (
+                <li key={l.catId}>
+                  <span className="text-foreground font-medium">{l.name}</span>
+                  <span className="ml-1">— {l.detail}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
+        {catSectionOpen && (
           <div className="mt-2 space-y-1.5 pl-6">
             {leagueCategories.length === 0 && (
               <p className="text-[11px] text-muted">No league categories yet.</p>
