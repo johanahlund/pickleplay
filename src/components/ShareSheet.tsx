@@ -20,6 +20,7 @@
 import { useEffect, useState } from "react";
 import { copyText } from "@/lib/clipboard";
 import { personalClaimUrl } from "@/lib/inviteShare";
+import { ShareInviteModal } from "./ShareInviteModal";
 
 export interface ShareRecipient {
   id: string;            // playerId
@@ -59,22 +60,31 @@ export function ShareSheet({
 }: ShareSheetProps) {
   const [tokens, setTokens] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Recipients that have been copied at least once. Persists for the
-  // life of the sheet so the admin can track who they've already
-  // invited. Tapping the same row again toggles it back to "Copy".
-  const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
+  // Recipients the admin has already opened the invite modal for at
+  // least once. Persists for the life of the sheet so they can track
+  // who they've reached out to. Tap a "✓ Invited" row to toggle it
+  // back to "Invite" (no modal re-open).
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   // Short flash for the group-message Copy button (1.5s revert).
   const [groupFlashed, setGroupFlashed] = useState(false);
   const [errorByRecipient, setErrorByRecipient] = useState<Record<string, string>>({});
   const [showAll, setShowAll] = useState(false);
+  // The recipient whose invite modal is currently open. Holds the
+  // pre-built message + phone so ShareInviteModal can do WhatsApp /
+  // Copy / Email actions.
+  const [activeInvite, setActiveInvite] = useState<{
+    recipient: ShareRecipient;
+    message: string;
+  } | null>(null);
 
   // Reset transient state whenever the sheet re-opens so a stale
-  // "copied" check from a previous session doesn't linger.
+  // "invited" check from a previous session doesn't linger.
   useEffect(() => {
     if (open) {
-      setCopiedIds(new Set());
+      setInvitedIds(new Set());
       setGroupFlashed(false);
       setErrorByRecipient({});
+      setActiveInvite(null);
     }
   }, [open]);
 
@@ -90,8 +100,8 @@ export function ShareSheet({
     setGroupFlashed(true);
     setTimeout(() => setGroupFlashed(false), 1500);
   };
-  const toggleCopiedId = (id: string, add: boolean) => {
-    setCopiedIds((prev) => {
+  const toggleInvitedId = (id: string, add: boolean) => {
+    setInvitedIds((prev) => {
       const next = new Set(prev);
       if (add) next.add(id); else next.delete(id);
       return next;
@@ -132,29 +142,21 @@ export function ShareSheet({
     return buildPersonal(r, claimUrl);
   };
 
-  // First tap copies the personalised message AND marks the row as
-  // "copied" (visible ✓). Second tap on the same row toggles back to
-  // "Copy" without re-copying — useful when the admin wants to clear a
-  // false-positive without resending. Matches the user's mental model of
-  // a check-list of "who I've invited so far".
-  const onCopyRecipient = async (r: ShareRecipient) => {
-    if (copiedIds.has(r.id)) {
-      toggleCopiedId(r.id, false);
+  // First tap opens the same modal used for one-off invites
+  // (WhatsApp / Copy / Email picker) with the personalised message
+  // pre-built. The row is marked "✓ Invited" so the admin can keep
+  // track of who they've reached out to. Tapping a "✓ Invited" row
+  // toggles the mark back off without re-opening the modal — handy if
+  // they marked someone by mistake.
+  const onInviteRecipient = async (r: ShareRecipient) => {
+    if (invitedIds.has(r.id)) {
+      toggleInvitedId(r.id, false);
       return;
     }
     const msg = await buildMessageFor(r);
     if (!msg) return;
-    const ok = await copyText(msg);
-    if (ok) toggleCopiedId(r.id, true);
-  };
-
-  const onWhatsAppRecipient = async (r: ShareRecipient) => {
-    if (!r.phone) return;
-    const msg = await buildMessageFor(r);
-    if (!msg) return;
-    const cleanPhone = r.phone.replace(/\D/g, "");
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-    window.open(url, "_blank", "noopener");
+    setActiveInvite({ recipient: r, message: msg });
+    toggleInvitedId(r.id, true);
   };
 
   return (
@@ -217,7 +219,7 @@ export function ShareSheet({
               <ul className="space-y-1">
                 {visible.map((r) => {
                   const isBusy = busyId === r.id;
-                  const isCopied = copiedIds.has(r.id);
+                  const isInvited = invitedIds.has(r.id);
                   const err = errorByRecipient[r.id];
                   return (
                     <li key={r.id} className="border border-border rounded-lg px-2.5 py-2 flex items-center gap-2">
@@ -239,19 +241,10 @@ export function ShareSheet({
                       <button
                         type="button"
                         disabled={isBusy}
-                        onClick={() => onCopyRecipient(r)}
-                        title={isCopied ? "Copied — tap again to mark as not invited" : "Copy personalised invite"}
-                        className={`text-[12px] font-semibold px-2.5 py-1 rounded-lg shrink-0 ${isCopied ? "bg-emerald-600 text-white" : "bg-action text-white"} disabled:opacity-50`}
-                      >{isBusy ? "…" : isCopied ? "✓ Copied" : "Copy"}</button>
-                      {r.phone && (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => onWhatsAppRecipient(r)}
-                          title="Open WhatsApp chat with pre-filled message"
-                          className="text-[12px] font-semibold px-2.5 py-1 rounded-lg shrink-0 border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                        >WA</button>
-                      )}
+                        onClick={() => onInviteRecipient(r)}
+                        title={isInvited ? "Already invited — tap to clear the mark" : "Open invite chooser (WhatsApp / Copy / Email)"}
+                        className={`text-[12px] font-semibold px-2.5 py-1 rounded-lg shrink-0 ${isInvited ? "bg-emerald-600 text-white" : "bg-action text-white"} disabled:opacity-50`}
+                      >{isBusy ? "…" : isInvited ? "✓ Invited" : "Invite"}</button>
                     </li>
                   );
                 })}
@@ -260,6 +253,15 @@ export function ShareSheet({
           </section>
         </div>
       </div>
+
+      <ShareInviteModal
+        open={!!activeInvite}
+        message={activeInvite?.message ?? ""}
+        phone={activeInvite?.recipient.phone ?? null}
+        title={activeInvite ? `Invite ${activeInvite.recipient.name}` : "Invite"}
+        emailSubject="Join FriendlyBall"
+        onClose={() => setActiveInvite(null)}
+      />
     </div>
   );
 }

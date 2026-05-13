@@ -2,6 +2,40 @@ import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
+/**
+ * Preview a claim invite. Public on purpose — anyone holding the
+ * single-use token already has access to the claim flow itself, so
+ * surfacing the player's name/avatar to confirm they're claiming the
+ * right account leaks nothing the token doesn't already imply.
+ */
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const token = url.searchParams.get("token");
+  if (!token) {
+    return NextResponse.json({ error: "Token required" }, { status: 400 });
+  }
+  const player = await prisma.player.findUnique({
+    where: { inviteToken: token },
+    select: {
+      id: true, name: true, emoji: true, photoUrl: true,
+      passwordHash: true, status: true,
+      clubMembers: { select: { club: { select: { name: true, emoji: true } } } },
+    },
+  });
+  if (!player || player.status === "voided") {
+    return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 404 });
+  }
+  if (player.passwordHash) {
+    return NextResponse.json({ error: "Account already claimed" }, { status: 410 });
+  }
+  return NextResponse.json({
+    name: player.name,
+    emoji: player.emoji,
+    photoUrl: player.photoUrl,
+    clubs: player.clubMembers.map((m) => ({ name: m.club.name, emoji: m.club.emoji })),
+  });
+}
+
 export async function POST(req: Request) {
   const { token, email, password } = await req.json();
 

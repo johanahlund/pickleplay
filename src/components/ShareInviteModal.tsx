@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { copyText } from "@/lib/clipboard";
+import { WhatsAppIcon } from "./WhatsAppIcon";
 
 interface Props {
   open: boolean;
@@ -79,24 +80,36 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
             onClick={() => setTimeout(onClose, 200)}
             className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#25D366] text-white text-sm font-semibold active:opacity-90"
           >
-            <span aria-hidden>💬</span>
+            <WhatsAppIcon className="w-4 h-4 [&_path]:fill-white" />
             <span>WhatsApp{phoneDigits ? "" : " — pick contact"}</span>
           </a>
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gray-100 text-foreground text-sm font-semibold hover:bg-gray-200"
+            className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              copied
+                ? "bg-emerald-500 text-white"
+                : "bg-sky-100 text-sky-800 hover:bg-sky-200 active:bg-sky-300"
+            }`}
+            aria-label="Copy invite text to clipboard"
           >
-            <span aria-hidden>📋</span>
-            <span>{copied ? "Copied!" : "Copy invite text"}</span>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>{copied ? "Copied — paste anywhere" : "Copy invite text"}</span>
           </button>
           <a
             href={mailUrl}
             onClick={() => setTimeout(onClose, 200)}
-            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gray-100 text-foreground text-sm font-semibold hover:bg-gray-200"
+            className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 active:bg-slate-900 transition-colors"
+            aria-label="Send invite via email"
           >
-            <span aria-hidden>📧</span>
-            <span>Email</span>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="m3 7 9 6 9-6" />
+            </svg>
+            <span>Send by email</span>
           </a>
         </div>
       </div>

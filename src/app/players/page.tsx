@@ -10,11 +10,12 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { COUNTRIES } from "@/lib/countries";
-import { withInstallTip } from "@/lib/inviteShare";
+import { withInstallTip, personalClaimUrl } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { UnclaimedIcon } from "@/components/UnclaimedIcon";
 
 interface PlayerClub {
   id: string;
@@ -209,9 +210,12 @@ export default function PlayersPage() {
         return;
       }
 
-      const claimUrl = `${window.location.origin}/claim/${data.token}`;
+      const claimUrl = personalClaimUrl(window.location.origin, data.token, player.name);
+      const firstName = player.name.split(" ")[0];
+      const inviterName = session?.user?.name || "A friend";
       const shareText = withInstallTip(
-        `Hi ${player.name}, you've been added to FriendlyBall. Claim your account to track your stats:\n\n${claimUrl}`,
+        `Hi ${firstName},\n\n${inviterName} invited you to FriendlyBall — the friendly pickleball app. You've already been added as a player, so we just need you to set up your account:\n\n${claimUrl}`,
+        { forClaim: true },
       );
 
       // Open our share chooser instead of navigator.share. The native
@@ -570,16 +574,11 @@ export default function PlayersPage() {
                               </span>
                             )}
                             {isUnclaimed(p) && (
-                              <span
-                                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-100 text-amber-700 shrink-0"
-                                title="Unclaimed — no account yet"
-                                aria-label="Unclaimed"
-                              >
-                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                                  <path d="M12 17h.01" />
-                                </svg>
-                              </span>
+                              <UnclaimedIcon
+                                onClick={isAdmin ? () => invitePlayer(p) : undefined}
+                                disabled={invitingId === p.id}
+                                title={isAdmin ? "Invite to claim account" : undefined}
+                              />
                             )}
                             {p.phone && (
                               <a
@@ -634,15 +633,6 @@ export default function PlayersPage() {
                   })()}
                   {isAdmin && (
                     <div className="flex items-center gap-1 mt-2 ml-12 flex-wrap">
-                      {isUnclaimed(p) && (
-                        <button
-                          onClick={() => invitePlayer(p)}
-                          disabled={invitingId === p.id}
-                          className="text-primary text-xs px-2 py-1 rounded hover:bg-primary/10 transition-colors disabled:opacity-50"
-                        >
-                          {copiedId === p.id ? "Copied!" : invitingId === p.id ? "..." : "Invite"}
-                        </button>
-                      )}
                       {!isUnclaimed(p) && (
                         <button
                           onClick={() => resetPlayer(p)}

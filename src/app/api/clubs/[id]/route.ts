@@ -22,6 +22,9 @@ export async function GET(
               id: true, name: true, emoji: true, rating: true, gender: true,
               phone: true, photoUrl: true, wins: true, losses: true, role: true,
               whatsappVisibility: true,
+              passwordHash: true,
+              canCreateLeagues: true,
+              canCreateClubs: true,
               clubMembers: { select: { clubId: true } },
               leagueTeamPlayers: { select: { teamId: true } },
               eventPlayers: { select: { eventId: true } },
@@ -48,6 +51,7 @@ export async function GET(
     id: string; name: string; emoji: string; rating: number; gender: string | null;
     phone: string | null; photoUrl: string | null; wins: number; losses: number; role: string;
     whatsappVisibility: string;
+    passwordHash: string | null;
     clubMembers: { clubId: string }[];
     leagueTeamPlayers: { teamId: string }[];
     eventPlayers: { eventId: string }[];
@@ -63,9 +67,16 @@ export async function GET(
         teamIds: player.leagueTeamPlayers.map((t) => t.teamId),
         signedUpEventIds: player.eventPlayers.map((e) => e.eventId),
       });
-      const { clubMembers: _cm, leagueTeamPlayers: _lt, eventPlayers: _ep, whatsappVisibility: _vis, phone, ...rest } = player;
+      const { clubMembers: _cm, leagueTeamPlayers: _lt, eventPlayers: _ep, whatsappVisibility: _vis, phone, passwordHash, ...rest } = player;
       void _cm; void _lt; void _ep; void _vis;
-      return { ...m, player: { ...rest, phone: allowWhatsApp ? phone : null } };
+      return {
+        ...m,
+        player: {
+          ...rest,
+          phone: allowWhatsApp ? phone : null,
+          hasAccount: !!passwordHash,
+        },
+      };
     }),
   };
 

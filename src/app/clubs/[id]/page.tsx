@@ -203,6 +203,10 @@ function SwipeableMemberRow({
   onRoleChange,
   onInvite,
   inviting,
+  onAdminResetElo,
+  onAdminVoid,
+  onAdminGrant,
+  onAdminEdit,
 }: {
   member: ClubMember;
   canManage: boolean;
@@ -213,6 +217,11 @@ function SwipeableMemberRow({
   onRoleChange: (role: string) => void;
   onInvite?: () => void;
   inviting?: boolean;
+  /** App-admin shortcuts mirroring the /players page actions row. */
+  onAdminResetElo?: () => void;
+  onAdminVoid?: () => void;
+  onAdminGrant?: () => void;
+  onAdminEdit?: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
@@ -261,9 +270,10 @@ function SwipeableMemberRow({
   const p = member.player;
 
   return (
+    <div className="rounded-lg bg-card border border-border relative">
     <div
       ref={rowRef}
-      className="group flex items-center gap-2 px-3 py-2 rounded-lg transition-transform select-none bg-card border border-border"
+      className="group flex items-center gap-2 px-3 py-2 transition-transform select-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -292,9 +302,26 @@ function SwipeableMemberRow({
           admin/owner members the pill always renders so their status
           is visible.
         */}
-        {((member.role === "owner" || member.role === "admin") || (isOwner && !isSelf)) && (
+        {/* Role pill renders whenever the member has a privileged role
+            (owner/admin), OR when the viewer can change roles. App admin
+            sees + edits every row (including their own — needed to
+            demote themselves down to member). The role-pill picker is
+            editable when:
+              - app admin (always), OR
+              - club owner editing a non-owner non-self row
+              (owner can only demote-own-role via the "transfer
+               ownership" flow, not via this pill). */}
+        {((member.role === "owner" || member.role === "admin") || (isOwner && !isSelf) || isGlobalAdmin) && (
           <div className="mt-0.5">
-            <RolePill role={member.role} canChange={!!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))} onChange={onRoleChange} />
+            <RolePill
+              role={member.role}
+              canChange={
+                isGlobalAdmin
+                  ? (member.role !== "owner" || isGlobalAdmin)
+                  : !!(isOwner && !isSelf && (member.role !== "owner" || isGlobalAdmin))
+              }
+              onChange={onRoleChange}
+            />
           </div>
         )}
       </div>
@@ -335,6 +362,37 @@ function SwipeableMemberRow({
           ✕
         </button>
       )}
+    </div>
+    {/* App-admin action row — mirrors /players page actions. Edit
+        links out to /players?q=<name> so the same inline edit form
+        there can be reused. Hidden for non-app-admin viewers. */}
+    {isGlobalAdmin && (
+      <div className="flex items-center gap-1 px-2 py-1 border-t border-border/60 bg-gray-50/60 flex-wrap">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAdminResetElo?.(); }}
+          className="text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+        >Reset ELO</button>
+        {p.role !== "admin" && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAdminGrant?.(); }}
+            className="text-xs px-2 py-1 rounded text-muted hover:bg-gray-100 transition-colors"
+            title="Grant or revoke creation permissions"
+          >🔑 Grant</button>
+        )}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAdminEdit?.(); }}
+          className="text-muted text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+        >Edit</button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onAdminVoid?.(); }}
+          className="text-danger text-xs px-2 py-1 rounded hover:bg-red-50 transition-colors ml-auto"
+        >Void</button>
+      </div>
+    )}
     </div>
   );
 }
@@ -638,6 +696,98 @@ export default function ClubDetailPage() {
       });
     } finally {
       setInvitingMemberId(null);
+    }
+  };
+
+  // ── App-admin actions on member rows (Reset ELO / Grant / Edit / Void) ──
+  // Mirrors the four admin tools surfaced on /players, inline so the
+  // admin doesn't need to navigate away from the members list.
+  const [grantTargetId, setGrantTargetId] = useState<string | null>(null);
+  const [grantBusy, setGrantBusy] = useState(false);
+  // Inline player-edit modal state (name / gender / phone / country —
+  // same shape as the /players page edit form).
+  const [editPlayerId, setEditPlayerId] = useState<string | null>(null);
+  const [adminEditName, setAdminEditName] = useState("");
+  const [adminEditGender, setAdminEditGender] = useState<string | null>(null);
+  const [adminEditPhone, setAdminEditPhone] = useState("");
+  const [adminEditCountry, setAdminEditCountry] = useState<string>("");
+  const [editBusy, setEditBusy] = useState(false);
+
+  const startAdminEdit = (player: Player) => {
+    setEditPlayerId(player.id);
+    setAdminEditName(player.name);
+    setAdminEditGender(player.gender || null);
+    setAdminEditPhone(player.phone || "");
+    setAdminEditCountry((player as Player & { country?: string | null }).country || "");
+  };
+  const cancelAdminEdit = () => {
+    setEditPlayerId(null);
+    setAdminEditName("");
+    setAdminEditCountry("");
+  };
+  const saveAdminEdit = async () => {
+    if (!editPlayerId || !adminEditName.trim()) return;
+    setEditBusy(true);
+    try {
+      const r = await fetch(`/api/players/${editPlayerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: adminEditName.trim(),
+          gender: adminEditGender,
+          phone: adminEditPhone.trim() || null,
+          country: adminEditCountry || null,
+        }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
+      cancelAdminEdit();
+      fetchClub();
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const adminResetRating = async (player: Player) => {
+    const ok = await confirmDialog({
+      title: `Reset ELO for ${player.name}?`,
+      message: "Rating drops back to 1000. Match history is kept.",
+      confirmText: "Reset",
+      danger: true,
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/players/${player.id}/reset-rating`, { method: "POST" });
+    if (!res.ok) { await alertDialog("Failed to reset rating"); return; }
+    fetchClub();
+  };
+
+  const adminVoidPlayer = async (player: Player) => {
+    const ok = await confirmDialog({
+      title: `Remove ${player.name}?`,
+      message: "If they have match history they'll be voided (hidden, data preserved).",
+      confirmText: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
+    await fetch(`/api/players/${player.id}/void`, { method: "POST" });
+    fetchClub();
+  };
+
+  const adminSetPermission = async (
+    playerId: string,
+    field: "canCreateLeagues" | "canCreateClubs",
+    value: boolean,
+  ) => {
+    setGrantBusy(true);
+    try {
+      const res = await fetch(`/api/players/${playerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
+      fetchClub();
+    } finally {
+      setGrantBusy(false);
     }
   };
 
@@ -1899,24 +2049,51 @@ export default function ClubDetailPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-foreground">Members</h3>
             {canManage && (
-              <button
-                onClick={() => {
-                  fetchAllPlayers();
-                  setAddMemberSearch("");
-                  setAddMemberGender(null);
-                  // Default country filter to the signed-in user's country
-                  // when known; falls back to "all countries" otherwise.
-                  setAddMemberCountry(
-                    (session?.user as { country?: string | null } | undefined)?.country || "",
-                  );
-                  setPendingMemberIds(new Set());
-                  setAddedMemberIds(new Set());
-                  setShowAddMember(true);
-                }}
-                className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
-              >
-                + Member
-              </button>
+              <div className="flex items-center gap-5">
+                {/* Invite-link icon (share to non-members). Sits to the
+                    left of "+ Member" so the two admin actions live
+                    side-by-side. */}
+                <HeaderInviteIcon
+                  kind="C"
+                  label="Invite link to club"
+                  color="#334155"
+                  badgeFg="#fff"
+                  onClick={async () => {
+                    const r = await fetch(`/api/clubs/${club.id}/invite`, { method: "POST" });
+                    if (!r.ok) return;
+                    const invite = await r.json();
+                    const url = `${window.location.origin}/clubs/join/${invite.token}`;
+                    const inviterName = session?.user?.name || "A club member";
+                    const message = withInstallTip(
+                      `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`,
+                    );
+                    setInviteShare({
+                      message,
+                      phone: null,
+                      title: `Invite to ${club.name}`,
+                      emailSubject: `Join ${club.name} on FriendlyBall`,
+                    });
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    fetchAllPlayers();
+                    setAddMemberSearch("");
+                    setAddMemberGender(null);
+                    // Default country filter to the signed-in user's country
+                    // when known; falls back to "all countries" otherwise.
+                    setAddMemberCountry(
+                      (session?.user as { country?: string | null } | undefined)?.country || "",
+                    );
+                    setPendingMemberIds(new Set());
+                    setAddedMemberIds(new Set());
+                    setShowAddMember(true);
+                  }}
+                  className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors"
+                >
+                  + Member
+                </button>
+              </div>
             )}
           </div>
           {/* Filters */}
@@ -1935,32 +2112,9 @@ export default function ClubDetailPage() {
             ))}
           </div>
 
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted">
-              {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
-            </p>
-            {canManage && (
-              <button onClick={async () => {
-                const r = await fetch(`/api/clubs/${club.id}/invite`, { method: "POST" });
-                if (!r.ok) return;
-                const invite = await r.json();
-                const url = `${window.location.origin}/clubs/join/${invite.token}`;
-                const inviterName = session?.user?.name || "A club member";
-                // Open the share chooser (WhatsApp / Copy / Email) — no
-                // phone known for a generic invite, so WhatsApp opens
-                // with the contact picker.
-                const message = withInstallTip(
-                  `${inviterName} invites you to join "${club.name}" on FriendlyBall.\n\n${url}`,
-                );
-                setInviteShare({
-                  message,
-                  phone: null,
-                  title: `Invite to ${club.name}`,
-                  emailSubject: `Join ${club.name} on FriendlyBall`,
-                });
-              }} className="text-xs text-action font-medium">Invite</button>
-            )}
-          </div>
+          <p className="text-xs text-muted">
+            {filteredMembers.length} member{filteredMembers.length !== 1 ? "s" : ""}
+          </p>
 
           <div className="space-y-1">
             {filteredMembers.map((m) => (
@@ -1975,6 +2129,10 @@ export default function ClubDetailPage() {
                 onRoleChange={(role) => updateRole(m.playerId, role)}
                 onInvite={canManage ? () => inviteMember(m) : undefined}
                 inviting={invitingMemberId === m.playerId}
+                onAdminResetElo={isGlobalAdmin ? () => adminResetRating(m.player) : undefined}
+                onAdminVoid={isGlobalAdmin ? () => adminVoidPlayer(m.player) : undefined}
+                onAdminGrant={isGlobalAdmin ? () => setGrantTargetId(m.playerId) : undefined}
+                onAdminEdit={isGlobalAdmin ? () => startAdminEdit(m.player) : undefined}
               />
             ))}
           </div>
@@ -2155,6 +2313,132 @@ export default function ClubDetailPage() {
             recipients={recipients}
             buildPersonal={buildPersonal}
           />
+        );
+      })()}
+
+      {/* App-admin inline edit modal — same shape as the /players page
+          edit form. Saves to PATCH /api/players/<id> then refetches
+          the club so the row updates in place. */}
+      {editPlayerId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={cancelAdminEdit}
+        >
+          <div
+            className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-base font-bold">Edit player</div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Name</label>
+              <input
+                type="text"
+                value={adminEditName}
+                onChange={(e) => setAdminEditName(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Gender</label>
+              <div className="flex gap-1">
+                {([
+                  { v: "M" as const, label: "♂ M" },
+                  { v: "F" as const, label: "♀ F" },
+                  { v: null, label: "—" },
+                ]).map((g) => (
+                  <button
+                    key={g.label}
+                    type="button"
+                    onClick={() => setAdminEditGender(g.v)}
+                    className={`flex-1 text-sm py-1.5 rounded-lg border ${adminEditGender === g.v ? "border-action bg-action/10 text-foreground font-semibold" : "border-border text-muted"}`}
+                  >{g.label}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Phone (WhatsApp)</label>
+              <input
+                type="tel"
+                value={adminEditPhone}
+                onChange={(e) => setAdminEditPhone(e.target.value)}
+                placeholder="+351 …"
+                className="w-full border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted mb-1">Country</label>
+              <select
+                value={adminEditCountry}
+                onChange={(e) => setAdminEditCountry(e.target.value)}
+                className="w-full border border-border rounded-lg px-3 py-2 bg-white"
+              >
+                <option value="">— Not set</option>
+                {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={cancelAdminEdit}
+                disabled={editBusy}
+                className="flex-1 bg-gray-100 text-foreground py-2 rounded-lg font-medium text-sm"
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={saveAdminEdit}
+                disabled={editBusy || !adminEditName.trim()}
+                className="flex-1 bg-action text-white py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
+              >{editBusy ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* App-admin Grant popup — mirrors the /players page popup. Two
+          toggles for canCreateLeagues + canCreateClubs. */}
+      {grantTargetId && (() => {
+        const targetMember = club?.members.find((m) => m.playerId === grantTargetId);
+        if (!targetMember) return null;
+        const target = targetMember.player as Player & { canCreateLeagues?: boolean; canCreateClubs?: boolean };
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setGrantTargetId(null)}
+          >
+            <div
+              className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <div className="text-base font-bold">Permissions for {target.name}</div>
+                <div className="text-xs text-muted">App-admin grants. Take effect immediately.</div>
+              </div>
+              <label className="flex items-center justify-between gap-2 p-2 rounded-lg border border-border">
+                <span className="text-sm">Can create leagues</span>
+                <input
+                  type="checkbox"
+                  disabled={grantBusy}
+                  checked={!!target.canCreateLeagues}
+                  onChange={(e) => adminSetPermission(target.id, "canCreateLeagues", e.target.checked)}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 p-2 rounded-lg border border-border">
+                <span className="text-sm">Can create clubs</span>
+                <input
+                  type="checkbox"
+                  disabled={grantBusy}
+                  checked={!!target.canCreateClubs}
+                  onChange={(e) => adminSetPermission(target.id, "canCreateClubs", e.target.checked)}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setGrantTargetId(null)}
+                className="w-full bg-action text-white text-sm font-semibold py-2 rounded-lg"
+              >Done</button>
+            </div>
+          </div>
         );
       })()}
 

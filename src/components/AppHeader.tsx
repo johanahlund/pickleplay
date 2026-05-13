@@ -72,6 +72,13 @@ interface AppHeaderProps {
    * the header's right-hand action row (next to the bell). Called on
    * tap. The parent typically opens a share modal. */
   onInvite?: () => void;
+
+  /** Single-letter type badge overlaid on the share icon ("E" event,
+   *  "C" club, "L" league, "T" team, "M" match-day, …). Tells the user
+   *  at a glance WHAT the share will share. */
+  inviteKind?: string;
+  /** Long-form label used in aria-label / tooltip (e.g. "Share event"). */
+  inviteLabel?: string;
 }
 
 export function AppHeader({
@@ -85,14 +92,16 @@ export function AppHeader({
   notifications,
   user,
   onInvite,
+  inviteKind,
+  inviteLabel,
 }: AppHeaderProps) {
   if (variant === "hero-sub") {
-    return <HeroSubHeader {...{ title, meta, back, action, notifications, user, onInvite }} />;
+    return <HeroSubHeader {...{ title, meta, back, action, notifications, user, onInvite, inviteKind, inviteLabel }} />;
   }
   return variant === "hero" ? (
-    <HeroHeader {...{ title, meta, status, back, notifications, user, onInvite }} />
+    <HeroHeader {...{ title, meta, status, back, notifications, user, onInvite, inviteKind, inviteLabel }} />
   ) : (
-    <LightHeader {...{ back, title, isAdmin, notifications, user, onInvite }} />
+    <LightHeader {...{ back, title, isAdmin, notifications, user, onInvite, inviteKind, inviteLabel }} />
   );
 }
 export default AppHeader;
@@ -171,12 +180,20 @@ function HeaderActions({
   badge,
   user,
   onInvite,
+  inviteKind,
+  inviteLabel,
 }: {
   color: string;
   avatarBg: string;
   badge?: number;
   user?: { initial: string; avatarUrl?: string; href?: string };
   onInvite?: () => void;
+  /** Single-letter type badge overlaid on the share icon ("E" event,
+   *  "C" club, "L" league, "T" team, "M" match-day, …). Tells the user
+   *  at a glance WHAT the share will share. */
+  inviteKind?: string;
+  /** Long-form label used in aria-label/title (e.g. "Share event"). */
+  inviteLabel?: string;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -184,9 +201,9 @@ function HeaderActions({
         <button
           type="button"
           onClick={onInvite}
-          aria-label="Invite a friend to FriendlyBall"
-          title="Invite a friend"
-          style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", lineHeight: 0 }}
+          aria-label={inviteLabel || "Invite a friend to FriendlyBall"}
+          title={inviteLabel || "Invite a friend"}
+          style={{ position: "relative", background: "transparent", border: 0, padding: 0, cursor: "pointer", lineHeight: 0 }}
         >
           {/* Share-arrow + plus icon: distinct from the bell. */}
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -195,6 +212,27 @@ function HeaderActions({
             <circle cx="17" cy="18" r="2.4" stroke={color} strokeWidth={1.8} />
             <path d="M8 11l7-4M8 13l7 4" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
           </svg>
+          {inviteKind && (
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                bottom: -4,
+                right: -6,
+                minWidth: 14,
+                height: 14,
+                padding: "0 3px",
+                background: color,
+                color: avatarBg,
+                borderRadius: 3,
+                fontSize: 9,
+                fontWeight: 800,
+                lineHeight: "14px",
+                textAlign: "center",
+                letterSpacing: "0.02em",
+              }}
+            >{inviteKind}</span>
+          )}
         </button>
       )}
       <Link
@@ -309,7 +347,9 @@ function LightHeader({
   notifications,
   user,
   onInvite,
-}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user" | "onInvite">) {
+  inviteKind,
+  inviteLabel,
+}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
   const hasBack = !!back;
   const ref = useRef<HTMLElement | null>(null);
   useHeaderHeightSync(ref);
@@ -346,6 +386,8 @@ function LightHeader({
             badge={notifications}
             user={user}
             onInvite={onInvite}
+            inviteKind={inviteKind}
+            inviteLabel={inviteLabel}
           />
         </div>
       </div>
@@ -394,7 +436,9 @@ function HeroHeader({
   notifications,
   user,
   onInvite,
-}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user" | "onInvite">) {
+  inviteKind,
+  inviteLabel,
+}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
   const statusStyles: Record<HeaderStatus, { bg: string; fg: string; dot: string }> = {
     draft:     { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#fde68a" },
     open:      { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#bef264" },
@@ -433,10 +477,12 @@ function HeroHeader({
         <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
         <HeaderActions
           color="#fff"
-          avatarBg="rgba(255,255,255,0.22)"
+          avatarBg="#14532d"
           badge={notifications}
           user={user}
           onInvite={onInvite}
+          inviteKind={inviteKind}
+          inviteLabel={inviteLabel}
         />
       </div>
       {back && (
@@ -518,7 +564,9 @@ function HeroSubHeader({
   notifications,
   user,
   onInvite,
-}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user" | "onInvite">) {
+  inviteKind,
+  inviteLabel,
+}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
   const actionEl = action ? (
     action.onClick ? (
       <button
@@ -598,10 +646,12 @@ function HeroSubHeader({
           {actionEl}
           <HeaderActions
             color="#fff"
-            avatarBg="rgba(255,255,255,0.22)"
+            avatarBg="#14532d"
             badge={notifications}
             user={user}
             onInvite={onInvite}
+            inviteKind={inviteKind}
+            inviteLabel={inviteLabel}
           />
         </div>
       </div>

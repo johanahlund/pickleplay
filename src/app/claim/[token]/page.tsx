@@ -4,25 +4,50 @@ import { signIn, useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { frameClass } from "@/components/Card";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
+
+type Preview = {
+  name: string;
+  emoji: string;
+  photoUrl: string | null;
+  clubs: { name: string; emoji: string }[];
+};
 
 export default function ClaimPage() {
   const params = useParams();
   const token = params.token as string;
   const { data: session, status: sessionStatus } = useSession();
 
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [playerName, setPlayerName] = useState("");
 
-  // If already signed in, redirect to home
   useEffect(() => {
     if (sessionStatus === "authenticated" && session?.user) {
       window.location.href = "/";
     }
   }, [sessionStatus, session]);
+
+  // Fetch who this token belongs to so the page shows the player's
+  // name + clubs — recipients should see at a glance that they're
+  // claiming the right pre-existing player record.
+  useEffect(() => {
+    if (!token) return;
+    fetch(`/api/claim?token=${encodeURIComponent(token)}`)
+      .then(async (r) => {
+        if (r.ok) {
+          setPreview(await r.json());
+        } else {
+          const data = await r.json().catch(() => ({}));
+          setPreviewError(data.error || "Invalid or expired invite link");
+        }
+      })
+      .catch(() => setPreviewError("Couldn't load this invite. Try again."));
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +78,8 @@ export default function ClaimPage() {
       return;
     }
 
-    setPlayerName(data.playerName);
     setSuccess(true);
 
-    // Auto sign-in
     const result = await signIn("credentials", {
       email: email.toLowerCase().trim(),
       password,
@@ -64,13 +87,11 @@ export default function ClaimPage() {
     });
 
     if (result?.error) {
-      // Claimed successfully but auto-sign-in failed
-      setError("Account claimed! Please sign in manually.");
+      setError("Account created! Please sign in manually.");
       setLoading(false);
       return;
     }
 
-    // Full page reload to properly initialize session
     window.location.href = "/";
   };
 
@@ -78,8 +99,25 @@ export default function ClaimPage() {
     return (
       <div className="text-center py-12">
         <div className="text-5xl mb-3">🎉</div>
-        <h2 className="text-xl font-bold mb-2">Welcome, {playerName}!</h2>
+        <h2 className="text-xl font-bold mb-2">Welcome, {preview?.name ?? "player"}!</h2>
         <p className="text-muted">Signing you in...</p>
+      </div>
+    );
+  }
+
+  if (previewError) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <div className="text-5xl mb-2">🏓</div>
+          <h2 className="text-2xl font-bold">FriendlyBall</h2>
+          <p className="text-muted text-sm">The friendly pickleball app</p>
+        </div>
+        <div className={`${frameClass} p-4 text-center`}>
+          <div className="text-3xl mb-2">⚠️</div>
+          <p className="text-sm text-danger">{previewError}</p>
+          <p className="text-xs text-muted mt-2">Ask the person who invited you for a fresh link.</p>
+        </div>
       </div>
     );
   }
@@ -88,16 +126,37 @@ export default function ClaimPage() {
     <div className="space-y-6">
       <div className="text-center">
         <div className="text-5xl mb-2">🏓</div>
-        <h2 className="text-2xl font-bold">Claim Your Account</h2>
-        <p className="text-muted text-sm mt-1">
-          Set up your email and password to start using FriendlyBall
-        </p>
+        <h2 className="text-2xl font-bold">FriendlyBall</h2>
+        <p className="text-muted text-sm">The friendly pickleball app</p>
       </div>
+
+      {preview && (
+        <div className={`${frameClass} p-4 flex items-center gap-3`}>
+          <PlayerAvatar name={preview.name} photoUrl={preview.photoUrl} size="md" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-muted">You've been added as</div>
+            <div className="text-lg font-bold truncate">{preview.name}</div>
+            {preview.clubs.length > 0 && (
+              <div className="text-xs text-muted mt-0.5 truncate">
+                in {preview.clubs.map((c) => `${c.emoji} ${c.name}`).join(" · ")}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <form
         onSubmit={handleSubmit}
         className={`${frameClass} p-4 space-y-4`}
       >
+        <div>
+          <h3 className="text-base font-semibold">Sign up</h3>
+          <p className="text-xs text-muted">
+            Pick an email + password to take over this account. From now on
+            you'll use these to sign in.
+          </p>
+        </div>
+
         {error && (
           <div className="bg-red-50 text-danger text-sm px-3 py-2 rounded-lg">
             {error}
@@ -136,10 +195,10 @@ export default function ClaimPage() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !preview}
           className="w-full bg-action-dark text-white py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
         >
-          {loading ? "Setting up..." : "Claim Account"}
+          {loading ? "Creating account..." : "Sign up"}
         </button>
       </form>
     </div>
