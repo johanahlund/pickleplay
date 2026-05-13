@@ -6432,10 +6432,15 @@ export default function EventDetailPage() {
         </div>
 
         {(isOwner || isAdmin) && (
-          <button onClick={deleteEvent}
-            className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
-            Delete Event
-          </button>
+          <div className="mt-10 pt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={deleteEvent}
+              className="text-xs text-danger font-medium hover:underline"
+            >
+              Delete Event
+            </button>
+          </div>
         )}
       </div>
     );
@@ -6865,10 +6870,15 @@ export default function EventDetailPage() {
       {renderScorerTracker()}
 
       {(isOwner || isAdmin) && (
-        <button onClick={deleteEvent}
-          className="w-full py-2.5 text-xs text-danger font-medium rounded-xl border border-red-200 hover:bg-red-50 active:bg-red-100 transition-colors">
-          Delete Event
-        </button>
+        <div className="mt-10 pt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={deleteEvent}
+            className="text-xs text-danger font-medium hover:underline"
+          >
+            Delete Event
+          </button>
+        </div>
       )}
     </div>
   );
