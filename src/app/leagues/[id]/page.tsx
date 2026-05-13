@@ -714,9 +714,12 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
             </div>
             <div>
               <label className="block text-[11px] text-muted mb-1">Cross-category play</label>
-              <select value={crossCat} onChange={(e) => setCrossCat(e.target.value as typeof crossCat)}
-                className="w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-white">
-                <option value="inherit">Inherit from league</option>
+              <select
+                value={crossCat}
+                onChange={(e) => setCrossCat(e.target.value as typeof crossCat)}
+                className={`w-full border border-border rounded-lg px-2 py-1.5 bg-white ${crossCat === "inherit" ? "text-[10px] text-muted" : "text-sm"}`}
+              >
+                <option value="inherit">↳ {leagueConfig?.allowCrossCategoryPlay === false ? "Disallow" : "Allow"}</option>
                 <option value="allow">Allow</option>
                 <option value="deny">Disallow</option>
               </select>
@@ -827,12 +830,12 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                         <div className="w-32">
                           <label className="block text-[10px] text-muted">Age group</label>
                           {/* When the field has no override (value === ""), shrink the
-                              whole select so the 'Inherit (X)' placeholder reads small.
-                              Browsers don't honor per-option font-size for the selected
-                              display value, so we style the select element itself. */}
+                              whole select so the inherit placeholder reads small.
+                              Browsers don't honor per-option font-size for the
+                              selected display value, so we style the select itself. */}
                           <select value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
                             className={`w-full border border-border rounded px-2 py-1 bg-white ${o.ageGroup === "" ? "text-[10px] text-muted" : "text-xs"}`}>
-                            <option value="">{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
+                            <option value="">↳ {c.ageGroup === "open" ? "Open" : c.ageGroup}</option>
                             {AGE_OPTS.filter((a) => a !== c.ageGroup).map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
                           </select>
                         </div>
@@ -842,7 +845,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <label className="block text-[10px] text-muted">Skill min</label>
                           <select value={o.skillMin} onChange={(e) => update({ skillMin: e.target.value })}
                             className={`w-full border border-border rounded px-2 py-1 bg-white ${o.skillMin === "" ? "text-[10px] text-muted" : "text-xs"}`}>
-                            <option value="">{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
+                            <option value="">{c.skillMin != null ? `↳ ${c.skillMin}` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
@@ -850,7 +853,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <label className="block text-[10px] text-muted">Skill max</label>
                           <select value={o.skillMax} onChange={(e) => update({ skillMax: e.target.value })}
                             className={`w-full border border-border rounded px-2 py-1 bg-white ${o.skillMax === "" ? "text-[10px] text-muted" : "text-xs"}`}>
-                            <option value="">{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
+                            <option value="">{c.skillMax != null ? `↳ ${c.skillMax}` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
@@ -861,7 +864,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <ScoringSelect value={o.scoringFormat}
                             onChange={(v) => update({ scoringFormat: v === c.scoringFormat ? "" : v })}
                             className={`w-full border border-border rounded px-2 py-1 bg-white ${o.scoringFormat === "" ? "text-[10px] text-muted" : "text-xs"}`}
-                            placeholder={`Inherit (${c.scoringFormat})`}
+                            placeholder={`↳ ${c.scoringFormat}`}
                           />
                         </div>
                         <div className="w-28">
@@ -869,14 +872,14 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <WinBySelect value={o.winBy}
                             onChange={(v) => update({ winBy: v === c.winBy ? "" : v })}
                             className={`w-full border border-border rounded px-2 py-1 bg-white ${o.winBy === "" ? "text-[10px] text-muted" : "text-xs"}`}
-                            placeholder={`Inherit (${c.winBy})`}
+                            placeholder={`↳ ${c.winBy}`}
                           />
                         </div>
                         <div className="w-24">
                           <label className="block text-[10px] text-muted">Max / event</label>
                           <input type="number" min={0} value={o.maxPerEvent}
                             onChange={(e) => update({ maxPerEvent: e.target.value })}
-                            placeholder={c.maxPerEvent != null ? `Inherit (${c.maxPerEvent})` : "Inherit (no cap)"}
+                            placeholder={c.maxPerEvent != null ? `↳ ${c.maxPerEvent}` : "↳ no cap"}
                             className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70 placeholder:text-muted" />
                         </div>
                       </div>
