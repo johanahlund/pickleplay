@@ -872,26 +872,24 @@ export default function LineupBuilderPage() {
                 <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
                 <div className="text-base font-bold">{cat.name}</div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <div className="text-[11px] text-muted">{cat.format} · {matchCount} of max {max}</div>
-                {canAddMore && !ourLocked && (
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) + 1 }));
-                    }}
-                    className="text-[11px] text-action font-medium hover:underline disabled:opacity-50"
-                  >+ Add match</button>
-                )}
-              </div>
+              <div className="text-[11px] text-muted">{cat.format} · {matchCount} of max {max}</div>
             </summary>
             <div className="px-3 pb-3 pt-1.5 space-y-2 border-t border-border/70">
 
             {slots.length === 0 && (
               <p className="text-[11px] text-muted italic">No matches in this Event.</p>
+            )}
+            {canAddMore && !ourLocked && (
+              <div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) + 1 }));
+                  }}
+                  className="border border-action text-action bg-white hover:bg-action/5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50"
+                >+ Add match</button>
+              </div>
             )}
             {slots.map((slotNum) => {
               const g = gameByKey.get(`${cat.id}:${slotNum}`);
