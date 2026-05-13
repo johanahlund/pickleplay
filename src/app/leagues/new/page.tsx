@@ -201,10 +201,18 @@ export default function NewLeaguePage() {
           </div>
         </div>
 
-        <button onClick={handleCreate} disabled={!name.trim() || creating}
-          className="w-full bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50">
-          {creating ? "Creating..." : "Create League"}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleCreate} disabled={!name.trim() || creating}
+            className="flex-1 bg-action-dark text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            {creating ? "Creating..." : "Create League"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/leagues")}
+            disabled={creating}
+            className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-lg font-medium disabled:opacity-50"
+          >Cancel</button>
+        </div>
       </div>
     </div>
   );

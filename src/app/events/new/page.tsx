@@ -481,13 +481,21 @@ export default function NewEventPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleSave}
-              disabled={saving || !name.trim()}
-              className="w-full bg-action-dark text-white py-3 rounded-xl font-semibold disabled:opacity-50"
-            >
-              {saving ? "Creating..." : "Save"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={saving || !name.trim()}
+                className="flex-1 bg-action-dark text-white py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? "Creating..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/events")}
+                disabled={saving}
+                className="flex-1 bg-gray-100 text-foreground py-3 rounded-xl font-medium disabled:opacity-50"
+              >Cancel</button>
+            </div>
             <p className="text-[10px] text-muted text-center">
               You can set format, pairing, players, and the rest from the event page after creating.
             </p>

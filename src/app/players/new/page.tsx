@@ -223,13 +223,21 @@ function NewPlayerPageInner() {
           )}
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={saving || !canAdd}
-          className="w-full bg-action text-white py-2.5 rounded-lg font-semibold active:bg-action-dark transition-colors disabled:opacity-50"
-        >
-          {saving ? "Adding..." : "Add Player"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || !canAdd}
+            className="flex-1 bg-action text-white py-2.5 rounded-lg font-semibold active:bg-action-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Adding..." : "Add Player"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(returnTo)}
+            disabled={saving}
+            className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-lg font-medium disabled:opacity-50"
+          >Cancel</button>
+        </div>
       </div>
     </div>
   );
