@@ -1918,14 +1918,24 @@ export default function EventDetailPage() {
   // ── Section: When (name + date/time) ──
   const edit = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setHasEdits(true); };
 
-  const editButtons = hasEdits ? (
+  // Always render the action row in edit sections. Save is disabled +
+  // faded until there are unsaved changes; Cancel is always available
+  // as a clear way back to the overview. The sections themselves are
+  // already gated by canManage at the section-activation level — only
+  // users with edit permission ever see these forms.
+  const editButtons = (
     <div className="flex gap-2 mt-4">
-      <button onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
-        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm">Save</button>
-      <button onClick={() => { startEditEvent(); setActiveSection("overview"); }}
-        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
+      <button
+        onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
+        disabled={!hasEdits}
+        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >Save</button>
+      <button
+        onClick={() => { startEditEvent(); setActiveSection("overview"); }}
+        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm"
+      >Cancel</button>
     </div>
-  ) : null;
+  );
 
   const renderWhen = () => (
     <div className={`${frameClass} p-4 space-y-3`}>

@@ -10,8 +10,11 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { COUNTRIES } from "@/lib/countries";
-import { withInstallTip } from "@/lib/inviteShare";
+import { withInstallTip, personalClaimUrl } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
+import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
+import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
+import { buildClubInviteGroup, buildClubInvitePersonal, type ClubInviteContext } from "@/lib/inviteShare";
 import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
@@ -20,6 +23,7 @@ import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { UnclaimedIcon } from "@/components/UnclaimedIcon";
 
 // ── Long press to delete ──
 // `onDelete` is responsible for confirming via useConfirm before mutating;
@@ -86,6 +90,7 @@ interface Player {
   losses: number;
   role?: string;
   country?: string | null;
+  hasAccount?: boolean;
   /** Club memberships from /api/players. Used to disambiguate players
    *  with similar names in the Add Member picker. */
   clubs?: { id: string; name: string; emoji: string; role: string }[];
@@ -196,6 +201,8 @@ function SwipeableMemberRow({
   isSelf,
   onRemove,
   onRoleChange,
+  onInvite,
+  inviting,
 }: {
   member: ClubMember;
   canManage: boolean;
@@ -204,6 +211,8 @@ function SwipeableMemberRow({
   isSelf: boolean;
   onRemove: () => void;
   onRoleChange: (role: string) => void;
+  onInvite?: () => void;
+  inviting?: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
@@ -266,7 +275,16 @@ function SwipeableMemberRow({
         </span>
       )}
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm truncate">{p.name}</div>
+        <div className="font-medium text-sm truncate flex items-center gap-1.5">
+          <span className="truncate">{p.name}</span>
+          {p.hasAccount === false && (
+            <UnclaimedIcon
+              onClick={onInvite}
+              disabled={inviting}
+              title={onInvite ? `Invite ${p.name} to claim their FriendlyBall account` : undefined}
+            />
+          )}
+        </div>
         {/*
           Render the role pill for ALL members when the viewer is the
           club owner (so they can promote a member directly to admin or
@@ -358,6 +376,7 @@ export default function ClubDetailPage() {
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
   const [inviteShare, setInviteShare] = useState<{ message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
+  const [invitingMemberId, setInvitingMemberId] = useState<string | null>(null);
   // Tab is URL-synced via useSearchParams. setTab writes via
   // history.replaceState; the effect below reflects URL → state on
   // soft navigation (back/forward, header tab links).
@@ -469,6 +488,8 @@ export default function ClubDetailPage() {
   const isAppAdmin = session?.user?.role === "admin";
   const simulatesClubDirector = isAppAdmin && hasRole(viewRole, "club") && !isGlobalAdmin;
   const canManage = myMembership?.role === "owner" || myMembership?.role === "admin" || isGlobalAdmin || simulatesClubDirector;
+  // Bulk club share-invite sheet (top-right share icon).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const isOwner = myMembership?.role === "owner" || isGlobalAdmin || simulatesClubDirector;
 
   const [myPendingRequest, setMyPendingRequest] = useState(false);
@@ -583,6 +604,41 @@ export default function ClubDetailPage() {
       return;
     }
     fetchClub();
+  };
+
+  /**
+   * Mint a claim token for an unclaimed member and open the share modal
+   * with a club-flavored message. Club owners/admins are allowed by the
+   * /api/players/[id]/invite endpoint; viewers without authority see a
+   * non-clickable icon and never reach this code path.
+   */
+  const inviteMember = async (m: ClubMember) => {
+    if (!club) return;
+    setInvitingMemberId(m.playerId);
+    try {
+      const r = await fetch(`/api/players/${m.playerId}/invite`, { method: "POST" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        await alertDialog(data.error || "Couldn't create the invite link.", "Invite failed");
+        return;
+      }
+      const claimUrl = personalClaimUrl(window.location.origin, data.token, m.player.name);
+      const ctx: ClubInviteContext = {
+        inviterName: session?.user?.name || "A club admin",
+        clubName: club.name,
+        cityText: [club.city, club.country].filter(Boolean).join(", ") || null,
+        joinUrl: `${window.location.origin}/clubs/${club.id}`,
+        blurb: club.description || null,
+      };
+      setInviteShare({
+        message: buildClubInvitePersonal(ctx, { name: m.player.name, claimUrl }),
+        phone: m.player.phone ?? null,
+        title: `Invite ${m.player.name}`,
+        emailSubject: `Join ${club.name} on FriendlyBall`,
+      });
+    } finally {
+      setInvitingMemberId(null);
+    }
   };
 
   const updateRole = async (playerId: string, role: string) => {
@@ -1198,28 +1254,39 @@ export default function ClubDetailPage() {
 
   return (
     <div className="space-y-3">
-      {/* Back navigation. Always reads "← Clubs" to match the quick-view
-          card shown before data finishes loading. Avoids the flash where
-          the label changes from "Clubs" → "Back". */}
-      {tab === "feed" ? (
-        <button onClick={async () => {
-          if (editing && clubDirty) {
-            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-            if (!ok) return;
-            setClubDirty(false); setEditing(false);
-          }
-          router.push("/clubs");
-        }} className="text-sm text-action font-medium">← Clubs</button>
-      ) : (
-        <button onClick={async () => {
-          if (editing && clubDirty) {
-            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-            if (!ok) return;
-            setClubDirty(false); setEditing(false);
-          }
-          setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
-        }} className="text-sm text-action font-medium">← {clubLabel(club)}</button>
-      )}
+      {/* Back navigation + top-right share icon (consistent placement
+          across event/league/club pages). Always reads "← Clubs" to
+          match the quick-view card shown before data finishes loading. */}
+      <div className="flex items-center justify-between gap-2">
+        {tab === "feed" ? (
+          <button onClick={async () => {
+            if (editing && clubDirty) {
+              const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+              if (!ok) return;
+              setClubDirty(false); setEditing(false);
+            }
+            router.push("/clubs");
+          }} className="text-sm text-action font-medium">← Clubs</button>
+        ) : (
+          <button onClick={async () => {
+            if (editing && clubDirty) {
+              const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+              if (!ok) return;
+              setClubDirty(false); setEditing(false);
+            }
+            setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
+          }} className="text-sm text-action font-medium">← {clubLabel(club)}</button>
+        )}
+        {canManage && (
+          <HeaderInviteIcon
+            onClick={() => setShareSheetOpen(true)}
+            kind="C"
+            label="Share club invite"
+            color="#334155"
+            badgeFg="#fff"
+          />
+        )}
+      </div>
 
       {/* ── Club Info Panel ── */}
       {showInfo && (
@@ -1376,12 +1443,21 @@ export default function ClubDetailPage() {
 
 
 
-              {clubDirty && (
-                <div className="flex gap-2">
-                  <button onClick={saveEdit} className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium">Save</button>
-                  <button onClick={() => { setClubDirty(false); setEditing(false); }} className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-                </div>
-              )}
+              {/* Always rendered for users with edit permission (gate is on
+                  the form itself — we only get here when isOwner === true).
+                  Save is disabled + faded until something changes; Cancel
+                  is always available as a clear way out. */}
+              <div className="flex gap-2">
+                <button
+                  onClick={saveEdit}
+                  disabled={!clubDirty}
+                  className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >Save</button>
+                <button
+                  onClick={() => { setClubDirty(false); setEditing(false); }}
+                  className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium"
+                >Cancel</button>
+              </div>
 
               {(() => {
                 const owner = club.members.find((m) => m.role === "owner");
@@ -1895,9 +1971,10 @@ export default function ClubDetailPage() {
                 isOwner={isOwner}
                 isGlobalAdmin={isGlobalAdmin}
                 isSelf={m.playerId === userId}
-                showContact={isGlobalAdmin || m.playerId === userId}
                 onRemove={() => removeMember(m.playerId, m.player.name)}
                 onRoleChange={(role) => updateRole(m.playerId, role)}
+                onInvite={canManage ? () => inviteMember(m) : undefined}
+                inviting={invitingMemberId === m.playerId}
               />
             ))}
           </div>
@@ -2040,6 +2117,46 @@ export default function ClubDetailPage() {
       )}
 
       {/* Settings tab removed — club info is now via ℹ icon */}
+
+      {/* Bulk club share-invite sheet (opened from the header share
+          icon). Recipient pool: every club member. Existing
+          ShareInviteModal (below) is for per-member 1:1 shares from the
+          members list. */}
+      {canManage && club && (() => {
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const ctx: ClubInviteContext = {
+          inviterName: session?.user?.name || "A club admin",
+          clubName: club.name,
+          cityText: [club.city, club.country].filter(Boolean).join(", ") || null,
+          joinUrl: `${origin}/clubs/${club.id}`,
+          blurb: club.description || null,
+        };
+        const groupMessage = buildClubInviteGroup(ctx);
+        const recipients: ShareRecipient[] = (club.members || []).map((m) => ({
+          id: m.player.id,
+          name: m.player.name,
+          phone: m.player.phone || null,
+          // Player type on this page doesn't expose hasAccount — fall back
+          // to "has email" as a coarse proxy. Misses claim-without-email
+          // edge cases; can be tightened later by selecting hasAccount on
+          // the club detail API.
+          hasAccount: !!(m.player as unknown as { email?: string | null }).email,
+          hint: clubRoleLabel(m.role),
+        }));
+        const buildPersonal = (r: ShareRecipient, claimUrl: string) =>
+          buildClubInvitePersonal(ctx, { name: r.name, claimUrl });
+        return (
+          <ShareSheet
+            open={shareSheetOpen}
+            onClose={() => setShareSheetOpen(false)}
+            title="Invite to this club"
+            blurb="Copy the group message into your WhatsApp group(s). Send each unclaimed member a personal link so they can claim their account."
+            groupMessage={groupMessage}
+            recipients={recipients}
+            buildPersonal={buildPersonal}
+          />
+        );
+      })()}
 
       <ShareInviteModal
         open={!!inviteShare}
