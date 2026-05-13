@@ -902,6 +902,13 @@ export default function LineupBuilderPage() {
                           return;
                         }
                         if (canSchedule) {
+                          const ok = await confirmDialog({
+                            title: `Remove ${cat.name} match ${slotNum}?`,
+                            message: "This deletes the match from the event for both teams.",
+                            confirmText: "Remove",
+                            danger: true,
+                          });
+                          if (!ok) return;
                           setSaving(true);
                           try {
                             const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${g.id}`, { method: "DELETE" });
@@ -916,6 +923,15 @@ export default function LineupBuilderPage() {
                             setSaving(false);
                           }
                         } else {
+                          const ok = await confirmDialog({
+                            title: `Remove ${cat.name} match ${slotNum}?`,
+                            message: oppWants
+                              ? "This clears your tick. The opponent has also ticked, so the match stays on the schedule until they untick too."
+                              : "This clears your tick. The match will be removed from the event.",
+                            confirmText: "Remove",
+                            danger: true,
+                          });
+                          if (!ok) return;
                           if (ourWants) toggleSlot(cat.id, slotNum, false);
                           setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
                         }
