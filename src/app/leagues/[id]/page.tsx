@@ -822,13 +822,17 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <label className="block text-[10px] text-muted">Name</label>
                           <input value={o.name} onChange={(e) => update({ name: e.target.value })}
                             placeholder={c.name}
-                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70 placeholder:text-muted" />
                         </div>
                         <div className="w-32">
                           <label className="block text-[10px] text-muted">Age group</label>
+                          {/* When the field has no override (value === ""), shrink the
+                              whole select so the 'Inherit (X)' placeholder reads small.
+                              Browsers don't honor per-option font-size for the selected
+                              display value, so we style the select element itself. */}
                           <select value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="" style={{ fontSize: 10 }}>{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
+                            className={`w-full border border-border rounded px-2 py-1 bg-white ${o.ageGroup === "" ? "text-[10px] text-muted" : "text-xs"}`}>
+                            <option value="">{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
                             {AGE_OPTS.filter((a) => a !== c.ageGroup).map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
                           </select>
                         </div>
@@ -837,16 +841,16 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Skill min</label>
                           <select value={o.skillMin} onChange={(e) => update({ skillMin: e.target.value })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="" style={{ fontSize: 10 }}>{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
+                            className={`w-full border border-border rounded px-2 py-1 bg-white ${o.skillMin === "" ? "text-[10px] text-muted" : "text-xs"}`}>
+                            <option value="">{c.skillMin != null ? `Inherit (${c.skillMin})` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Skill max</label>
                           <select value={o.skillMax} onChange={(e) => update({ skillMax: e.target.value })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            <option value="" style={{ fontSize: 10 }}>{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
+                            className={`w-full border border-border rounded px-2 py-1 bg-white ${o.skillMax === "" ? "text-[10px] text-muted" : "text-xs"}`}>
+                            <option value="">{c.skillMax != null ? `Inherit (${c.skillMax})` : "—"}</option>
                             {SKILL_OPTS.filter((s) => s).map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                         </div>
@@ -856,7 +860,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <label className="block text-[10px] text-muted">Scoring</label>
                           <ScoringSelect value={o.scoringFormat}
                             onChange={(v) => update({ scoringFormat: v === c.scoringFormat ? "" : v })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white"
+                            className={`w-full border border-border rounded px-2 py-1 bg-white ${o.scoringFormat === "" ? "text-[10px] text-muted" : "text-xs"}`}
                             placeholder={`Inherit (${c.scoringFormat})`}
                           />
                         </div>
@@ -864,7 +868,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <label className="block text-[10px] text-muted">Win by</label>
                           <WinBySelect value={o.winBy}
                             onChange={(v) => update({ winBy: v === c.winBy ? "" : v })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white"
+                            className={`w-full border border-border rounded px-2 py-1 bg-white ${o.winBy === "" ? "text-[10px] text-muted" : "text-xs"}`}
                             placeholder={`Inherit (${c.winBy})`}
                           />
                         </div>
@@ -873,7 +877,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
                           <input type="number" min={0} value={o.maxPerEvent}
                             onChange={(e) => update({ maxPerEvent: e.target.value })}
                             placeholder={c.maxPerEvent != null ? `Inherit (${c.maxPerEvent})` : "Inherit (no cap)"}
-                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs placeholder:text-[10px] placeholder:opacity-70 placeholder:text-muted" />
                         </div>
                       </div>
                       <div className="flex gap-2 items-end">
