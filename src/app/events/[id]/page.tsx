@@ -1948,9 +1948,29 @@ export default function EventDetailPage() {
     // included player record on the row itself, and finally "?".
     const resolveName = (gp: { playerId: string; player?: { name: string } }) =>
       shortName(playerById.get(gp.playerId) || gp.player?.name || "?");
+    // Per-team roster lookup so we can attribute legacy null-team
+    // LeagueGamePlayer rows (written before the `team` field existed)
+    // to the correct side based on roster membership. New rows always
+    // have an explicit team set by the assign_players endpoint.
+    const rosterByTeamId = new Map<string, Set<string>>();
+    for (const t of teams) {
+      rosterByTeamId.set(t.id, new Set(t.players.map((tp) => tp.playerId)));
+    }
+    type GP = { playerId: string; team?: number | null; player?: { id: string; name: string } };
     const games: MatchDayShareGame[] = (event.leagueGames || []).map((g) => {
-      const t1Names = g.gamePlayers.filter((gp) => gp.team === 1).map(resolveName);
-      const t2Names = g.gamePlayers.filter((gp) => gp.team === 2).map(resolveName);
+      const t1Roster = rosterByTeamId.get(g.team1Id) ?? new Set<string>();
+      const t2Roster = rosterByTeamId.get(g.team2Id) ?? new Set<string>();
+      const sideOf = (gp: GP): 1 | 2 => {
+        if (gp.team === 1) return 1;
+        if (gp.team === 2) return 2;
+        if (t1Roster.has(gp.playerId)) return 1;
+        if (t2Roster.has(gp.playerId)) return 2;
+        // Orphan: non-roster + no team tag (legacy friendly extra).
+        // Show on side 1 so they appear somewhere rather than vanish.
+        return 1;
+      };
+      const t1Names = g.gamePlayers.filter((gp) => sideOf(gp) === 1).map(resolveName);
+      const t2Names = g.gamePlayers.filter((gp) => sideOf(gp) === 2).map(resolveName);
       const match = matchByGame.get(g.id);
       const team1Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 1).map((p) => p.score)) : null;
       const team2Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 2).map((p) => p.score)) : null;
@@ -1967,6 +1987,7 @@ export default function EventDetailPage() {
         courtNum: g.courtNum ?? null,
         scheduledAt: g.scheduledAt ?? null,
         categoryName: categoryById.get(g.categoryId) || "—",
+        slotNumber: g.slotNumber ?? null,
         team1PlayerNames: t1Names,
         team2PlayerNames: t2Names,
         team1Score,
@@ -2151,7 +2172,16 @@ export default function EventDetailPage() {
   const editButtons = (
     <div className="flex gap-2 mt-4">
       <button
-        onClick={async () => { await saveEditEvent(); setActiveSection("overview"); }}
+        onClick={() => {
+          // Snap back to overview RIGHT AWAY so the operator isn't
+          // staring at the form while three sequential fetches run.
+          // The PATCH + pairing + competition writes fire-and-forget;
+          // SWR mutate at the end of saveEditEvent reconciles the
+          // overview once the server confirms.
+          setEditingEvent(false);
+          setActiveSection("overview");
+          void saveEditEvent();
+        }}
         disabled={!hasEdits}
         className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
       >Save</button>
@@ -7129,6 +7159,12 @@ export default function EventDetailPage() {
                 {new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
                 {" · "}
                 {new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                {event.endDate && (
+                  <>
+                    {" – "}
+                    {new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </>
+                )}
               </span>
               <span className="block text-[10px] text-muted">
                 {eventDisplayLabel(event)}
