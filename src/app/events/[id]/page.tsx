@@ -1769,8 +1769,11 @@ export default function EventDetailPage() {
   const ownerName = event.createdBy?.name;
   const helperNames = event.helpers.map((h) => h.player.name);
 
+  // Use the club's shortName when set so the loaded header matches the
+  // pre-load preview chip (which already prefers shortName). Keeps the
+  // hero from shifting between loading and loaded states.
   const heroMeta = [
-    event.club?.name,
+    event.club?.shortName?.trim() || event.club?.name,
     new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }),
     new Date(event.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
       + (event.endDate ? ` — ${new Date(event.endDate).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : ""),
