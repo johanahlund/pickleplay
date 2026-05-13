@@ -763,11 +763,11 @@ export default function LineupBuilderPage() {
           return (
             <div className={`text-[11px] rounded px-2 py-1 space-y-0.5 ${atCap ? "text-amber-700 bg-amber-50 border border-amber-200" : "text-muted bg-gray-50 border border-border"}`}>
               <div>
-                Principal + League matches: <span className="font-semibold">{used} / {maxMatchesPerEvent}</span>
+                Principal + League matches: <span className="font-bold">{used} / {maxMatchesPerEvent}</span>
               </div>
               {atCap && (
-                <div className="font-medium">
-                  Cap reached. You can however add <span className="font-semibold">Friendly</span> matches.
+                <div>
+                  Cap reached. You can however add <span className="font-bold">Friendly</span> matches.
                 </div>
               )}
             </div>
