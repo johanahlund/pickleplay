@@ -1138,7 +1138,7 @@ export default function LeagueDetailPage() {
   const [editMinMatchDays, setEditMinMatchDays] = useState("2");
   const [editMaxMatchesPerEvent, setEditMaxMatchesPerEvent] = useState("");
   const [editAllowCrossCategory, setEditAllowCrossCategory] = useState(true);
-  const [editMatchDuration, setEditMatchDuration] = useState("45");
+  const [editMatchDuration, setEditMatchDuration] = useState<number | null>(45);
   const [editDeputyId, setEditDeputyId] = useState("");
   const [helperSearch, setHelperSearch] = useState("");
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -1307,7 +1307,7 @@ export default function LeagueDetailPage() {
     setEditMinMatchDays(String(league.config?.minMatchDaysForPlayoff ?? 2));
     setEditMaxMatchesPerEvent(league.config?.maxMatchesPerEvent != null ? String(league.config.maxMatchesPerEvent) : "");
     setEditAllowCrossCategory(league.config?.allowCrossCategoryPlay !== false);
-    setEditMatchDuration(String(league.matchDurationMin ?? 45));
+    setEditMatchDuration(league.matchDurationMin ?? 45);
     setEditDeputyId(league.deputy?.id || "");
     setShowAddHelper(false);
     setHelperSearch("");
@@ -1336,7 +1336,7 @@ export default function LeagueDetailPage() {
           maxMatchesPerEvent: editMaxMatchesPerEvent.trim() === "" ? null : parseInt(editMaxMatchesPerEvent, 10) || null,
           allowCrossCategoryPlay: editAllowCrossCategory,
         },
-        matchDurationMin: editMatchDuration.trim() === "" ? null : Math.max(5, Math.min(240, parseInt(editMatchDuration, 10) || 45)),
+        matchDurationMin: editMatchDuration,
         deputyId: editDeputyId || null,
       }),
     });
@@ -1944,8 +1944,10 @@ export default function LeagueDetailPage() {
             </div>
             <div>
               <label className="block text-xs text-muted mb-1">Default match duration (min)</label>
-              <input type="number" value={editMatchDuration} onChange={(e) => { setEditMatchDuration(e.target.value); setDirty(true); }} min={5} max={240}
-                className="w-20 border border-border rounded-lg px-3 py-2 text-sm" />
+              <DurationStepper
+                value={editMatchDuration}
+                onChange={(next) => { setEditMatchDuration(next); setDirty(true); }}
+              />
               <p className="text-[10px] text-muted mt-1">Includes warmup. Used by the auto-schedule. Rounds, events, and categories can override.</p>
             </div>
           </div>
