@@ -61,6 +61,28 @@ function formatLabel(scoring: string, winBy: string): string {
   return `${SCORING[scoring] ?? scoring} · ${winBy}`;
 }
 
+// Ultra-compact format label for the category header. Drops "win by 2"
+// (the default) entirely; abbreviates "Best of 3" to "Bo3".
+//   formatLabelShort("3x15", "2")    → "Bo3 to 15"
+//   formatLabelShort("3x15", "cap18") → "Bo3 to 15 · cap18"
+//   formatLabelShort("1xR21", "1")    → "Rally 21 · 1"
+function formatLabelShort(scoring: string, winBy: string): string {
+  const SCORING: Record<string, string> = {
+    "1x7": "1×7", "1x9": "1×9", "1x11": "1×11", "1x15": "1×15",
+    "3x11": "Bo3 to 11", "3x15": "Bo3 to 15", "3x21": "Bo3 to 21",
+    "1xR15": "Rally 15", "1xR21": "Rally 21",
+    "3xR15": "Bo3 R15", "3xR21": "Bo3 R21",
+  };
+  const base = SCORING[scoring] ?? scoring;
+  if (!winBy || winBy === "2") return base; // win-by-2 is the default → omit
+  if (winBy === "1") return `${base} · 1`;
+  const gp = winBy.match(/^2_gp(\d+)$/);
+  if (gp) return `${base} · GP${gp[1]}`;
+  const cap = winBy.match(/^cap(\d+)$/);
+  if (cap) return `${base} · cap${cap[1]}`;
+  return `${base} · ${winBy}`;
+}
+
 const FORMAT_SCORING_OPTS = [
   { v: "1x7", label: "1 set to 7" },
   { v: "1x9", label: "1 set to 9" },
@@ -883,7 +905,7 @@ export default function LineupBuilderPage() {
                 <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
                 <div className="text-base font-bold">{cat.name}</div>
               </div>
-              <div className="text-[11px] text-muted">{cat.format} · {matchCount} of max {max}</div>
+              <div className="text-[11px] text-muted">{formatLabelShort(cat.scoringFormat, cat.winBy)} · {matchCount} of max {max}</div>
             </summary>
             <div className="px-3 pb-3 pt-1.5 space-y-2 border-t border-border/70">
 
