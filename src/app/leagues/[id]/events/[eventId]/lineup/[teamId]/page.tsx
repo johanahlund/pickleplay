@@ -825,10 +825,10 @@ export default function LineupBuilderPage() {
             primary = `${oppName} lineup is unlocked. Unlock yours too for joint editing, or wait for them to lock their lineup.`;
           } else if (totalLocked && !myReady && oppReady) {
             // State 5: I'm the one who re-opened — opp is still locked.
-            // From this side: lock yours to refinalize, or ask opp to
-            // unlock so you can edit together.
+            // Secondary line already shows "opp: 🔒 locked", so the
+            // primary just nudges toward an action.
             bg = "bg-amber-50 border-amber-200";
-            primary = `${oppName} has locked their lineup. Lock yours to refinalize the match, or ask ${oppName} to unlock for joint editing.`;
+            primary = `Lock yours or ask ${oppName} to unlock for joint editing.`;
           } else if (myReady) {
             bg = "bg-amber-50 border-amber-200";
             primary = `Waiting for ${oppName}…`;
