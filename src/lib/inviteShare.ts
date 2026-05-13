@@ -276,7 +276,7 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
   if (ctx.team1Name && ctx.team2Name) {
     heading.push(`${ctx.team1Name} vs ${ctx.team2Name}`);
   }
-  heading.push(`📅 ${ctx.dateText}${ctx.doorsTimeText ? ` · doors ${ctx.doorsTimeText}` : ""}`);
+  heading.push(`📅 ${ctx.dateText}${ctx.doorsTimeText ? ` · Starts ${ctx.doorsTimeText}` : ""}`);
   if (ctx.locationText) heading.push(`📍 ${ctx.locationText}`);
 
   const lines: string[] = [...heading, "", "━━━━━━━━━━━━━━━━━━━"];
@@ -284,6 +284,9 @@ export function buildMatchDayShare(ctx: MatchDayShareContext): string {
   for (const c of courts) {
     const list = byCourt.get(c)!;
     const courtLabel = c === null ? "Court TBD" : `Court ${c}`;
+    // Extra blank line before each court header so the visual break
+    // between courts is unmistakable in WhatsApp's tight line-spacing.
+    lines.push("");
     lines.push("");
     lines.push(`*${courtLabel}*`);
     for (const g of list) {

@@ -113,7 +113,16 @@ export async function GET(
           displayOrder: true,
           winnerId: true,
           scheduleAnchored: true,
-          gamePlayers: { select: { playerId: true, team: true } },
+          gamePlayers: {
+            select: {
+              playerId: true,
+              team: true,
+              // Include the player record so the share builder can
+              // resolve names even for non-roster / non-signup players
+              // (e.g. someone added straight into a friendly slot).
+              player: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       pairs: {

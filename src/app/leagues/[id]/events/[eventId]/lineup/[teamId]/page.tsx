@@ -745,6 +745,12 @@ export default function LineupBuilderPage() {
       title={headerTitle}
       meta={headerMeta}
       back={{ label: "Back to event", onClick: back }}
+      // 📣 — route to the Matches tab on the event detail page with a
+      // `?share=schedule` flag so the share modal auto-opens on arrival.
+      // The lineup page doesn't load the full schedule context locally,
+      // so we hand off to the event page that already builds the share.
+      onShareSchedule={() => router.push(`/events/${eventId}?section=rounds&share=schedule`)}
+      shareScheduleLabel="Share match-day schedule"
     />
   );
 

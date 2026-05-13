@@ -211,7 +211,7 @@ interface Event {
     displayOrder?: number | null;
     winnerId?: string | null;
     scheduleAnchored?: boolean;
-    gamePlayers: { playerId: string; team?: number | null }[];
+    gamePlayers: { playerId: string; team?: number | null; player?: { id: string; name: string } }[];
   }[];
   matchDurationMin?: number | null;
   /** Per-event per-category match-duration overrides. */
@@ -886,15 +886,22 @@ export default function EventDetailPage() {
   // that and then strip the param so a subsequent back-to-overview gesture
   // doesn't reapply it.
   const handledInitialSectionRef = useRef(false);
+  // Pending share-flag captured from the URL on first mount. We can't
+  // open the share modal until `event` is loaded, so we stash the
+  // request here and a separate effect fires it once the event is
+  // ready.
+  const pendingShareRef = useRef<string | null>(null);
   useEffect(() => {
     if (!searchParams || handledInitialSectionRef.current) return;
     const s = searchParams.get("section");
-    if (!s) return;
+    const share = searchParams.get("share");
+    if (!s && !share) return;
     handledInitialSectionRef.current = true;
     const allowed = ["overview", "when", "admins", "scoring", "pairing", "players", "pairs", "competition", "rounds", "manual"] as const;
-    if ((allowed as readonly string[]).includes(s)) {
+    if (s && (allowed as readonly string[]).includes(s)) {
       setActiveSection(s as typeof allowed[number]);
     }
+    if (share) pendingShareRef.current = share;
     if (typeof id === "string") router.replace(`/events/${id}`);
   }, [searchParams, id, router]);
   // Auto-dismiss the green banner ~4s after it appears.
@@ -1886,6 +1893,10 @@ export default function EventDetailPage() {
     for (const t of teams) {
       for (const tp of t.players) playerById.set(tp.playerId, tp.player.name);
     }
+    // Also index event sign-ups so non-roster friendly extras (people
+    // who signed up to the event but aren't on either team's roster)
+    // resolve to their real names instead of "?".
+    for (const ep of event.players) playerById.set(ep.player.id, ep.player.name);
     const categoryById = new Map<string, string>();
     for (const c of categories) categoryById.set(c.id, c.name);
     // Match-by-leagueGame lookup for the score line on completed games.
@@ -1895,17 +1906,27 @@ export default function EventDetailPage() {
       if (m.leagueGame?.id) matchByGame.set(m.leagueGame.id, m);
     }
 
-    // Format a full name as "First L."
+    // Format a full name as "First L." — strip any parenthesised
+    // qualifier first (e.g. "Lloyd (Captain)" → "Lloyd"), and skip
+    // tokens that don't begin with a letter so a stray "(" can't end
+    // up as the initial.
     const shortName = (full: string): string => {
-      const parts = full.trim().split(/\s+/);
+      const cleaned = full.replace(/\([^)]*\)/g, " ").trim();
+      const parts = cleaned.split(/\s+/).filter((p) => /^\p{L}/u.test(p));
+      if (parts.length === 0) return full;
       if (parts.length === 1) return parts[0];
       const last = parts[parts.length - 1];
       return `${parts[0]} ${last[0]}.`;
     };
 
+    // Resolve a gamePlayer to a short name, falling back through three
+    // sources: the prebuilt playerById map (rosters + sign-ups), the
+    // included player record on the row itself, and finally "?".
+    const resolveName = (gp: { playerId: string; player?: { name: string } }) =>
+      shortName(playerById.get(gp.playerId) || gp.player?.name || "?");
     const games: MatchDayShareGame[] = (event.leagueGames || []).map((g) => {
-      const t1Names = g.gamePlayers.filter((gp) => gp.team === 1).map((gp) => shortName(playerById.get(gp.playerId) || "?"));
-      const t2Names = g.gamePlayers.filter((gp) => gp.team === 2).map((gp) => shortName(playerById.get(gp.playerId) || "?"));
+      const t1Names = g.gamePlayers.filter((gp) => gp.team === 1).map(resolveName);
+      const t2Names = g.gamePlayers.filter((gp) => gp.team === 2).map(resolveName);
       const match = matchByGame.get(g.id);
       const team1Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 1).map((p) => p.score)) : null;
       const team2Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 2).map((p) => p.score)) : null;
@@ -1939,9 +1960,17 @@ export default function EventDetailPage() {
       : null;
 
     const dateText = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-    const locationText = [event.club?.name, event.club?.locations?.[0]?.name]
-      .filter((s) => !!s && s !== event.club?.name).length > 0
-      ? `${event.club?.name} · ${event.club?.locations?.[0]?.name}`
+    // Pick the location actually selected for the event (via
+    // event.locationId). If the location is just the club's HQ /
+    // unspecified, fall back to the club name alone. Avoids the
+    // previous "Club · LocationA, Club · LocationB" duplication.
+    const selectedLocation = event.locationId
+      ? event.club?.locations?.find((l) => l.id === event.locationId)
+      : null;
+    const locationText = selectedLocation?.name
+      ? (event.club?.name && selectedLocation.name !== event.club.name
+          ? `${event.club.name} · ${selectedLocation.name}`
+          : selectedLocation.name)
       : event.club?.name ?? null;
     const team1Name = event.leagueTeams?.[0]?.team.name ?? null;
     const team2Name = event.leagueTeams?.[1]?.team.name ?? null;
@@ -1964,6 +1993,18 @@ export default function EventDetailPage() {
       title: `Share match-day · ${roundLabel}`,
     });
   };
+  // Auto-open the schedule share when arriving with `?share=schedule`
+  // in the URL (e.g. tapped 📣 on the lineup page). Waits for `event`
+  // to be loaded since openScheduleShare reads from it. Fires once
+  // then clears the ref so a later state change doesn't re-open.
+  useEffect(() => {
+    if (!event || !event.round || !pendingShareRef.current) return;
+    if (pendingShareRef.current === "schedule") {
+      pendingShareRef.current = null;
+      openScheduleShare();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event]);
 
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">

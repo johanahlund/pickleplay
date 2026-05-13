@@ -259,15 +259,36 @@ function HeaderActions({
           title={shareScheduleLabel || "Share match-day schedule"}
           style={{ position: "relative", background: "transparent", border: 0, padding: 0, cursor: "pointer", lineHeight: 0 }}
         >
-          {/* Trophy glyph — same shape as the Leagues tab in BottomNav. */}
+          {/* Megaphone — "broadcast schedule to the squad". Stroke-only
+              line-art so it picks up the header's `color` (white on
+              hero, slate on light) like the invite share icon. */}
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
             <path
-              d="M7 4h10v4a5 5 0 0 1-10 0V4zM7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3M12 13v4M9 20h6M10 17h4v3h-4z"
+              d="M4 10v4l11 5V5L4 10z"
+              stroke={color}
+              strokeWidth={1.8}
+              strokeLinejoin="round"
+            />
+            <path
+              d="M4 10H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1"
               stroke={color}
               strokeWidth={1.8}
               strokeLinecap="round"
               strokeLinejoin="round"
-              fill="none"
+            />
+            <path
+              d="M7 14v3a2 2 0 0 0 4 0v-2"
+              stroke={color}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M18 8c1.2 1 1.2 7 0 8"
+              stroke={color}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
           </svg>
         </button>
