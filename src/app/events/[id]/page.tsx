@@ -20,7 +20,8 @@ import { getPreview, setPreview } from "@/lib/entityPreview";
 import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
-import { buildEventInviteGroup, buildEventInvitePersonal, type EventInviteContext } from "@/lib/inviteShare";
+import { ShareInviteModal } from "@/components/ShareInviteModal";
+import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShare, type EventInviteContext, type MatchDayShareGame } from "@/lib/inviteShare";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -651,6 +652,11 @@ export default function EventDetailPage() {
   // recipient pool + message text are derived from `event` at render
   // time so they always reflect current data.
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  // Match-day schedule share — opens ShareInviteModal pre-populated
+  // with a court-grouped, time-sorted text version of the schedule.
+  // Audience is the existing WhatsApp group; payload differs from the
+  // invite (which is targeted at unclaimed/cold prospects).
+  const [scheduleShare, setScheduleShare] = useState<{ message: string; title: string } | null>(null);
   // Schedule view — effective default match duration. Initialized from
   // the persisted cascade (event override → round override → league
   // default → 45). User edits write back to Event.matchDurationMin,
@@ -1835,6 +1841,102 @@ export default function EventDetailPage() {
         return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
       })()
     : event.name;
+
+  /**
+   * Build the WhatsApp-ready match-day schedule and open the share
+   * chooser. League events only. Anyone with view access can share.
+   * Data is read straight off the loaded `event` payload — no API call.
+   */
+  const openScheduleShare = () => {
+    if (!event.round) return;
+    const league = event.round.league;
+    const teams = league.teams || [];
+    const categories = league.categories || [];
+    // Build lookup maps so we can resolve playerId → name and
+    // categoryId → display name without nested .find() per game.
+    const playerById = new Map<string, string>();
+    for (const t of teams) {
+      for (const tp of t.players) playerById.set(tp.playerId, tp.player.name);
+    }
+    const categoryById = new Map<string, string>();
+    for (const c of categories) categoryById.set(c.id, c.name);
+    // Match-by-leagueGame lookup for the score line on completed games.
+    type MatchLite = { leagueGame?: { id: string } | null; players: { team: number; score: number }[] };
+    const matchByGame = new Map<string, MatchLite>();
+    for (const m of event.matches as MatchLite[]) {
+      if (m.leagueGame?.id) matchByGame.set(m.leagueGame.id, m);
+    }
+
+    // Format a full name as "First L."
+    const shortName = (full: string): string => {
+      const parts = full.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0];
+      const last = parts[parts.length - 1];
+      return `${parts[0]} ${last[0]}.`;
+    };
+
+    const games: MatchDayShareGame[] = (event.leagueGames || []).map((g) => {
+      const t1Names = g.gamePlayers.filter((gp) => gp.team === 1).map((gp) => shortName(playerById.get(gp.playerId) || "?"));
+      const t2Names = g.gamePlayers.filter((gp) => gp.team === 2).map((gp) => shortName(playerById.get(gp.playerId) || "?"));
+      const match = matchByGame.get(g.id);
+      const team1Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 1).map((p) => p.score)) : null;
+      const team2Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 2).map((p) => p.score)) : null;
+      // winnerTeam: prefer LeagueGame.winnerId (organizer-set) — map
+      // winner team id back to 1/2; fall back to score comparison only
+      // when a match exists with a strictly-greater score.
+      let winnerTeam: 1 | 2 | null = null;
+      if (g.winnerId) {
+        winnerTeam = g.winnerId === g.team1Id ? 1 : g.winnerId === g.team2Id ? 2 : null;
+      } else if (match && team1Score != null && team2Score != null && team1Score !== team2Score) {
+        winnerTeam = team1Score > team2Score ? 1 : 2;
+      }
+      return {
+        courtNum: g.courtNum ?? null,
+        scheduledAt: g.scheduledAt ?? null,
+        categoryName: categoryById.get(g.categoryId) || "—",
+        team1PlayerNames: t1Names,
+        team2PlayerNames: t2Names,
+        team1Score,
+        team2Score,
+        winnerTeam,
+      };
+    });
+
+    // Earliest scheduledAt across all games → "doors" time hint.
+    const allTimes = games
+      .map((g) => g.scheduledAt ? new Date(g.scheduledAt).getTime() : null)
+      .filter((t): t is number => t !== null);
+    const doorsTimeText = allTimes.length > 0
+      ? new Date(Math.min(...allTimes)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : null;
+
+    const dateText = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    const locationText = [event.club?.name, event.club?.locations?.[0]?.name]
+      .filter((s) => !!s && s !== event.club?.name).length > 0
+      ? `${event.club?.name} · ${event.club?.locations?.[0]?.name}`
+      : event.club?.name ?? null;
+    const team1Name = event.leagueTeams?.[0]?.team.name ?? null;
+    const team2Name = event.leagueTeams?.[1]?.team.name ?? null;
+    const roundLabel = event.round.name || `Round ${event.round.roundNumber}`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+    const message = buildMatchDayShare({
+      leagueName: league.name,
+      roundLabel,
+      team1Name,
+      team2Name,
+      dateText,
+      doorsTimeText,
+      locationText,
+      eventUrl: `${origin}/events/${event.id}`,
+      games,
+    });
+    setScheduleShare({
+      message,
+      title: `Share match-day · ${roundLabel}`,
+    });
+  };
+
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
       <AppHeader
@@ -1848,6 +1950,8 @@ export default function EventDetailPage() {
         onInvite={canManage && event.round ? () => setShareSheetOpen(true) : undefined}
         inviteKind={canManage && event.round ? "E" : undefined}
         inviteLabel={canManage && event.round ? "Share event invite" : undefined}
+        onShareSchedule={event.round ? openScheduleShare : undefined}
+        shareScheduleLabel={event.round ? "Share match-day schedule" : undefined}
       />
     </div>
   );
@@ -6615,6 +6719,17 @@ export default function EventDetailPage() {
           />
         );
       })()}
+
+      {/* Match-day schedule share — open via the trophy glyph in the
+          header. Anyone with view access can fire it; payload is the
+          court-grouped schedule built by buildMatchDayShare. */}
+      <ShareInviteModal
+        open={!!scheduleShare}
+        message={scheduleShare?.message ?? ""}
+        title={scheduleShare?.title || "Share match-day"}
+        emailSubject={scheduleShare?.title || "Match-day schedule"}
+        onClose={() => setScheduleShare(null)}
+      />
 
       {canManage && managerCard}
 

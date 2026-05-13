@@ -194,6 +194,122 @@ export function buildLeagueInvitePersonal(
   return withInstallTip(lines.join("\n"), { forClaim: true });
 }
 
+// ── Match-day schedule share ──────────────────────────────────────
+//
+// "Share the schedule for this match day" — a single block of text the
+// host typically pastes into a club WhatsApp group on the day. Grouped
+// by court, sorted by start time within each court (TBD games at the
+// end of each court list). Includes scores once a game has a winner.
+
+export interface MatchDayShareGame {
+  /** Court the game is on. `null` = not yet assigned. */
+  courtNum: number | null;
+  /** Scheduled start (Date or ISO string). `null` = TBD. */
+  scheduledAt: Date | string | null;
+  /** Display label for the category, e.g. "Men's Doubles". */
+  categoryName: string;
+  /** Pre-formatted player names ("Alice S.") for team 1 / team 2 — the
+   *  caller knows the team roster, this builder stays format-only. */
+  team1PlayerNames: string[];
+  team2PlayerNames: string[];
+  /** Final team scores (single-game). Pass when `winnerTeam` is set. */
+  team1Score?: number | null;
+  team2Score?: number | null;
+  /** 1 or 2 if the game has a winner; null/undefined otherwise. */
+  winnerTeam?: 1 | 2 | null;
+}
+
+export interface MatchDayShareContext {
+  leagueName: string;
+  /** "Round 3" or similar — optional. */
+  roundLabel?: string | null;
+  /** The two teams playing the match day. */
+  team1Name?: string | null;
+  team2Name?: string | null;
+  /** Calendar date, already formatted ("Sat 23 May"). */
+  dateText: string;
+  /** Earliest start time across all games, pre-formatted ("10:00"). */
+  doorsTimeText?: string | null;
+  /** Venue line ("Setúbal Pickleball Club, Setúbal"). */
+  locationText?: string | null;
+  /** Public absolute URL to the event detail page. */
+  eventUrl: string;
+  games: MatchDayShareGame[];
+}
+
+function fmtTime(scheduledAt: Date | string | null): string {
+  if (!scheduledAt) return "TBD";
+  const d = scheduledAt instanceof Date ? scheduledAt : new Date(scheduledAt);
+  if (Number.isNaN(d.getTime())) return "TBD";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Build the WhatsApp-ready match-day schedule message. */
+export function buildMatchDayShare(ctx: MatchDayShareContext): string {
+  // Group by court (null/TBD-court goes last).
+  const byCourt = new Map<number | null, MatchDayShareGame[]>();
+  for (const g of ctx.games) {
+    const key = g.courtNum ?? null;
+    const list = byCourt.get(key);
+    if (list) list.push(g);
+    else byCourt.set(key, [g]);
+  }
+  const courts = Array.from(byCourt.keys()).sort((a, b) => {
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a - b;
+  });
+
+  // Within each court, sort by scheduledAt ascending; nulls last.
+  for (const c of courts) {
+    const list = byCourt.get(c)!;
+    list.sort((a, b) => {
+      const ta = a.scheduledAt ? new Date(a.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+      const tb = b.scheduledAt ? new Date(b.scheduledAt).getTime() : Number.POSITIVE_INFINITY;
+      return ta - tb;
+    });
+  }
+
+  const heading: string[] = [];
+  const roundSuffix = ctx.roundLabel ? ` — ${ctx.roundLabel}` : "";
+  heading.push(`🏆 *${ctx.leagueName}${roundSuffix}*`);
+  if (ctx.team1Name && ctx.team2Name) {
+    heading.push(`${ctx.team1Name} vs ${ctx.team2Name}`);
+  }
+  heading.push(`📅 ${ctx.dateText}${ctx.doorsTimeText ? ` · doors ${ctx.doorsTimeText}` : ""}`);
+  if (ctx.locationText) heading.push(`📍 ${ctx.locationText}`);
+
+  const lines: string[] = [...heading, "", "━━━━━━━━━━━━━━━━━━━"];
+
+  for (const c of courts) {
+    const list = byCourt.get(c)!;
+    const courtLabel = c === null ? "Court TBD" : `Court ${c}`;
+    lines.push("");
+    lines.push(`*${courtLabel}*`);
+    for (const g of list) {
+      lines.push("");
+      lines.push(`${fmtTime(g.scheduledAt)} · _${g.categoryName}_`);
+      const t1 = g.team1PlayerNames.join(" + ") || "?";
+      const t2 = g.team2PlayerNames.join(" + ") || "?";
+      lines.push(`${t1}  vs  ${t2}`);
+      if (g.winnerTeam && g.team1Score != null && g.team2Score != null) {
+        const winnerNames = g.winnerTeam === 1 ? t1 : t2;
+        const scoreText = g.winnerTeam === 1
+          ? `${g.team1Score}-${g.team2Score}`
+          : `${g.team2Score}-${g.team1Score}`;
+        lines.push(`✅ ${winnerNames} — *${scoreText}*`);
+      }
+    }
+  }
+
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━");
+  lines.push("🔗 Live scores & full details:");
+  lines.push(ctx.eventUrl);
+
+  return lines.join("\n");
+}
+
 // ── Club invite ───────────────────────────────────────────────────
 
 export interface ClubInviteContext {

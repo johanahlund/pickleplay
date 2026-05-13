@@ -79,6 +79,14 @@ interface AppHeaderProps {
   inviteKind?: string;
   /** Long-form label used in aria-label / tooltip (e.g. "Share event"). */
   inviteLabel?: string;
+
+  /** When set, render a "Share match-day schedule" button — the trophy
+   *  glyph from BottomNav, distinct from the invite share. Audience is
+   *  the existing WhatsApp group; payload is the full schedule. */
+  onShareSchedule?: () => void;
+  /** Long-form label used in aria-label / tooltip for the schedule
+   *  share (e.g. "Share match-day schedule"). */
+  shareScheduleLabel?: string;
 }
 
 export function AppHeader({
@@ -94,14 +102,16 @@ export function AppHeader({
   onInvite,
   inviteKind,
   inviteLabel,
+  onShareSchedule,
+  shareScheduleLabel,
 }: AppHeaderProps) {
   if (variant === "hero-sub") {
-    return <HeroSubHeader {...{ title, meta, back, action, notifications, user, onInvite, inviteKind, inviteLabel }} />;
+    return <HeroSubHeader {...{ title, meta, back, action, notifications, user, onInvite, inviteKind, inviteLabel, onShareSchedule, shareScheduleLabel }} />;
   }
   return variant === "hero" ? (
-    <HeroHeader {...{ title, meta, status, back, notifications, user, onInvite, inviteKind, inviteLabel }} />
+    <HeroHeader {...{ title, meta, status, back, notifications, user, onInvite, inviteKind, inviteLabel, onShareSchedule, shareScheduleLabel }} />
   ) : (
-    <LightHeader {...{ back, title, isAdmin, notifications, user, onInvite, inviteKind, inviteLabel }} />
+    <LightHeader {...{ back, title, isAdmin, notifications, user, onInvite, inviteKind, inviteLabel, onShareSchedule, shareScheduleLabel }} />
   );
 }
 export default AppHeader;
@@ -182,6 +192,8 @@ function HeaderActions({
   onInvite,
   inviteKind,
   inviteLabel,
+  onShareSchedule,
+  shareScheduleLabel,
 }: {
   color: string;
   avatarBg: string;
@@ -194,6 +206,10 @@ function HeaderActions({
   inviteKind?: string;
   /** Long-form label used in aria-label/title (e.g. "Share event"). */
   inviteLabel?: string;
+  /** When set, render a separate trophy-glyph button for sharing the
+   *  match-day schedule. */
+  onShareSchedule?: () => void;
+  shareScheduleLabel?: string;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -233,6 +249,27 @@ function HeaderActions({
               }}
             >{inviteKind}</span>
           )}
+        </button>
+      )}
+      {onShareSchedule && (
+        <button
+          type="button"
+          onClick={onShareSchedule}
+          aria-label={shareScheduleLabel || "Share match-day schedule"}
+          title={shareScheduleLabel || "Share match-day schedule"}
+          style={{ position: "relative", background: "transparent", border: 0, padding: 0, cursor: "pointer", lineHeight: 0 }}
+        >
+          {/* Trophy glyph — same shape as the Leagues tab in BottomNav. */}
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M7 4h10v4a5 5 0 0 1-10 0V4zM7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3M12 13v4M9 20h6M10 17h4v3h-4z"
+              stroke={color}
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </svg>
         </button>
       )}
       <Link
@@ -349,7 +386,9 @@ function LightHeader({
   onInvite,
   inviteKind,
   inviteLabel,
-}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
+  onShareSchedule,
+  shareScheduleLabel,
+}: Pick<AppHeaderProps, "back" | "title" | "isAdmin" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel" | "onShareSchedule" | "shareScheduleLabel">) {
   const hasBack = !!back;
   const ref = useRef<HTMLElement | null>(null);
   useHeaderHeightSync(ref);
@@ -388,6 +427,8 @@ function LightHeader({
             onInvite={onInvite}
             inviteKind={inviteKind}
             inviteLabel={inviteLabel}
+            onShareSchedule={onShareSchedule}
+            shareScheduleLabel={shareScheduleLabel}
           />
         </div>
       </div>
@@ -438,7 +479,9 @@ function HeroHeader({
   onInvite,
   inviteKind,
   inviteLabel,
-}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
+  onShareSchedule,
+  shareScheduleLabel,
+}: Pick<AppHeaderProps, "title" | "meta" | "status" | "back" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel" | "onShareSchedule" | "shareScheduleLabel">) {
   const statusStyles: Record<HeaderStatus, { bg: string; fg: string; dot: string }> = {
     draft:     { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#fde68a" },
     open:      { bg: "rgba(255,255,255,0.18)", fg: "#fff",     dot: "#bef264" },
@@ -483,6 +526,8 @@ function HeroHeader({
           onInvite={onInvite}
           inviteKind={inviteKind}
           inviteLabel={inviteLabel}
+          onShareSchedule={onShareSchedule}
+          shareScheduleLabel={shareScheduleLabel}
         />
       </div>
       {back && (
@@ -566,7 +611,9 @@ function HeroSubHeader({
   onInvite,
   inviteKind,
   inviteLabel,
-}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel">) {
+  onShareSchedule,
+  shareScheduleLabel,
+}: Pick<AppHeaderProps, "title" | "meta" | "back" | "action" | "notifications" | "user" | "onInvite" | "inviteKind" | "inviteLabel" | "onShareSchedule" | "shareScheduleLabel">) {
   const actionEl = action ? (
     action.onClick ? (
       <button
@@ -652,6 +699,8 @@ function HeroSubHeader({
             onInvite={onInvite}
             inviteKind={inviteKind}
             inviteLabel={inviteLabel}
+            onShareSchedule={onShareSchedule}
+            shareScheduleLabel={shareScheduleLabel}
           />
         </div>
       </div>
