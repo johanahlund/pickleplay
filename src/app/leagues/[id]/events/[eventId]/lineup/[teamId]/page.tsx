@@ -153,6 +153,11 @@ export default function LineupBuilderPage() {
   // view to a single row per category until the captain explicitly asks
   // for more.
   const [extraSlots, setExtraSlots] = useState<Record<string, number>>({});
+  // In-flight optimistic mutations. Polling pauses while >0 so the
+  // post-server-commit reconcile doesn't race with a poll that snapshots
+  // stale data mid-POST (caused the kind-selector to flicker back to
+  // its old value before settling).
+  const [mutationsInFlight, setMutationsInFlight] = useState(0);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   // Search query for the player picker. Resets to empty whenever the
   // picker (re-)opens.
@@ -283,7 +288,7 @@ export default function LineupBuilderPage() {
   // tab-focus / visibilitychange so an alt-tab back is instant.
   // Pauses while a save is in flight or the picker is open so we don't
   // clobber mid-edit.
-  usePollingRefresh(loadAll, 7000, !loading && !saving && !picker);
+  usePollingRefresh(loadAll, 7000, !loading && !saving && !picker && mutationsInFlight === 0);
 
   // Per-game side derivation. MUST use the game's OWN team1Id — legacy
   // pre-create rows (rounds/events POST) stored team1Id/team2Id in
@@ -393,21 +398,26 @@ export default function LineupBuilderPage() {
   // flicker when picking players in quick succession).
   const postOptimistic = async (body: Record<string, unknown>, rollback: () => void) => {
     setErrorMsg(null);
-    const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      setErrorMsg(d.error || "Failed");
-      rollback();
-      return;
+    setMutationsInFlight((n) => n + 1);
+    try {
+      const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setErrorMsg(d.error || "Failed");
+        rollback();
+        return;
+      }
+      // Reconcile with server truth in the background — don't block the
+      // caller. The 7s polling refresh and the next user action will pick
+      // up any missed reconciliation anyway.
+      void loadAll();
+    } finally {
+      setMutationsInFlight((n) => n - 1);
     }
-    // Reconcile with server truth in the background — don't block the
-    // caller. The 15s polling refresh and the next user action will pick
-    // up any missed reconciliation anyway.
-    void loadAll();
   };
 
   const toggleSlot = async (categoryId: string, slotNumber: number, want: boolean) => {
