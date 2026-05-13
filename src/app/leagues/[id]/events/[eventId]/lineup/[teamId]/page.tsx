@@ -250,9 +250,13 @@ export default function LineupBuilderPage() {
     return () => { document.body.style.overflow = prev; };
   }, [picker]);
 
-  // Poll so each team sees the opponent's picks live. Pauses while a
-  // save is in flight or the picker is open so we don't clobber mid-edit.
-  usePollingRefresh(loadAll, 15000, !loading && !saving && !picker);
+  // Poll so each team sees the opponent's picks (and any new matches
+  // they've added) live. 7 s feels near-real-time when both captains
+  // are coordinating side-by-side; the hook also re-fires on
+  // tab-focus / visibilitychange so an alt-tab back is instant.
+  // Pauses while a save is in flight or the picker is open so we don't
+  // clobber mid-edit.
+  usePollingRefresh(loadAll, 7000, !loading && !saving && !picker);
 
   // Per-game side derivation. MUST use the game's OWN team1Id — legacy
   // pre-create rows (rounds/events POST) stored team1Id/team2Id in
