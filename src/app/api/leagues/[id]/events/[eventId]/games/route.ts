@@ -170,13 +170,21 @@ export async function POST(
     if (!categoryId || typeof slotNumber !== "number" || typeof want !== "boolean") {
       return NextResponse.json({ error: "categoryId, slotNumber, want required" }, { status: 400 });
     }
-    const isTeam1Side = ctx.captainTeamId === ctx.team1Id;
-    const wantsField = isTeam1Side ? "team1Wants" : "team2Wants";
 
     const existing = await prisma.leagueGame.findUnique({
       where: { eventId_categoryId_slotNumber: { eventId, categoryId, slotNumber } },
       include: { gamePlayers: { select: { player: { select: { id: true } }, playerId: true } } },
     });
+    // When updating an EXISTING row, derive our side from that row's
+    // own team1Id — older pre-create paths (rounds/events POST) stored
+    // team1Id/team2Id in UI-selection order, not the alphabetical
+    // canonical order. Reading from `ctx.team1Id` would write the wrong
+    // flag in those cases. For a fresh create we fall back to the
+    // canonical ctx pair.
+    const isTeam1Side = existing
+      ? ctx.captainTeamId === existing.team1Id
+      : ctx.captainTeamId === ctx.team1Id;
+    const wantsField = isTeam1Side ? "team1Wants" : "team2Wants";
 
     if (want) {
       // Tick — upsert row with our flag true.

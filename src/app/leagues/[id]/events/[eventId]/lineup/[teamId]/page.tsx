@@ -254,24 +254,34 @@ export default function LineupBuilderPage() {
   // save is in flight or the picker is open so we don't clobber mid-edit.
   usePollingRefresh(loadAll, 15000, !loading && !saving && !picker);
 
-  // Determine which side our team is on. MUST match the server's view:
-  // server uses `game.team1Id === captainTeamId` (the literal stored id).
-  // Older events (Round 1, created via the rounds/events POST endpoint)
-  // store team1Id as the home team — NOT alphabetical — so an
-  // alphabetical fallback would disagree with the server and flip the
-  // team tag on assignments, making picks land in the opponent column.
-  // Read team1Id straight from any existing game in this event; fall
-  // back to alphabetical only when there are no games yet.
-  const ourSide: 1 | 2 | null = useMemo(() => {
-    if (!team) return null;
-    if (games.length > 0) {
-      return games[0].team1Id === team.id ? 1 : 2;
-    }
-    if (!opponentTeam) return null;
-    return team.id.localeCompare(opponentTeam.id) < 0 ? 1 : 2;
-  }, [team, opponentTeam, games]);
+  // Per-game side derivation. MUST use the game's OWN team1Id — legacy
+  // pre-create rows (rounds/events POST) stored team1Id/team2Id in
+  // UI-selection order, while new toggle_slot rows use the alphabetical
+  // canonical pair. A single global ourSide silently flipped the wants /
+  // players column for half the games when the two conventions mixed.
+  // Server's assign_players already derives side per-game; we do the
+  // same here.
+  const mySideForGame = useCallback((g: Game): 1 | 2 => {
+    return team && g.team1Id === team.id ? 1 : 2;
+  }, [team]);
 
-  const wantsField = (g: Game): boolean => ourSide === 1 ? g.team1Wants : g.team2Wants;
+  // Alphabetical canonical side — used when CREATING a fresh game
+  // (synthetic optimistic row + server's new-row path both use the
+  // sort-by-id pair). For existing rows we read each game's own team1Id
+  // via mySideForGame.
+  const myAlphabeticalSide: 1 | 2 | null = useMemo(() => {
+    if (!team || !opponentTeam) return null;
+    return team.id.localeCompare(opponentTeam.id) < 0 ? 1 : 2;
+  }, [team, opponentTeam]);
+
+  const wantsField = (g: Game): boolean => {
+    const s = mySideForGame(g);
+    return s === 1 ? g.team1Wants : g.team2Wants;
+  };
+  const oppWantsForGame = (g: Game): boolean => {
+    const s = mySideForGame(g);
+    return s === 1 ? g.team2Wants : g.team1Wants;
+  };
 
   // Build (categoryId → slotNumber → game) map.
   const gameByKey = useMemo(() => {
@@ -286,10 +296,11 @@ export default function LineupBuilderPage() {
   // for legacy rows where team is null (pre-migration data).
   const ourPlayersForGame = (g: Game): { id: string; name: string }[] => {
     const rosterIds = new Set(roster.map((p) => p.id));
+    const side = mySideForGame(g);
     return g.gamePlayers
       .filter((gp) => {
         const t = (gp as { team?: number | null }).team;
-        if (t === 1 || t === 2) return t === ourSide;
+        if (t === 1 || t === 2) return t === side;
         return rosterIds.has(gp.playerId);
       })
       .map((gp) => gp.player);
@@ -297,10 +308,11 @@ export default function LineupBuilderPage() {
   const oppPlayersForGame = (g: Game): { id: string; name: string }[] => {
     const oppRosterIds = opponentRosterIds;
     const ourRosterIds = new Set(roster.map((p) => p.id));
+    const side = mySideForGame(g);
     return g.gamePlayers
       .filter((gp) => {
         const t = (gp as { team?: number | null }).team;
-        if (t === 1 || t === 2) return t !== ourSide;
+        if (t === 1 || t === 2) return t !== side;
         // Legacy null-team row:
         // - In OUR roster → ours, hide from opp column.
         // - In OPP roster → opp, show.
@@ -373,16 +385,18 @@ export default function LineupBuilderPage() {
       // Server still blocks until players are removed. Walk them off first.
       await post({ action: "assign_players", gameId: g.id, playerIds: [] });
     }
-    if (ourSide === null) return;
-    const wantsField: "team1Wants" | "team2Wants" = ourSide === 1 ? "team1Wants" : "team2Wants";
-    const otherWantsField: "team1Wants" | "team2Wants" = ourSide === 1 ? "team2Wants" : "team1Wants";
-    const opponentTeamId = ourSide === 1 ? team!.id : opponentTeam?.id || "";
-    void opponentTeamId;
+    if (myAlphabeticalSide === null) return;
 
     // Snapshot for rollback.
     const snapshot = games;
     setGames((prev) => {
       const existing = prev.find((x) => x.categoryId === categoryId && x.slotNumber === slotNumber);
+      // Derive the per-game wants field. EXISTING rows may use legacy
+      // (non-alphabetical) team1/team2 order — read from THEIR team1Id.
+      // NEW rows use alphabetical (matches server's create path).
+      const rowSide: 1 | 2 = existing ? mySideForGame(existing) : myAlphabeticalSide;
+      const wantsField: "team1Wants" | "team2Wants" = rowSide === 1 ? "team1Wants" : "team2Wants";
+      const otherWantsField: "team1Wants" | "team2Wants" = rowSide === 1 ? "team2Wants" : "team1Wants";
       if (want) {
         if (existing) {
           return prev.map((x) => x === existing ? { ...x, [wantsField]: true } : x);
@@ -398,7 +412,7 @@ export default function LineupBuilderPage() {
           id: `pending-${categoryId}-${slotNumber}`,
           categoryId, slotNumber,
           team1Id: t1, team2Id: t2,
-          team1Wants: ourSide === 1, team2Wants: ourSide === 2,
+          team1Wants: myAlphabeticalSide === 1, team2Wants: myAlphabeticalSide === 2,
           kind: hasPrincipal ? "league" : "principal",
           winnerId: null, gamePlayers: [],
         };
@@ -418,7 +432,7 @@ export default function LineupBuilderPage() {
 
   const assignPlayers = async (gameId: string, playerIds: string[]) => {
     // Optimistic: replace our team's players locally, leave opponent rows.
-    // Tag each new gamePlayer with `team: ourSide` so the read-side
+    // Tag each new gamePlayer with the per-game side so the read-side
     // helpers (`ourPlayersForGame`) pick non-roster friendly extras up
     // as ours without waiting for the server refetch — otherwise the
     // newly-picked pill wouldn't appear instantly on the card.
@@ -426,10 +440,11 @@ export default function LineupBuilderPage() {
     // Identify which ids are NEW vs the previous state so we can flash
     // just those pills on the match card for ~2s of UX feedback.
     const prevGame = games.find((g) => g.id === gameId);
+    const prevSide = prevGame ? mySideForGame(prevGame) : null;
     const prevOurIds = prevGame
       ? prevGame.gamePlayers.filter((gp) => {
           const t = gp.team;
-          if (t === 1 || t === 2) return t === ourSide;
+          if (t === 1 || t === 2) return t === prevSide;
           return roster.some((r) => r.id === gp.playerId);
         }).map((gp) => gp.playerId)
       : [];
@@ -439,10 +454,11 @@ export default function LineupBuilderPage() {
       if (g.id !== gameId) return g;
       // Drop any existing rows on our side (by team tag, with a roster
       // fallback for legacy rows) — mirrors the server-side delete.
+      const side = mySideForGame(g);
       const ourRosterIds = new Set(roster.map((p) => p.id));
       const remaining = g.gamePlayers.filter((gp) => {
         const t = gp.team;
-        if (t === 1 || t === 2) return t !== ourSide;
+        if (t === 1 || t === 2) return t !== side;
         return !ourRosterIds.has(gp.playerId);
       });
       const ourPlayers = playerIds.map((pid) => {
@@ -451,7 +467,7 @@ export default function LineupBuilderPage() {
         const fromRoster = roster.find((p) => p.id === pid);
         const fromSignup = signups.find((s) => s.playerId === pid)?.player;
         const name = fromRoster?.name ?? fromSignup?.name ?? "…";
-        return { playerId: pid, team: ourSide ?? null, player: { id: pid, name } };
+        return { playerId: pid, team: side, player: { id: pid, name } };
       });
       return { ...g, gamePlayers: [...remaining, ...ourPlayers] };
     }));
@@ -469,7 +485,7 @@ export default function LineupBuilderPage() {
     if (ready) {
       const problems: string[] = [];
       for (const g of games) {
-        const ourWants = ourSide === 1 ? g.team1Wants : g.team2Wants;
+        const ourWants = wantsField(g);
         if (!ourWants) continue;
         const cat = categories.find((c) => c.id === g.categoryId);
         if (!cat) continue;
@@ -852,7 +868,7 @@ export default function LineupBuilderPage() {
             {slots.map((slotNum) => {
               const g = gameByKey.get(`${cat.id}:${slotNum}`);
               const ourWants = !!(g && wantsField(g));
-              const oppWants = !!(g && (ourSide === 1 ? g.team2Wants : g.team1Wants));
+              const oppWants = !!(g && oppWantsForGame(g));
               const ourPlayers = g ? ourPlayersForGame(g) : [];
               const oppPlayers = g ? oppPlayersForGame(g) : [];
               const locked = !!g?.winnerId;

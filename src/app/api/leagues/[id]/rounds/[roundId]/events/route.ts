@@ -130,8 +130,15 @@ export async function POST(
 
   // Pre-create LeagueGame rows when 2 teams play. Skip round-only custom
   // categories (no FK target, doesn't count toward standings).
+  //
+  // team1Id/team2Id MUST be in alphabetical order — matches the canonical
+  // pair the games endpoint derives via `loadEventContext` (which sorts
+  // the event's leagueTeams by id). Without this, toggle_slot would write
+  // wants flags to the wrong side. Existing legacy rows with non-sorted
+  // order are handled by toggle_slot reading the row's own team1Id when
+  // updating.
   if (teamIds.length === 2 && effectiveCats.length > 0) {
-    const [t1Id, t2Id] = teamIds;
+    const [t1Id, t2Id] = [...teamIds].sort((a, b) => a.localeCompare(b));
     for (const cat of effectiveCats) {
       if (!cat._hasFK) continue;
       await prisma.leagueGame.create({
