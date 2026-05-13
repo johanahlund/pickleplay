@@ -141,7 +141,7 @@ export async function POST(
     const otherEt = ets.find((e) => e.teamId !== ctx.captainTeamId);
     if (myEt?.lineupReady) {
       return NextResponse.json(
-        { error: "Your team's lineup is locked. Tap Re-open to edit it." },
+        { error: "Your team's lineup is locked. Tap Unlock to edit it." },
         { status: 400 },
       );
     }

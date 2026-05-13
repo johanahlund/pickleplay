@@ -820,9 +820,9 @@ export default function LineupBuilderPage() {
             bg = "bg-blue-50 border-blue-200";
             primary = "Joint editing open — both teams unlocked.";
           } else if (totalLocked && myReady && !oppReady) {
-            // State 6: opp re-opened after reveal; they want to edit.
+            // State 6: opp unlocked after reveal; they want to edit.
             bg = "bg-amber-50 border-amber-200";
-            primary = `${oppName} re-opened their lineup. Re-open yours too for joint editing.`;
+            primary = `${oppName} lineup is unlocked. Unlock yours too for joint editing, or wait for them to lock their lineup.`;
           } else if (totalLocked && !myReady && oppReady) {
             // State 5: I'm the one who re-opened — opp is still locked.
             // From this side: lock yours to refinalize, or ask opp to
@@ -852,7 +852,7 @@ export default function LineupBuilderPage() {
                 className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap ${
                   myReady ? "bg-gray-200 text-foreground" : "bg-action text-white"
                 } disabled:opacity-50`}
-              >{myReady ? "Re-open" : "Lock Team Lineup"}</button>
+              >{myReady ? "Unlock" : "Lock Team Lineup"}</button>
             </div>
           );
         })()}
