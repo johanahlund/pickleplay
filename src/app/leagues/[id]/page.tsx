@@ -158,9 +158,10 @@ function clampPositiveInt(raw: string, max: number): string {
   return String(n);
 }
 
-function ScoringSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+function ScoringSelect({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
       <optgroup label="Normal — 1 Set"><option value="1x7">1 set to 7</option><option value="1x9">1 set to 9</option><option value="1x11">1 set to 11</option><option value="1x15">1 set to 15</option></optgroup>
       <optgroup label="Normal — Best of 3"><option value="3x11">Bo3 to 11</option><option value="3x15">Bo3 to 15</option></optgroup>
       <optgroup label="Rally — 1 Set"><option value="1xR15">Rally to 15</option><option value="1xR21">Rally to 21</option></optgroup>
@@ -168,9 +169,10 @@ function ScoringSelect({ value, onChange, className }: { value: string; onChange
     </select>
   );
 }
-function WinBySelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+function WinBySelect({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
       <option value="1">1</option><option value="2">2</option>
       <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
       <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
@@ -576,41 +578,21 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       </div>
 
       <div className="border-t border-border pt-3">
-        <div className="text-sm font-medium mb-2">Match durations (min)</div>
-        <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 items-center max-w-sm">
-          <span className="text-xs text-muted">All categories</span>
-          <DurationStepper value={matchDuration} onChange={setMatchDuration} />
-          {leagueCategories.flatMap((c) => {
-            const v = catDurations[c.id];
-            return [
-              <span key={`label-${c.id}`} className="text-xs text-foreground truncate">
-                <span className="text-muted">↳ </span>{c.name}
-              </span>,
-              <DurationStepper
-                key={`step-${c.id}`}
-                value={v ?? null}
-                compact
-                label={`Match duration override for ${c.name}`}
-                onChange={(next) => {
-                  setCatDurations((prev) => {
-                    const out = { ...prev };
-                    if (next == null) delete out[c.id];
-                    else out[c.id] = next;
-                    return out;
-                  });
-                }}
-              />,
-            ];
-          })}
+        <div className="text-sm mb-2"><span className="font-bold">Match duration</span> for this round</div>
+        <div className="flex items-end gap-3">
+          <div>
+            <div className="text-[11px] text-muted mb-1">All categories (min)</div>
+            <DurationStepper value={matchDuration} onChange={setMatchDuration} />
+          </div>
         </div>
-        <p className="text-[10px] text-muted mt-2">– on the general row inherits from the league. – on a category row inherits from the general row above. Tap a compact category chip to step it.</p>
+        <p className="text-[10px] text-muted mt-2">– = inherit from league. Per-category overrides live in the Customize Categories section below.</p>
       </div>
 
       <div className="border-t border-border pt-3">
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={useFormatOverride}
             onChange={(e) => setUseFormatOverride(e.target.checked)} className="rounded" />
-          <span className="text-sm font-medium">Override format for this round</span>
+          <span className="text-sm"><span className="font-bold">Customize Format</span> for this round</span>
         </label>
         {useFormatOverride && (
           <div className="mt-2 space-y-2 pl-6">
@@ -647,7 +629,7 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={useCategoriesOverride}
             onChange={(e) => setUseCategoriesOverride(e.target.checked)} className="rounded" />
-          <span className="text-sm font-medium">Customize categories for this round</span>
+          <span className="text-sm"><span className="font-bold">Customize Categories</span> for this round</span>
         </label>
         {useCategoriesOverride && (
           <div className="mt-2 space-y-1.5 pl-6">
@@ -660,16 +642,36 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
               const update = (patch: Partial<CatOverrideForm>) => {
                 setCatOverrides((prev) => ({ ...prev, [c.id]: { ...o, ...patch } }));
               };
+              const dur = catDurations[c.id];
+              const onDurChange = (next: number | null) => {
+                setCatDurations((prev) => {
+                  const out = { ...prev };
+                  if (next == null) delete out[c.id];
+                  else out[c.id] = next;
+                  return out;
+                });
+              };
               return (
                 <div key={c.id} className="border border-border rounded-lg p-2 bg-gray-50">
                   <div className="flex items-center gap-2">
                     <input type="checkbox" checked={o.included} onChange={(e) => update({ included: e.target.checked })} className="rounded" />
-                    <span className={`text-sm flex-1 truncate ${!o.included ? "line-through text-muted" : ""}`}>{c.name}</span>
+                    <span className={`text-sm flex-1 truncate ${!o.included ? "text-muted italic" : ""}`}>
+                      {c.name}
+                      {!o.included && <span className="ml-1 text-[10px] not-italic">— will not be played in this round</span>}
+                    </span>
                     {o.included && (
-                      <button onClick={() => update({ expanded: !o.expanded })}
-                        className="text-[10px] text-action font-medium">
-                        {o.expanded ? "Hide" : "Edit"}
-                      </button>
+                      <>
+                        <DurationStepper
+                          value={dur ?? null}
+                          compact
+                          label={`Match duration override for ${c.name}`}
+                          onChange={onDurChange}
+                        />
+                        <button onClick={() => update({ expanded: !o.expanded })}
+                          className="text-[10px] text-action font-medium">
+                          {o.expanded ? "Hide" : "Edit"}
+                        </button>
+                      </>
                     )}
                   </div>
                   {o.included && o.expanded && (
@@ -683,9 +685,10 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                         </div>
                         <div className="w-32">
                           <label className="block text-[10px] text-muted">Age group</label>
-                          <select value={o.ageGroup || c.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
+                          <select value={o.ageGroup} onChange={(e) => update({ ageGroup: e.target.value === c.ageGroup ? "" : e.target.value })}
                             className="w-full border border-border rounded px-2 py-1 text-xs bg-white">
-                            {AGE_OPTS.map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
+                            <option value="">{`Inherit (${c.ageGroup === "open" ? "Open" : c.ageGroup})`}</option>
+                            {AGE_OPTS.filter((a) => a !== c.ageGroup).map((a) => <option key={a} value={a}>{a === "open" ? "Open" : a}</option>)}
                           </select>
                         </div>
                       </div>
@@ -710,21 +713,25 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="block text-[10px] text-muted">Scoring</label>
-                          <ScoringSelect value={o.scoringFormat || c.scoringFormat}
+                          <ScoringSelect value={o.scoringFormat}
                             onChange={(v) => update({ scoringFormat: v === c.scoringFormat ? "" : v })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white"
+                            placeholder={`Inherit (${c.scoringFormat})`}
+                          />
                         </div>
                         <div className="w-28">
                           <label className="block text-[10px] text-muted">Win by</label>
-                          <WinBySelect value={o.winBy || c.winBy}
+                          <WinBySelect value={o.winBy}
                             onChange={(v) => update({ winBy: v === c.winBy ? "" : v })}
-                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white" />
+                            className="w-full border border-border rounded px-2 py-1 text-xs bg-white"
+                            placeholder={`Inherit (${c.winBy})`}
+                          />
                         </div>
                         <div className="w-24">
                           <label className="block text-[10px] text-muted">Max / event</label>
                           <input type="number" min={0} value={o.maxPerEvent}
                             onChange={(e) => update({ maxPerEvent: e.target.value })}
-                            placeholder={c.maxPerEvent != null ? String(c.maxPerEvent) : "—"}
+                            placeholder={c.maxPerEvent != null ? `Inherit (${c.maxPerEvent})` : "Inherit (no cap)"}
                             className="w-full border border-border rounded px-2 py-1 text-xs" />
                         </div>
                       </div>
@@ -1598,13 +1605,44 @@ export default function LeagueDetailPage() {
   };
 
   const deleteRound = async (roundId: string, label: string) => {
-    const ok = await confirm({
+    if (!league) return;
+    const round = league.rounds.find((r) => r.id === roundId);
+    const eventCount = round?.events?.length ?? 0;
+    // Sum games across all events in this round as a proxy for "real
+    // play data" — leagueGame rows are created when captains tick a
+    // slot, so >0 means some captain has already committed picks.
+    const gameCount = (round?.events ?? []).reduce((acc, ev) => acc + (ev.leagueGames?.length ?? 0), 0);
+
+    // First confirm — always.
+    const okFirst = await confirm({
       title: "Delete round?",
-      message: `Delete ${label}? All events, lineups, and games inside this round will be deleted.`,
-      confirmText: "Delete",
+      message:
+        eventCount === 0
+          ? `Delete ${label}? This round is empty.`
+          : gameCount > 0
+            ? `${label} has ${eventCount} event${eventCount === 1 ? "" : "s"} with ${gameCount} match slot${gameCount === 1 ? "" : "s"} already ticked by captains.`
+            : `${label} has ${eventCount} event${eventCount === 1 ? "" : "s"}.`,
+      confirmText: eventCount > 0 ? "Continue" : "Delete",
       danger: true,
     });
-    if (!ok) return;
+    if (!okFirst) return;
+
+    // Strong second confirm when the round has events. If captains have
+    // already started picking matches (gameCount > 0), require typing
+    // DELETE — at that point losing the data is a real cost.
+    if (eventCount > 0) {
+      const okStrong = await confirm({
+        title: "Permanently delete round + events?",
+        message:
+          gameCount > 0
+            ? `${eventCount} event${eventCount === 1 ? "" : "s"} and ${gameCount} ticked match slot${gameCount === 1 ? "" : "s"} will be deleted forever. Captains' picks will be lost. Type DELETE to confirm.`
+            : `${eventCount} event${eventCount === 1 ? "" : "s"} (with their lineups, sign-ups, and any matches) will be deleted forever.`,
+        confirmText: "Delete",
+        danger: true,
+        requireType: gameCount > 0 ? "DELETE" : undefined,
+      });
+      if (!okStrong) return;
+    }
     const r = await fetch(`/api/leagues/${id}/rounds`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
