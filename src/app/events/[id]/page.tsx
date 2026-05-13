@@ -4445,11 +4445,31 @@ export default function EventDetailPage() {
     //     windows [start, start + duration) overlap. Impossible to play.
     //   • rushed  — different courts, positive gap < BUFFER_MIN. Player
     //     has to sprint between courts; flag as a soft warning.
-    // Games without scheduledAt or courtNum are ignored — they aren't
-    // really scheduled yet, so they can't conflict.
+    // Per-match duration is DERIVED from the schedule itself: the gap
+    // to the next match on the SAME court. That implicitly captures
+    // warmup time, since the captain set the next start accordingly.
+    // The last match on each court has no next, so it falls back to
+    // the operator-set `scheduleDurationMin` default.
     const BUFFER_MIN = 10;
-    const durationMs = scheduleDurationMin * 60_000;
+    const fallbackDurationMs = scheduleDurationMin * 60_000;
     const bufferMs = BUFFER_MIN * 60_000;
+    const durationByGame = new Map<string, number>();
+    for (let courtNum = 1; courtNum <= numCourts; courtNum++) {
+      const col = (buckets[String(courtNum)] || [])
+        .filter((g) => g.scheduledAt)
+        .slice()
+        .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
+      for (let i = 0; i < col.length; i++) {
+        const cur = col[i]!;
+        const next = col[i + 1];
+        if (next) {
+          const dur = new Date(next.scheduledAt!).getTime() - new Date(cur.scheduledAt!).getTime();
+          durationByGame.set(cur.id, dur > 0 ? dur : fallbackDurationMs);
+        } else {
+          durationByGame.set(cur.id, fallbackDurationMs);
+        }
+      }
+    }
     type ConflictKind = "overlap" | "rushed";
     interface PerGameConflict {
       playerId: string;
@@ -4486,7 +4506,8 @@ export default function EventDetailPage() {
         const a = sorted[i]!;
         const b = sorted[i + 1]!;
         const aStart = new Date(a.scheduledAt!).getTime();
-        const aEnd = aStart + durationMs;
+        const aDur = durationByGame.get(a.id) ?? fallbackDurationMs;
+        const aEnd = aStart + aDur;
         const bStart = new Date(b.scheduledAt!).getTime();
         const gapMs = bStart - aEnd;
         let kind: ConflictKind | null = null;
@@ -4969,7 +4990,7 @@ export default function EventDetailPage() {
               })}
             </ul>
             <p className="text-[10px] text-amber-800 mt-1">
-              Match duration assumed to be {scheduleDurationMin} min; rushed warns when the gap between matches on different courts is under {BUFFER_MIN} min.
+              Match duration is derived from the gap to the next match on the same court (includes warmup). The last match on each court falls back to the {scheduleDurationMin}-min default. Rushed warns when the gap between matches on different courts is under {BUFFER_MIN} min.
             </p>
           </div>
         )}
