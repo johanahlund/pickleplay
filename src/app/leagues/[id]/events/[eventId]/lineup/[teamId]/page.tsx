@@ -21,6 +21,8 @@ interface Game {
   winnerId: string | null;
   scheduledAt?: string | null;
   courtNum?: number | null;
+  scoringFormatOverride?: string | null;
+  winByOverride?: string | null;
   gamePlayers: { playerId: string; team?: number | null; player: { id: string; name: string } }[];
 }
 interface Signup {
@@ -32,6 +34,50 @@ interface Signup {
 
 // 1-based picker slot identity. `which` only used in doubles.
 type PickerTarget = { categoryId: string; slotNumber: number; which: 1 | 2 };
+
+// Compact label for the match format. Examples:
+//   formatLabel("3x15", "2") → "Best of 3 to 15 · win by 2"
+//   formatLabel("1xR21", "cap18") → "Rally to 21 · GP 18"
+function formatLabel(scoring: string, winBy: string): string {
+  const SCORING: Record<string, string> = {
+    "1x7": "1 set to 7", "1x9": "1 set to 9", "1x11": "1 set to 11", "1x15": "1 set to 15",
+    "3x11": "Best of 3 to 11", "3x15": "Best of 3 to 15",
+    "1xR15": "Rally to 15", "1xR21": "Rally to 21",
+    "3xR15": "Best of 3 rally 15", "3xR21": "Best of 3 rally 21",
+  };
+  const WINBY: Record<string, string> = {
+    "1": "win by 1", "2": "win by 2",
+    "2_gp18": "win by 2 (GP 18)", "2_gp21": "win by 2 (GP 21)",
+    "cap13": "GP 13", "cap15": "GP 15", "cap17": "GP 17",
+    "cap18": "GP 18", "cap23": "GP 23", "cap25": "GP 25",
+  };
+  return `${SCORING[scoring] ?? scoring} · ${WINBY[winBy] ?? winBy}`;
+}
+
+const FORMAT_SCORING_OPTS = [
+  { v: "1x7", label: "1 set to 7" },
+  { v: "1x9", label: "1 set to 9" },
+  { v: "1x11", label: "1 set to 11" },
+  { v: "1x15", label: "1 set to 15" },
+  { v: "3x11", label: "Best of 3 to 11" },
+  { v: "3x15", label: "Best of 3 to 15" },
+  { v: "1xR15", label: "Rally to 15" },
+  { v: "1xR21", label: "Rally to 21" },
+  { v: "3xR15", label: "Best of 3 rally 15" },
+  { v: "3xR21", label: "Best of 3 rally 21" },
+];
+const FORMAT_WINBY_OPTS = [
+  { v: "1", label: "win by 1" },
+  { v: "2", label: "win by 2" },
+  { v: "2_gp18", label: "win by 2 (GP 18)" },
+  { v: "2_gp21", label: "win by 2 (GP 21)" },
+  { v: "cap13", label: "GP 13" },
+  { v: "cap15", label: "GP 15" },
+  { v: "cap17", label: "GP 17" },
+  { v: "cap18", label: "GP 18" },
+  { v: "cap23", label: "GP 23" },
+  { v: "cap25", label: "GP 25" },
+];
 
 export default function LineupBuilderPage() {
   const { id, eventId, teamId } = useParams() as { id: string; eventId: string; teamId: string };
@@ -60,13 +106,16 @@ export default function LineupBuilderPage() {
   const [roundName, setRoundName] = useState<string | null>(null);
   const [eventLocation, setEventLocation] = useState<string | null>(null);
   const [eventDate, setEventDate] = useState<string | null>(null);
-  const [eventNumCourts, setEventNumCourts] = useState<number>(2);
   // Cap on principal + league matches per event (from round override
   // or league config). null = no cap. Friendly matches don't count.
   const [maxMatchesPerEvent, setMaxMatchesPerEvent] = useState<number | null>(null);
   const [roster, setRoster] = useState<PlayerLite[]>([]);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  // Per-game format-override edit panel state. Key = gameId; absence
+  // means panel closed. Value holds the in-progress select choices.
+  const [formatEdits, setFormatEdits] = useState<Record<string, { scoringFormat: string; winBy: string }>>({});
+  const [savingFormatId, setSavingFormatId] = useState<string | null>(null);
   const [readyByTeam, setReadyByTeam] = useState<Record<string, boolean>>({});
   // Latched cross-team reveal — true the moment both teams' lineupReady
   // first hit true. After it's true the opponent's gamePlayers stay
@@ -158,10 +207,6 @@ export default function LineupBuilderPage() {
     const ev = (round?.events || []).find((e: { id: string }) => e.id === eventId);
     setEventDate(ev?.date ?? null);
     setHostTeamId(ev?.hostTeamId ?? null);
-    // Use the event's numCourts to scope the per-match court picker.
-    if (typeof event?.numCourts === "number" && event.numCourts > 0) {
-      setEventNumCourts(event.numCourts);
-    }
     const opp = ev?.leagueTeams?.find((lt: { teamId: string }) => lt.teamId !== teamId);
     setOpponentTeam(opp ? { id: opp.team.id, name: opp.team.name } : null);
     // Pull the opponent's full roster IDs from the league team list so
@@ -516,28 +561,6 @@ export default function LineupBuilderPage() {
     }
   };
 
-
-  // Schedule update — PATCH directly (not the action-dispatched POST).
-  // Optimistic: flip locally, fetch in background.
-  const setSchedule = async (gameId: string, patch: { scheduledAt?: string | null; courtNum?: number | null }) => {
-    const snapshot = games;
-    setGames((prev) => prev.map((g) => g.id === gameId ? { ...g, ...patch } : g));
-    setSaving(true);
-    setErrorMsg(null);
-    const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${gameId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    setSaving(false);
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      setErrorMsg(d.error || "Failed");
-      setGames(snapshot);
-      return;
-    }
-    await loadAll();
-  };
 
   // Whether opponent rosters/sign-ups are revealed. The reveal is now
   // LATCHED on the event-level `lineupTotalLocked` field: once both
@@ -950,91 +973,126 @@ export default function LineupBuilderPage() {
                     })()}
                   </div>
 
-                  {/* Schedule (host-team captain only). Time + court inputs.
-                      Read-only chip for everyone else. */}
-                  {g && (canSchedule ? (
-                    <div className="mt-2 flex items-center gap-2 flex-wrap text-[11px]">
-                      <label className="text-muted">Start</label>
-                      {/* Two-select time picker — mirrors the Matches-tab
-                          schedule. iOS Safari ignores `step` on
-                          <input type="time">, so 5-min minutes are
-                          enforced via the option set here. */}
-                      {(() => {
-                        const cur = g.scheduledAt ? new Date(g.scheduledAt) : null;
-                        const curOk = cur && !isNaN(cur.getTime());
-                        const hh = curOk ? cur!.getHours() : null;
-                        const mm = curOk ? cur!.getMinutes() : null;
-                        const FIVE_MINS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-                        const HOURS = Array.from({ length: 24 }, (_, i) => i);
-                        const writeTime = (newHh: number, newMm: number) => {
-                          let base = eventDate ? new Date(eventDate) : new Date();
-                          if (isNaN(base.getTime())) base = new Date();
-                          base.setHours(newHh, newMm, 0, 0);
-                          setSchedule(g.id, { scheduledAt: base.toISOString() });
-                        };
-                        return (
-                          <span className="inline-flex items-center gap-0.5 tabular-nums">
+                  {/* Schedule + format — read-only display for everyone.
+                      Time and court are managed from the Matches page
+                      (where matches are organised by court / start time).
+                      The host captain CAN override the format here. */}
+                  {g && (() => {
+                    const timeStr = g.scheduledAt
+                      ? (() => {
+                          const d = new Date(g.scheduledAt);
+                          if (isNaN(d.getTime())) return null;
+                          return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+                        })()
+                      : null;
+                    const effectiveScoring = g.scoringFormatOverride ?? cat.scoringFormat;
+                    const effectiveWinBy = g.winByOverride ?? cat.winBy;
+                    const hasFormatOverride = g.scoringFormatOverride != null || g.winByOverride != null;
+                    const edit = formatEdits[g.id];
+                    const openEdit = () => {
+                      setFormatEdits((prev) => ({
+                        ...prev,
+                        [g.id]: { scoringFormat: effectiveScoring, winBy: effectiveWinBy },
+                      }));
+                    };
+                    const closeEdit = () => {
+                      setFormatEdits((prev) => {
+                        const out = { ...prev };
+                        delete out[g.id];
+                        return out;
+                      });
+                    };
+                    const saveEdit = async () => {
+                      if (!edit) return;
+                      setSavingFormatId(g.id);
+                      try {
+                        const scoringFormatOverride = edit.scoringFormat === cat.scoringFormat ? null : edit.scoringFormat;
+                        const winByOverride = edit.winBy === cat.winBy ? null : edit.winBy;
+                        const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${g.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ scoringFormatOverride, winByOverride }),
+                        });
+                        if (!r.ok) {
+                          const d = await r.json().catch(() => ({}));
+                          await alertDialog(d.error || "Failed to save format override");
+                          return;
+                        }
+                        // Optimistic local update + close the panel.
+                        setGames((prev) => prev.map((x) => x.id === g.id ? { ...x, scoringFormatOverride, winByOverride } : x));
+                        closeEdit();
+                      } finally {
+                        setSavingFormatId(null);
+                      }
+                    };
+                    return (
+                      <div className="mt-2 text-[11px] text-muted flex items-center gap-2 flex-wrap">
+                        {timeStr && <span>⏰ {timeStr}</span>}
+                        {g.courtNum != null && <span>· Court {g.courtNum}</span>}
+                        <span className={hasFormatOverride ? "text-action font-medium" : ""}>
+                          · {formatLabel(effectiveScoring, effectiveWinBy)}
+                        </span>
+                        {canSchedule && !edit && !g.winnerId && (
+                          <button
+                            type="button"
+                            onClick={openEdit}
+                            className="text-[10px] text-action font-medium hover:underline"
+                          >
+                            {hasFormatOverride ? "Change override" : "Override format"}
+                          </button>
+                        )}
+                        {edit && (
+                          <span className="inline-flex flex-wrap items-center gap-1 ml-1">
                             <select
-                              value={hh == null ? "" : String(hh)}
-                              disabled={saving || !!g.winnerId}
-                              onChange={(e) => writeTime(parseInt(e.target.value, 10), mm ?? 0)}
-                              className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                              value={edit.scoringFormat}
+                              onChange={(e) => setFormatEdits((prev) => ({ ...prev, [g.id]: { ...edit, scoringFormat: e.target.value } }))}
+                              className="border border-border rounded px-1 py-0.5 text-[11px] bg-white"
                             >
-                              <option value="" disabled>--</option>
-                              {HOURS.map((h) => (
-                                <option key={h} value={h}>{String(h).padStart(2, "0")}</option>
-                              ))}
+                              {FORMAT_SCORING_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                             </select>
-                            <span className="text-[11px]">:</span>
                             <select
-                              value={mm == null ? "" : String(mm)}
-                              disabled={saving || !!g.winnerId || hh == null}
-                              onChange={(e) => writeTime(hh ?? 0, parseInt(e.target.value, 10))}
-                              className="border border-border rounded px-0.5 py-0.5 text-[11px] bg-white cursor-pointer"
+                              value={edit.winBy}
+                              onChange={(e) => setFormatEdits((prev) => ({ ...prev, [g.id]: { ...edit, winBy: e.target.value } }))}
+                              className="border border-border rounded px-1 py-0.5 text-[11px] bg-white"
                             >
-                              <option value="" disabled>--</option>
-                              {FIVE_MINS.map((m) => (
-                                <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
-                              ))}
+                              {FORMAT_WINBY_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                             </select>
-                            {hh != null && (
+                            {hasFormatOverride && (
                               <button
                                 type="button"
-                                title="Clear time"
-                                onClick={() => setSchedule(g.id, { scheduledAt: null })}
-                                className="text-muted hover:text-danger text-xs px-1"
-                              >✕</button>
+                                onClick={async () => {
+                                  setSavingFormatId(g.id);
+                                  try {
+                                    const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${g.id}`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ scoringFormatOverride: null, winByOverride: null }),
+                                    });
+                                    if (!r.ok) { const d = await r.json().catch(() => ({})); await alertDialog(d.error || "Failed"); return; }
+                                    setGames((prev) => prev.map((x) => x.id === g.id ? { ...x, scoringFormatOverride: null, winByOverride: null } : x));
+                                    closeEdit();
+                                  } finally { setSavingFormatId(null); }
+                                }}
+                                disabled={savingFormatId === g.id}
+                                className="text-[10px] text-muted hover:text-danger px-1"
+                              >Clear</button>
                             )}
+                            <button
+                              type="button"
+                              onClick={saveEdit}
+                              disabled={savingFormatId === g.id}
+                              className="text-[10px] text-white bg-action rounded-md px-2 py-0.5 font-semibold hover:brightness-110 disabled:opacity-50"
+                            >{savingFormatId === g.id ? "Saving…" : "Save"}</button>
+                            <button
+                              type="button"
+                              onClick={closeEdit}
+                              className="text-[10px] text-muted hover:text-foreground px-1"
+                            >Cancel</button>
                           </span>
-                        );
-                      })()}
-                      <label className="text-muted">Court</label>
-                      <select
-                        disabled={saving || !!g.winnerId}
-                        value={g.courtNum ?? ""}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const n = raw === "" ? null : parseInt(raw, 10);
-                          if (n !== (g.courtNum ?? null)) setSchedule(g.id, { courtNum: n });
-                        }}
-                        className="border border-border rounded px-1 py-0.5 text-[11px] bg-white"
-                      >
-                        <option value="">—</option>
-                        {Array.from({ length: eventNumCourts }, (_, i) => i + 1).map((n) => (
-                          <option key={n} value={n}>Court {n}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (g.scheduledAt || g.courtNum) ? (
-                    <div className="mt-2 text-[11px] text-muted flex items-center gap-2">
-                      {g.scheduledAt && (() => {
-                        const d = new Date(g.scheduledAt);
-                        if (isNaN(d.getTime())) return null;
-                        return <span>⏰ {d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>;
-                      })()}
-                      {g.courtNum != null && <span>· Court {g.courtNum}</span>}
-                    </div>
-                  ) : null)}
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {ourWants && g && (
                     <div className="mt-2 space-y-1">

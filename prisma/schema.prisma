@@ -789,6 +789,13 @@ model LeagueGame {
   /// auto-schedule preserves anchored times and chains subsequent
   /// matches forward from each anchor. False = auto-derived.
   scheduleAnchored Boolean @default(false)
+  /// Per-match overrides of the category's scoringFormat / winBy.
+  /// Set by the host team's captain (or league organizer) when a
+  /// specific match needs a different format. Null = inherit the
+  /// category default. Stored as the same string codes as
+  /// LeagueCategory ("3x15", "1x11", "2", "cap18", etc).
+  scoringFormatOverride String?
+  winByOverride         String?
   createdById String? // audit — captain or organizer who first ticked this slot
 
   event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)

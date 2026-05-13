@@ -83,9 +83,17 @@ export async function PATCH(
     data.kind = body.kind;
   }
 
-  // Schedule fields: only the host team's captain/vice or a league
-  // organizer (or app admin) may set them. The away team can't.
-  if (body.scheduledAt !== undefined || body.courtNum !== undefined || body.displayOrder !== undefined) {
+  // Schedule + per-match format-override fields: only the host team's
+  // captain/vice or a league organizer (or app admin) may set them.
+  // The away team can't. Same auth gate covers schedule edits AND
+  // scoringFormat / winBy overrides set from the lineup page.
+  if (
+    body.scheduledAt !== undefined
+    || body.courtNum !== undefined
+    || body.displayOrder !== undefined
+    || body.scoringFormatOverride !== undefined
+    || body.winByOverride !== undefined
+  ) {
     const user = await requireAuth();
     const isAppAdmin = user.role === "admin";
     const league = game.event.round?.league;
@@ -130,6 +138,30 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid displayOrder" }, { status: 400 });
       }
       data.displayOrder = o;
+    }
+    // Per-match scoring format / winBy overrides. Free-form strings
+    // validated by code lookup; matches LeagueCategory's accepted set.
+    const VALID_SCORING = new Set(["1x7", "1x9", "1x11", "1x15", "3x11", "3x15", "1xR15", "1xR21", "3xR15", "3xR21"]);
+    const VALID_WINBY = new Set(["1", "2", "2_gp18", "2_gp21", "cap13", "cap15", "cap17", "cap18", "cap23", "cap25"]);
+    if (body.scoringFormatOverride !== undefined) {
+      const v = body.scoringFormatOverride;
+      if (v === null || v === "") {
+        data.scoringFormatOverride = null;
+      } else if (typeof v === "string" && VALID_SCORING.has(v)) {
+        data.scoringFormatOverride = v;
+      } else {
+        return NextResponse.json({ error: "Invalid scoringFormatOverride" }, { status: 400 });
+      }
+    }
+    if (body.winByOverride !== undefined) {
+      const v = body.winByOverride;
+      if (v === null || v === "") {
+        data.winByOverride = null;
+      } else if (typeof v === "string" && VALID_WINBY.has(v)) {
+        data.winByOverride = v;
+      } else {
+        return NextResponse.json({ error: "Invalid winByOverride" }, { status: 400 });
+      }
     }
   }
 
