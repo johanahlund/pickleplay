@@ -1,7 +1,14 @@
 export const CATEGORY_FORMATS = ["doubles", "singles"] as const;
 export const CATEGORY_GENDERS = ["male", "female", "mix", "open"] as const;
 export const CATEGORY_AGE_GROUPS = ["open", "18+", "35+", "50+", "55+", "60+", "65+", "70+"] as const;
-export const CATEGORY_SCORING_FORMATS = ["1x11", "3x11", "1x15", "1xR15", "1x21"] as const;
+// Must mirror the options offered by <ScoringSelect> in the league page —
+// every value the UI lets the operator pick has to be accepted here.
+export const CATEGORY_SCORING_FORMATS = [
+  "1x7", "1x9", "1x11", "1x15",
+  "3x11", "3x15",
+  "1xR15", "1xR21",
+  "3xR15", "3xR21",
+] as const;
 export const CATEGORY_WIN_BY = [
   "1", "2",
   "2_gp18", "2_gp21",
