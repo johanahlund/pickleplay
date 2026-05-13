@@ -437,24 +437,44 @@ export default function LineupBuilderPage() {
       const otherWantsField: "team1Wants" | "team2Wants" = rowSide === 1 ? "team2Wants" : "team1Wants";
       if (want) {
         if (existing) {
-          return prev.map((x) => x === existing ? { ...x, [wantsField]: true } : x);
+          // Pre-create placeholder going real for the first time → mirror
+          // the server's UPDATE-path kind re-evaluation so the badge
+          // doesn't lie until polling.
+          const wasReal = existing.team1Wants || existing.team2Wants;
+          let nextKind: "principal" | "league" | "extra" = existing.kind;
+          if (!wasReal) {
+            const isReal = (x: Game) => x.team1Wants || x.team2Wants;
+            const otherReal = (x: Game) => x.id !== existing.id && isReal(x);
+            const hasPrincipal = prev.some((x) =>
+              x.categoryId === categoryId && x.kind === "principal" && otherReal(x),
+            );
+            nextKind = hasPrincipal ? "league" : "principal";
+            if (maxMatchesPerEvent !== null) {
+              const countingNow = prev.filter((x) =>
+                (x.kind === "principal" || x.kind === "league") && otherReal(x),
+              ).length;
+              if (countingNow >= maxMatchesPerEvent) nextKind = "extra";
+            }
+          }
+          return prev.map((x) => x === existing ? { ...x, [wantsField]: true, kind: nextKind } : x);
         }
         // Lazy-create a placeholder so the UI flips immediately. The real
         // id arrives on reconcile (loadAll), then this synthetic row is
         // replaced by the server's row — we keep keys stable by category+slot.
         const t1 = team!.id.localeCompare(opponentTeam?.id || "") < 0 ? team!.id : (opponentTeam?.id || "");
         const t2 = t1 === team!.id ? (opponentTeam?.id || "") : team!.id;
-        // Mirror the server's kind-selection logic so the optimistic
-        // UI doesn't flicker:
-        //   1. First slot in a category → principal.
-        //   2. Subsequent slots in the same category → league.
-        //   3. If the event-wide cap on principal+league is already
-        //      reached, fall back to "extra" (Friendly) — Friendly
-        //      doesn't count toward the cap.
-        const hasPrincipal = prev.some((x) => x.categoryId === categoryId && x.kind === "principal");
+        // Mirror the server's kind-selection logic. Only REAL matches
+        // (at least one team wants) count — pre-create placeholder
+        // rows (both wants=false) are bookkeeping, not games.
+        //   1. First real match in a category → principal.
+        //   2. Subsequent matches in the same category → league.
+        //   3. Past the event-wide cap on principal+league → "extra"
+        //      (Friendly, doesn't count toward the cap).
+        const isReal = (x: Game) => x.team1Wants || x.team2Wants;
+        const hasPrincipal = prev.some((x) => x.categoryId === categoryId && x.kind === "principal" && isReal(x));
         let kind: "principal" | "league" | "extra" = hasPrincipal ? "league" : "principal";
         if (maxMatchesPerEvent !== null) {
-          const countingNow = prev.filter((x) => x.kind === "principal" || x.kind === "league").length;
+          const countingNow = prev.filter((x) => (x.kind === "principal" || x.kind === "league") && isReal(x)).length;
           if (countingNow >= maxMatchesPerEvent) kind = "extra";
         }
         const synthetic: Game = {
@@ -868,23 +888,18 @@ export default function LineupBuilderPage() {
           .filter((g) => g.categoryId === cat.id)
           .map((g) => g.slotNumber);
         const maxExisting = Math.max(0, ...existingSlots);
-        // Visible slot count tracks the actual DB rows for this category.
-        // The pre-create path seeds slot 1 on event creation, so on a fresh
-        // event the user still sees the row. Once the row is deleted
-        // server-side (e.g. the opposite team unticks and nobody else
-        // wants the match), maxExisting drops to 0 and the placeholder
-        // disappears from BOTH teams' views — polling alone is enough.
-        //
-        // extraSlots overlays the user's local intent: + Add match
-        // increments, ✕ on an empty row decrements (negative values
-        // hide a pre-create row the captain isn't interested in). The
-        // outer Math.max(maxExisting, …) guarantees a row that exists
-        // in the DB always renders, so a freshly-created opponent
-        // match never gets clipped out by a stale negative extraSlots.
-        const visibleSlotCount = Math.min(
-          max,
-          Math.max(maxExisting, maxExisting + (extraSlots[cat.id] || 0)),
-        );
+        // extraSlots is the user's REQUESTED visible slot count (absolute,
+        // not an offset). visibleSlotCount = max(maxExisting, requested):
+        // existing DB rows always render, and the user can request more
+        // empty slots on top. Storing an absolute count avoids the
+        // "phantom slot appears after tick / untick" drift that an offset
+        // model produced when maxExisting changed underneath it.
+        //   "+ Add match"  → requested = visibleSlotCount + 1
+        //   "✕" on empty   → requested = max(0, visibleSlotCount - 1)
+        //   Tick / untick  → requested unchanged; maxExisting tracks
+        //                    the new reality on its own.
+        const requested = extraSlots[cat.id] || 0;
+        const visibleSlotCount = Math.min(max, Math.max(maxExisting, requested));
         const slots = Array.from({ length: visibleSlotCount }, (_, i) => i + 1);
         const canAddMore = visibleSlotCount < max;
         // Principal-per-category cap: only ONE principal per category in
@@ -918,7 +933,10 @@ export default function LineupBuilderPage() {
                   type="button"
                   disabled={saving}
                   onClick={() => {
-                    setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) + 1 }));
+                    // Absolute target: ask for one more than what's
+                    // currently visible. Snapshot the value to avoid
+                    // racing with rapid clicks.
+                    setExtraSlots((prev) => ({ ...prev, [cat.id]: visibleSlotCount + 1 }));
                   }}
                   className="border border-action text-action bg-white hover:bg-action/5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50"
                 >+ Add match</button>
@@ -959,7 +977,7 @@ export default function LineupBuilderPage() {
                         //     un-tick our wants; the row may persist if the opponent
                         //     still wants it.
                         if (!g) {
-                          setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                          setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.max(0, visibleSlotCount - 1) }));
                           return;
                         }
                         if (canSchedule) {
@@ -1022,7 +1040,7 @@ export default function LineupBuilderPage() {
                           });
                           if (!ok) return;
                           if (ourWants) toggleSlot(cat.id, slotNum, false);
-                          setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                          setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.max(0, visibleSlotCount - 1) }));
                         }
                       }}
                       className="absolute -top-2 -right-2 z-10 bg-white border border-red-200 text-danger hover:bg-red-50 rounded-full w-5 h-5 flex items-center justify-center text-[11px] leading-none shadow-sm disabled:opacity-50"

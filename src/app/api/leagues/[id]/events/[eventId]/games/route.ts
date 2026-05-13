@@ -190,25 +190,51 @@ export async function POST(
       // Tick — upsert row with our flag true.
       if (existing) {
         const data: Record<string, unknown> = { [wantsField]: true };
+        // If this UPDATE is taking a pre-create placeholder row (both
+        // wants=false, kind="league" by default) to a real match for
+        // the first time, re-evaluate kind against the current state:
+        // the first real match in a category should be "principal", not
+        // "league", and the event-wide cap takes precedence.
+        const wasReal = existing.team1Wants || existing.team2Wants;
+        if (!wasReal) {
+          const realWants = {
+            OR: [{ team1Wants: true }, { team2Wants: true }],
+            NOT: { id: existing.id },
+          };
+          const principalCount = await prisma.leagueGame.count({
+            where: { eventId, categoryId: existing.categoryId, kind: "principal", ...realWants },
+          });
+          let newKind: "principal" | "league" | "extra" = principalCount === 0 ? "principal" : "league";
+          const cap = await getMaxMatchesPerEvent(eventId);
+          if (cap !== null) {
+            const countingNow = await prisma.leagueGame.count({
+              where: { eventId, kind: { in: ["principal", "league"] }, ...realWants },
+            });
+            if (countingNow >= cap) newKind = "extra";
+          }
+          data.kind = newKind;
+        }
         const updated = await prisma.leagueGame.update({ where: { id: existing.id }, data });
         return NextResponse.json(updated);
       }
-      // First slot in this category = principal by default. Captains can
-      // demote/swap via set_kind. If a principal already exists in the
-      // category (e.g. someone added slot 2 as principal manually), the
-      // new game stays "league".
+      // First REAL slot in this category = principal by default
+      // (pre-create placeholder rows with both wants=false are
+      // bookkeeping, not real matches). Captains can demote/swap via
+      // set_kind. If a real principal already exists in the category,
+      // the new game stays "league".
       // Event-wide cap: Principal + League ≤ maxMatchesPerEvent. When
       // the cap is reached, new ticked slots fall back to "extra"
       // (Friendly) so the captain can still mark intent without
       // overflowing standings.
+      const realWants = { OR: [{ team1Wants: true }, { team2Wants: true }] };
       const principalCount = await prisma.leagueGame.count({
-        where: { eventId, categoryId, kind: "principal" },
+        where: { eventId, categoryId, kind: "principal", ...realWants },
       });
       let kind: "principal" | "league" | "extra" = principalCount === 0 ? "principal" : "league";
       const cap = await getMaxMatchesPerEvent(eventId);
       if (cap !== null) {
         const countingNow = await prisma.leagueGame.count({
-          where: { eventId, kind: { in: ["principal", "league"] } },
+          where: { eventId, kind: { in: ["principal", "league"] }, ...realWants },
         });
         if (countingNow >= cap) kind = "extra";
       }
