@@ -1738,14 +1738,22 @@ export default function LeagueDetailPage() {
     </div>
   );
 
-  const editFooter = (onSave: () => Promise<void>, target: string) => dirty ? (
+  // Always render BOTH buttons so the operator has a clear way out
+  // (Cancel = close this edit view) regardless of whether anything is
+  // dirty. Save is faded + disabled until there are unsaved changes.
+  const editFooter = (onSave: () => Promise<void>, target: string) => (
     <div className="flex gap-2 mt-4">
-      <button onClick={async () => { await onSave(); setDirty(false); setEditSection(target as typeof editSection); }}
-        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm">Save</button>
-      <button onClick={() => { setDirty(false); setEditSection(target as typeof editSection); }}
-        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm">Cancel</button>
+      <button
+        onClick={async () => { await onSave(); setDirty(false); setEditSection(target as typeof editSection); }}
+        disabled={!dirty}
+        className="flex-1 bg-action text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >Save</button>
+      <button
+        onClick={() => { setDirty(false); setEditSection(target as typeof editSection); }}
+        className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-xl font-medium text-sm"
+      >Cancel</button>
     </div>
-  ) : null;
+  );
 
   const d = (fn: (...args: unknown[]) => void) => (...args: unknown[]) => { fn(...args); setDirty(true); };
 
