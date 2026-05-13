@@ -846,6 +846,9 @@ export default function LineupBuilderPage() {
             </summary>
             <div className="px-3 pb-3 pt-1.5 space-y-2 border-t border-border/70">
 
+            {slots.length === 0 && (
+              <p className="text-[11px] text-muted italic">No matches in this Event.</p>
+            )}
             {slots.map((slotNum) => {
               const g = gameByKey.get(`${cat.id}:${slotNum}`);
               const ourWants = !!(g && wantsField(g));
@@ -865,15 +868,44 @@ export default function LineupBuilderPage() {
                       stay visible (driven by the existing game). The
                       category card itself always stays so "+ Add match"
                       can bring the row back. */}
-                  {!locked && !ourLocked && ourPlayers.length === 0 && (
+                  {!locked && !ourLocked && ourPlayers.length === 0 && oppPlayers.length === 0 && (
                     <button
                       type="button"
-                      aria-label="Hide this match row"
-                      onClick={() => {
-                        if (g && ourWants) toggleSlot(cat.id, slotNum, false);
-                        setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                      aria-label="Remove this match"
+                      title={g ? "Remove this match from the event" : "Hide this match row"}
+                      onClick={async () => {
+                        // Three paths:
+                        //  1. No game row yet → just shrink the local visible-slots count.
+                        //  2. Game exists AND we're authorised to schedule → DELETE
+                        //     the game on the server. Removes it for both teams.
+                        //  3. Game exists, away-team captain (no schedule auth) → only
+                        //     un-tick our wants; the row may persist if the opponent
+                        //     still wants it. Matches the previous behaviour.
+                        if (!g) {
+                          setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                          return;
+                        }
+                        if (canSchedule) {
+                          setSaving(true);
+                          try {
+                            const r = await fetch(`/api/leagues/${id}/events/${eventId}/games/${g.id}`, { method: "DELETE" });
+                            if (!r.ok) {
+                              const d = await r.json().catch(() => ({}));
+                              await alertDialog(d.error || "Failed to remove match");
+                              return;
+                            }
+                            setGames((prev) => prev.filter((x) => x.id !== g.id));
+                            setExtraSlots((prev) => ({ ...prev, [cat.id]: Math.min(0, (prev[cat.id] || 0) - 1) }));
+                          } finally {
+                            setSaving(false);
+                          }
+                        } else {
+                          if (ourWants) toggleSlot(cat.id, slotNum, false);
+                          setExtraSlots((prev) => ({ ...prev, [cat.id]: (prev[cat.id] || 0) - 1 }));
+                        }
                       }}
-                      className="absolute -top-2 -right-2 z-10 bg-white border border-red-200 text-danger hover:bg-red-50 rounded-full w-5 h-5 flex items-center justify-center text-[11px] leading-none shadow-sm"
+                      className="absolute -top-2 -right-2 z-10 bg-white border border-red-200 text-danger hover:bg-red-50 rounded-full w-5 h-5 flex items-center justify-center text-[11px] leading-none shadow-sm disabled:opacity-50"
+                      disabled={saving}
                     >✕</button>
                   )}
                   <div className="flex items-center justify-between">

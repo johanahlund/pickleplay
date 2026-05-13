@@ -193,3 +193,63 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+// DELETE: hard-remove the LeagueGame regardless of team-wants state.
+// Used by the lineup-page ✕ button when the host captain decides the
+// match shouldn't be played this event. Blocked once a winner is
+// recorded — completed matches shouldn't disappear. Auth: host
+// captain / vice, league organizer / deputy, or app admin.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string; eventId: string; gameId: string }> }
+) {
+  const { id: leagueId, eventId, gameId } = await params;
+  let user;
+  try { user = await requireAuth(); } catch (e) { return authErrorResponse(e); }
+
+  const game = await prisma.leagueGame.findUnique({
+    where: { id: gameId },
+    select: {
+      eventId: true,
+      courtNum: true,
+      winnerId: true,
+      event: {
+        select: {
+          hostTeamId: true,
+          round: { select: { leagueId: true, league: { select: { createdById: true, deputyId: true } } } },
+        },
+      },
+    },
+  });
+  if (!game) return NextResponse.json({ error: "Game not found" }, { status: 404 });
+  if (game.eventId !== eventId || game.event.round?.leagueId !== leagueId) {
+    return NextResponse.json({ error: "Game does not belong to this league/event" }, { status: 400 });
+  }
+  if (game.winnerId) {
+    return NextResponse.json({ error: "Cannot delete a match that already has a winner" }, { status: 400 });
+  }
+
+  const isAppAdmin = user.role === "admin";
+  const league = game.event.round?.league;
+  const isLeagueAdmin = !!league && (league.createdById === user.id || league.deputyId === user.id);
+  let isHostCaptain = false;
+  if (game.event.hostTeamId) {
+    const host = await prisma.leagueTeam.findUnique({
+      where: { id: game.event.hostTeamId },
+      select: { captainId: true, viceCaptainId: true },
+    });
+    isHostCaptain = !!host && (host.captainId === user.id || host.viceCaptainId === user.id);
+  }
+  if (!isAppAdmin && !isLeagueAdmin && !isHostCaptain) {
+    return NextResponse.json({ error: "Only the home team's captain/vice or a league organizer can remove this match." }, { status: 403 });
+  }
+
+  await prisma.leagueGame.delete({ where: { id: gameId } });
+
+  // If the deleted game had a court assignment, re-chain that court's
+  // remaining schedule so following matches don't keep a stale start time.
+  if (game.courtNum != null) {
+    try { await recalcCourtAndPersist(eventId, game.courtNum); } catch { /* ignore */ }
+  }
+  return NextResponse.json({ ok: true });
+}
