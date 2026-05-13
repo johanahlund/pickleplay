@@ -16,7 +16,9 @@ import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
-import { buildLeagueInviteGroup, buildLeagueInvitePersonal, type LeagueInviteContext } from "@/lib/inviteShare";
+import { ShareInviteModal } from "@/components/ShareInviteModal";
+import { UnclaimedIcon } from "@/components/UnclaimedIcon";
+import { buildLeagueInviteGroup, buildLeagueInvitePersonal, personalClaimUrl, withInstallTip, type LeagueInviteContext } from "@/lib/inviteShare";
 import { frameClass } from "@/components/Card";
 import { DurationStepper } from "@/components/DurationStepper";
 import { nameMatchesSearch } from "@/lib/searchUtil";
@@ -199,9 +201,14 @@ interface TeamRosterProps {
   onRemove: (playerId: string, playerName: string) => void;
   onEditPrefs?: (playerId: string) => void;
   focusedPlayerId?: string | null;
+  // Click → trigger an invite-to-claim flow for that player. Only
+  // wire this when the viewer is allowed to invite — TeamRoster
+  // hides the icon's button affordance otherwise.
+  onInvite?: (playerId: string, playerName: string) => void;
+  invitingPlayerId?: string | null;
 }
 
-function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, focusedPlayerId }: TeamRosterProps) {
+function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, focusedPlayerId, onInvite, invitingPlayerId }: TeamRosterProps) {
   const [genderFilter, setGenderFilter] = useState<"all" | "F" | "M">("all");
   const [nameQuery, setNameQuery] = useState("");
 
@@ -278,12 +285,16 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, fo
                 {isDeputy && <span className="text-[10px] text-muted ml-1">(Deputy)</span>}
               </div>
             </div>
-            {/* Unclaimed flag — shown to anyone who can see the roster, since
-                it's not really sensitive (just "this player hasn't signed up
-                to the app yet"). The visibility gate on the roster itself
-                already restricts who sees rosters at all. */}
+            {/* Unclaimed flag — shown to anyone who can see the roster.
+                If onInvite is provided (viewer has invite permission)
+                the icon becomes a button that fires the invite flow
+                for this specific player. */}
             {tp.player.hasAccount === false && (
-              <span title="Unclaimed account" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚠ unclaimed</span>
+              <UnclaimedIcon
+                onClick={onInvite ? () => onInvite(tp.playerId, tp.player.name) : undefined}
+                disabled={invitingPlayerId === tp.playerId}
+                title={onInvite ? "Invite to claim account" : undefined}
+              />
             )}
             <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
             {onEditPrefs && !removing && (
@@ -1047,6 +1058,16 @@ export default function LeagueDetailPage() {
   const [league, setLeague] = useState<League | null>(null);
   // League share-invite sheet (top-right share icon in header).
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  // Per-player inline invite state — the UnclaimedIcon in TeamRoster
+  // calls invitePlayer(), which fetches a claim token and pops a
+  // ShareInviteModal for that one recipient.
+  const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
+  const [inviteShare, setInviteShare] = useState<{
+    message: string;
+    phone: string | null;
+    title?: string;
+    emailSubject?: string;
+  } | null>(null);
   useEffect(() => {
     if (typeof window === "undefined" || !cacheKey) return;
     try {
@@ -1722,6 +1743,36 @@ export default function LeagueDetailPage() {
     }
     fetchLeague();
     return true;
+  };
+
+  // Per-player inline invite from a team roster row. Fetches a
+  // one-time claim token and pops the ShareInviteModal with a
+  // personalised message ready to copy / send.
+  const invitePlayer = async (playerId: string, playerName: string) => {
+    setInvitingPlayerId(playerId);
+    try {
+      const res = await fetch(`/api/players/${playerId}/invite`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        await alertDialog(data.error || "Failed to generate invite");
+        return;
+      }
+      const claimUrl = personalClaimUrl(window.location.origin, data.token, playerName);
+      const firstName = playerName.split(" ")[0];
+      const inviterName = session?.user?.name || "Your league organizer";
+      const message = withInstallTip(
+        `Hi ${firstName},\n\n${inviterName} invited you to FriendlyBall — the friendly pickleball app. You've already been added as a player, so we just need you to set up your account:\n\n${claimUrl}`,
+        { forClaim: true },
+      );
+      setInviteShare({
+        message,
+        phone: null,
+        title: `Invite ${playerName}`,
+        emailSubject: `Join FriendlyBall — ${playerName}`,
+      });
+    } finally {
+      setInvitingPlayerId(null);
+    }
   };
 
   const removePlayerFromTeam = async (teamId: string, playerId: string, playerName: string) => {
@@ -3839,6 +3890,8 @@ export default function LeagueDetailPage() {
                   onRemove={(playerId, playerName) => removePlayerFromTeam(team.id, playerId, playerName)}
                   onEditPrefs={canAddToTeam ? (playerId) => router.push(`/leagues/${id}/sign-up?for=${playerId}&team=${team.id}`) : undefined}
                   focusedPlayerId={focusedPlayerId}
+                  onInvite={canEdit ? invitePlayer : undefined}
+                  invitingPlayerId={invitingPlayerId}
                 />
               )}
             </div>
@@ -3894,6 +3947,16 @@ export default function LeagueDetailPage() {
           />
         );
       })()}
+
+      {/* Per-player invite (UnclaimedIcon click in TeamRoster). */}
+      <ShareInviteModal
+        open={!!inviteShare}
+        message={inviteShare?.message ?? ""}
+        phone={inviteShare?.phone ?? null}
+        title={inviteShare?.title}
+        emailSubject={inviteShare?.emailSubject}
+        onClose={() => setInviteShare(null)}
+      />
 
     </div>
   );
