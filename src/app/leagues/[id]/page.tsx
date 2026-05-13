@@ -468,6 +468,34 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   const [useCategoriesOverride, setUseCategoriesOverride] = useState(!!initial.categoriesOverride);
   const [catOverrides, setCatOverrides] = useState<Record<string, CatOverrideForm>>(initialCatMap);
   const [customCats, setCustomCats] = useState<CustomCat[]>(initialCustomCats);
+
+  // Dirty tracking — JSON-compare current state vs the initial snapshot.
+  // Cheap (form state is small) and centralises detection so we don't
+  // have to thread setDirty through every onChange in the form.
+  const initialSnapshot = useMemo(() => JSON.stringify({
+    roundNumber: initial.roundNumber,
+    name: initial.name,
+    start: initial.startDate,
+    end: initial.endDate,
+    status: initial.status,
+    matchDuration: initial.matchDurationMin ?? null,
+    catDurations: initial.categoryDurationOverrides ?? {},
+    maxPts: initial.configOverride?.maxPointsPerMatchDay != null ? String(initial.configOverride.maxPointsPerMatchDay) : "",
+    maxMatches: initial.configOverride?.maxMatchesPerEvent != null ? String(initial.configOverride.maxMatchesPerEvent) : "",
+    crossCat: initial.configOverride?.allowCrossCategoryPlay === true ? "allow" : initial.configOverride?.allowCrossCategoryPlay === false ? "deny" : "inherit",
+    useFormatOverride: !!initial.configOverride,
+    useCategoriesOverride: !!initial.categoriesOverride,
+    catOverrides: initialCatMap,
+    customCats: initialCustomCats,
+  }), [initial, initialCatMap, initialCustomCats]);
+  const currentSnapshot = JSON.stringify({
+    roundNumber, name, start, end, status,
+    matchDuration, catDurations,
+    maxPts, maxMatches, crossCat,
+    useFormatOverride, useCategoriesOverride,
+    catOverrides, customCats,
+  });
+  const isDirty = currentSnapshot !== initialSnapshot;
   // NOTE: don't mirror props → state via useEffect. The league page polls
   // every 30s, which makes `initial` a new object reference each cycle.
   // A mirror effect would clobber the user's in-flight edits with the latest
@@ -534,7 +562,15 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
   };
 
   return (
-    <div className={`${frameClass} p-4 space-y-3`}>
+    <div className="space-y-2">
+      {mode === "edit" && (
+        <div className="flex justify-end">
+          <button type="button" onClick={onCancel} className="text-xs text-action font-medium hover:underline">
+            Close round data
+          </button>
+        </div>
+      )}
+      <div className={`${frameClass} p-4 space-y-3`}>
       <div className="flex gap-3">
         <div className="w-20">
           <label className="block text-xs text-muted mb-1">Round #</label>
@@ -838,12 +874,13 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, onSubmit, on
       </div>
 
       <div className="flex gap-2">
-        <button onClick={handleSave} disabled={!roundNumber}
+        <button onClick={handleSave} disabled={!roundNumber || (mode === "edit" && !isDirty)}
           className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
           {mode === "add" ? "Add Round" : "Save"}
         </button>
         <button onClick={onCancel}
           className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+      </div>
       </div>
     </div>
   );
