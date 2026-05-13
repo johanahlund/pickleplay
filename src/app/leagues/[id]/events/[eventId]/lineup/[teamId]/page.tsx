@@ -1029,7 +1029,7 @@ export default function LineupBuilderPage() {
                       <div className="mt-2 text-[11px] text-muted flex items-center gap-2 flex-wrap">
                         {timeStr && <span>⏰ {timeStr}</span>}
                         {g.courtNum != null && <span>· Court {g.courtNum}</span>}
-                        <span className={hasFormatOverride ? "text-action font-medium" : ""}>
+                        <span className={hasFormatOverride ? "text-violet-700 font-medium" : ""}>
                           · {formatLabel(effectiveScoring, effectiveWinBy)}
                         </span>
                         {canSchedule && !edit && !g.winnerId && (
