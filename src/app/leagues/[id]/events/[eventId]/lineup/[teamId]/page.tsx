@@ -158,7 +158,7 @@ export default function LineupBuilderPage() {
   // Toggle for the single Expand/Collapse-all button above the category
   // cards. Mirrors the rounds/standings pattern: imperatively sets each
   // <details data-category-card> `open` attribute via querySelectorAll.
-  const [categoriesAllCollapsed, setCategoriesAllCollapsed] = useState(false);
+  const [categoriesAllCollapsed, setCategoriesAllCollapsed] = useState(true);
 
   const isAppAdmin = userRole === "admin";
   const isOrganizer = isAppAdmin || (!!userId && (leagueOrg.createdById === userId || leagueOrg.deputyId === userId));
@@ -860,7 +860,7 @@ export default function LineupBuilderPage() {
         const principalCount = games.filter((g) => g.categoryId === cat.id && g.kind === "principal").length;
 
         return (
-          <details key={cat.id} data-category-card open className={`${frameClass} shadow-sm border-l-4 border-l-action/60 group overflow-hidden`}>
+          <details key={cat.id} data-category-card className={`${frameClass} shadow-sm border-l-4 border-l-action/60 group overflow-hidden`}>
             <summary className="flex items-baseline justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 list-none">
               <div className="flex items-center gap-2">
                 <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
