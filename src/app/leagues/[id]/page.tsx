@@ -967,14 +967,19 @@ function RoundForm({ mode, initial, leagueCategories, leagueConfig, leagueMatchD
         )}
       </div>
 
-      <div className="flex gap-2">
-        <button onClick={handleSave} disabled={!roundNumber || (mode === "edit" && !isDirty)}
-          className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-          {mode === "add" ? "Add Round" : "Save"}
-        </button>
-        <button onClick={onCancel}
-          className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
-      </div>
+      {/* Bottom action row only renders when there's something to act on
+          (edit mode + dirty, or add mode). The top-right 'Close round
+          data' link is always there as the escape route otherwise. */}
+      {(mode === "add" || isDirty) && (
+        <div className="flex gap-2">
+          <button onClick={handleSave} disabled={!roundNumber}
+            className="flex-1 bg-action-dark text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+            {mode === "add" ? "Add Round" : "Save"}
+          </button>
+          <button onClick={onCancel}
+            className="flex-1 bg-gray-100 py-2 rounded-lg text-sm font-medium">Cancel</button>
+        </div>
+      )}
       </div>
     </div>
   );
