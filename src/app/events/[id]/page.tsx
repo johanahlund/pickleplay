@@ -21,7 +21,7 @@ import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
-import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShare, type EventInviteContext, type MatchDayShareGame } from "@/lib/inviteShare";
+import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShareFromEvent, type EventInviteContext } from "@/lib/inviteShare";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -1904,144 +1904,30 @@ export default function EventDetailPage() {
   /**
    * Build the WhatsApp-ready match-day schedule and open the share
    * chooser. League events only. Anyone with view access can share.
-   * Data is read straight off the loaded `event` payload — no API call.
+   * Logic lives in lib/inviteShare so the lineup page produces the
+   * same output for the same event.
    */
   const openScheduleShare = () => {
-    if (!event.round) return;
-    const league = event.round.league;
-    const teams = league.teams || [];
-    const categories = league.categories || [];
-    // Build lookup maps so we can resolve playerId → name and
-    // categoryId → display name without nested .find() per game.
-    const playerById = new Map<string, string>();
-    for (const t of teams) {
-      for (const tp of t.players) playerById.set(tp.playerId, tp.player.name);
-    }
-    // Also index event sign-ups so non-roster friendly extras (people
-    // who signed up to the event but aren't on either team's roster)
-    // resolve to their real names instead of "?".
-    for (const ep of event.players) playerById.set(ep.player.id, ep.player.name);
-    const categoryById = new Map<string, string>();
-    for (const c of categories) categoryById.set(c.id, c.name);
-    // Match-by-leagueGame lookup for the score line on completed games.
-    type MatchLite = { leagueGame?: { id: string } | null; players: { team: number; score: number }[] };
-    const matchByGame = new Map<string, MatchLite>();
-    for (const m of event.matches as MatchLite[]) {
-      if (m.leagueGame?.id) matchByGame.set(m.leagueGame.id, m);
-    }
-
-    // Format a full name as "First L." — strip any parenthesised
-    // qualifier first (e.g. "Lloyd (Captain)" → "Lloyd"), and skip
-    // tokens that don't begin with a letter so a stray "(" can't end
-    // up as the initial.
-    const shortName = (full: string): string => {
-      const cleaned = full.replace(/\([^)]*\)/g, " ").trim();
-      const parts = cleaned.split(/\s+/).filter((p) => /^\p{L}/u.test(p));
-      if (parts.length === 0) return full;
-      if (parts.length === 1) return parts[0];
-      const last = parts[parts.length - 1];
-      return `${parts[0]} ${last[0]}.`;
-    };
-
-    // Resolve a gamePlayer to a short name, falling back through three
-    // sources: the prebuilt playerById map (rosters + sign-ups), the
-    // included player record on the row itself, and finally "?".
-    const resolveName = (gp: { playerId: string; player?: { name: string } }) =>
-      shortName(playerById.get(gp.playerId) || gp.player?.name || "?");
-    // Per-team roster lookup so we can attribute legacy null-team
-    // LeagueGamePlayer rows (written before the `team` field existed)
-    // to the correct side based on roster membership. New rows always
-    // have an explicit team set by the assign_players endpoint.
-    const rosterByTeamId = new Map<string, Set<string>>();
-    for (const t of teams) {
-      rosterByTeamId.set(t.id, new Set(t.players.map((tp) => tp.playerId)));
-    }
-    type GP = { playerId: string; team?: number | null; player?: { id: string; name: string } };
-    const games: MatchDayShareGame[] = (event.leagueGames || []).map((g) => {
-      const t1Roster = rosterByTeamId.get(g.team1Id) ?? new Set<string>();
-      const t2Roster = rosterByTeamId.get(g.team2Id) ?? new Set<string>();
-      const sideOf = (gp: GP): 1 | 2 => {
-        if (gp.team === 1) return 1;
-        if (gp.team === 2) return 2;
-        if (t1Roster.has(gp.playerId)) return 1;
-        if (t2Roster.has(gp.playerId)) return 2;
-        // Orphan: non-roster + no team tag (legacy friendly extra).
-        // Show on side 1 so they appear somewhere rather than vanish.
-        return 1;
-      };
-      const t1Names = g.gamePlayers.filter((gp) => sideOf(gp) === 1).map(resolveName);
-      const t2Names = g.gamePlayers.filter((gp) => sideOf(gp) === 2).map(resolveName);
-      const match = matchByGame.get(g.id);
-      const team1Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 1).map((p) => p.score)) : null;
-      const team2Score = match ? Math.max(0, ...match.players.filter((p) => p.team === 2).map((p) => p.score)) : null;
-      // winnerTeam: prefer LeagueGame.winnerId (organizer-set) — map
-      // winner team id back to 1/2; fall back to score comparison only
-      // when a match exists with a strictly-greater score.
-      let winnerTeam: 1 | 2 | null = null;
-      if (g.winnerId) {
-        winnerTeam = g.winnerId === g.team1Id ? 1 : g.winnerId === g.team2Id ? 2 : null;
-      } else if (match && team1Score != null && team2Score != null && team1Score !== team2Score) {
-        winnerTeam = team1Score > team2Score ? 1 : 2;
-      }
-      return {
-        courtNum: g.courtNum ?? null,
-        scheduledAt: g.scheduledAt ?? null,
-        categoryName: categoryById.get(g.categoryId) || "—",
-        slotNumber: g.slotNumber ?? null,
-        team1PlayerNames: t1Names,
-        team2PlayerNames: t2Names,
-        team1Score,
-        team2Score,
-        winnerTeam,
-      };
-    });
-
-    // Event start time — read straight from event.date (the time the
-    // organizer set in Event Data), not the earliest court schedule.
-    // The first court can be later than doors-open, and the organizer
-    // owns the canonical "show up at" time.
-    const eventStart = event.date ? new Date(event.date) : null;
-    const doorsTimeText = eventStart && !isNaN(eventStart.getTime())
-      ? eventStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : null;
-
-    const dateText = new Date(event.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-    // Pick the location actually selected for the event (via
-    // event.locationId). If the location is just the club's HQ /
-    // unspecified, fall back to the club name alone. Avoids the
-    // previous "Club · LocationA, Club · LocationB" duplication.
-    const selectedLocation = event.locationId
-      ? event.club?.locations?.find((l) => l.id === event.locationId)
-      : null;
-    const locationText = selectedLocation?.name
-      ? (event.club?.name && selectedLocation.name !== event.club.name
-          ? `${event.club.name} · ${selectedLocation.name}`
-          : selectedLocation.name)
-      : event.club?.name ?? null;
-    const team1Name = event.leagueTeams?.[0]?.team.name ?? null;
-    const team2Name = event.leagueTeams?.[1]?.team.name ?? null;
-    const roundLabel = event.round.name || `Round ${event.round.roundNumber}`;
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-
-    const message = buildMatchDayShare({
-      leagueName: league.name,
-      roundLabel,
-      team1Name,
-      team2Name,
-      dateText,
-      doorsTimeText,
-      locationText,
-      eventUrl: `${origin}/events/${event.id}`,
-      games,
-    });
-    setScheduleShare({
-      message,
-      title: `Share match-day · ${roundLabel}`,
-    });
+    const result = buildMatchDayShareFromEvent(event, origin);
+    if (result) setScheduleShare(result);
   };
   // Expose the current closure to the URL-share auto-open effect that
   // had to be hoisted above the early-return guards (React #310 fix).
   openScheduleShareRef.current = openScheduleShare;
+  // Single source of truth for the schedule-share modal. The component
+  // has several top-level returns (overview, rounds, competition…), so
+  // we mount this in each branch — otherwise tapping the trophy glyph
+  // outside the overview shows nothing until the user navigates back.
+  const scheduleShareModalEl = (
+    <ShareInviteModal
+      open={!!scheduleShare}
+      message={scheduleShare?.message ?? ""}
+      title={scheduleShare?.title || "Share match-day"}
+      emailSubject={scheduleShare?.title || "Match-day schedule"}
+      onClose={() => setScheduleShare(null)}
+    />
+  );
   const eventHeroHeader = (
     <div className="-mx-4 -mt-2">
       <AppHeader
@@ -6533,6 +6419,7 @@ export default function EventDetailPage() {
         <div className="px-4">
           {renderPlayers()}
         </div>
+        {scheduleShareModalEl}
       </div>
     );
   }
@@ -6827,6 +6714,7 @@ export default function EventDetailPage() {
         </div>
         {activeSection === "rounds" && renderRounds()}
         {activeSection === "manual" && renderManual()}
+        {scheduleShareModalEl}
       </div>
     );
   }
@@ -7204,16 +7092,9 @@ export default function EventDetailPage() {
         );
       })()}
 
-      {/* Match-day schedule share — open via the trophy glyph in the
-          header. Anyone with view access can fire it; payload is the
-          court-grouped schedule built by buildMatchDayShare. */}
-      <ShareInviteModal
-        open={!!scheduleShare}
-        message={scheduleShare?.message ?? ""}
-        title={scheduleShare?.title || "Share match-day"}
-        emailSubject={scheduleShare?.title || "Match-day schedule"}
-        onClose={() => setScheduleShare(null)}
-      />
+      {/* Schedule share modal — mounted in every top-level return,
+          declared once as scheduleShareModalEl above. */}
+      {scheduleShareModalEl}
 
       {canManage && managerCard}
 
