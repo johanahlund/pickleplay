@@ -142,7 +142,12 @@ export async function PATCH(
     // Per-match scoring format / winBy overrides. Free-form strings
     // validated by code lookup; matches LeagueCategory's accepted set.
     const VALID_SCORING = new Set(["1x7", "1x9", "1x11", "1x15", "3x11", "3x15", "1xR15", "1xR21", "3xR15", "3xR21"]);
-    const VALID_WINBY = new Set(["1", "2", "2_gp18", "2_gp21", "cap13", "cap15", "cap17", "cap18", "cap23", "cap25"]);
+    // Mirror lib/leagueCategories.ts: "1", "2", plus 2_gp12..2_gp25 and cap12..cap25.
+    const VALID_WINBY: Set<string> = (() => {
+      const s = new Set<string>(["1", "2"]);
+      for (let n = 12; n <= 25; n++) { s.add(`2_gp${n}`); s.add(`cap${n}`); }
+      return s;
+    })();
     if (body.scoringFormatOverride !== undefined) {
       const v = body.scoringFormatOverride;
       if (v === null || v === "") {

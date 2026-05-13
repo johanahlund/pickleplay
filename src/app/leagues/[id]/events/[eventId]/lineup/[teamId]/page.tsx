@@ -45,13 +45,15 @@ function formatLabel(scoring: string, winBy: string): string {
     "1xR15": "Rally to 15", "1xR21": "Rally to 21",
     "3xR15": "Best of 3 rally 15", "3xR21": "Best of 3 rally 21",
   };
-  const WINBY: Record<string, string> = {
-    "1": "win by 1", "2": "win by 2",
-    "2_gp18": "win by 2 (GP 18)", "2_gp21": "win by 2 (GP 21)",
-    "cap13": "GP 13", "cap15": "GP 15", "cap17": "GP 17",
-    "cap18": "GP 18", "cap23": "GP 23", "cap25": "GP 25",
-  };
-  return `${SCORING[scoring] ?? scoring} · ${WINBY[winBy] ?? winBy}`;
+  // win-by labels are generated for the full 12..25 range; the static
+  // entries cover the no-cap and unbounded variants.
+  const WINBY_STATIC: Record<string, string> = { "1": "win by 1", "2": "win by 2" };
+  if (WINBY_STATIC[winBy]) return `${SCORING[scoring] ?? scoring} · ${WINBY_STATIC[winBy]}`;
+  const gp = winBy.match(/^2_gp(\d+)$/);
+  if (gp) return `${SCORING[scoring] ?? scoring} · win by 2 (GP ${gp[1]})`;
+  const cap = winBy.match(/^cap(\d+)$/);
+  if (cap) return `${SCORING[scoring] ?? scoring} · Cap ${cap[1]}`;
+  return `${SCORING[scoring] ?? scoring} · ${winBy}`;
 }
 
 const FORMAT_SCORING_OPTS = [
@@ -66,18 +68,15 @@ const FORMAT_SCORING_OPTS = [
   { v: "3xR15", label: "Best of 3 rally 15" },
   { v: "3xR21", label: "Best of 3 rally 21" },
 ];
-const FORMAT_WINBY_OPTS = [
-  { v: "1", label: "win by 1" },
-  { v: "2", label: "win by 2" },
-  { v: "2_gp18", label: "win by 2 (GP 18)" },
-  { v: "2_gp21", label: "win by 2 (GP 21)" },
-  { v: "cap13", label: "GP 13" },
-  { v: "cap15", label: "GP 15" },
-  { v: "cap17", label: "GP 17" },
-  { v: "cap18", label: "GP 18" },
-  { v: "cap23", label: "GP 23" },
-  { v: "cap25", label: "GP 25" },
-];
+const FORMAT_WINBY_OPTS: { v: string; label: string }[] = (() => {
+  const out: { v: string; label: string }[] = [
+    { v: "1", label: "win by 1" },
+    { v: "2", label: "win by 2" },
+  ];
+  for (let n = 12; n <= 25; n++) out.push({ v: `2_gp${n}`, label: `win by 2 (GP ${n})` });
+  for (let n = 12; n <= 25; n++) out.push({ v: `cap${n}`, label: `Cap ${n}` });
+  return out;
+})();
 
 export default function LineupBuilderPage() {
   const { id, eventId, teamId } = useParams() as { id: string; eventId: string; teamId: string };

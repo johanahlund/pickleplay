@@ -9,10 +9,13 @@ export const CATEGORY_SCORING_FORMATS = [
   "1xR15", "1xR21",
   "3xR15", "3xR21",
 ] as const;
+// Generators for the long enums. parseWinBy() handles `2_gp<N>` and
+// `cap<N>` via regex so this list can be widened freely.
+const GP_RANGE = Array.from({ length: 14 }, (_, i) => i + 12); // 12..25
 export const CATEGORY_WIN_BY = [
   "1", "2",
-  "2_gp18", "2_gp21",
-  "cap13", "cap15", "cap17", "cap18", "cap23", "cap25",
+  ...GP_RANGE.map((n) => `2_gp${n}` as const),
+  ...GP_RANGE.map((n) => `cap${n}` as const),
 ] as const;
 export const CATEGORY_STATUSES = ["draft", "active"] as const;
 

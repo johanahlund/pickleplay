@@ -170,13 +170,24 @@ function ScoringSelect({ value, onChange, className, placeholder }: { value: str
   );
 }
 function WinBySelect({ value, onChange, className, placeholder }: { value: string; onChange: (v: string) => void; className?: string; placeholder?: string }) {
+  // Symmetric range: 2_gp12..2_gp25 and cap12..cap25. Grouped for clarity
+  // in the dropdown — operators usually pick within one mode at a time.
+  const GP_RANGE = Array.from({ length: 14 }, (_, i) => i + 12);
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className ?? "w-full border border-border rounded-lg px-2 py-1.5 text-xs"}>
       {placeholder !== undefined && <option value="" style={{ fontSize: 10 }}>{placeholder}</option>}
-      <option value="1">1</option><option value="2">2</option>
-      <option value="2_gp18">2 (GP@18)</option><option value="2_gp21">2 (GP@21)</option>
-      <option value="cap13">GP 13</option><option value="cap15">GP 15</option><option value="cap17">GP 17</option>
-      <option value="cap18">GP 18</option><option value="cap23">GP 23</option><option value="cap25">GP 25</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <optgroup label="Win by 2 — golden point at N">
+        {GP_RANGE.map((n) => (
+          <option key={`gp${n}`} value={`2_gp${n}`}>2 (GP@{n})</option>
+        ))}
+      </optgroup>
+      <optgroup label="Cap to N (first to N wins)">
+        {GP_RANGE.map((n) => (
+          <option key={`cap${n}`} value={`cap${n}`}>Cap {n}</option>
+        ))}
+      </optgroup>
     </select>
   );
 }

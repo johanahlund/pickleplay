@@ -2124,14 +2124,16 @@ export default function EventDetailPage() {
                 className="w-full border border-border rounded-lg px-2 py-2 text-xs font-medium">
                 <option value="1">1</option>
                 <option value="2">2</option>
-                <option value="2_gp18">2 (GP @18)</option>
-                <option value="2_gp21">2 (GP @21)</option>
-                <option value="cap13">Cap 13</option>
-                <option value="cap15">Cap 15</option>
-                <option value="cap17">Cap 17</option>
-                <option value="cap18">Cap 18</option>
-                <option value="cap23">Cap 23</option>
-                <option value="cap25">Cap 25</option>
+                <optgroup label="Win by 2 — golden point at N">
+                  {Array.from({ length: 14 }, (_, i) => i + 12).map((n) => (
+                    <option key={`gp${n}`} value={`2_gp${n}`}>2 (GP @{n})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Cap to N (first to N wins)">
+                  {Array.from({ length: 14 }, (_, i) => i + 12).map((n) => (
+                    <option key={`cap${n}`} value={`cap${n}`}>Cap {n}</option>
+                  ))}
+                </optgroup>
               </select>
             </>
           ) : (
@@ -5661,7 +5663,16 @@ export default function EventDetailPage() {
               <option value="">{(event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"} (event default)</option>
               <option value="1">1</option>
               <option value="2">2</option>
-              <option value="2_gp18">2 (GP@18)</option>
+              <optgroup label="Win by 2 — golden point at N">
+                {Array.from({ length: 14 }, (_, i) => i + 12).map((n) => (
+                  <option key={`gp${n}`} value={`2_gp${n}`}>2 (GP@{n})</option>
+                ))}
+              </optgroup>
+              <optgroup label="Cap to N (first to N wins)">
+                {Array.from({ length: 14 }, (_, i) => i + 12).map((n) => (
+                  <option key={`cap${n}`} value={`cap${n}`}>Cap {n}</option>
+                ))}
+              </optgroup>
             </select>
             <p className="text-[10px] text-muted mt-0.5">
               {(() => { const wb = manualWinBy || (event.classes?.[0] as unknown as Record<string, string>)?.winBy || "2"; return wb === "1" ? "First to target wins" : wb.includes("_gp") ? `Win by 2, golden point at ${wb.split("gp")[1]}` : "Must win by 2 points"; })()}
