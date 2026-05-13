@@ -928,13 +928,36 @@ export default function LineupBuilderPage() {
         const matchCount = games.filter((g) =>
           g.categoryId === cat.id && (g.team1Wants || g.team2Wants),
         ).length;
+        // How many ticked matches on OUR side are missing players?
+        // Doubles needs 2; singles needs 1. We don't gate on the
+        // opponent's side — they're responsible for their own picks.
+        const neededPerMatch = cat.format === "doubles" ? 2 : 1;
+        const missingPlayerMatches = (() => {
+          let n = 0;
+          for (const gg of games) {
+            if (gg.categoryId !== cat.id) continue;
+            if (!wantsField(gg)) continue;
+            const have = ourPlayersForGame(gg).length;
+            if (have < neededPerMatch) n++;
+          }
+          return n;
+        })();
+        const hasMissing = missingPlayerMatches > 0;
 
         return (
-          <details key={cat.id} data-category-card className={`${frameClass} shadow-sm border-l-4 border-l-action/60 group overflow-hidden`}>
+          <details key={cat.id} data-category-card className={`${frameClass} shadow-sm group overflow-hidden border-l-4 ${hasMissing ? "border-l-amber-500" : "border-l-action/60"}`}>
             <summary className="flex items-baseline justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 list-none">
               <div className="flex items-center gap-2">
                 <span className="text-muted text-xs group-open:rotate-90 transition-transform">›</span>
                 <div className="text-base font-bold">{cat.name}</div>
+                {hasMissing && (
+                  <span
+                    title={`${missingPlayerMatches} ${missingPlayerMatches === 1 ? "match needs" : "matches need"} players on your side`}
+                    className="text-[10px] text-amber-800 bg-amber-100 border border-amber-300 rounded-full px-1.5 py-0.5 font-semibold"
+                  >
+                    ⚠ {missingPlayerMatches} need{missingPlayerMatches === 1 ? "s" : ""} players
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-muted">
                 {formatLabelShort(cat.scoringFormat, cat.winBy)}
