@@ -289,6 +289,49 @@ export async function requireAdmin() {
   return user;
 }
 
+/**
+ * Stricter gate than `requireEventManager`: schedule edits on a
+ * league event (start time, court, displayOrder, auto-arrange,
+ * per-category duration overrides). Allowed:
+ *   - app admin
+ *   - event organizer (event.createdById)
+ *   - league admin (league.createdById OR league.deputyId)
+ *   - host team's captain/vice (league events only)
+ *
+ * Explicitly excludes event helpers and visitor-team captains —
+ * schedule decisions belong to the host. Returns the user object
+ * on success; throws "Forbidden" otherwise.
+ */
+export async function requireScheduleEditor(eventId: string) {
+  const user = await requireAuth();
+  if (user.role === "admin") return user;
+
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      createdById: true,
+      hostTeamId: true,
+      round: { select: { league: { select: { createdById: true, deputyId: true } } } },
+    },
+  });
+  if (!event) throw new Error("NotFound");
+
+  if (event.createdById === user.id) return user;
+
+  const league = event.round?.league;
+  if (league && (league.createdById === user.id || league.deputyId === user.id)) return user;
+
+  if (event.hostTeamId) {
+    const host = await prisma.leagueTeam.findUnique({
+      where: { id: event.hostTeamId },
+      select: { captainId: true, viceCaptainId: true },
+    });
+    if (host && (host.captainId === user.id || host.viceCaptainId === user.id)) return user;
+  }
+
+  throw new Error("Forbidden");
+}
+
 /** Check if the current user can manage the given event (admin, owner, helper,
  *  or league director/deputy if the event is part of a league match-day). */
 export async function requireEventManager(eventId: string) {

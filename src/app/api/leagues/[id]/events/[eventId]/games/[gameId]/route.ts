@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { requireAuth, authErrorResponse, requireScheduleEditor } from "@/lib/auth";
 import { recalcCourtAndPersist } from "@/lib/leagueSchedule";
 import { NextResponse } from "next/server";
 
@@ -94,17 +94,15 @@ export async function PATCH(
     || body.scoringFormatOverride !== undefined
     || body.winByOverride !== undefined
   ) {
-    const user = await requireAuth();
-    const isAppAdmin = user.role === "admin";
-    const league = game.event.round?.league;
-    const isLeagueAdmin = !!league && (league.createdById === user.id || league.deputyId === user.id);
-    const hostTeamId = game.event.hostTeamId;
-    const hostTeam = hostTeamId === null ? null
-      : hostTeamId === undefined ? null
-      : (await prisma.leagueTeam.findUnique({ where: { id: hostTeamId }, select: { captainId: true, viceCaptainId: true } }));
-    const isHostCaptain = !!hostTeam && (hostTeam.captainId === user.id || hostTeam.viceCaptainId === user.id);
-    if (!isAppAdmin && !isLeagueAdmin && !isHostCaptain) {
-      return NextResponse.json({ error: "Only the home team's captain/vice or a league organizer can schedule this match." }, { status: 403 });
+    // Same gate as the event-PATCH schedule fields and the
+    // bulk-arrange route — see `requireScheduleEditor`.
+    try {
+      await requireScheduleEditor(eventId);
+    } catch {
+      return NextResponse.json(
+        { error: "Only the event organizer, league admin, or host team captain/vice can schedule this match." },
+        { status: 403 },
+      );
     }
     if (body.scheduledAt !== undefined) {
       if (body.scheduledAt) {

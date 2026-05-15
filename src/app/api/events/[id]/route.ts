@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requireEventOwner, requireEventManager, canSeeEmails, stripEmailsDeep, getViewerMemberships, canSeeWhatsApp } from "@/lib/auth";
+import { requireAuth, requireEventOwner, requireEventManager, requireScheduleEditor, canSeeEmails, stripEmailsDeep, getViewerMemberships, canSeeWhatsApp } from "@/lib/auth";
 import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
@@ -398,6 +398,23 @@ export async function PATCH(
   }
 
   const body = await req.json();
+  // Schedule-affecting fields (start times, durations, category
+  // overrides) need the stricter `requireScheduleEditor` gate —
+  // helpers and visitor-team captains who can manage everything
+  // else must not be able to touch these.
+  const touchesSchedule = body.matchDurationMin !== undefined
+    || body.courtStartTimes !== undefined
+    || body.categoryDurationOverrides !== undefined;
+  if (touchesSchedule) {
+    try {
+      await requireScheduleEditor(id);
+    } catch {
+      return NextResponse.json(
+        { error: "Only the event organizer, league admin, or host team captain/vice can change scheduling fields." },
+        { status: 403 },
+      );
+    }
+  }
   const { name, numCourts, date, endDate, openSignup, visibility } = body;
   const { scoringFormat, numSets, scoringType, timedMinutes, pairingMode, rankingMode } = body;
 

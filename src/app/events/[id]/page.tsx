@@ -5286,11 +5286,16 @@ export default function EventDetailPage() {
       }
     }
 
-    // Permission: host captain/vice OR league organizer OR admin can edit.
+    // Permission for scheduling actions (start time / auto-arrange /
+    // move matches / change court / category-duration overrides).
+    // Allowed: app admin, event organizer (event creator), league
+    // admin (league creator OR deputy), or the HOST team's
+    // captain/vice. Helpers and visitor-team captains are NOT
+    // permitted — schedule decisions belong to the host.
     const allLeagueTeams = event.round.league.teams || [];
     const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
     const isHostCaptain = !!userId && !!host && (host.captainId === userId || host.viceCaptainId === userId);
-    const canEditSchedule = isAdmin || isLeagueOrganizerOfEvent || isHostCaptain;
+    const canEditSchedule = isAdmin || isOwner || isLeagueOrganizerOfEvent || isHostCaptain;
 
     // Lineup visibility — pre-reveal show "Team A vs Team B"; post-reveal show players.
     const revealed = !!event.lineupTotalLocked

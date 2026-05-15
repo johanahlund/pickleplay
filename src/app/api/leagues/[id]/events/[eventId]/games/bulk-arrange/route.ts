@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, authErrorResponse } from "@/lib/auth";
+import { requireAuth, authErrorResponse, requireScheduleEditor } from "@/lib/auth";
 import { recalcAllCourtsAndPersist } from "@/lib/leagueSchedule";
 import { NextResponse } from "next/server";
 
@@ -9,44 +9,30 @@ import { NextResponse } from "next/server";
 // here on approval. Doing it atomically (one recalc, not N) avoids the
 // per-PATCH race where parallel writes step on each other.
 //
-// Auth: host team's captain/vice, league organizer/deputy, or app admin
-// — mirrors the per-game PATCH route.
+// Auth: app admin, event organizer, league admin (creator/deputy),
+// or the HOST team's captain/vice — mirrors `requireScheduleEditor`
+// and the per-game PATCH route.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string; eventId: string }> }
 ) {
   const { id: leagueId, eventId } = await params;
-  let user;
-  try { user = await requireAuth(); } catch (e) { return authErrorResponse(e); }
 
+  // Cheap check first: event must belong to this league. Done before
+  // the auth gate so a wrong leagueId surfaces as 404 even for
+  // unauthenticated callers (avoids leaking "this event exists but
+  // not in your league" via the 403 vs 404 distinction).
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: {
-      hostTeamId: true,
-      round: { select: { leagueId: true, league: { select: { createdById: true, deputyId: true } } } },
-    },
+    select: { round: { select: { leagueId: true } } },
   });
   if (!event || event.round?.leagueId !== leagueId) {
     return NextResponse.json({ error: "Event not in league" }, { status: 404 });
   }
 
-  const isAppAdmin = user.role === "admin";
-  const league = event.round?.league;
-  const isLeagueAdmin = !!league && (league.createdById === user.id || league.deputyId === user.id);
-  let isHostCaptain = false;
-  if (event.hostTeamId) {
-    const host = await prisma.leagueTeam.findUnique({
-      where: { id: event.hostTeamId },
-      select: { captainId: true, viceCaptainId: true },
-    });
-    isHostCaptain = !!host && (host.captainId === user.id || host.viceCaptainId === user.id);
-  }
-  if (!isAppAdmin && !isLeagueAdmin && !isHostCaptain) {
-    return NextResponse.json(
-      { error: "Only the home team's captain/vice or a league organizer can rearrange the schedule." },
-      { status: 403 },
-    );
-  }
+  try {
+    await requireScheduleEditor(eventId);
+  } catch (e) { return authErrorResponse(e); }
 
   const body = await req.json().catch(() => null);
   if (!body || !Array.isArray(body.assignments)) {
