@@ -5388,10 +5388,18 @@ export default function EventDetailPage() {
       if (!m) return { t1: null, t2: null };
       const p1 = m.players.find((p) => p.team === 1);
       const p2 = m.players.find((p) => p.team === 2);
-      return {
-        t1: p1?.score ?? null,
-        t2: p2?.score ?? null,
-      };
+      const s1 = p1?.score ?? null;
+      const s2 = p2?.score ?? null;
+      // MatchPlayer.score defaults to 0 in the schema, so a freshly-
+      // started (or paused-then-resumed) match would otherwise read
+      // "0 - 0" on the schedule card. Map those zero-zero pre-play
+      // states back to null so the UI shows "— —" until at least one
+      // point has actually been entered. Completed matches keep their
+      // real zeros (a legitimate pickled result).
+      if (m.status !== "completed" && (s1 ?? 0) + (s2 ?? 0) === 0) {
+        return { t1: null, t2: null };
+      }
+      return { t1: s1, t2: s2 };
     };
     // Group revealed players by side: any gamePlayer whose id is in
     // team1's roster is team1; rest is team2. (Pre-reveal players are
@@ -5486,60 +5494,105 @@ export default function EventDetailPage() {
         setScorerMatchId(linkedMatch.id);
         setScorerVisible(true);
       };
-      const startMatch = async () => {
+      // Fire-and-forget pattern across all match-control buttons —
+      // see [[feedback_optimistic_pattern]]. Each handler does its
+      // optimistic setState first, then kicks off the network request
+      // without awaiting, so the click is felt instantly. fetchEvent
+      // in the .finally reconciles in the background.
+      const startMatch = () => {
         if (!event.round) return;
         const leagueId = event.round.league.id;
-        // Optimistic: flip linkedMatch.status to active before the
-        // round-trip so the operator gets instant feedback.
+        const nowIso = new Date().toISOString();
         if (linkedMatch) {
+          // Existing Match — just flip its status to active.
           setEvent((prev) => prev ? {
             ...prev,
             matches: prev.matches.map((m) => m.id === linkedMatch.id
-              ? { ...m, status: "active", startedAt: m.startedAt ?? new Date().toISOString() }
+              ? { ...m, status: "active", startedAt: m.startedAt ?? nowIso }
               : m),
           } : prev);
+        } else if (lineupsReady) {
+          // First start — synthesize a placeholder Match so the card
+          // flips state immediately, before the start-match endpoint
+          // creates the real row. fetchEvent will replace it.
+          const tempId = `temp-${g.id}-${Date.now()}`;
+          const synth: Match = {
+            id: tempId,
+            courtNum: g.courtNum ?? 1,
+            round: 1,
+            status: "active",
+            startedAt: nowIso,
+            scorerId: null,
+            leagueGame: {
+              id: g.id,
+              kind: (g.kind ?? "league") as "principal" | "league" | "extra",
+              slotNumber: g.slotNumber ?? 1,
+              scheduledAt: g.scheduledAt ?? null,
+              courtNum: g.courtNum ?? null,
+              category: { id: g.categoryId, name: catName(g.categoryId) },
+            },
+            players: gpRows.map((gp) => ({
+              id: `temp-${tempId}-${gp.playerId}`,
+              playerId: gp.playerId,
+              team: gp.team ?? 1,
+              score: 0,
+              player: {
+                id: gp.playerId,
+                name: playerNameById.get(gp.playerId) || "Player",
+                emoji: "🏓",
+                rating: 1000,
+              },
+            })),
+          };
+          setEvent((prev) => prev ? { ...prev, matches: [...prev.matches, synth] } : prev);
         }
-        try {
-          const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, { method: "POST" });
-          if (!r.ok) {
-            const d = await r.json().catch(() => ({}));
-            await alertDialog(d.error || "Couldn't start this match.", "Start failed");
-          }
-        } finally {
-          await fetchEvent();
-        }
+        fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, { method: "POST" })
+          .then(async (r) => {
+            if (!r.ok) {
+              const d = await r.json().catch(() => ({}));
+              await alertDialog(d.error || "Couldn't start this match.", "Start failed");
+            }
+          })
+          .finally(() => { void fetchEvent(); });
       };
-      const pauseMatch = async () => {
+      const pauseMatch = () => {
         if (!linkedMatch) return;
+        // Pause with no points entered = "scrap" — someone tapped
+        // Start by accident (or Start → Resume → Pause without any
+        // real play). Auto-route to Stop so the card flips back to
+        // ▶ Start instead of parking on a paused-empty state that
+        // needs a second tap to clear.
+        if (matchPoints === 0) {
+          stopMatch();
+          return;
+        }
         setEvent((prev) => prev ? {
           ...prev,
           matches: prev.matches.map((m) => m.id === linkedMatch.id ? { ...m, status: "paused" } : m),
         } : prev);
-        await fetch(`/api/matches/${linkedMatch.id}`, {
+        fetch(`/api/matches/${linkedMatch.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "paused" }),
-        });
-        await fetchEvent();
+        }).finally(() => { void fetchEvent(); });
       };
-      const resumeMatch = async () => {
+      const resumeMatch = () => {
         if (!linkedMatch) return;
         setEvent((prev) => prev ? {
           ...prev,
           matches: prev.matches.map((m) => m.id === linkedMatch.id ? { ...m, status: "active" } : m),
         } : prev);
-        await fetch(`/api/matches/${linkedMatch.id}`, {
+        fetch(`/api/matches/${linkedMatch.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "active" }),
-        });
-        await fetchEvent();
+        }).finally(() => { void fetchEvent(); });
       };
       // "Stop" reverts a paused-with-no-points match back to pending +
       // clears startedAt — the card flips back to ▶ Start. Cheaper
       // than deleting the Match (keeps MatchPlayer rows + the
       // LeagueGame.matchId link so re-starting is instant).
-      const stopMatch = async () => {
+      const stopMatch = () => {
         if (!linkedMatch) return;
         setEvent((prev) => prev ? {
           ...prev,
@@ -5547,12 +5600,11 @@ export default function EventDetailPage() {
             ? { ...m, status: "pending", startedAt: null }
             : m),
         } : prev);
-        await fetch(`/api/matches/${linkedMatch.id}`, {
+        fetch(`/api/matches/${linkedMatch.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "pending" }),
-        });
-        await fetchEvent();
+        }).finally(() => { void fetchEvent(); });
       };
       // Has any point been recorded? Sum across both teams' MatchPlayer
       // scores. Anything > 0 means real play happened and we hide Stop.
@@ -5619,11 +5671,26 @@ export default function EventDetailPage() {
       const rowConflicts = conflictsByGame.get(g.id) || [];
       const rowHasOverlap = rowConflicts.some((c) => c.kind === "overlap");
       const rowHasRushed = !rowHasOverlap && rowConflicts.some((c) => c.kind === "rushed");
+      // Status-based card styling. Conflicts (overlap/rushed) keep
+      // priority over play state — a scheduling problem is more
+      // important to flag than whether the match is live.
+      let statusBorder = "border-border";
+      let statusBg = "bg-white";
+      let cardOpacity = "";
+      if (matchStatus === "active") {
+        statusBorder = "border-emerald-400 ring-1 ring-emerald-200";
+        statusBg = "bg-emerald-50/30";
+      } else if (matchStatus === "paused") {
+        statusBorder = "border-amber-400 ring-1 ring-amber-100";
+      } else if (matchStatus === "completed") {
+        statusBorder = "border-gray-300";
+        cardOpacity = "opacity-70";
+      }
       const conflictBorder = rowHasOverlap
         ? "border-red-400 ring-1 ring-red-200"
         : rowHasRushed
           ? "border-amber-400 ring-1 ring-amber-200"
-          : "border-border";
+          : statusBorder;
       const rowPairKeys = pairKeysByGame.get(g.id) || [];
       // Bucket each pair by the relative direction of the OTHER match,
       // so the colored dot points the operator toward the conflicting
@@ -5661,7 +5728,7 @@ export default function EventDetailPage() {
         right: "flex-col gap-0.5",
       };
       return (
-        <div key={g.id} className={`relative ${conflictBorder} border rounded-lg p-2 pl-7 space-y-1.5 bg-white`}>
+        <div key={g.id} className={`relative ${conflictBorder} ${statusBg} ${cardOpacity} border rounded-lg p-2 pl-7 space-y-1.5`}>
         {(Object.keys(dotsByEdge) as Array<keyof typeof dotsByEdge>).map((edge) => {
           const keys = dotsByEdge[edge];
           if (keys.length === 0) return null;
@@ -5814,8 +5881,21 @@ export default function EventDetailPage() {
               {g.kind === "principal" ? "P" : g.kind === "league" ? "L" : "F"}
             </span>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            {catName(g.categoryId)} <span className="text-muted/70">· Match {g.slotNumber ?? "?"}</span>
+          <div className="text-[10px] uppercase tracking-wider text-muted font-medium flex items-center gap-1">
+            <span>{catName(g.categoryId)} <span className="text-muted/70">· Match {g.slotNumber ?? "?"}</span></span>
+            {/* Status badges — top-right of the card title row. Active
+                gets a pulsing live dot; completed gets a check. */}
+            {matchStatus === "active" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700">
+                <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                LIVE
+              </span>
+            )}
+            {matchStatus === "completed" && (
+              <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600" title="Match completed">
+                <span aria-hidden>✓</span>PLAYED
+              </span>
+            )}
           </div>
           {/* Two team rows. Home team is always on top — the canonical
               team1Id stored on each leagueGame is alphabetical, so we
