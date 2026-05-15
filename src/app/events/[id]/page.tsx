@@ -5452,6 +5452,84 @@ export default function EventDetailPage() {
     const renderGameRow = (g: G) => {
       const hhmm = timeHHMM(g.scheduledAt);
       const { t1: t1Score, t2: t2Score } = teamScoresFor(g);
+      // ── Per-card start / pause / scorer button cluster ──
+      // Find the Match record this LeagueGame is linked to (if any).
+      // Match is created lazily on first ▶ Start tap via the
+      // start-match endpoint, so most cards won't have one until
+      // play actually begins.
+      const linkedMatch = event.matches.find((m) => m.leagueGame?.id === g.id);
+      const matchStatus = linkedMatch?.status ?? null;
+      // Permission: any of
+      //   - schedule editor (admin / organizer / league admin / host capt.)
+      //   - player rostered into THIS specific game (LeagueGamePlayer)
+      //   - the existing Match's assigned scorer
+      const gpRows = (g as { gamePlayers?: { playerId: string; team?: number | null }[] }).gamePlayers ?? [];
+      const isPlayerInGame = !!userId && gpRows.some((gp) => gp.playerId === userId);
+      const isMatchScorer = !!userId && linkedMatch?.scorerId === userId;
+      const canActOnMatch = canEditSchedule || isPlayerInGame || isMatchScorer;
+      // Both teams need at least one assigned player before a Match
+      // can be created. Disabled (with tooltip) otherwise.
+      const team1Assigned = gpRows.filter((gp) => gp.team === 1).length > 0;
+      const team2Assigned = gpRows.filter((gp) => gp.team === 2).length > 0;
+      const lineupsReady = team1Assigned && team2Assigned;
+      // Bring the existing Match action sheet / scorer overlay state
+      // into scope. setScorerMatchId / setScorerVisible already mounted
+      // higher up the component; the existing renderScorerTracker
+      // overlay reads these as single sources of truth.
+      const openScorer = () => {
+        if (!linkedMatch) return;
+        setScorerMatchId(linkedMatch.id);
+        setScorerVisible(true);
+      };
+      const startMatch = async () => {
+        if (!event.round) return;
+        const leagueId = event.round.league.id;
+        // Optimistic: flip linkedMatch.status to active before the
+        // round-trip so the operator gets instant feedback.
+        if (linkedMatch) {
+          setEvent((prev) => prev ? {
+            ...prev,
+            matches: prev.matches.map((m) => m.id === linkedMatch.id
+              ? { ...m, status: "active", startedAt: m.startedAt ?? new Date().toISOString() }
+              : m),
+          } : prev);
+        }
+        try {
+          const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, { method: "POST" });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            await alertDialog(d.error || "Couldn't start this match.", "Start failed");
+          }
+        } finally {
+          await fetchEvent();
+        }
+      };
+      const pauseMatch = async () => {
+        if (!linkedMatch) return;
+        setEvent((prev) => prev ? {
+          ...prev,
+          matches: prev.matches.map((m) => m.id === linkedMatch.id ? { ...m, status: "paused" } : m),
+        } : prev);
+        await fetch(`/api/matches/${linkedMatch.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "paused" }),
+        });
+        await fetchEvent();
+      };
+      const resumeMatch = async () => {
+        if (!linkedMatch) return;
+        setEvent((prev) => prev ? {
+          ...prev,
+          matches: prev.matches.map((m) => m.id === linkedMatch.id ? { ...m, status: "active" } : m),
+        } : prev);
+        await fetch(`/api/matches/${linkedMatch.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "active" }),
+        });
+        await fetchEvent();
+      };
       const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
       const isMoving = movingScheduleId === g.id;
       const col = colOf(g);
@@ -5801,6 +5879,70 @@ export default function EventDetailPage() {
             </div>
           );
         })()}
+        {/* Match controls — bottom-right of the card. Visible to
+            schedule editors, players in the match, and the assigned
+            scorer. Compact icon buttons so the schedule grid stays
+            scannable. */}
+        {canActOnMatch && matchStatus !== "completed" && (
+          <div className="flex items-center justify-end gap-1 -mt-0.5">
+            {/* No match yet: ▶ Start (creates Match via start-match API).
+                Disabled if either team has no assigned player. */}
+            {!linkedMatch && (
+              <button
+                type="button"
+                onClick={startMatch}
+                disabled={!lineupsReady}
+                title={lineupsReady ? "Start match" : "Assign players on both teams first"}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
+              >
+                <span aria-hidden>▶</span><span>Start</span>
+              </button>
+            )}
+            {linkedMatch && matchStatus === "pending" && (
+              <button
+                type="button"
+                onClick={startMatch}
+                title="Start match"
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 inline-flex items-center gap-1"
+              >
+                <span aria-hidden>▶</span><span>Start</span>
+              </button>
+            )}
+            {linkedMatch && matchStatus === "active" && (
+              <button
+                type="button"
+                onClick={pauseMatch}
+                title="Pause match"
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 inline-flex items-center gap-1"
+              >
+                <span aria-hidden>⏸</span><span>Pause</span>
+              </button>
+            )}
+            {linkedMatch && matchStatus === "paused" && (
+              <button
+                type="button"
+                onClick={resumeMatch}
+                title="Resume match"
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 inline-flex items-center gap-1"
+              >
+                <span aria-hidden>▶</span><span>Resume</span>
+              </button>
+            )}
+            {/* Scorer — opens the existing ScorerTracker overlay for
+                this match. Only meaningful once a Match exists. */}
+            {linkedMatch && (matchStatus === "active" || matchStatus === "paused" || matchStatus === "pending") && (
+              <button
+                type="button"
+                onClick={openScorer}
+                title="Open scorer view"
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-sky-500 text-white hover:bg-sky-600 active:bg-sky-700 inline-flex items-center gap-1"
+                aria-label="Open scorer view"
+              >
+                <span aria-hidden>🎯</span><span>Score</span>
+              </button>
+            )}
+          </div>
+        )}
         </div>
       );
     };
