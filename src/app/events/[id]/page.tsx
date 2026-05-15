@@ -21,7 +21,8 @@ import { eventDisplayLabel, normalizeEventStatus } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
-import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShareFromEvent, type EventInviteContext } from "@/lib/inviteShare";
+import { UnclaimedIcon } from "@/components/UnclaimedIcon";
+import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShareFromEvent, personalClaimUrl, withInstallTip, type EventInviteContext } from "@/lib/inviteShare";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -570,6 +571,18 @@ export default function EventDetailPage() {
   // null = both teams. "home" = host team (first leagueTeam if no hostTeamId).
   // "away" = the other team.
   const [playerTeamFilter, setPlayerTeamFilter] = useState<"home" | "away" | null>(null);
+  // Per-player inline invite from a participant row. Mirrors the
+  // flow on the league team-roster page: tap the UnclaimedIcon →
+  // fetch a one-time claim token → pop ShareInviteModal pre-filled.
+  // Only wired for App Admins (the global `isAdmin`); other roles
+  // see the icon as a passive status indicator.
+  const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
+  const [playerInviteShare, setPlayerInviteShare] = useState<{
+    message: string;
+    phone: string | null;
+    title?: string;
+    emailSubject?: string;
+  } | null>(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   // Multi-select state for the captain's "+ Add player" picker on the
@@ -1294,6 +1307,37 @@ export default function EventDetailPage() {
     });
     if (!ok) return;
     await removePlayer(playerId, playerName);
+  };
+
+  // Per-player invite-to-claim from the league participants list.
+  // App Admins only — fetches a one-time claim token and pops the
+  // ShareInviteModal with a personalised message. Same plumbing the
+  // leagues team-roster page uses; keeps invite messages consistent.
+  const invitePlayerToApp = async (playerId: string, playerName: string) => {
+    setInvitingPlayerId(playerId);
+    try {
+      const res = await fetch(`/api/players/${playerId}/invite`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        await alertDialog(data.error || "Failed to generate invite", "Error");
+        return;
+      }
+      const claimUrl = personalClaimUrl(window.location.origin, data.token, playerName);
+      const firstName = playerName.split(" ")[0];
+      const inviterName = session?.user?.name || "Your event organizer";
+      const message = withInstallTip(
+        `Hi ${firstName},\n\n${inviterName} invited you to FriendlyBall — the friendly pickleball app. You've already been added as a player, so we just need you to set up your account:\n\n${claimUrl}`,
+        { forClaim: true },
+      );
+      setPlayerInviteShare({
+        message,
+        phone: null,
+        title: `Invite ${playerName}`,
+        emailSubject: `Join FriendlyBall — ${playerName}`,
+      });
+    } finally {
+      setInvitingPlayerId(null);
+    }
   };
 
   const removePlayer = async (playerId: string, _playerName?: string) => {
@@ -4180,8 +4224,15 @@ export default function EventDetailPage() {
                             {ep.player.name}
                             {isGuest && <span className="text-[9px] text-amber-700 not-italic font-normal ml-1">(guest)</span>}
                           </span>
-                          {ep.player.hasAccount === false && canAddToTeam && (
-                            <span title="Unclaimed account" className="text-[9px] shrink-0 bg-amber-100 text-amber-700 px-1 rounded-full font-medium">⚠</span>
+                          {/* Unclaimed-account marker. App Admins get a
+                              clickable icon (one-tap invite-to-claim);
+                              other viewers see it as a passive flag. */}
+                          {ep.player.hasAccount === false && (
+                            <UnclaimedIcon
+                              onClick={isAdmin ? () => invitePlayerToApp(ep.player.id, ep.player.name) : undefined}
+                              disabled={invitingPlayerId === ep.player.id}
+                              title={isAdmin ? "Invite to claim account" : "Unclaimed account"}
+                            />
                           )}
                           {/* Always show the participation icon (no
                               inline flip), and a single pen icon when
@@ -4404,6 +4455,16 @@ export default function EventDetailPage() {
         {canManage && (
           <p className="text-[11px] text-muted italic text-center mt-2">Tap name to check in/out · Tap matches/⏸ to pause</p>
         )}
+        {/* Per-player invite (UnclaimedIcon click on a participant row).
+            Fixed-position overlay, so DOM placement here is fine. */}
+        <ShareInviteModal
+          open={!!playerInviteShare}
+          message={playerInviteShare?.message ?? ""}
+          phone={playerInviteShare?.phone ?? null}
+          title={playerInviteShare?.title}
+          emailSubject={playerInviteShare?.emailSubject}
+          onClose={() => setPlayerInviteShare(null)}
+        />
       </div>
     );
   };
