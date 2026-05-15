@@ -44,6 +44,12 @@ model Player {
   /// (hasAccount becomes true, the icon stops rendering).
   invitesSent      Int       @default(0)
   lastInvitedAt    DateTime?
+  /// When the player's account was first activated — either by
+  /// self-registration (POST /api/register) or by claiming an
+  /// existing Player row via invite token (POST /api/claim). Powers
+  /// the App Admin "new users" filter on /players (last 24h / 7d).
+  /// Null = no account yet (passwordHash also null).
+  accountActivatedAt DateTime?
 
   // Profile
   gender   String? // "M" | "F"

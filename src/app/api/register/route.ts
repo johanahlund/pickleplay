@@ -36,6 +36,7 @@ export async function POST(req: Request) {
       passwordHash,
       emoji: emoji || "🏓",
       role,
+      accountActivatedAt: new Date(),
     },
   });
 

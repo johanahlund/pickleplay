@@ -98,6 +98,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const country = (url.searchParams.get("country") || "").trim();
+  // App Admin filter: "24h" / "7d" — restrict to players whose accounts
+  // were activated (self-registered OR claimed via invite) in that
+  // window. Powers the "new users" stats links on /players. Unknown
+  // values are ignored.
+  const activatedSinceRaw = (url.searchParams.get("activatedSince") || "").trim();
+  const activatedSinceMs = activatedSinceRaw === "24h" ? 86_400_000
+    : activatedSinceRaw === "7d" ? 7 * 86_400_000
+    : null;
   const limitRaw = parseInt(url.searchParams.get("limit") || "100", 10);
   // Hard cap at 5000 — the add-member / add-player pickers want every
   // candidate available locally so they can filter as you type. Realistic
@@ -107,17 +115,23 @@ export async function GET(req: Request) {
     status: string;
     name?: { contains: string; mode: "insensitive" };
     country?: string;
+    accountActivatedAt?: { gte: Date };
   } = {
     status: "active",
   };
   if (q) where.name = { contains: q, mode: "insensitive" };
   if (country) where.country = country;
+  if (activatedSinceMs !== null) {
+    where.accountActivatedAt = { gte: new Date(Date.now() - activatedSinceMs) };
+  }
   // Wide type — the actual shape is determined by the `select` below.
   let players: Array<Record<string, unknown>>;
   try {
     players = await prisma.player.findMany({
     where,
-    orderBy: { rating: "desc" },
+    // When the "new users" filter is on, sort by most-recently-activated
+    // first so the freshly-joined accounts surface immediately.
+    orderBy: activatedSinceMs !== null ? { accountActivatedAt: "desc" } : { rating: "desc" },
     take: limit,
     select: {
       id: true,
@@ -139,6 +153,7 @@ export async function GET(req: Request) {
       passwordHash: true, // only used to derive hasAccount below
       invitesSent: true,
       lastInvitedAt: true,
+      accountActivatedAt: true,
       _count: { select: { matchPlayers: true } },
       clubMembers: {
         select: {

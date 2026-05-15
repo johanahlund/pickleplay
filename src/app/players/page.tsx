@@ -90,6 +90,13 @@ export default function PlayersPage() {
   // flag the user couldn't reset the filter to "All": every render that
   // saw a session country would overwrite their choice.
   const [countryDefaultApplied, setCountryDefaultApplied] = useState(false);
+  // App-admin filter: when set, restrict the list to accounts activated
+  // (self-registered OR claimed-via-invite) in that window. Driven by
+  // the "new users" stat links above the search field.
+  const [activatedSinceFilter, setActivatedSinceFilter] = useState<"24h" | "7d" | null>(null);
+  // Per-admin new-user counts shown above the list. Null until first
+  // fetch — keeps the link strip hidden so it doesn't pop in empty.
+  const [adminStats, setAdminStats] = useState<{ activated24h: number; activated7d: number } | null>(null);
   // Admin-only "Grant permissions" popup. Holds the target player id when open.
   const [grantTargetId, setGrantTargetId] = useState<string | null>(null);
   // Player ids whose clubs/ligas list is expanded past the 3-row cap.
@@ -112,12 +119,13 @@ export default function PlayersPage() {
   const [hasMore, setHasMore] = useState(false);
   const [currentLimit, setCurrentLimit] = useState(100);
 
-  const fetchPlayers = useCallback(async (limit: number, q: string, country: string) => {
+  const fetchPlayers = useCallback(async (limit: number, q: string, country: string, activatedSince: "24h" | "7d" | null) => {
     try {
       const params = new URLSearchParams();
       params.set("limit", String(limit));
       if (q.trim()) params.set("q", q.trim());
       if (country) params.set("country", country);
+      if (activatedSince) params.set("activatedSince", activatedSince);
       const r = await fetch(`/api/players?${params.toString()}`);
       if (!r.ok) {
         setPlayers([]);
@@ -149,13 +157,33 @@ export default function PlayersPage() {
     setCountryDefaultApplied(true);
   }, [session, countryDefaultApplied]);
 
-  // Initial load + debounced refetch when the search query / country changes.
+  // Initial load + debounced refetch when the search query / country
+  // / "new users" window changes. Search alone gets a 250ms debounce
+  // because it fires on every keystroke; the other filters refire
+  // immediately because they only change on direct user action.
   useEffect(() => {
     const t = setTimeout(() => {
-      void fetchPlayers(currentLimit, searchQuery, countryFilter);
+      void fetchPlayers(currentLimit, searchQuery, countryFilter, activatedSinceFilter);
     }, searchQuery ? 250 : 0);
     return () => clearTimeout(t);
-  }, [fetchPlayers, currentLimit, searchQuery, countryFilter]);
+  }, [fetchPlayers, currentLimit, searchQuery, countryFilter, activatedSinceFilter]);
+
+  // App-admin "new users" stats. Single fetch on mount; refreshes
+  // whenever the player list is refetched (so the counts stay
+  // close-enough to live without a separate poll).
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch("/api/players/stats");
+        if (!r.ok || cancelled) return;
+        const data = await r.json();
+        if (!cancelled) setAdminStats({ activated24h: data.activated24h ?? 0, activated7d: data.activated7d ?? 0 });
+      } catch { /* leave adminStats null — strip stays hidden */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAdmin, players.length]);
 
 
   const voidPlayer = async (id: string, playerName: string) => {
@@ -167,7 +195,7 @@ export default function PlayersPage() {
     });
     if (!ok) return;
     await fetch(`/api/players/${id}/void`, { method: "POST" });
-    fetchPlayers(currentLimit, searchQuery, countryFilter);
+    fetchPlayers(currentLimit, searchQuery, countryFilter, activatedSinceFilter);
   };
 
   const startEdit = (p: Player) => {
@@ -197,7 +225,7 @@ export default function PlayersPage() {
       }),
     });
     cancelEdit();
-    fetchPlayers(currentLimit, searchQuery, countryFilter);
+    fetchPlayers(currentLimit, searchQuery, countryFilter, activatedSinceFilter);
   };
 
   const invitePlayer = async (player: Player) => {
@@ -310,7 +338,7 @@ export default function PlayersPage() {
       await alertDialog(data.error || "Failed to update");
       return;
     }
-    fetchPlayers(currentLimit, searchQuery, countryFilter);
+    fetchPlayers(currentLimit, searchQuery, countryFilter, activatedSinceFilter);
   };
 
   const resetRating = async (player: Player) => {
@@ -326,7 +354,7 @@ export default function PlayersPage() {
       await alertDialog("Failed to reset rating");
       return;
     }
-    fetchPlayers(currentLimit, searchQuery, countryFilter);
+    fetchPlayers(currentLimit, searchQuery, countryFilter, activatedSinceFilter);
   };
 
   const isUnclaimed = (p: Player) => !p.hasAccount;
@@ -357,6 +385,45 @@ export default function PlayersPage() {
           </Link>
         )}
       </div>
+
+      {/* App-admin "new users" strip — two clickable counts that filter
+          the list to recently-activated accounts (self-registered OR
+          claimed via invite). Click again to clear. Hidden when stats
+          haven't loaded yet so it doesn't pop in empty. */}
+      {isAdmin && adminStats && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted">New users:</span>
+          <button
+            type="button"
+            onClick={() => setActivatedSinceFilter((prev) => prev === "24h" ? null : "24h")}
+            className={`px-2 py-1 rounded-lg font-medium transition-colors ${
+              activatedSinceFilter === "24h"
+                ? "bg-action text-white"
+                : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+            }`}
+          >
+            {adminStats.activated24h} · 24h
+          </button>
+          <button
+            type="button"
+            onClick={() => setActivatedSinceFilter((prev) => prev === "7d" ? null : "7d")}
+            className={`px-2 py-1 rounded-lg font-medium transition-colors ${
+              activatedSinceFilter === "7d"
+                ? "bg-action text-white"
+                : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+            }`}
+          >
+            {adminStats.activated7d} · 7d
+          </button>
+          {activatedSinceFilter && (
+            <button
+              type="button"
+              onClick={() => setActivatedSinceFilter(null)}
+              className="text-muted hover:text-foreground underline ml-1"
+            >Clear</button>
+          )}
+        </div>
+      )}
 
       <ClearInput value={searchQuery} onChange={setSearchQuery} placeholder="Search players..." className="text-base" />
       {/* Country + Clubs filters on one row when there's space. Country

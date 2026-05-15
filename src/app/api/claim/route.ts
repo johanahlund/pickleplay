@@ -103,6 +103,7 @@ export async function POST(req: Request) {
       passwordHash,
       role,
       inviteToken: null, // Clear the token — one-time use
+      accountActivatedAt: new Date(),
     },
   });
 
