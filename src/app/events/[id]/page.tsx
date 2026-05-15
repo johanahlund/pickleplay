@@ -1279,7 +1279,11 @@ export default function EventDetailPage() {
       if (!await confirmDialog({ title: "Delete scored match?", message: "This match has scores. Rankings will be reversed.", confirmText: "Continue", danger: true })) return;
       if (!await confirmDialog({ message: "Are you absolutely sure? This cannot be undone.", confirmText: "Delete", danger: true })) return;
     } else {
-      if (!await confirmDialog({ message: "Delete this match?", confirmText: "Delete", danger: true })) return;
+      // Two-step confirm even for unscored matches — the action is
+      // irreversible and the action sheet sits next to other quick
+      // edits, so a single dialog is too easy to fat-finger.
+      if (!await confirmDialog({ title: "Delete this match?", message: "Players will be unassigned and the slot disappears from the schedule.", confirmText: "Continue", danger: true })) return;
+      if (!await confirmDialog({ message: "Are you sure? This cannot be undone.", confirmText: "Delete", danger: true })) return;
     }
     // Optimistic: remove from UI immediately
     setEvent((prev) => prev ? { ...prev, matches: prev.matches.filter((m) => m.id !== matchId) } : prev);
@@ -5472,14 +5476,14 @@ export default function EventDetailPage() {
       // play actually begins.
       const linkedMatch = event.matches.find((m) => m.leagueGame?.id === g.id);
       const matchStatus = linkedMatch?.status ?? null;
-      // Permission: any of
-      //   - schedule editor (admin / organizer / league admin / host capt.)
-      //   - player rostered into THIS specific game (LeagueGamePlayer)
-      //   - the existing Match's assigned scorer
+      // Permission for the schedule-card action cluster (Start /
+      // Pause / Resume / Stop). Schedule editors and the assigned
+      // scorer only — match players cannot self-start their own
+      // matches. Per user direction: starting belongs with the
+      // people running the match-day, not the players in it.
       const gpRows = (g as { gamePlayers?: { playerId: string; team?: number | null }[] }).gamePlayers ?? [];
-      const isPlayerInGame = !!userId && gpRows.some((gp) => gp.playerId === userId);
       const isMatchScorer = !!userId && linkedMatch?.scorerId === userId;
-      const canActOnMatch = canEditSchedule || isPlayerInGame || isMatchScorer;
+      const canActOnMatch = canEditSchedule || isMatchScorer;
       // Both teams need at least one assigned player before a Match
       // can be created. Disabled (with tooltip) otherwise.
       const team1Assigned = gpRows.filter((gp) => gp.team === 1).length > 0;
@@ -5869,12 +5873,6 @@ export default function EventDetailPage() {
                   onClick={() => clearTime(g)}
                   className="text-muted hover:text-danger text-xs px-1"
                 >✕</button>
-                <button
-                  type="button"
-                  title={`Auto-fill subsequent times on this court (+${scheduleDurationMin}m each, stops at next fixed time)`}
-                  onClick={() => autoFillDown(g)}
-                  className="text-action hover:underline text-[10px] px-1 font-semibold"
-                >↓ fill</button>
               </>
             )}
             <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full border ${g.kind === "principal" ? "border-emerald-400 text-emerald-700 bg-emerald-50" : g.kind === "league" ? "border-blue-400 text-blue-700 bg-blue-50" : "border-gray-300 text-muted bg-gray-50"}`}>
@@ -6056,28 +6054,31 @@ export default function EventDetailPage() {
                 <span aria-hidden>⏹</span><span>Stop</span>
               </button>
             )}
-            {/* Set / change scorer — schedule editors only. Opens the
-                action sheet with the picker already expanded so the
-                operator lands one tap from the recipient list. */}
+            {/* Edit — schedule editors only. Opens the full action
+                sheet (edit / delete / set scorer / announce / etc).
+                Doubles as the entry point to the scorer picker; we
+                pre-expand the picker on open so the most common
+                action is one tap away. */}
             {canEditSchedule && linkedMatch && (
               <button
                 type="button"
                 onClick={openScorerPicker}
                 title={linkedMatch.scorerId
-                  ? `Scorer: ${linkedMatch.scorer?.name?.split(" ")[0] ?? "set"} — tap to change`
-                  : "Assign a scorer for this match"}
+                  ? `Scorer: ${linkedMatch.scorer?.name?.split(" ")[0] ?? "set"} — tap to edit`
+                  : "Edit this match"}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-border text-foreground hover:bg-gray-50 active:bg-gray-100 inline-flex items-center gap-1"
-                aria-label="Set scorer"
+                aria-label="Edit match"
               >
-                <span aria-hidden>📋</span>
-                <span>{linkedMatch.scorerId
-                  ? (linkedMatch.scorer?.name?.split(" ")[0] ?? "Scorer")
-                  : "Scorer"}</span>
+                <span aria-hidden>✏️</span>
+                <span>Edit</span>
               </button>
             )}
-            {/* Scorer — opens the existing ScorerTracker overlay for
-                this match. Only meaningful once a Match exists. */}
-            {linkedMatch && (matchStatus === "active" || matchStatus === "paused" || matchStatus === "pending") && (
+            {/* Scorer — opens the existing ScorerTracker overlay.
+                Visible only to the player who's been assigned as
+                scorer for this match (match.scorerId === userId).
+                Admins who want to score must first delegate it to
+                themselves via the picker, then this button appears. */}
+            {linkedMatch && isMatchScorer && (matchStatus === "active" || matchStatus === "paused" || matchStatus === "pending") && (
               <button
                 type="button"
                 onClick={openScorer}
@@ -6334,15 +6335,6 @@ export default function EventDetailPage() {
               <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
                 <div className="flex items-center justify-between gap-1 px-1">
                   <span className="text-[10px] uppercase tracking-wider text-muted font-bold">Court {n}</span>
-                  {canEditSchedule && n === 1 && numCourts > 1 && startIso && (
-                    <button
-                      type="button"
-                      onClick={copyCourt1StartToAll}
-                      title="Apply Court 1 start time to all other courts"
-                      aria-label="Copy Court 1 start to all courts"
-                      className="text-[10px] text-action font-semibold hover:underline"
-                    >→ all</button>
-                  )}
                 </div>
                 {canEditSchedule && (
                   <div className="flex items-center gap-0.5 px-1 text-[11px] tabular-nums">
@@ -6367,6 +6359,19 @@ export default function EventDetailPage() {
                     </select>
                     {startIso && (
                       <button type="button" onClick={() => writeCourtStart(n, null)} className="ml-1 text-muted hover:text-foreground text-[11px]" title="Clear start time">✕</button>
+                    )}
+                    {/* → all sits right after the clear-X, on Court 1
+                        only and only when there are other courts to
+                        copy to. Lives next to the time it operates on
+                        so it reads as "do this to all courts". */}
+                    {n === 1 && numCourts > 1 && startIso && (
+                      <button
+                        type="button"
+                        onClick={copyCourt1StartToAll}
+                        title="Apply Court 1 start time to all other courts"
+                        aria-label="Copy Court 1 start to all courts"
+                        className="ml-1 text-[10px] text-action font-semibold hover:underline"
+                      >→ all</button>
                     )}
                   </div>
                 )}
@@ -6894,6 +6899,19 @@ export default function EventDetailPage() {
     };
     const eligibleScorers = [...event.players]
       .sort((a, b) => a.player.name.localeCompare(b.player.name));
+    // Map playerId → team short-name pill text. Lets the scorer
+    // picker render a per-candidate team chip so the operator can
+    // see at a glance which side each option belongs to (handy for
+    // avoiding "scorer is on the team that's playing" footguns).
+    const playerIdToTeam = new Map<string, { id: string; name: string }>();
+    for (const lt of (event.round?.league.teams || [])) {
+      for (const tp of (lt.players || [])) {
+        const pid = (tp as { playerId?: string }).playerId;
+        if (pid) playerIdToTeam.set(pid, { id: lt.id, name: lt.name });
+      }
+    }
+    // Home / away identification for tinting the team pill.
+    const hostTeamId = event.hostTeamId ?? null;
     return (
       <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
         <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-16 mx-auto" onClick={(e) => e.stopPropagation()}>
@@ -6902,93 +6920,141 @@ export default function EventDetailPage() {
             <span className="text-sm font-semibold">Court {match.courtNum}</span>
             <span className="text-xs text-muted ml-2">{t1.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")} vs {t2.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")}</span>
           </div>
-          <div className="flex p-3 gap-3">
-            {/* Left column: Edit + Delete */}
-            {canManage && (
-              <div className="flex flex-col gap-1.5 w-24">
-                {isMatchCompleted && (isOwner || isAdmin) ? (<>
-                  <button onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit score</span></button>
-                  <button onClick={async () => { close(); if (!await confirmDialog({ message: "Clear scores and revert match to active? Rankings will be reversed.", confirmText: "Clear", danger: true })) return; await fetch(`/api/matches/${match.id}/score`, { method: "DELETE" }); await fetchEvent(); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex flex-col items-center gap-1">🔄 <span>Clear scores</span></button>
-                </>) : !isMatchCompleted ? (
-                  <button onClick={() => { close(); openEditMatch(match.id); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex flex-col items-center gap-1">✏️ <span>Edit</span></button>
-                ) : null}
-                {(isOwner || isAdmin) && (
-                  <button onClick={() => { close(); deleteMatch(match.id); }}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex flex-col items-center gap-1">🗑️ <span>Delete</span></button>
-                )}
-              </div>
-            )}
-            {/* Right column: Actions */}
-            <div className="flex-1 flex flex-col gap-1.5">
-              {isMatchActive && (canManage || match.scorerId === userId) && (
-                <button onClick={() => { setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev); setMatchTab("paused"); fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent()); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⏸️ Pause</button>
+          {/* Vertical stack — Edit / Delete are compact top-row icons,
+              Live scorer / Set scorer get the rest of the width so
+              the scorer picker (when expanded) has room. Announce is
+              a wide button just above Cancel. */}
+          <div className="flex flex-col p-3 gap-1.5">
+            {/* Top action row: small Edit + Delete on the left, the
+                scorer actions filling the rest. */}
+            <div className="flex items-stretch gap-1.5">
+              {canManage && (
+                <>
+                  {isMatchCompleted && (isOwner || isAdmin) ? (
+                    <>
+                      <button
+                        onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
+                        title="Edit score"
+                        aria-label="Edit score"
+                        className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center"
+                      >✏️</button>
+                      <button
+                        onClick={async () => { close(); if (!await confirmDialog({ message: "Clear scores and revert match to active? Rankings will be reversed.", confirmText: "Clear", danger: true })) return; await fetch(`/api/matches/${match.id}/score`, { method: "DELETE" }); await fetchEvent(); }}
+                        title="Clear scores"
+                        aria-label="Clear scores"
+                        className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center"
+                      >🔄</button>
+                    </>
+                  ) : !isMatchCompleted ? (
+                    <button
+                      onClick={() => { close(); openEditMatch(match.id); }}
+                      title="Edit match"
+                      aria-label="Edit match"
+                      className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center"
+                    >✏️</button>
+                  ) : null}
+                  {(isOwner || isAdmin) && (
+                    <button
+                      onClick={() => { close(); deleteMatch(match.id); }}
+                      title="Delete match"
+                      aria-label="Delete match"
+                      className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center"
+                    >🗑️</button>
+                  )}
+                </>
               )}
+              {/* Live scorer + Set scorer take the remaining width on
+                  the same row, so users land here looking at the four
+                  match-action buttons grouped together. */}
               {!isMatchCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
-                <button onClick={async () => { close(); if (match.scorerId === userId || (scorerMatchId === match.id && scorerLiveScore)) { setScorerMatchId(match.id); setScorerVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setScorerMatchId(match.id); setScorerVisible(true); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📋 Live scorer</button>
+                <button
+                  onClick={async () => { close(); if (match.scorerId === userId || (scorerMatchId === match.id && scorerLiveScore)) { setScorerMatchId(match.id); setScorerVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setScorerMatchId(match.id); setScorerVisible(true); }}
+                  className="flex-1 min-w-0 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+                >📋 Live scorer</button>
               )}
               {canSetScorer && (
                 <button
                   onClick={() => setScorerPickerOpen((v) => !v)}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+                  className="flex-1 min-w-0 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
                 >
-                  📋 {match.scorerId ? `Scorer: ${match.scorer?.name?.split(" ")[0] ?? "set"}` : "Set scorer"}
+                  📋 <span className="truncate">{match.scorerId ? `Scorer: ${match.scorer?.name?.split(" ")[0] ?? "set"}` : "Set scorer"}</span>
                 </button>
               )}
-              {canSetScorer && scorerPickerOpen && (
-                <div className="border border-border rounded-xl bg-white shadow-sm max-h-64 overflow-y-auto">
-                  <div className="px-3 py-2 text-[11px] text-muted border-b border-border bg-gray-50">
-                    Tap a name to assign them as scorer for this match.
-                    {match.scorerId && (
-                      <button
-                        type="button"
-                        onClick={() => setScorer(null)}
-                        className="ml-2 text-action font-semibold hover:underline"
-                      >Clear</button>
-                    )}
-                  </div>
-                  {eligibleScorers.length === 0 ? (
-                    <div className="px-3 py-3 text-[12px] text-muted italic">Nobody is signed up to this event yet.</div>
-                  ) : (
-                    <ul className="divide-y divide-border">
-                      {eligibleScorers.map((ep) => {
-                        const isCurrent = match.scorerId === ep.player.id;
-                        return (
-                          <li key={ep.player.id}>
-                            <button
-                              type="button"
-                              onClick={() => setScorer(ep.player.id)}
-                              className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
-                            >
-                              <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                              <span className="flex-1 truncate font-medium">{ep.player.name}</span>
-                              {isCurrent && <span className="text-[10px] text-emerald-700 font-semibold">current</span>}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+            </div>
+            {/* Pause sits on its own row when match is active so it
+                doesn't crowd the top quartet. Same for Confirm score. */}
+            {isMatchActive && (canManage || match.scorerId === userId) && (
+              <button
+                onClick={() => { setEvent((prev) => prev ? { ...prev, matches: prev.matches.map((m) => m.id === match.id ? { ...m, status: "paused" } : m) } : prev); setMatchTab("paused"); fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paused" }) }).then(() => fetchEvent()); close(); }}
+                className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+              >⏸️ Pause</button>
+            )}
+            {isMatchCompleted && match.rankingMode === "approval" && !match.scoreConfirmed && (
+              <button
+                onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); close(); }}
+                className="py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2"
+              >✓ Confirm score</button>
+            )}
+            {/* Scorer picker — full-width row (more horizontal space
+                for the user list + team pills). */}
+            {canSetScorer && scorerPickerOpen && (
+              <div className="border border-border rounded-xl bg-white shadow-sm max-h-64 overflow-y-auto">
+                <div className="px-3 py-2 text-[11px] text-muted border-b border-border bg-gray-50">
+                  Tap a name to assign them as scorer for this match.
+                  {match.scorerId && (
+                    <button
+                      type="button"
+                      onClick={() => setScorer(null)}
+                      className="ml-2 text-action font-semibold hover:underline"
+                    >Clear</button>
                   )}
                 </div>
-              )}
-              {!isMatchCompleted && (
-                <button onClick={() => { setFocusedMatchId(match.id); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📺 Focus view</button>
-              )}
-              {(canManage || match.scorerId === userId) && (
-                <button onClick={() => { if (typeof window !== "undefined" && window.speechSynthesis?.speaking) stopAnnouncement(); else { const n1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => p.player.name); const n2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => p.player.name); sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, n1, n2, event.pairingMode === "king_of_court")); } close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">🔊 {isMatchCompleted ? "Announce result" : "Announce"}</button>
-              )}
-              {isMatchCompleted && match.rankingMode === "approval" && !match.scoreConfirmed && (
-                <button onClick={async () => { await fetch(`/api/matches/${match.id}/score`, { method: "PATCH" }); await fetchEvent(); close(); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2">✓ Confirm score</button>
-              )}
-            </div>
+                {eligibleScorers.length === 0 ? (
+                  <div className="px-3 py-3 text-[12px] text-muted italic">Nobody is signed up to this event yet.</div>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {eligibleScorers.map((ep) => {
+                      const isCurrent = match.scorerId === ep.player.id;
+                      const team = playerIdToTeam.get(ep.player.id);
+                      const isHostSide = team?.id === hostTeamId;
+                      return (
+                        <li key={ep.player.id}>
+                          <button
+                            type="button"
+                            onClick={() => setScorer(ep.player.id)}
+                            className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
+                          >
+                            <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                            <span className="flex-1 truncate font-medium">{ep.player.name}</span>
+                            {team && (
+                              <span
+                                className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                  isHostSide
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-sky-100 text-sky-800"
+                                }`}
+                                title={`Team: ${team.name}`}
+                              >{team.name}</span>
+                            )}
+                            {isCurrent && <span className="text-[10px] text-emerald-700 font-semibold">current</span>}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
+          {/* Announce: wide button just above Cancel. */}
+          {(canManage || match.scorerId === userId) && (
+            <div className="px-3 pb-1">
+              <button
+                onClick={() => { if (typeof window !== "undefined" && window.speechSynthesis?.speaking) stopAnnouncement(); else { const n1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => p.player.name); const n2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => p.player.name); sendAnnouncement(id as string, formatMatchAnnouncement(match.courtNum, n1, n2, event.pairingMode === "king_of_court")); } close(); }}
+                className="w-full py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+              >🔊 {isMatchCompleted ? "Announce result" : "Announce"}</button>
+            </div>
+          )}
           <div className="px-4 pb-4 pt-2">
             <button onClick={close} className="w-full py-3 rounded-xl bg-gray-100 text-sm font-medium">Cancel</button>
           </div>
