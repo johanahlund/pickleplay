@@ -1792,63 +1792,40 @@ export default function EventDetailPage() {
     // Show preview skeleton only after mount (sessionStorage is client-only).
     // Before mount, show spinner to match server render and avoid hydration mismatch.
     const showPreview = mounted && preview;
+    // Reuse the real AppHeader so the loading hero matches the loaded
+    // hero's position, size, and main-content offset exactly (it's
+    // position:fixed + runs useHeaderHeightSync). Previously we
+    // hand-rolled a static green block, which made the hero "jump"
+    // from normal flow to fixed when data arrived.
+    const previewBack = showPreview && preview.round?.league
+      ? { label: leagueShortName(preview.round.league), href: `/leagues/${preview.round.league.id}?tab=rounds` }
+      : { label: "Events", href: "/events" };
+    const previewTitle = showPreview
+      ? (preview.round
+          ? (() => {
+              const teamNames = (preview.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+              const roundLabel = preview.round.name || `Round ${preview.round.roundNumber}`;
+              return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
+            })()
+          : preview.name)
+      : "Loading…";
+    const previewMeta = showPreview
+      ? [
+          preview.club && (preview.club.shortName?.trim() || preview.club.name),
+          new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }),
+          new Date(preview.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+          `${preview.numCourts} court${preview.numCourts !== 1 ? "s" : ""}`,
+        ].filter(Boolean).join(" · ")
+      : undefined;
     return (
       <div className="-mx-4 -mt-2">
-        {/* Hero header skeleton — green background */}
-        <div style={{ background: "linear-gradient(180deg, #15803d 0%, #14532d 100%)", color: "#fff", paddingBottom: 18, paddingTop: "max(env(safe-area-inset-top, 0px), 12px)" }}>
-          <div className="flex items-center justify-between px-3.5" style={{ height: 48 }}>
-            <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
-          </div>
-          {/* Back link: mirror the loaded view's logic — league events
-              link back to the league's Rounds tab with the short league
-              name; otherwise back to /events. Otherwise the skeleton
-              flashes "Events" before swapping to "[LeagueShort]". */}
-          <div className="px-4 pt-0.5">
-            {showPreview && preview.round?.league ? (
-              <Link href={`/leagues/${preview.round.league.id}?tab=rounds`} className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
-                <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                {leagueShortName(preview.round.league)}
-              </Link>
-            ) : (
-              <Link href="/events" className="inline-flex items-center gap-1 text-[15px] font-medium no-underline" style={{ color: "#d9f99d" }}>
-                <svg width={10} height={16} viewBox="0 0 10 16"><path d="M8 2 L2 8 L8 14" fill="none" stroke="#d9f99d" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                Events
-              </Link>
-            )}
-          </div>
-          <div className="px-4 pt-1 pb-2">
-            {showPreview ? (
-              <>
-                {/* Title: for league events the stored event.name is the
-                    long "{league}: {teams} — {round}" string. The league
-                    is already in the back chevron, so the hero only
-                    needs the match-day-specific bit. */}
-                <h2 className="text-2xl font-extrabold" style={{ letterSpacing: "-0.02em" }}>
-                  {preview.round
-                    ? (() => {
-                        const teamNames = (preview.leagueTeams || []).map((t) => t.team.name).join(" vs ");
-                        const roundLabel = preview.round.name || `Round ${preview.round.roundNumber}`;
-                        return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
-                      })()
-                    : preview.name}
-                </h2>
-                <p className="text-sm text-white/80 mt-2">
-                  {preview.club && `${(preview.club.shortName?.trim() || preview.club.name)} · `}
-                  {new Date(preview.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-                  {" · "}
-                  {new Date(preview.date).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                  {" · "}
-                  {preview.numCourts} court{preview.numCourts !== 1 ? "s" : ""}
-                </p>
-              </>
-            ) : (
-              <div className="animate-pulse space-y-2 py-1">
-                <div className="h-6 bg-white/20 rounded w-2/3" />
-                <div className="h-4 bg-white/10 rounded w-1/2" />
-              </div>
-            )}
-          </div>
-        </div>
+        <AppHeader
+          variant="hero"
+          back={previewBack}
+          title={previewTitle}
+          meta={previewMeta}
+          user={{ initial: session?.user?.name?.[0]?.toUpperCase() ?? "?", href: "/profile" }}
+        />
         {/* Content skeleton */}
         <div className="px-4 pt-4 space-y-3">
           <div className={`${frameClass} p-4 animate-pulse`}>
