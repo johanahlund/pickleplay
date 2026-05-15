@@ -565,6 +565,7 @@ export default function EventDetailPage() {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [playerGenderFilter, setPlayerGenderFilter] = useState<string | null>(null);
+  const [playerParticipationFilter, setPlayerParticipationFilter] = useState<"playing" | "social" | "attending" | null>(null);
   // For league events: filter the participants list by which team they're on.
   // null = both teams. "home" = host team (first leagueTeam if no hostTeamId).
   // "away" = the other team.
@@ -3585,33 +3586,49 @@ export default function EventDetailPage() {
         )}
         <div className="flex items-center gap-2">
           {event.players.length > 6 && (
-            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search participants..." className="text-base flex-1" />
+            <ClearInput value={playerSearch} onChange={setPlayerSearch} placeholder="Search..." className="text-base flex-1 min-w-0 max-w-[210px]" />
           )}
           {/* Home/Away toggle — only meaningful on league events with 2 teams.
               Click toggles in/out (no "Both" pill needed; deselected = both). */}
           {event.round && (event.leagueTeams?.length ?? 0) === 2 && (
-            <div className="flex gap-1 shrink-0">
+            <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
               {(["home", "away"] as const).map((side) => (
                 <button key={side}
                   onClick={() => setPlayerTeamFilter((prev) => prev === side ? null : side)}
                   title={side === "home" ? "Home only" : "Away only"}
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    playerTeamFilter === side ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                  className={`px-1.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    playerTeamFilter === side ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
                   }`}>{side === "home" ? "🏠" : "✈️"}</button>
               ))}
             </div>
           )}
+          {/* Participation toggle — selected-for-match / social / attend.
+              "playing" means in a lineup slot (not merely wanting to play). */}
+          <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
+            {[
+              { value: "playing" as const, label: "🏆", title: "Selected for a match" },
+              { value: "social" as const, label: "🎾", title: "Social play" },
+              { value: "attending" as const, label: "👋", title: "Just attending" },
+            ].map((p) => (
+              <button key={p.value}
+                onClick={() => setPlayerParticipationFilter((prev) => prev === p.value ? null : p.value)}
+                title={p.title}
+                className={`px-1.5 py-1 rounded-md text-sm font-medium transition-all ${
+                  playerParticipationFilter === p.value ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
+                }`}>{p.label}</button>
+            ))}
+          </div>
           {/* Gender toggle — click to filter to that gender, click again to clear.
               No "All" button: deselected = all. */}
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
             {[
               { value: "M" as const, label: "♂" },
               { value: "F" as const, label: "♀" },
             ].map((g) => (
               <button key={g.label}
                 onClick={() => setPlayerGenderFilter((prev) => prev === g.value ? null : g.value)}
-                className={`px-2 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  playerGenderFilter === g.value ? "bg-selected text-white" : "bg-gray-100 text-foreground"
+                className={`px-1.5 py-1 rounded-md text-sm font-medium transition-all ${
+                  playerGenderFilter === g.value ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
                 }`}>{g.label}</button>
             ))}
           </div>
@@ -4032,13 +4049,42 @@ export default function EventDetailPage() {
             // (signupPreferences._guestTeamId === et.teamId). Guests render
             // with a "guest" badge so it's clear they aren't on the team
             // roster — see the row rendering below.
-            const eps = event.players
+            const teamEps = event.players
               .filter((ep) => {
                 if (rosterIds.has(ep.player.id)) return true;
                 const prefs = (ep.signupPreferences || {}) as Record<string, unknown>;
                 return typeof prefs._guestTeamId === "string" && prefs._guestTeamId === et.teamId;
-              })
-              .filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter))
+              });
+            // Counts reflect what's currently visible (after search /
+            // gender / participation filters), so the header doubles as
+            // a live result-count when filters are active.
+            // Effective participation per player — same logic used in the
+            // row icon below ("ix"). "playing" filter means actually
+            // selected for a match (in a lineup slot), not merely wanting
+            // to play.
+            const participationOf = (ep: typeof event.players[number]): "playing" | "social" | "attending" | "unavailable" => {
+              const prefs = (ep.signupPreferences || {}) as Record<string, { level?: string } | string | undefined>;
+              const sentinel = typeof prefs._intent === "string" ? prefs._intent : null;
+              const hasAnyPlay = Object.entries(prefs).some(([k, v]) => k !== "_intent" && k !== "_guestTeamId" && typeof v === "object" && v !== null && (v.level === "prefer" || v.level === "ok"));
+              const preferred: "playing" | "social" | "attending" | "unavailable" =
+                ep.status === "unavailable" ? "unavailable"
+                  : sentinel === "social" ? "social"
+                  : sentinel === "attending" ? "attending"
+                  : hasAnyPlay ? "playing"
+                  : "attending";
+              const inLineup = linedUpPlayerIds.has(ep.player.id);
+              return preferred === "unavailable" ? "unavailable"
+                : inLineup ? "playing"
+                : lineupFixed ? (sentinel === "social" || preferred === "social" ? "social" : "attending")
+                : preferred;
+            };
+            const matchesParticipation = (ep: typeof event.players[number]): boolean => {
+              if (!playerParticipationFilter) return true;
+              if (playerParticipationFilter === "playing") return linedUpPlayerIds.has(ep.player.id);
+              return participationOf(ep) === playerParticipationFilter;
+            };
+            const eps = teamEps
+              .filter((ep) => nameMatchesSearch(ep.player.name, playerSearch) && (!playerGenderFilter || ep.player.gender === playerGenderFilter) && matchesParticipation(ep))
               .sort((a, b) => a.player.name.localeCompare(b.player.name));
             // Roster players who haven't signed up yet — eligible for the
             // "+ Add" picker. Note: these are full team rosters from the
@@ -4050,9 +4096,20 @@ export default function EventDetailPage() {
               .sort((a, b) => a.player.name.localeCompare(b.player.name));
             return (
               <div key={et.teamId} className="min-w-0">
-                <div className="text-[11px] font-bold text-foreground px-1 py-1 flex items-center gap-1">
+                <div className="text-[11px] font-bold text-foreground px-1 py-1 flex items-center gap-1 flex-wrap">
                   {et.team.name}
                   {et.lineupReady && <span className="text-emerald-600 text-[10px]">✓ ready</span>}
+                  {teamEps.length > 0 && (() => {
+                    const visibleFemale = eps.filter((ep) => ep.player.gender === "F").length;
+                    const visibleMale = eps.filter((ep) => ep.player.gender === "M").length;
+                    return (
+                      <span className="text-[10px] font-normal text-muted ml-auto">
+                        {eps.length}
+                        <span className="text-pink-500 ml-1">{visibleFemale}♀</span>
+                        <span className="text-blue-500 ml-1">{visibleMale}♂</span>
+                      </span>
+                    );
+                  })()}
                 </div>
                 {hidden ? (
                   <p className="text-[11px] text-muted italic px-1 py-2">
