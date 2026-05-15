@@ -36,6 +36,14 @@ model Player {
   canCreateClubs   Boolean @default(false) // granted by app admin
   inviteToken      String? @unique // for claim-account flow
   resetToken       String? @unique // for password reset flow
+  /// Invite-tracking. Incremented when an admin / captain explicitly
+  /// marks an invite as sent (the modal's "I already sent this" button
+  /// or after tapping WhatsApp/Email/Copy). Used to colour the
+  /// UnclaimedIcon by recency: gray (never), amber (≤7d), faded
+  /// (>7d). Cleared implicitly once the player claims an account
+  /// (hasAccount becomes true, the icon stops rendering).
+  invitesSent      Int       @default(0)
+  lastInvitedAt    DateTime?
 
   // Profile
   gender   String? // "M" | "F"

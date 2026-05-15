@@ -137,6 +137,8 @@ export async function GET(req: Request) {
       duprRating: true,
       whatsappVisibility: true,
       passwordHash: true, // only used to derive hasAccount below
+      invitesSent: true,
+      lastInvitedAt: true,
       _count: { select: { matchPlayers: true } },
       clubMembers: {
         select: {

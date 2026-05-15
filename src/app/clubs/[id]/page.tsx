@@ -91,6 +91,8 @@ interface Player {
   role?: string;
   country?: string | null;
   hasAccount?: boolean;
+  invitesSent?: number;
+  lastInvitedAt?: string | null;
   /** Club memberships from /api/players. Used to disambiguate players
    *  with similar names in the Add Member picker. */
   clubs?: { id: string; name: string; emoji: string; role: string }[];
@@ -291,7 +293,8 @@ function SwipeableMemberRow({
             <UnclaimedIcon
               onClick={onInvite}
               disabled={inviting}
-              title={onInvite ? `Invite ${p.name} to claim their FriendlyBall account` : undefined}
+              invitesSent={p.invitesSent}
+              lastInvitedAt={p.lastInvitedAt}
             />
           )}
         </div>
@@ -433,7 +436,10 @@ export default function ClubDetailPage() {
 
   const [club, setClub] = useState<Club | null>(null);
   const [loading, setLoading] = useState(true);
-  const [inviteShare, setInviteShare] = useState<{ message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
+  // `playerId` is set only for per-member 1:1 invites — the club-level
+  // share (no specific recipient) leaves it undefined so `onMarkSent`
+  // is not wired and the "I already sent this" button stays hidden.
+  const [inviteShare, setInviteShare] = useState<{ playerId?: string; message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
   const [invitingMemberId, setInvitingMemberId] = useState<string | null>(null);
   // Tab is URL-synced via useSearchParams. setTab writes via
   // history.replaceState; the effect below reflects URL → state on
@@ -689,6 +695,7 @@ export default function ClubDetailPage() {
         blurb: club.description || null,
       };
       setInviteShare({
+        playerId: m.playerId,
         message: buildClubInvitePersonal(ctx, { name: m.player.name, claimUrl }),
         phone: m.player.phone ?? null,
         title: `Invite ${m.player.name}`,
@@ -696,6 +703,27 @@ export default function ClubDetailPage() {
       });
     } finally {
       setInvitingMemberId(null);
+    }
+  };
+
+  // Record an invite as actually sent. Drives the colour-coded
+  // UnclaimedIcon on member rows; optimistic update so the colour
+  // shifts the moment "I already sent this" is tapped.
+  const markPlayerInviteSent = async (playerId: string) => {
+    const nowIso = new Date().toISOString();
+    setClub((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        members: prev.members.map((m) => m.playerId === playerId
+          ? { ...m, player: { ...m.player, invitesSent: (m.player.invitesSent || 0) + 1, lastInvitedAt: nowIso } }
+          : m),
+      };
+    });
+    try {
+      await fetch(`/api/players/${playerId}/invite/sent`, { method: "POST" });
+    } catch {
+      // Optimistic update stays; next fetch reconciles.
     }
   };
 
@@ -2448,6 +2476,7 @@ export default function ClubDetailPage() {
         phone={inviteShare?.phone ?? null}
         title={inviteShare?.title}
         emailSubject={inviteShare?.emailSubject}
+        onMarkSent={inviteShare?.playerId ? () => markPlayerInviteSent(inviteShare.playerId!) : undefined}
         onClose={() => setInviteShare(null)}
       />
     </div>

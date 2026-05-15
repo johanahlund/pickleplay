@@ -23,6 +23,8 @@ export async function GET(
               phone: true, photoUrl: true, wins: true, losses: true, role: true,
               whatsappVisibility: true,
               passwordHash: true,
+              invitesSent: true,
+              lastInvitedAt: true,
               canCreateLeagues: true,
               canCreateClubs: true,
               clubMembers: { select: { clubId: true } },
@@ -52,6 +54,10 @@ export async function GET(
     phone: string | null; photoUrl: string | null; wins: number; losses: number; role: string;
     whatsappVisibility: string;
     passwordHash: string | null;
+    invitesSent: number;
+    lastInvitedAt: Date | null;
+    canCreateLeagues: boolean;
+    canCreateClubs: boolean;
     clubMembers: { clubId: string }[];
     leagueTeamPlayers: { teamId: string }[];
     eventPlayers: { eventId: string }[];

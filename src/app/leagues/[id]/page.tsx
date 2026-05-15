@@ -34,7 +34,7 @@ interface LeaguePreview {
   club?: { id: string; name: string; emoji: string; logoUrl?: string | null } | null;
 }
 
-interface Player { id: string; name: string; email?: string | null; photoUrl?: string | null; rating: number; gender?: string | null; hasAccount?: boolean }
+interface Player { id: string; name: string; email?: string | null; photoUrl?: string | null; rating: number; gender?: string | null; hasAccount?: boolean; invitesSent?: number; lastInvitedAt?: string | null }
 interface LeagueTeam {
   id: string; name: string; slogan?: string | null;
   logoUrl: string | null; photoUrl?: string | null;
@@ -293,7 +293,8 @@ function TeamRoster({ team, canEdit, removingPlayerId, onRemove, onEditPrefs, fo
               <UnclaimedIcon
                 onClick={onInvite ? () => onInvite(tp.playerId, tp.player.name) : undefined}
                 disabled={invitingPlayerId === tp.playerId}
-                title={onInvite ? "Invite to claim account" : undefined}
+                invitesSent={tp.player.invitesSent}
+                lastInvitedAt={tp.player.lastInvitedAt}
               />
             )}
             <span className="text-xs text-muted">{tp.player.rating.toFixed(0)}</span>
@@ -1063,6 +1064,7 @@ export default function LeagueDetailPage() {
   // ShareInviteModal for that one recipient.
   const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
   const [inviteShare, setInviteShare] = useState<{
+    playerId: string;
     message: string;
     phone: string | null;
     title?: string;
@@ -1765,6 +1767,7 @@ export default function LeagueDetailPage() {
         { forClaim: true },
       );
       setInviteShare({
+        playerId,
         message,
         phone: null,
         title: `Invite ${playerName}`,
@@ -1772,6 +1775,30 @@ export default function LeagueDetailPage() {
       });
     } finally {
       setInvitingPlayerId(null);
+    }
+  };
+
+  // Record an invite as actually sent. Optimistically bumps the
+  // matching team-roster row so the UnclaimedIcon colour shifts
+  // immediately; reconciled by the next refresh.
+  const markPlayerInviteSent = async (playerId: string) => {
+    const nowIso = new Date().toISOString();
+    setLeague((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        teams: prev.teams.map((t) => ({
+          ...t,
+          players: t.players.map((tp) => tp.playerId === playerId
+            ? { ...tp, player: { ...tp.player, invitesSent: (tp.player.invitesSent || 0) + 1, lastInvitedAt: nowIso } }
+            : tp),
+        })),
+      };
+    });
+    try {
+      await fetch(`/api/players/${playerId}/invite/sent`, { method: "POST" });
+    } catch {
+      // Optimistic update stays; next fetch reconciles.
     }
   };
 
@@ -3955,6 +3982,7 @@ export default function LeagueDetailPage() {
         phone={inviteShare?.phone ?? null}
         title={inviteShare?.title}
         emailSubject={inviteShare?.emailSubject}
+        onMarkSent={inviteShare ? () => markPlayerInviteSent(inviteShare.playerId) : undefined}
         onClose={() => setInviteShare(null)}
       />
 

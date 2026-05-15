@@ -52,6 +52,8 @@ interface Player {
   clubs?: PlayerClub[];
   leagueTeams?: PlayerLeagueTeam[];
   _count?: { matchPlayers: number };
+  invitesSent?: number;
+  lastInvitedAt?: string | null;
 }
 
 // Short-name a league: take the first two whitespace-separated tokens.
@@ -69,7 +71,7 @@ export default function PlayersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [invitingId, setInvitingId] = useState<string | null>(null);
-  const [inviteShare, setInviteShare] = useState<{ message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
+  const [inviteShare, setInviteShare] = useState<{ playerId: string; message: string; phone: string | null; title: string; emailSubject: string } | null>(null);
 
   useHideBottomNav(!!editingId);
   const [resettingId, setResettingId] = useState<string | null>(null);
@@ -223,6 +225,7 @@ export default function PlayersPage() {
       // for the primary intended channel. The chooser offers WhatsApp
       // (deep-linked to the player's phone when known), Copy, and Email.
       setInviteShare({
+        playerId: player.id,
         message: shareText,
         phone: player.phone ?? null,
         title: `Invite ${player.name}`,
@@ -230,6 +233,22 @@ export default function PlayersPage() {
       });
     } finally {
       setInvitingId(null);
+    }
+  };
+
+  // Record an invite as actually sent. The colour-coded UnclaimedIcon
+  // depends on `lastInvitedAt`, so we bump the player's row optimistically
+  // before the network call resolves — the colour shifts instantly. On
+  // error the next refresh corrects the count.
+  const markPlayerInviteSent = async (playerId: string) => {
+    const nowIso = new Date().toISOString();
+    setPlayers((prev) => prev.map((p) => p.id === playerId
+      ? { ...p, invitesSent: (p.invitesSent || 0) + 1, lastInvitedAt: nowIso }
+      : p));
+    try {
+      await fetch(`/api/players/${playerId}/invite/sent`, { method: "POST" });
+    } catch {
+      // Optimistic update stays; next fetch reconciles.
     }
   };
 
@@ -577,7 +596,8 @@ export default function PlayersPage() {
                               <UnclaimedIcon
                                 onClick={isAdmin ? () => invitePlayer(p) : undefined}
                                 disabled={invitingId === p.id}
-                                title={isAdmin ? "Invite to claim account" : undefined}
+                                invitesSent={p.invitesSent}
+                                lastInvitedAt={p.lastInvitedAt}
                               />
                             )}
                             {p.phone && (
@@ -776,6 +796,7 @@ export default function PlayersPage() {
         phone={inviteShare?.phone ?? null}
         title={inviteShare?.title}
         emailSubject={inviteShare?.emailSubject}
+        onMarkSent={inviteShare ? () => markPlayerInviteSent(inviteShare.playerId) : undefined}
         onClose={() => setInviteShare(null)}
       />
     </div>

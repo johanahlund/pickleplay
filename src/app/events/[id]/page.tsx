@@ -60,6 +60,8 @@ interface Player {
   gender?: string | null;
   phone?: string | null;
   hasAccount?: boolean;
+  invitesSent?: number;
+  lastInvitedAt?: string | null;
   country?: string | null;
   clubs?: { id: string; name: string; emoji: string; role: string }[];
 }
@@ -578,6 +580,7 @@ export default function EventDetailPage() {
   // see the icon as a passive status indicator.
   const [invitingPlayerId, setInvitingPlayerId] = useState<string | null>(null);
   const [playerInviteShare, setPlayerInviteShare] = useState<{
+    playerId: string;
     message: string;
     phone: string | null;
     title?: string;
@@ -1330,6 +1333,7 @@ export default function EventDetailPage() {
         { forClaim: true },
       );
       setPlayerInviteShare({
+        playerId,
         message,
         phone: null,
         title: `Invite ${playerName}`,
@@ -1337,6 +1341,27 @@ export default function EventDetailPage() {
       });
     } finally {
       setInvitingPlayerId(null);
+    }
+  };
+
+  // Record an invite as actually sent. Drives the colour-coded
+  // UnclaimedIcon — optimistic local bump so the colour shifts the
+  // instant the user taps "I already sent this".
+  const markPlayerInviteSent = async (playerId: string) => {
+    const nowIso = new Date().toISOString();
+    setEvent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        players: prev.players.map((ep) => ep.player.id === playerId
+          ? { ...ep, player: { ...ep.player, invitesSent: (ep.player.invitesSent || 0) + 1, lastInvitedAt: nowIso } }
+          : ep),
+      };
+    });
+    try {
+      await fetch(`/api/players/${playerId}/invite/sent`, { method: "POST" });
+    } catch {
+      // Optimistic update stays; next fetch reconciles.
     }
   };
 
@@ -4203,12 +4228,15 @@ export default function EventDetailPage() {
                           </span>
                           {/* Unclaimed-account marker. App Admins get a
                               clickable icon (one-tap invite-to-claim);
-                              other viewers see it as a passive flag. */}
+                              other viewers see it as a passive flag. Colour
+                              shifts with `lastInvitedAt` so the chasing
+                              status is visible at a glance. */}
                           {ep.player.hasAccount === false && (
                             <UnclaimedIcon
                               onClick={isAdmin ? () => invitePlayerToApp(ep.player.id, ep.player.name) : undefined}
                               disabled={invitingPlayerId === ep.player.id}
-                              title={isAdmin ? "Invite to claim account" : "Unclaimed account"}
+                              invitesSent={ep.player.invitesSent}
+                              lastInvitedAt={ep.player.lastInvitedAt}
                             />
                           )}
                           {/* Always show the participation icon (no
@@ -4256,7 +4284,7 @@ export default function EventDetailPage() {
             const canAddToTeam = isCaptainHere || isLeagueAdmin || isAdmin;
             if (!canAddToTeam) return null;
             const signedUpIds = new Set(event.players.map((p) => p.player.id));
-            type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl?: string | null; gender?: string | null; hasAccount?: boolean } };
+            type RosterPlayer = { playerId: string; player: { id: string; name: string; photoUrl?: string | null; gender?: string | null; hasAccount?: boolean; invitesSent?: number; lastInvitedAt?: string | null } };
             const rosterUnsigned = ((fullTeam?.players ?? []) as RosterPlayer[])
               .filter((tp) => !signedUpIds.has(tp.playerId))
               .sort((a, b) => a.player.name.localeCompare(b.player.name));
@@ -4335,7 +4363,10 @@ export default function EventDetailPage() {
                         {tp.player.gender && <span className={`text-xs shrink-0 ${tp.player.gender === "F" ? "text-pink-500" : "text-blue-500"}`}>{tp.player.gender === "F" ? "♀" : "♂"}</span>}
                         <span className="text-sm flex-1">{tp.player.name}</span>
                         {tp.player.hasAccount === false && (
-                          <span title="Unclaimed account" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">⚠ unclaimed</span>
+                          <UnclaimedIcon
+                            invitesSent={tp.player.invitesSent}
+                            lastInvitedAt={tp.player.lastInvitedAt}
+                          />
                         )}
                       </button>
                     );
@@ -4440,6 +4471,7 @@ export default function EventDetailPage() {
           phone={playerInviteShare?.phone ?? null}
           title={playerInviteShare?.title}
           emailSubject={playerInviteShare?.emailSubject}
+          onMarkSent={playerInviteShare ? () => markPlayerInviteSent(playerInviteShare.playerId) : undefined}
           onClose={() => setPlayerInviteShare(null)}
         />
       </div>

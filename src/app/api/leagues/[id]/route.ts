@@ -39,7 +39,7 @@ export async function GET(
           club: { select: { id: true, name: true, emoji: true, logoUrl: true } },
           captain: { select: { id: true, name: true, email: true, photoUrl: true } },
           viceCaptain: { select: { id: true, name: true, email: true, photoUrl: true } },
-          players: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true, rating: true, gender: true, passwordHash: true } } } },
+          players: { include: { player: { select: { id: true, name: true, email: true, photoUrl: true, rating: true, gender: true, passwordHash: true, invitesSent: true, lastInvitedAt: true } } } },
           _count: { select: { players: true } },
         },
       },

@@ -21,6 +21,11 @@ interface Props {
    *  action buttons. Lets callers open the modal as instant feedback
    *  for the tap while the message text is still being prepared. */
   loading?: boolean;
+  /** When provided, render an extra "I already sent this" button that
+   *  records an invite without opening any share intent. Used by the
+   *  invite-to-claim flow so the icon colour reflects real sends, not
+   *  WhatsApp / Email taps that the user may have abandoned. */
+  onMarkSent?: () => void;
   onClose: () => void;
 }
 
@@ -37,7 +42,7 @@ function sanitizePhone(p?: string | null): string {
  * macOS), so we present an explicit three-way choice that works
  * uniformly on every platform.
  */
-export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", loading = false, onClose }: Props) {
+export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", loading = false, onMarkSent, onClose }: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -135,6 +140,24 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
             </svg>
             <span>Send by email</span>
           </a>
+          {/* Tap to record an invite without opening any share intent.
+              Used when the caller already sent the invite some other
+              way, or tapped WhatsApp/Email but couldn't find the
+              contact — keeps the colour-coded ⭕ honest. */}
+          {onMarkSent && (
+            <button
+              type="button"
+              onClick={() => { onMarkSent(); onClose(); }}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-300 text-foreground hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
+              aria-label="Mark this invite as already sent"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span>I already sent this</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
