@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireScheduleEditor, requireAuth } from "@/lib/auth";
 import { safePlayerSelect } from "@/lib/playerSelect";
 import { NextResponse } from "next/server";
 
@@ -58,20 +58,38 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAdmin();
-  } catch {
-    return NextResponse.json({ error: "Admin required" }, { status: 403 });
-  }
-
   const { id } = await params;
 
+  // Need the match to know its eventId before we can run the gate.
   const match = await prisma.match.findUnique({
     where: { id },
     include: { players: { include: { player: { select: safePlayerSelect } } } },
   });
   if (!match) {
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  }
+
+  // Permission: schedule editor (admin / event organizer / league
+  // admin / host team captain or vice). Widened from app-admin-only
+  // so event organisers don't 403 on their own match-day's matches —
+  // the UI surfaces Delete to them and the server must agree.
+  try {
+    await requireScheduleEditor(match.eventId);
+  } catch {
+    // Fall back to allowing event helpers too, mirroring
+    // requireEventManager-style permissiveness for non-league
+    // events. App admin / event organiser is already covered.
+    try {
+      const user = await requireAuth();
+      const helper = user.role === "admin" ? true : !!(await prisma.eventHelper.findFirst({
+        where: { eventId: match.eventId, playerId: user.id },
+      }));
+      if (!helper) {
+        return NextResponse.json({ error: "Not authorised to delete this match." }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Login required" }, { status: 401 });
+    }
   }
 
   // If completed, reverse ELO changes before deleting

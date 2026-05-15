@@ -34,6 +34,19 @@ export async function POST(
     await requireScheduleEditor(eventId);
   } catch (e) { return authErrorResponse(e); }
 
+  // Reject if the schedule is locked. Bulk arrange would silently
+  // overwrite a frozen layout otherwise.
+  const lockCheck = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { scheduleLocked: true },
+  });
+  if (lockCheck?.scheduleLocked) {
+    return NextResponse.json(
+      { error: "Schedule is locked. Unlock it before rearranging." },
+      { status: 409 },
+    );
+  }
+
   const body = await req.json().catch(() => null);
   if (!body || !Array.isArray(body.assignments)) {
     return NextResponse.json({ error: "Invalid body — expected { assignments: [...] }" }, { status: 400 });

@@ -404,7 +404,8 @@ export async function PATCH(
   // else must not be able to touch these.
   const touchesSchedule = body.matchDurationMin !== undefined
     || body.courtStartTimes !== undefined
-    || body.categoryDurationOverrides !== undefined;
+    || body.categoryDurationOverrides !== undefined
+    || body.scheduleLocked !== undefined;
   if (touchesSchedule) {
     try {
       await requireScheduleEditor(id);
@@ -413,6 +414,25 @@ export async function PATCH(
         { error: "Only the event organizer, league admin, or host team captain/vice can change scheduling fields." },
         { status: 403 },
       );
+    }
+    // Lock check: if the schedule is currently locked, reject ALL
+    // schedule-field writes EXCEPT the scheduleLocked toggle itself
+    // (otherwise locking would trap us — no way to unlock).
+    const isToggleOnly = body.scheduleLocked !== undefined
+      && body.matchDurationMin === undefined
+      && body.courtStartTimes === undefined
+      && body.categoryDurationOverrides === undefined;
+    if (!isToggleOnly) {
+      const current = await prisma.event.findUnique({
+        where: { id },
+        select: { scheduleLocked: true },
+      });
+      if (current?.scheduleLocked) {
+        return NextResponse.json(
+          { error: "Schedule is locked. Unlock it before editing scheduling fields." },
+          { status: 409 },
+        );
+      }
     }
   }
   const { name, numCourts, date, endDate, openSignup, visibility } = body;
@@ -479,6 +499,9 @@ export async function PATCH(
     } else {
       return NextResponse.json({ error: "categoryDurationOverrides must be an object" }, { status: 400 });
     }
+  }
+  if (body.scheduleLocked !== undefined) {
+    eventData.scheduleLocked = !!body.scheduleLocked;
   }
   if (date !== undefined) {
     const parsed = new Date(date);

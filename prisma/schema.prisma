@@ -225,6 +225,14 @@ model Event {
   /// teams to also have lineupReady=false (mutual unlock) — neither
   /// team can stealth-edit after seeing the opponent's lineup.
   lineupTotalLocked Boolean @default(false)
+  /// Schedule-wide lock. When true the league-event schedule view
+  /// is read-only: time / court / displayOrder edits, anchor toggles,
+  /// per-game move D-pad, court-start-time controls, and the
+  /// auto-arrange Run button are all disabled. Per-game and bulk-
+  /// arrange API routes reject mutations while this is true. Toggled
+  /// by schedule editors (see `requireScheduleEditor`) to lock things
+  /// down once the schedule is final and prevent accidental moves.
+  scheduleLocked Boolean @default(false)
   numCourts  Int       @default(2)
   openSignup Boolean   @default(true) // kept for backwards compat
   visibility String    @default("visible") // kept for backwards compat
@@ -808,6 +816,8 @@ model LeagueGame {
   /// auto-schedule preserves anchored times and chains subsequent
   /// matches forward from each anchor. False = auto-derived.
   scheduleAnchored Boolean @default(false)
+  /// (also see Event.scheduleLocked — when true the whole schedule
+  /// is read-only; per-game scheduling endpoints reject mutations).
   /// Per-match overrides of the category's scoringFormat / winBy.
   /// Set by the host team's captain (or league organizer) when a
   /// specific match needs a different format. Null = inherit the

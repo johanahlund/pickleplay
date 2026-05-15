@@ -104,6 +104,19 @@ export async function PATCH(
         { status: 403 },
       );
     }
+    // Reject if the schedule is locked. The toggle lives on the
+    // event PATCH; this route is for per-match schedule edits which
+    // should be blocked entirely while locked.
+    const evLock = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { scheduleLocked: true },
+    });
+    if (evLock?.scheduleLocked) {
+      return NextResponse.json(
+        { error: "Schedule is locked. Unlock it before editing scheduling fields." },
+        { status: 409 },
+      );
+    }
     if (body.scheduledAt !== undefined) {
       if (body.scheduledAt) {
         const d = new Date(body.scheduledAt);

@@ -197,6 +197,7 @@ interface Event {
   leagueTeams?: LeagueEventTeamLink[];
   hostTeamId?: string | null;
   lineupTotalLocked?: boolean;
+  scheduleLocked?: boolean;
   // Flat list of league games (per-category match slots) for this event.
   // Used by the participants list to flag who is/isn't in a lineup yet.
   // gamePlayers is filtered server-side to the viewer's side until both
@@ -741,6 +742,10 @@ export default function EventDetailPage() {
   // preview: per-gameId override map. When non-null the schedule grid
   //   renders the proposed assignment, with Approve/Cancel banner.
   const [arrangePolicy, setArrangePolicy] = useState<"principal-first" | "league-first">("principal-first");
+  // Auto-arrange UI is collapsed by default — it's destructive enough
+  // that we don't want a single accidental tap to reflow the whole
+  // grid. Expand reveals the policy select + blue Run button.
+  const [autoArrangeOpen, setAutoArrangeOpen] = useState(false);
   const [arrangePreview, setArrangePreview] = useState<Record<string, { courtNum: number; displayOrder: number }> | null>(null);
   const [arrangeApplying, setArrangeApplying] = useState(false);
   // Game id currently showing the court-picker popup. Null = no popup open.
@@ -4524,10 +4529,16 @@ export default function EventDetailPage() {
     }
     return true;
   };
-  const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesMatchFilters);
-  const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesMatchFilters);
-  const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesMatchFilters);
-  const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesMatchFilters);
+  // League Matches own their own UI inside the league schedule grid
+  // (renderLineup → renderGameRow with the per-card Start / Pause /
+  // Score cluster). Filtering them out of the legacy IN PLAY /
+  // UPCOMING / COMPLETED lists prevents the same match showing up
+  // twice on the page — once in the grid, once in the old list view.
+  const passesLegacyMatchView = (m: Match) => !m.leagueGame && passesMatchFilters(m);
+  const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesLegacyMatchView);
+  const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesLegacyMatchView);
+  const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesLegacyMatchView);
+  const pendingMatches = event.matches.filter((m) => m.status === "pending").filter(passesLegacyMatchView);
   // Sort key for league matches: scheduled time (set by the host captain on
   // the lineup builder) → court → fallback to round/court for non-league.
   const matchSortKey = (m: Match): [number, number, number] => {
@@ -5305,6 +5316,28 @@ export default function EventDetailPage() {
     const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
     const isHostCaptain = !!userId && !!host && (host.captainId === userId || host.viceCaptainId === userId);
     const canEditSchedule = isAdmin || isOwner || isLeagueOrganizerOfEvent || isHostCaptain;
+    const scheduleLocked = !!event.scheduleLocked;
+    // Combined: has permission AND the schedule is currently unlocked.
+    // Used for the time / court / displayOrder / anchor / move /
+    // auto-arrange / court-start-time controls. Locking it once the
+    // schedule is final prevents fat-finger moves on play day.
+    // canActOnMatch (Start/Pause/Resume/Stop) intentionally stays on
+    // canEditSchedule alone — running matches must still work while
+    // the schedule itself is frozen.
+    const scheduleEditable = canEditSchedule && !scheduleLocked;
+
+    // Toggle the schedule lock. Schedule editors only — server gate
+    // mirrors. Optimistic: flip local state immediately so the lock
+    // indicator changes the instant the operator taps it.
+    const toggleScheduleLocked = () => {
+      const next = !scheduleLocked;
+      setEvent((prev) => prev ? { ...prev, scheduleLocked: next } : prev);
+      fetch(`/api/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduleLocked: next }),
+      }).finally(() => { void fetchEvent(); });
+    };
 
     // Lineup visibility — pre-reveal show "Team A vs Team B"; post-reveal show players.
     const revealed = !!event.lineupTotalLocked
@@ -5752,7 +5785,7 @@ export default function EventDetailPage() {
             </div>
           );
         })}
-        {canEditSchedule && (
+        {scheduleEditable && (
           <button
             type="button"
             onClick={() => {
@@ -5778,7 +5811,7 @@ export default function EventDetailPage() {
         )}
         <div className="contents">
           <div className="flex items-center gap-1.5">
-            {canEditSchedule ? (
+            {scheduleEditable ? (
               // Two-select time picker. We can't use <input type="time">
               // because iOS Safari ignores `step` and shows a per-minute
               // wheel. With native <select>s the minutes column is exactly
@@ -5830,7 +5863,7 @@ export default function EventDetailPage() {
                 {hhmm || <span className="text-muted font-normal">—</span>}
               </span>
             )}
-            {canEditSchedule && hhmm && (
+            {scheduleEditable && hhmm && (
               <>
                 {g.scheduleAnchored && (
                   <button
@@ -5875,7 +5908,45 @@ export default function EventDetailPage() {
                 >✕</button>
               </>
             )}
-            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full border ${g.kind === "principal" ? "border-emerald-400 text-emerald-700 bg-emerald-50" : g.kind === "league" ? "border-blue-400 text-blue-700 bg-blue-50" : "border-gray-300 text-muted bg-gray-50"}`}>
+            {/* Small C{n} court pill — pushed right with ml-auto so
+                it sits next to the Kind badge. Tap opens the existing
+                court-picker dropdown; selecting a court moves the
+                match to that column (at the end of its list). */}
+            {scheduleEditable && (
+              <div className="relative ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setCourtPickerGameId(courtPickerGameId === g.id ? null : g.id)}
+                  className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${g.courtNum != null ? "border-blue-400 bg-blue-50 text-blue-700" : "border-border bg-gray-50 text-muted"} hover:brightness-95`}
+                  title={g.courtNum != null ? `Court ${g.courtNum} — tap to move` : "No court — tap to assign"}
+                  aria-label={g.courtNum != null ? `Court ${g.courtNum}` : "No court"}
+                >
+                  {g.courtNum != null ? `C${g.courtNum}` : "—"}
+                </button>
+                {courtPickerGameId === g.id && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setCourtPickerGameId(null)} />
+                    <div className="absolute z-40 mt-1 right-0 bg-white border border-border rounded-lg shadow-lg p-2 flex flex-wrap gap-1.5 w-[180px]">
+                      <button
+                        type="button"
+                        onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, ""); }}
+                        className={`w-9 h-9 rounded-md border text-[11px] font-medium ${g.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
+                        title="No court"
+                      >—</button>
+                      {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, String(n)); }}
+                          className={`w-9 h-9 rounded-md border text-sm font-bold ${g.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
+                        >{n}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${g.kind === "principal" ? "border-emerald-400 text-emerald-700 bg-emerald-50" : g.kind === "league" ? "border-blue-400 text-blue-700 bg-blue-50" : "border-gray-300 text-muted bg-gray-50"}`}>
               {g.kind === "principal" ? "P" : g.kind === "league" ? "L" : "F"}
             </span>
           </div>
@@ -5934,40 +6005,6 @@ export default function EventDetailPage() {
               </div>
             );
           })()}
-          {canEditSchedule && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setCourtPickerGameId(courtPickerGameId === g.id ? null : g.id)}
-                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${g.courtNum != null ? "border-blue-400 bg-blue-50 text-blue-700" : "border-border bg-gray-50 text-muted"} hover:brightness-95`}
-              >
-                <span>{g.courtNum != null ? `Court ${g.courtNum}` : "no court"}</span>
-                <span className="text-[9px] opacity-70">▾</span>
-              </button>
-              {courtPickerGameId === g.id && (
-                <>
-                  {/* Backdrop closes the popup on outside click. */}
-                  <div className="fixed inset-0 z-30" onClick={() => setCourtPickerGameId(null)} />
-                  <div className="absolute z-40 mt-1 left-0 bg-white border border-border rounded-lg shadow-lg p-2 flex flex-wrap gap-1.5 w-[180px]">
-                    <button
-                      type="button"
-                      onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, ""); }}
-                      className={`w-9 h-9 rounded-md border text-[11px] font-medium ${g.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
-                      title="No court"
-                    >—</button>
-                    {Array.from({ length: numCourts }, (_, i) => i + 1).map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={async () => { setCourtPickerGameId(null); await onCourtChange(g, String(n)); }}
-                        className={`w-9 h-9 rounded-md border text-sm font-bold ${g.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
-                      >{n}</button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
         {rowConflicts.length > 0 && (() => {
           // Dedupe by player + kind for the inline pill — one player
@@ -6126,10 +6163,36 @@ export default function EventDetailPage() {
 
     return (
       <div className={`${frameClass} p-3 space-y-2`}>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="text-base font-bold">Schedule</div>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold">Schedule</span>
+            {scheduleLocked && (
+              <span className="text-[10px] uppercase tracking-wider font-bold text-amber-700 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                <span aria-hidden>🔒</span>LOCKED
+              </span>
+            )}
+          </div>
+          {/* Open/Locked toggle — visible to schedule editors only.
+              When locked the time / court / displayOrder / anchor /
+              move / auto-arrange / court-start controls are all
+              disabled to prevent accidental moves on play day. */}
+          {canEditSchedule && (
+            <button
+              type="button"
+              onClick={toggleScheduleLocked}
+              title={scheduleLocked ? "Schedule is locked — tap to unlock for edits" : "Schedule is open for edits — tap to lock and prevent accidental moves"}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 transition-colors ${
+                scheduleLocked
+                  ? "bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700"
+                  : "bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700"
+              }`}
+            >
+              <span aria-hidden>{scheduleLocked ? "🔒" : "🔓"}</span>
+              <span>{scheduleLocked ? "Locked" : "Open"}</span>
+            </button>
+          )}
         </div>
-        {canEditSchedule && (
+        {scheduleEditable && (
           <div className="mt-3 flex items-end gap-6 flex-wrap">
             <div>
               <div className="text-[11px] text-muted mb-1">Per match (min)</div>
@@ -6210,10 +6273,10 @@ export default function EventDetailPage() {
             </div>
           </div>
         )}
-        {canEditSchedule && (
+        {scheduleEditable && (
           <p className="text-[10px] text-muted">– = inherit from round / league. Per-category overrides live in the Category overrides panel above.</p>
         )}
-        {canEditSchedule && (
+        {scheduleEditable && (
           arrangePreview ? (
             <div className="mb-2 rounded-xl border border-action/40 bg-action/5 p-2.5 flex items-center justify-between gap-2 text-[12px]">
               <span className="font-semibold text-action">
@@ -6235,23 +6298,46 @@ export default function EventDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="mb-2 rounded-xl border border-border bg-white p-2.5 flex items-center justify-between gap-2 text-[12px]">
-              <span className="font-semibold">Auto-arrange schedule</span>
-              <div className="flex items-center gap-2 shrink-0">
-                <select
-                  value={arrangePolicy}
-                  onChange={(e) => setArrangePolicy(e.target.value as "principal-first" | "league-first")}
-                  className="text-[11px] border border-border rounded px-1.5 py-0.5 bg-white"
-                >
-                  <option value="principal-first">Principal → League → Friendly</option>
-                  <option value="league-first">League → Principal → Friendly</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={runArrange}
-                  className="text-[11px] font-semibold border border-action text-action bg-white hover:bg-action/5 rounded-md px-3 py-1"
-                >Run</button>
-              </div>
+            <div className="mb-2 rounded-xl border border-border bg-white">
+              {/* Single tappable row when collapsed. Reveals the policy
+                  select + blue Run button when open. */}
+              <button
+                type="button"
+                onClick={() => setAutoArrangeOpen((v) => !v)}
+                className="w-full p-2.5 flex items-center justify-between gap-2 text-[12px]"
+                aria-expanded={autoArrangeOpen}
+              >
+                <span className="font-semibold">Auto arrange schedule</span>
+                <span className={`text-muted transition-transform ${autoArrangeOpen ? "rotate-180" : ""}`} aria-hidden>▾</span>
+              </button>
+              {autoArrangeOpen && (
+                <div className="border-t border-border p-2.5 space-y-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted mb-1">Policy</div>
+                    <select
+                      value={arrangePolicy}
+                      onChange={(e) => setArrangePolicy(e.target.value as "principal-first" | "league-first")}
+                      className="w-full text-[12px] border border-border rounded px-2 py-1 bg-white"
+                    >
+                      <option value="principal-first">Principal → League → Friendly</option>
+                      <option value="league-first">League → Principal → Friendly</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await confirmDialog({
+                        title: "Run auto-arrange?",
+                        message: "This will reorder all unplayed matches across courts using the chosen policy. You'll see a preview before any change is applied.",
+                        confirmText: "Run",
+                      });
+                      if (!ok) return;
+                      runArrange();
+                    }}
+                    className="w-full text-[12px] font-semibold bg-sky-600 text-white hover:bg-sky-700 active:bg-sky-800 rounded-md px-3 py-2"
+                  >Run auto-arrange</button>
+                </div>
+              )}
             </div>
           )
         )}
@@ -6336,7 +6422,7 @@ export default function EventDetailPage() {
                 <div className="flex items-center justify-between gap-1 px-1">
                   <span className="text-[10px] uppercase tracking-wider text-muted font-bold">Court {n}</span>
                 </div>
-                {canEditSchedule && (
+                {scheduleEditable && (
                   <div className="flex items-center gap-0.5 px-1 text-[11px] tabular-nums">
                     <span className="text-muted text-[10px] mr-1">starts</span>
                     <select
@@ -6375,7 +6461,7 @@ export default function EventDetailPage() {
                     )}
                   </div>
                 )}
-                {!canEditSchedule && startIso && (
+                {!scheduleEditable && startIso && (
                   <div className="px-1 text-[11px] text-muted">starts {String(startHh).padStart(2, "0")}:{String(startMm).padStart(2, "0")}</div>
                 )}
                 {colGames.length > 0 ? colGames.map(renderGameRow) : (
@@ -6953,7 +7039,13 @@ export default function EventDetailPage() {
                       className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center"
                     >✏️</button>
                   ) : null}
-                  {(isOwner || isAdmin) && (
+                  {/* Delete — schedule editors (admin / organizer /
+                      league admin / host team captain) on league
+                      events; (isOwner || isAdmin) on non-league. The
+                      action sheet's wider canManage gate is already
+                      around this column, so just OR in canSetScorer
+                      which carries the league-schedule-editor check. */}
+                  {(isOwner || isAdmin || canSetScorer) && (
                     <button
                       onClick={() => { close(); deleteMatch(match.id); }}
                       title="Delete match"
