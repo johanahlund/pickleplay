@@ -19,12 +19,38 @@ export async function PATCH(
   const body = await req.json();
   const { status, scorerId, swapWithMatchId } = body;
 
-  // Check authorization: match player, event manager, or app admin
+  // Check authorization: match player, event manager, or app admin.
+  // For league events also allow the league admin (creator/deputy)
+  // and the host team's captain/vice — they need to delegate scorer
+  // / start matches without being a player themselves.
   const isMatchPlayer = match.players.some((p) => p.playerId === user.id);
   const isAdmin = user.role === "admin";
   const isOwner = match.event.createdById === user.id;
   const isHelper = await prisma.eventHelper.findFirst({ where: { eventId: match.eventId, playerId: user.id } });
-  const isAuthorized = isMatchPlayer || isAdmin || isOwner || !!isHelper;
+  let isLeagueOrHostAdmin = false;
+  if (!(isMatchPlayer || isAdmin || isOwner || !!isHelper)) {
+    const eventCtx = await prisma.event.findUnique({
+      where: { id: match.eventId },
+      select: {
+        hostTeamId: true,
+        round: { select: { league: { select: { createdById: true, deputyId: true } } } },
+      },
+    });
+    const league = eventCtx?.round?.league;
+    if (league && (league.createdById === user.id || league.deputyId === user.id)) {
+      isLeagueOrHostAdmin = true;
+    }
+    if (!isLeagueOrHostAdmin && eventCtx?.hostTeamId) {
+      const host = await prisma.leagueTeam.findUnique({
+        where: { id: eventCtx.hostTeamId },
+        select: { captainId: true, viceCaptainId: true },
+      });
+      if (host && (host.captainId === user.id || host.viceCaptainId === user.id)) {
+        isLeagueOrHostAdmin = true;
+      }
+    }
+  }
+  const isAuthorized = isMatchPlayer || isAdmin || isOwner || !!isHelper || isLeagueOrHostAdmin;
 
   if (!isAuthorized) {
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });

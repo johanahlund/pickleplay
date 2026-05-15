@@ -780,6 +780,11 @@ export default function EventDetailPage() {
   const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
   const [scorerMatchId, setScorerMatchId] = useState<string | null>(null);
   const [actionSheetMatchId, setActionSheetMatchId] = useState<string | null>(null);
+  // Open state for the "Set scorer" picker inside the match action
+  // sheet. Schedule editors only — lets them delegate live scoring to
+  // anyone signed up to the event (a parent on the sidelines, a
+  // teammate not playing this match, etc).
+  const [scorerPickerOpen, setScorerPickerOpen] = useState(false);
   const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
   const [scorerVisible, setScorerVisible] = useState(false);
   const [scorerLiveScore, setScorerLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
@@ -5938,7 +5943,7 @@ export default function EventDetailPage() {
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-sky-500 text-white hover:bg-sky-600 active:bg-sky-700 inline-flex items-center gap-1"
                 aria-label="Open scorer view"
               >
-                <span aria-hidden>🎯</span><span>Score</span>
+                <span aria-hidden>📋</span><span>Score</span>
               </button>
             )}
           </div>
@@ -6721,7 +6726,32 @@ export default function EventDetailPage() {
     const t2 = match.players.filter((p: MatchPlayer) => p.team === 2);
     const isMatchCompleted = match.status === "completed";
     const isMatchActive = match.status === "active";
-    const close = () => setActionSheetMatchId(null);
+    const close = () => { setActionSheetMatchId(null); setScorerPickerOpen(false); };
+    // "Set scorer" delegation — league events only, gated to the same
+    // schedule-editor set as the rest of the league-schedule controls
+    // (app admin / event organizer / league admin / host team captain
+    // or vice). Visitor-team captains and helpers can't delegate.
+    const allLeagueTeams = event.round?.league.teams || [];
+    const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
+    const isHostCaptain = !!userId && !!host && (host.captainId === userId || host.viceCaptainId === userId);
+    const canSetScorer = !!event.round && (isAdmin || isOwner || isLeagueOrganizerOfEvent || isHostCaptain) && !isMatchCompleted;
+    const setScorer = async (newScorerId: string | null) => {
+      // Optimistic local update so the action sheet reflects the new
+      // assignment instantly even before the network round-trip.
+      setEvent((prev) => prev ? {
+        ...prev,
+        matches: prev.matches.map((m) => m.id === match.id ? { ...m, scorerId: newScorerId ?? undefined } : m),
+      } : prev);
+      setScorerPickerOpen(false);
+      await fetch(`/api/matches/${match.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scorerId: newScorerId }),
+      });
+      await fetchEvent();
+    };
+    const eligibleScorers = [...event.players]
+      .sort((a, b) => a.player.name.localeCompare(b.player.name));
     return (
       <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
         <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-16 mx-auto" onClick={(e) => e.stopPropagation()}>
@@ -6757,7 +6787,51 @@ export default function EventDetailPage() {
               )}
               {!isMatchCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
                 <button onClick={async () => { close(); if (match.scorerId === userId || (scorerMatchId === match.id && scorerLiveScore)) { setScorerMatchId(match.id); setScorerVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setScorerMatchId(match.id); setScorerVisible(true); }}
-                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">⚖️ Live scorer</button>
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2">📋 Live scorer</button>
+              )}
+              {canSetScorer && (
+                <button
+                  onClick={() => setScorerPickerOpen((v) => !v)}
+                  className="py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+                >
+                  📋 {match.scorerId ? `Scorer: ${match.scorer?.name?.split(" ")[0] ?? "set"}` : "Set scorer"}
+                </button>
+              )}
+              {canSetScorer && scorerPickerOpen && (
+                <div className="border border-border rounded-xl bg-white shadow-sm max-h-64 overflow-y-auto">
+                  <div className="px-3 py-2 text-[11px] text-muted border-b border-border bg-gray-50">
+                    Tap a name to assign them as scorer for this match.
+                    {match.scorerId && (
+                      <button
+                        type="button"
+                        onClick={() => setScorer(null)}
+                        className="ml-2 text-action font-semibold hover:underline"
+                      >Clear</button>
+                    )}
+                  </div>
+                  {eligibleScorers.length === 0 ? (
+                    <div className="px-3 py-3 text-[12px] text-muted italic">Nobody is signed up to this event yet.</div>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {eligibleScorers.map((ep) => {
+                        const isCurrent = match.scorerId === ep.player.id;
+                        return (
+                          <li key={ep.player.id}>
+                            <button
+                              type="button"
+                              onClick={() => setScorer(ep.player.id)}
+                              className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
+                            >
+                              <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
+                              <span className="flex-1 truncate font-medium">{ep.player.name}</span>
+                              {isCurrent && <span className="text-[10px] text-emerald-700 font-semibold">current</span>}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               )}
               {!isMatchCompleted && (
                 <button onClick={() => { setFocusedMatchId(match.id); close(); }}
