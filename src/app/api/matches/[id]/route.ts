@@ -66,6 +66,20 @@ export async function PATCH(
     if (status === "active" && !match.startedAt) {
       data.startedAt = new Date();
     }
+    // "Stop" semantics: reverting to pending clears startedAt so the
+    // schedule card flips back to its ▶ Start appearance. Block this
+    // if any point has been recorded — the API shouldn't let a half-
+    // played match be silently rewound.
+    if (status === "pending") {
+      const totalPoints = match.players.reduce((sum, p) => sum + (p.score ?? 0), 0);
+      if (totalPoints > 0) {
+        return NextResponse.json(
+          { error: "Cannot revert to unstarted — points have already been scored." },
+          { status: 400 },
+        );
+      }
+      data.startedAt = null;
+    }
   }
 
   if (scorerId !== undefined) {

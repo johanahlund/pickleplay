@@ -5535,6 +5535,37 @@ export default function EventDetailPage() {
         });
         await fetchEvent();
       };
+      // "Stop" reverts a paused-with-no-points match back to pending +
+      // clears startedAt — the card flips back to ▶ Start. Cheaper
+      // than deleting the Match (keeps MatchPlayer rows + the
+      // LeagueGame.matchId link so re-starting is instant).
+      const stopMatch = async () => {
+        if (!linkedMatch) return;
+        setEvent((prev) => prev ? {
+          ...prev,
+          matches: prev.matches.map((m) => m.id === linkedMatch.id
+            ? { ...m, status: "pending", startedAt: null }
+            : m),
+        } : prev);
+        await fetch(`/api/matches/${linkedMatch.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "pending" }),
+        });
+        await fetchEvent();
+      };
+      // Has any point been recorded? Sum across both teams' MatchPlayer
+      // scores. Anything > 0 means real play happened and we hide Stop.
+      const matchPoints = (linkedMatch?.players ?? []).reduce((sum, p) => sum + (p.score ?? 0), 0);
+      const canStopMatch = !!linkedMatch && matchStatus === "paused" && matchPoints === 0;
+      // Open the action sheet with the scorer picker already expanded.
+      // One-tap from the schedule grid to the Set Scorer flow instead
+      // of "tap card body → action sheet → 📋 Set scorer".
+      const openScorerPicker = () => {
+        if (!linkedMatch) return;
+        setActionSheetMatchId(linkedMatch.id);
+        setScorerPickerOpen(true);
+      };
       const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
       const isMoving = movingScheduleId === g.id;
       const col = colOf(g);
@@ -5931,6 +5962,37 @@ export default function EventDetailPage() {
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 inline-flex items-center gap-1"
               >
                 <span aria-hidden>▶</span><span>Resume</span>
+              </button>
+            )}
+            {/* Stop — only when paused with zero points. Reverts the
+                match to pending so the card shows just ▶ Start again. */}
+            {canStopMatch && (
+              <button
+                type="button"
+                onClick={stopMatch}
+                title="Stop — revert to unstarted (no points have been scored)"
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-200 text-foreground hover:bg-gray-300 active:bg-gray-400 inline-flex items-center gap-1"
+              >
+                <span aria-hidden>⏹</span><span>Stop</span>
+              </button>
+            )}
+            {/* Set / change scorer — schedule editors only. Opens the
+                action sheet with the picker already expanded so the
+                operator lands one tap from the recipient list. */}
+            {canEditSchedule && linkedMatch && (
+              <button
+                type="button"
+                onClick={openScorerPicker}
+                title={linkedMatch.scorerId
+                  ? `Scorer: ${linkedMatch.scorer?.name?.split(" ")[0] ?? "set"} — tap to change`
+                  : "Assign a scorer for this match"}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-border text-foreground hover:bg-gray-50 active:bg-gray-100 inline-flex items-center gap-1"
+                aria-label="Set scorer"
+              >
+                <span aria-hidden>📋</span>
+                <span>{linkedMatch.scorerId
+                  ? (linkedMatch.scorer?.name?.split(" ")[0] ?? "Scorer")
+                  : "Scorer"}</span>
               </button>
             )}
             {/* Scorer — opens the existing ScorerTracker overlay for
