@@ -91,6 +91,12 @@ interface Match {
   scorerId?: string | null;
   scorer?: { id: string; name: string; photoUrl?: string | null } | null;
   leagueGame?: { id: string; kind: "principal" | "league" | "extra"; slotNumber: number; scheduledAt?: string | null; courtNum?: number | null; category: { id: string; name: string } } | null;
+  // Best-of-N matches: per-set [team1, team2] scores. Null on
+  // single-set matches; MatchPlayer.score then holds the only
+  // score. When non-null, the card score cells render the set
+  // breakdown ("11-9, 9-11, 11-7") and MatchPlayer.score carries
+  // the set-wins count (e.g. 2-1).
+  setScores?: number[][] | null;
 }
 
 // In the new model the Event itself is the match-day. `round` is on Event,
@@ -6192,8 +6198,25 @@ export default function EventDetailPage() {
                 },
               }));
             };
+            // Multi-set matches: render the per-set breakdown
+            // ("11/9 · 9/11 · 11/7") in addition to the set-wins
+            // total. Single-set matches render the plain score
+            // as before.
+            const matchSetScores = linkedMatch?.setScores;
+            const hasMultiSet = Array.isArray(matchSetScores) && matchSetScores.length > 0;
             const renderScoreCell = (currentScore: number | null, key: "team1" | "team2") => {
               if (!canEnterScore) {
+                if (hasMultiSet) {
+                  const sets = matchSetScores as number[][];
+                  const idx: 0 | 1 = key === "team1" ? 0 : 1;
+                  return (
+                    <div className="flex flex-col items-end leading-tight">
+                      {sets.map((s, i) => (
+                        <span key={i} className="text-sm font-semibold tabular-nums">{s[idx] ?? "—"}</span>
+                      ))}
+                    </div>
+                  );
+                }
                 return (
                   <span>{currentScore != null ? currentScore : <span className="text-muted/40 font-normal">—</span>}</span>
                 );
@@ -7451,6 +7474,75 @@ export default function EventDetailPage() {
                 )}
               </div>
             )}
+            {/* Per-match scoring-format override (league matches only).
+                Two selects: format (1 to 11 / Bo3 to 15 / Rally 21 …)
+                and Win-by. Both default to the category's setting;
+                "—" clears the override. PATCHes the leagueGame so
+                ScorerTracker picks it up on next open. */}
+            {match.leagueGame && canSetScorer && event.round && (() => {
+              const leagueId = event.round.league.id;
+              const lg = match.leagueGame as { id: string; scoringFormatOverride?: string | null; winByOverride?: string | null };
+              const SCORING_OPTIONS: Array<{ value: string; label: string }> = [
+                { value: "1x11", label: "1 to 11" },
+                { value: "1x15", label: "1 to 15" },
+                { value: "1x9",  label: "1 to 9" },
+                { value: "1x7",  label: "1 to 7" },
+                { value: "3x11", label: "Bo3 to 11" },
+                { value: "3x15", label: "Bo3 to 15" },
+                { value: "1xR15", label: "Rally 15" },
+                { value: "1xR21", label: "Rally 21" },
+                { value: "3xR15", label: "Bo3 R15" },
+                { value: "3xR21", label: "Bo3 R21" },
+              ];
+              const WINBY_OPTIONS: Array<{ value: string; label: string }> = [
+                { value: "2",   label: "Win by 2" },
+                { value: "1",   label: "Win by 1 (golden)" },
+                { value: "cap15", label: "Win by 2, cap 15" },
+                { value: "cap18", label: "Win by 2, cap 18" },
+                { value: "cap21", label: "Win by 2, cap 21" },
+              ];
+              const patchOverride = async (key: "scoringFormatOverride" | "winByOverride", value: string | null) => {
+                await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lg.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ [key]: value }),
+                });
+                await fetchEvent();
+              };
+              return (
+                <div className="rounded-xl border border-border bg-white p-3 space-y-2">
+                  <div className="text-[11px] uppercase tracking-wider font-bold text-muted">Format override</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-[10px] text-muted">
+                      Scoring
+                      <select
+                        value={lg.scoringFormatOverride ?? ""}
+                        onChange={(e) => patchOverride("scoringFormatOverride", e.target.value || null)}
+                        className="mt-0.5 w-full border border-border rounded-md px-2 py-1.5 text-sm bg-white"
+                      >
+                        <option value="">— Match default —</option>
+                        {SCORING_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-[10px] text-muted">
+                      Win-by
+                      <select
+                        value={lg.winByOverride ?? ""}
+                        onChange={(e) => patchOverride("winByOverride", e.target.value || null)}
+                        className="mt-0.5 w-full border border-border rounded-md px-2 py-1.5 text-sm bg-white"
+                      >
+                        <option value="">— Match default —</option>
+                        {WINBY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           {/* Announce: wide button just above Cancel. */}
           {(canManage || match.scorerId === userId) && (
@@ -7590,11 +7682,15 @@ export default function EventDetailPage() {
           await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "active" }) });
           fetchEvent();
         }}
-        onSubmitScore={async (t1, t2) => {
+        onSubmitScore={async (t1, t2, setScores) => {
           await fetch(`/api/matches/${match.id}/score`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
+            body: JSON.stringify(
+              setScores && setScores.length > 0
+                ? { setScores }
+                : { team1Score: t1, team2Score: t2 }
+            ),
           });
           setScorerMatchId(null);
           setScorerVisible(false);

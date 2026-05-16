@@ -101,7 +101,37 @@ export async function POST(
   }
 
   const { id } = await params;
-  const { team1Score, team2Score } = await req.json();
+  const body = await req.json();
+  let { team1Score, team2Score } = body as { team1Score?: number; team2Score?: number };
+  // Optional multi-set payload: `setScores: [[t1, t2], ...]`. When
+  // present we derive set wins → match winner, persist the set
+  // array on Match.setScores, and use SET WINS (e.g. 2-1) for the
+  // top-level MatchPlayer.score so back-compat readers still see
+  // a clean winner. Detailed per-set scores live on Match.setScores.
+  const setScoresRaw = body.setScores;
+  let setScores: number[][] | null = null;
+  if (Array.isArray(setScoresRaw) && setScoresRaw.length > 0) {
+    const parsed: number[][] = [];
+    for (const s of setScoresRaw) {
+      if (!Array.isArray(s) || s.length !== 2) {
+        return NextResponse.json({ error: "Each set must be [team1, team2]" }, { status: 400 });
+      }
+      const a = Number(s[0]);
+      const b = Number(s[1]);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < 0) {
+        return NextResponse.json({ error: "Set scores must be non-negative numbers" }, { status: 400 });
+      }
+      parsed.push([Math.round(a), Math.round(b)]);
+    }
+    setScores = parsed;
+    const t1Sets = parsed.filter(([a, b]) => a > b).length;
+    const t2Sets = parsed.filter(([a, b]) => b > a).length;
+    if (t1Sets === t2Sets) {
+      return NextResponse.json({ error: "Set scores result in a tie — one team must win more sets" }, { status: 400 });
+    }
+    team1Score = t1Sets;
+    team2Score = t2Sets;
+  }
 
   if (team1Score === undefined || team2Score === undefined) {
     return NextResponse.json({ error: "Scores required" }, { status: 400 });
@@ -138,10 +168,16 @@ export async function POST(
   const winnerTeam = team1Score > team2Score ? 1 : 2;
   let change = 0;
 
-  // Mark match as completed
+  // Mark match as completed. Persist per-set scores when provided
+  // (Bo3 multi-set finals) — the card render uses them to show
+  // "11-9, 9-11, 11-7" alongside the set-wins summary.
   await prisma.match.update({
     where: { id },
-    data: { status: "completed", completedAt: new Date() },
+    data: {
+      status: "completed",
+      completedAt: new Date(),
+      ...(setScores ? { setScores } : {}),
+    },
   });
 
   if (match.rankingMode === "ranked") {

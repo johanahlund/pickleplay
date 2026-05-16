@@ -509,6 +509,14 @@ model Match {
   startedAt   DateTime?
   completedAt DateTime?
   createdById String? // audit — null on rows created before audit was added
+  /// Best-of-N matches: per-set final scores stored as a JSON array
+  /// of [team1, team2] pairs, e.g. [[11,9],[9,11],[11,7]] for a Bo3
+  /// won 2-1. Null = single-set match (MatchPlayer.score holds the
+  /// only score). Set by the ScorerTracker / direct-entry flow once
+  /// each set completes; persisted alongside MatchPlayer.score
+  /// (which carries the final-set or single-set total) for back-
+  /// compat with non-multi-set readers.
+  setScores   Json?
 
   event      Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   class      EventClass?   @relation(fields: [classId], references: [id], onDelete: Cascade)

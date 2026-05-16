@@ -18,7 +18,7 @@ interface ScorerTrackerProps {
   scoringFormat: string; // "1x11", "3x11", "1xR15", etc.
   winBy: string; // "1", "2", "cap15", etc.
   onStartMatch: () => Promise<void>;
-  onSubmitScore: (team1Score: number, team2Score: number) => void;
+  onSubmitScore: (team1Score: number, team2Score: number, setScores?: number[][]) => void;
   onScoreChange?: (team1Score: number, team2Score: number, serverId?: string, receiverId?: string) => void;
   onClose: () => void;
 }
@@ -164,7 +164,9 @@ export function ScorerTracker({
   onScoreChange,
   onClose,
 }: ScorerTrackerProps) {
-  const { isRally, targetScore } = parseFormat(scoringFormat);
+  const { isRally, targetScore, sets: totalSets } = parseFormat(scoringFormat);
+  const setsNeededToWin = Math.ceil(totalSets / 2); // 1 of 1, 2 of 3
+  const isMultiSet = totalSets > 1;
   const { winByN, cap, goldenPoint } = parseWinBy(winBy);
   const isDoubles = team1Players.length === 2 && team2Players.length === 2;
 
@@ -184,6 +186,11 @@ export function ScorerTracker({
   const [history, setHistory] = useState<GameState[]>([]);
   const [redoStack, setRedoStack] = useState<{ state: GameState; winner: 1 | 2 | null }[]>([]);
   const [winner, setWinner] = useState<1 | 2 | null>(null);
+  // Multi-set tracking. `completedSets` holds [t1, t2] for each
+  // finished set; the running `gameState.score` is the CURRENT set.
+  // For single-set formats this stays empty and the existing flow
+  // is unchanged.
+  const [completedSets, setCompletedSets] = useState<number[][]>([]);
   const [lastWonSide, setLastWonSide] = useState<"left" | "right" | null>(null);
   const lastWonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -467,11 +474,42 @@ export function ScorerTracker({
       }
     }
 
-    // Check for game over
+    // Check for set/game over. For multi-set formats, a "won" set
+    // gets pushed onto `completedSets` and we either declare the
+    // MATCH winner (if a team has reached `setsNeededToWin`) or
+    // start a fresh set with score 0-0. The set winner serves
+    // first in the next set (pickleball convention).
     const w = isGameWon(newState.score, targetScore, winByN, cap, goldenPoint);
     if (w) {
-      setWinner(w);
-      setPhase("game-over");
+      if (isMultiSet) {
+        const finishedSet: [number, number] = [newState.score[0], newState.score[1]];
+        const nextSets = [...completedSets, finishedSet];
+        const t1Wins = nextSets.filter(([a, b]) => a > b).length;
+        const t2Wins = nextSets.filter(([a, b]) => b > a).length;
+        const matchWinner: 1 | 2 | null = t1Wins >= setsNeededToWin ? 1 : t2Wins >= setsNeededToWin ? 2 : null;
+        setCompletedSets(nextSets);
+        if (matchWinner) {
+          setWinner(matchWinner);
+          setPhase("game-over");
+        } else {
+          // Start the next set fresh. Winner of this set serves
+          // first in the next; reset to side-out first-serve state
+          // for doubles.
+          newState.score = [0, 0];
+          newState.servingTeam = w;
+          newState.isFirstServe = isDoubles;
+          newState.serverNumber = isDoubles ? 1 : 1;
+          // Server starts from THEIR right (see side-out logic).
+          if (isDoubles) {
+            newState.serverId = (w === 1 ? newState.court.team1Right : newState.court.team2Left).id;
+          } else {
+            newState.serverId = (w === 1 ? team1Players[0] : team2Players[0]).id;
+          }
+        }
+      } else {
+        setWinner(w);
+        setPhase("game-over");
+      }
     }
 
     setGameState(newState);
@@ -521,7 +559,15 @@ export function ScorerTracker({
 
   const handleSubmit = () => {
     if (!gameState) return;
-    onSubmitScore(gameState.score[0], gameState.score[1]);
+    // For single-set: pass the running scores as before.
+    // For multi-set: pass the captured per-set array (the parent
+    // forwards it to /score, which derives set wins and persists
+    // both Match.setScores and MatchPlayer.score).
+    if (isMultiSet && completedSets.length > 0) {
+      onSubmitScore(0, 0, completedSets);
+    } else {
+      onSubmitScore(gameState.score[0], gameState.score[1]);
+    }
   };
 
   if (!visible) return null;
@@ -776,7 +822,18 @@ export function ScorerTracker({
       {/* Compact header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
         <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Matches</button>
-        <span className="text-[10px] text-white/30">{formatLabel} · to {targetScore} · {history.length} rallies · {elapsedDisplay}</span>
+        <span className="text-[10px] text-white/30">
+          {formatLabel} · to {targetScore}
+          {isMultiSet && <> · Bo{totalSets}</>}
+          {isMultiSet && completedSets.length > 0 && (
+            <span className="text-white/60">
+              {" · "}
+              Sets {completedSets.filter(([a, b]) => a > b).length}-{completedSets.filter(([a, b]) => b > a).length}
+              {" ("}{completedSets.map(([a, b]) => `${a}-${b}`).join(", ")}{")"}
+            </span>
+          )}
+          {" · "}{history.length} rallies · {elapsedDisplay}
+        </span>
         <button onClick={() => {
           if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
             setPhase("pick-sides"); setGameState(null); setInitialGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
