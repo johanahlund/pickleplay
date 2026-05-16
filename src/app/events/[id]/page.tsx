@@ -6419,21 +6419,10 @@ export default function EventDetailPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-base font-bold">Schedule</span>
-            {scheduleLocked && (
-              <span className="text-[10px] uppercase tracking-wider font-bold text-amber-700 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                <span aria-hidden>🔒</span>LOCKED
-              </span>
-            )}
           </div>
-          {/* Open/Locked toggle — visible to schedule editors only.
-              When locked the time / court / displayOrder / anchor /
-              move / auto-arrange / court-start controls are all
-              disabled to prevent accidental moves on play day. */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {/* Print / Save as PDF — opens the dedicated /print route
-                in a new tab, which auto-fires window.print(). Browser
-                "Save as PDF" turns that into the deliverable file.
-                Visible to anyone with the schedule view; no edits. */}
+                in a new tab, which auto-fires window.print(). */}
             <button
               type="button"
               onClick={() => window.open(`/events/${event.id}/print`, "_blank", "noopener")}
@@ -6444,21 +6433,31 @@ export default function EventDetailPage() {
               <span aria-hidden>🖨️</span>
               <span>PDF</span>
             </button>
-            {canEditSchedule && (
-              <button
-                type="button"
-                onClick={toggleScheduleLocked}
-                title={scheduleLocked ? "Schedule is locked — tap to unlock for edits" : "Schedule is open for edits — tap to lock and prevent accidental moves"}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 transition-colors ${
-                  scheduleLocked
-                    ? "bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700"
-                    : "bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700"
-                }`}
-              >
-                <span aria-hidden>{scheduleLocked ? "🔒" : "🔓"}</span>
-                <span>{scheduleLocked ? "Locked" : "Open"}</span>
-              </button>
-            )}
+            {/* Single lock indicator + toggle. Editors tap to flip
+                between open (grey/unlocked) and locked (emerald,
+                clearly "ON"). Non-editors still see the state but
+                can't tap. The duplicate LOCKED pill next to the
+                "Schedule" title is gone — this icon carries it all. */}
+            <button
+              type="button"
+              onClick={canEditSchedule ? toggleScheduleLocked : undefined}
+              disabled={!canEditSchedule}
+              title={canEditSchedule
+                ? (scheduleLocked ? "Schedule is locked — tap to unlock for edits" : "Schedule is open for edits — tap to lock and prevent accidental moves")
+                : (scheduleLocked ? "Schedule is locked" : "Schedule is open for edits")}
+              aria-label={scheduleLocked ? "Schedule locked" : "Schedule open"}
+              className={`w-10 h-10 rounded-full inline-flex items-center justify-center text-2xl shadow-sm transition-colors ${
+                scheduleLocked
+                  ? (canEditSchedule
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700"
+                    : "bg-emerald-100 text-emerald-700")
+                  : (canEditSchedule
+                    ? "bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400"
+                    : "bg-gray-100 text-gray-500")
+              } ${!canEditSchedule ? "cursor-default" : "cursor-pointer"}`}
+            >
+              <span aria-hidden>{scheduleLocked ? "🔒" : "🔓"}</span>
+            </button>
           </div>
         </div>
         {scheduleEditable && (
