@@ -4891,11 +4891,16 @@ export default function EventDetailPage() {
     const catSort = new Map<string, number>(cats.map((c, i) => [c.id, (c as { sortOrder?: number }).sortOrder ?? i]));
 
     const playerNameById = new Map<string, string>();
-    for (const ep of event.players) playerNameById.set(ep.player.id, ep.player.name);
+    const playerPhotoById = new Map<string, string | null>();
+    for (const ep of event.players) {
+      playerNameById.set(ep.player.id, ep.player.name);
+      playerPhotoById.set(ep.player.id, ep.player.photoUrl ?? null);
+    }
     for (const t of (event.round.league.teams || [])) {
       for (const tp of t.players) {
-        const name = (tp as { player?: { name?: string } }).player?.name;
-        if (name) playerNameById.set(tp.playerId, name);
+        const p = (tp as { player?: { name?: string; photoUrl?: string | null } }).player;
+        if (p?.name) playerNameById.set(tp.playerId, p.name);
+        if (p?.photoUrl !== undefined) playerPhotoById.set(tp.playerId, p.photoUrl ?? null);
       }
     }
     const teamShort = (tid: string) => {
@@ -5493,13 +5498,14 @@ export default function EventDetailPage() {
       const t1Id = g.team1Id;
       const team1RostId = (event.round!.league.teams || []).find((t) => t.id === t1Id)?.players.map((p) => p.playerId);
       const t1Roster = new Set(team1RostId || []);
-      // Returns {id, name} pairs so the renderer can highlight the
-      // signed-in user's row in violet without re-resolving the name.
-      const a: { id: string; name: string }[] = [];
-      const b: { id: string; name: string }[] = [];
+      // Returns {id, name, photoUrl} so the renderer can show the
+      // player's photo (when one exists) and fall back to initials.
+      const a: { id: string; name: string; photoUrl: string | null }[] = [];
+      const b: { id: string; name: string; photoUrl: string | null }[] = [];
       for (const gp of g.gamePlayers) {
         const name = playerNameById.get(gp.playerId) || "?";
-        const entry = { id: gp.playerId, name };
+        const photoUrl = playerPhotoById.get(gp.playerId) ?? null;
+        const entry = { id: gp.playerId, name, photoUrl };
         // Prefer the explicit team tag (1/2) set server-side; fall back
         // to roster heuristics for legacy rows where team is null.
         const t = gp.team;
@@ -6162,7 +6168,7 @@ export default function EventDetailPage() {
             // Self stays violet; players with a conflict get an
             // amber/red warning chip beneath their name. Avatar
             // sits to the left of the name for at-a-glance recall.
-            const renderPlayerList = (players: { id: string; name: string }[]) => (
+            const renderPlayerList = (players: { id: string; name: string; photoUrl: string | null }[]) => (
               <div className="space-y-1.5">
                 {players.map((p, i) => {
                   const w = playerWarning.get(p.id);
@@ -6170,7 +6176,7 @@ export default function EventDetailPage() {
                   const warnColor = w?.kind === "overlap" ? "text-red-700" : "text-amber-700";
                   return (
                     <div key={`${p.id}-${i}`} className="flex items-center gap-2">
-                      <PlayerAvatar name={p.name} size="xs" />
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
                       <div className="min-w-0 flex-1">
                         <div className={`text-base leading-tight truncate font-semibold ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground"}`}>
                           {p.name}
@@ -6438,7 +6444,7 @@ export default function EventDetailPage() {
                 ? (scheduleLocked ? "Schedule is locked — tap to unlock for edits" : "Schedule is open for edits — tap to lock and prevent accidental moves")
                 : (scheduleLocked ? "Schedule is locked" : "Schedule is open for edits")}
               aria-label={scheduleLocked ? "Schedule locked" : "Schedule open"}
-              className={`w-10 h-10 rounded-full inline-flex items-center justify-center text-2xl shadow-sm transition-colors ${
+              className={`w-10 h-10 rounded-full inline-flex items-center justify-center shadow-sm transition-colors ${
                 scheduleLocked
                   ? (canEditSchedule
                     ? "bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700"
@@ -6448,7 +6454,25 @@ export default function EventDetailPage() {
                     : "bg-gray-100 text-gray-500")
               } ${!canEditSchedule ? "cursor-default" : "cursor-pointer"}`}
             >
-              <span aria-hidden>{scheduleLocked ? "🔒" : "🔓"}</span>
+              {/* Inline SVG so the locked / unlocked distinction is
+                  unambiguous on every platform. Locked: shackle
+                  attached to both sides of the body. Unlocked: the
+                  right side of the shackle is lifted off the body
+                  (clearly "not locked"). */}
+              {scheduleLocked ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="5" y="11" width="14" height="9" rx="2" />
+                  <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="5" y="11" width="14" height="9" rx="2" />
+                  {/* Shackle: attached on the LEFT, detached on the
+                      RIGHT (curling up + away) so the "open" state
+                      reads clearly even at small sizes. */}
+                  <path d="M8 11V8a4 4 0 0 1 7-2.6" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
