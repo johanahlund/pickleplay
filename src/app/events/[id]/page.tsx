@@ -102,7 +102,7 @@ interface LeagueRoundLink {
     id: string; name: string; shortName?: string | null; season: string | null;
     createdById: string | null; deputyId: string | null;
     matchDurationMin?: number | null;
-    categories?: { id: string; name: string; format: string; gender: string; matchDurationMin?: number | null }[];
+    categories?: { id: string; name: string; format: string; gender: string; matchDurationMin?: number | null; scoringFormat?: string | null; winBy?: string | null }[];
     teams?: {
       id: string;
       name: string;
@@ -5829,6 +5829,18 @@ export default function EventDetailPage() {
       const rowConflicts = conflictsByGame.get(g.id) || [];
       const rowHasOverlap = rowConflicts.some((c) => c.kind === "overlap");
       const rowHasRushed = !rowHasOverlap && rowConflicts.some((c) => c.kind === "rushed");
+      // Per-player worst-case warning for inline display next to the
+      // player's name. Overlap beats rushed (the more severe one is
+      // what the operator needs to act on). Lets us replace the
+      // bottom "1 player conflict… ⚠ Joana Santos overlap" pill with
+      // a direct cue under the player's row.
+      const playerWarning = new Map<string, { kind: "overlap" | "rushed"; gapMin: number }>();
+      for (const c of rowConflicts) {
+        const prev = playerWarning.get(c.playerId);
+        if (!prev || (c.kind === "overlap" && prev.kind !== "overlap")) {
+          playerWarning.set(c.playerId, { kind: c.kind, gapMin: c.gapMin });
+        }
+      }
       // Status-based card styling. Conflicts (overlap/rushed) keep
       // priority over play state — a scheduling problem is more
       // important to flag than whether the match is live.
@@ -5982,18 +5994,17 @@ export default function EventDetailPage() {
               // Read-only time display (schedule is locked or viewer
               // isn't an editor). Show an estimated end time alongside
               // the start, approximated as the next match's start
-              // time on the same court. The grid renders matches in
-              // displayOrder; same-court next gives the natural end.
+              // time on the same court.
               const sameCourt = colOf(g);
               const myIdx = sameCourt.findIndex((x) => x.id === g.id);
               const nextOnCourt = myIdx >= 0 ? sameCourt[myIdx + 1] : undefined;
               const endHhmm = nextOnCourt?.scheduledAt ? timeHHMM(nextOnCourt.scheduledAt) : null;
               return (
-                <span className={`text-[11px] font-semibold tabular-nums whitespace-nowrap ${g.scheduleAnchored ? "text-blue-700" : ""}`}>
+                <span className={`text-base font-bold tabular-nums whitespace-nowrap ${g.scheduleAnchored ? "text-blue-700" : "text-foreground"}`}>
                   {g.scheduleAnchored && hhmm && <span aria-hidden className="mr-0.5">📌</span>}
                   {hhmm || <span className="text-muted font-normal">—</span>}
                   {hhmm && endHhmm && (
-                    <span className="text-muted font-normal"> – {endHhmm}</span>
+                    <span className="text-muted font-normal text-sm"> – {endHhmm}</span>
                   )}
                 </span>
               );
@@ -6085,7 +6096,7 @@ export default function EventDetailPage() {
               {g.kind === "principal" ? "P" : g.kind === "league" ? "L" : "F"}
             </span>
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium flex items-center gap-1">
+          <div className="text-xs uppercase tracking-wider text-muted font-semibold flex items-center gap-1">
             <span>{catName(g.categoryId)} <span className="text-muted/70">· Match {g.slotNumber ?? "?"}</span></span>
             {/* Status badges — top-right of the card title row. Active
                 gets a pulsing live dot; completed gets a check. */}
@@ -6136,14 +6147,29 @@ export default function EventDetailPage() {
             // Render each player with bold violet highlighting when
             // the row belongs to the signed-in user — quick scan for
             // "where am I playing?" across a packed schedule.
+            // Render each player on their own line so per-player
+            // overlap / rushed warnings can sit directly underneath.
+            // Self stays violet; players with a conflict get an
+            // amber/red warning chip beneath their name.
             const renderPlayerList = (players: { id: string; name: string }[]) => (
-              <div className="text-[10px] text-muted leading-tight truncate">
-                {players.map((p, i) => (
-                  <span key={`${p.id}-${i}`}>
-                    {i > 0 ? ", " : ""}
-                    <span className={p.id === userId ? "text-violet-700 font-bold" : ""}>{p.name}</span>
-                  </span>
-                ))}
+              <div className="space-y-1">
+                {players.map((p, i) => {
+                  const w = playerWarning.get(p.id);
+                  const warnText = w ? (w.kind === "overlap" ? "overlap" : `${w.gapMin}m gap`) : null;
+                  const warnColor = w?.kind === "overlap" ? "text-red-700" : "text-amber-700";
+                  return (
+                    <div key={`${p.id}-${i}`}>
+                      <div className={`text-sm leading-snug truncate font-medium ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground/85"}`}>
+                        {p.name}
+                      </div>
+                      {warnText && (
+                        <div className={`text-[10px] font-semibold leading-tight truncate ${warnColor}`}>
+                          ⚠ {warnText}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
             // When the operator has score-entry rights AND the match
@@ -6181,28 +6207,28 @@ export default function EventDetailPage() {
                   value={pending}
                   onChange={(e) => setEntry(key, e.target.value)}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-10 text-right text-sm font-bold tabular-nums border border-border rounded px-1 py-0.5 bg-white focus:outline-none focus:border-action"
+                  className="w-14 text-center text-xl font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
                   placeholder="—"
                 />
               );
             };
             return (
-              <div className="space-y-1">
-                <div className="flex items-baseline gap-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-baseline gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-foreground truncate">{teamShort(topId)}</div>
+                    <div className="text-sm font-bold text-foreground truncate">{teamShort(topId)}</div>
                     {topPlayers.length > 0 && renderPlayerList(topPlayers)}
                   </div>
-                  <div className="text-right text-sm font-bold tabular-nums shrink-0">
+                  <div className="text-right text-xl font-bold tabular-nums shrink-0">
                     {renderScoreCell(topScore, topEntryKey)}
                   </div>
                 </div>
-                <div className="flex items-baseline gap-1.5">
+                <div className="flex items-baseline gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-foreground truncate">{teamShort(botId)}</div>
+                    <div className="text-sm font-bold text-foreground truncate">{teamShort(botId)}</div>
                     {botPlayers.length > 0 && renderPlayerList(botPlayers)}
                   </div>
-                  <div className="text-right text-sm font-bold tabular-nums shrink-0">
+                  <div className="text-right text-xl font-bold tabular-nums shrink-0">
                     {renderScoreCell(botScore, botEntryKey)}
                   </div>
                 </div>
@@ -6226,30 +6252,9 @@ export default function EventDetailPage() {
             );
           })()}
         </div>
-        {rowConflicts.length > 0 && (() => {
-          // Dedupe by player + kind for the inline pill — one player
-          // could appear in multiple cross-references but we just want
-          // a short summary on this card.
-          const seen = new Set<string>();
-          const items = rowConflicts.filter((c) => {
-            const key = `${c.playerId}:${c.kind}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          return (
-            <div className={`text-[10px] rounded px-1.5 py-0.5 ${rowHasOverlap ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
-              <span aria-hidden>⚠ </span>
-              {items.map((c, i) => (
-                <span key={`${c.playerId}-${i}`}>
-                  {i > 0 ? "; " : ""}
-                  <span className="font-semibold">{c.playerName}</span>{" "}
-                  {c.kind === "overlap" ? "overlap" : `${c.gapMin}m gap`}
-                </span>
-              ))}
-            </div>
-          );
-        })()}
+        {/* Per-player warnings now render directly beneath each
+            offending player's name (see renderPlayerList above), so
+            the old bottom-of-card pill is intentionally gone. */}
         {/* Match controls — bottom-right of the card. Visible to
             schedule editors, players in the match, and the assigned
             scorer. Compact icon buttons so the schedule grid stays
@@ -6637,13 +6642,15 @@ export default function EventDetailPage() {
             </p>
           </div>
         )}
-        <div className="flex gap-2 overflow-x-auto -mx-3 px-3 pb-2">
-          {/* Hide empty columns from display. The D-pad ← → arrows are
-              still enabled based on the full column range (1..N), so
-              moving INTO an empty column makes it appear. */}
+        <div className="flex gap-3 overflow-x-auto -mx-3 px-3 pb-2 snap-x snap-mandatory">
+          {/* Each court column is sized to ~one phone screen so the
+              referee can read the cards in sunlight. Other courts
+              swipe in horizontally. snap-x locks each scroll stop on
+              a court boundary. Hide empty columns; D-pad ← → arrows
+              still cover the full court range (1..N). */}
           {buckets["unassigned"].length > 0 && (
-            <div className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-muted font-bold px-1">Unassigned</div>
+            <div className="shrink-0 w-[88vw] max-w-[420px] snap-start space-y-1.5 rounded-lg p-1.5 -m-1.5">
+              <div className="text-xs uppercase tracking-wider text-muted font-bold px-1">Unassigned</div>
               {buckets["unassigned"].map(renderGameRow)}
             </div>
           )}
@@ -6665,9 +6672,9 @@ export default function EventDetailPage() {
             };
             const colGames = buckets[String(n)] || [];
             return (
-              <div key={n} className="shrink-0 w-60 space-y-1.5 rounded-lg p-1.5 -m-1.5">
+              <div key={n} className="shrink-0 w-[88vw] max-w-[420px] snap-start space-y-1.5 rounded-lg p-1.5 -m-1.5">
                 <div className="flex items-center justify-between gap-1 px-1">
-                  <span className="text-[10px] uppercase tracking-wider text-muted font-bold">Court {n}</span>
+                  <span className="text-sm uppercase tracking-wider text-foreground font-bold">Court {n}</span>
                 </div>
                 {scheduleEditable && (
                   <div className="flex items-center gap-0.5 px-1 text-[11px] tabular-nums">
@@ -7553,8 +7560,23 @@ export default function EventDetailPage() {
     const team1 = match.players.filter((p: MatchPlayer) => p.team === 1).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
     const team2 = match.players.filter((p: MatchPlayer) => p.team === 2).map((p: MatchPlayer) => ({ id: p.player.id, name: p.player.name, photoUrl: p.player.photoUrl }));
     const cls = match.classId ? event.classes?.find((c: { id: string }) => c.id === match.classId) : event.classes?.[0];
-    const fmt = match.matchFormat || cls?.scoringFormat || event.scoringFormat || "1x11";
-    const wb = cls?.winBy || "2";
+    // Resolve scoring format with per-match override priority:
+    //   1. League: per-game override → category default
+    //   2. Non-league: Match.matchFormat → class.scoringFormat
+    //   3. Event default → "1x11" fallback
+    // The leagueGame's category is the source of truth for league
+    // matches, not the event's classes (those are non-league only).
+    const lgMatch = match.leagueGame;
+    const lgCat = lgMatch?.category && (event.round?.league.categories || []).find((c) => c.id === lgMatch.category.id);
+    const lgOverrideFmt = (lgMatch as unknown as { scoringFormatOverride?: string | null } | undefined)?.scoringFormatOverride;
+    const lgOverrideWb = (lgMatch as unknown as { winByOverride?: string | null } | undefined)?.winByOverride;
+    const fmt = lgOverrideFmt
+      || lgCat?.scoringFormat
+      || match.matchFormat
+      || cls?.scoringFormat
+      || event.scoringFormat
+      || "1x11";
+    const wb = lgOverrideWb || lgCat?.winBy || cls?.winBy || "2";
     return (
       <ScorerTracker
         matchId={match.id}

@@ -718,7 +718,7 @@ export function ScorerTracker({
         <span className={isServer || isReceiver ? "" : "opacity-30"}>
           <PlayerAvatar name={player.name} photoUrl={player.photoUrl} size="xs" />
         </span>
-        <span className={`font-bold mt-0.5 ${isServer ? "text-base text-green-300" : isReceiver ? "text-base text-white/80" : "text-base text-white/40"}`}>
+        <span className={`font-bold mt-0.5 text-base ${isServer ? "text-green-300" : "text-white"}`}>
           {shortName(player)}
         </span>
         {isServer && <span className="text-[9px] text-green-300 font-bold animate-pulse">● Server</span>}
@@ -974,9 +974,11 @@ export function ScorerTracker({
           const rightColor = swapped ? "text-blue-500" : "text-red-500";
           const servingLeft = servingTeam === leftTeamNum;
           return (
-            <div className="flex items-start mx-3">
+            <div className="flex items-center mx-3">
               <button onClick={handleUndo} disabled={history.length === 0}
-                className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-1 pt-2 transition-colors shrink-0">←</button>
+                className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
+                aria-label="Undo rally"
+              >←</button>
               <div className="flex-1 text-center">
                 <span className={`text-5xl font-black tabular-nums ${leftWon ? "text-green-400" : leftColor}`}>{leftScore}</span>
                 {!isRally && isDoubles && servingLeft && (
@@ -991,7 +993,9 @@ export function ScorerTracker({
                 )}
               </div>
               <button onClick={handleRedo} disabled={redoStack.length === 0}
-                className="text-white/40 hover:text-white disabled:opacity-10 text-2xl px-1 pt-2 transition-colors shrink-0">→</button>
+                className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
+                aria-label="Redo rally"
+              >→</button>
             </div>
           );
         })()}
