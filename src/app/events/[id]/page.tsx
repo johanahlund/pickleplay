@@ -7600,13 +7600,23 @@ export default function EventDetailPage() {
           </Link>
         );
       })()}
-      {/* Organizer comments — free-text shown near the top of the page
-          and prepended to the match-day share. Wraps on whitespace to
-          preserve manual line breaks. */}
+      {/* Organizer comments — free-text prepended to the match-day
+          share. Wrapped in a collapsible "Event details" disclosure
+          so the page stays scannable; tapping the header reveals the
+          amber-tinted comment body, which preserves manual line
+          breaks. */}
       {event.comments && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900 whitespace-pre-wrap break-words">
-          {event.comments}
-        </div>
+        <details className="rounded-xl bg-amber-50 border border-amber-200 group">
+          <summary className="px-3 py-2 text-sm font-semibold text-amber-900 cursor-pointer flex items-center justify-between gap-2 select-none">
+            <span className="inline-flex items-center gap-2">
+              <span aria-hidden>📋</span>Event details
+            </span>
+            <span aria-hidden className="text-xs text-amber-700 transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="px-3 pb-3 pt-1 text-sm text-amber-900 whitespace-pre-wrap break-words">
+            {event.comments}
+          </div>
+        </details>
       )}
       {/* League event sign-up CTA — only shown to a player who is on one
           of the two teams playing this match-day. Mentions which team and
