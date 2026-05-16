@@ -5162,6 +5162,21 @@ export default function EventDetailPage() {
     }
     for (const k of Object.keys(buckets)) buckets[k] = sortGames(buckets[k]);
 
+    // Parallel buckets keyed on baseGames (unfiltered). Used for
+    // conflict detection so the warning reflects the real schedule
+    // even when the user has filtered the grid view by gender /
+    // singles vs doubles / etc. — a player's cross-category overlap
+    // is a real problem regardless of which pills the operator
+    // happens to have toggled on.
+    const allBuckets: Record<string, G[]> = { unassigned: [] };
+    for (let n = 1; n <= numCourts; n++) allBuckets[String(n)] = [];
+    for (const g of baseGames as unknown as G[]) {
+      const key = (g.courtNum == null) ? "unassigned" : String(g.courtNum);
+      if (!allBuckets[key]) allBuckets[key] = [];
+      allBuckets[key].push(g);
+    }
+    for (const k of Object.keys(allBuckets)) allBuckets[k] = sortGames(allBuckets[k]);
+
     // ── Scheduling conflict detection ───────────────────────────────
     // Models a realistic timeline that accounts for two things real
     // play-days always have:
@@ -5191,7 +5206,10 @@ export default function EventDetailPage() {
     const bufferMs = BUFFER_MIN * 60_000;
     const windowByGame = new Map<string, { realStart: number; realEnd: number; scheduledStart: number }>();
     for (let courtNum = 1; courtNum <= numCourts; courtNum++) {
-      const col = (buckets[String(courtNum)] || [])
+      // Use allBuckets (unfiltered) so the projected-delay chain
+      // reflects every match that will actually run on the court,
+      // not just the ones the operator's filter currently shows.
+      const col = (allBuckets[String(courtNum)] || [])
         .filter((g) => g.scheduledAt)
         .slice()
         .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
@@ -5229,7 +5247,11 @@ export default function EventDetailPage() {
     const conflictsByGame = new Map<string, PerGameConflict[]>();
     const conflictSummary: SummaryConflict[] = [];
     const playerGames = new Map<string, G[]>();
-    for (const g of games) {
+    // Iterate baseGames (unfiltered) so a player's conflict shows
+    // even when one of the conflicting matches is hidden by the
+    // current filter — the user wants to know the conflict exists
+    // either way and to "unfilter" to find the offender.
+    for (const g of baseGames as unknown as G[]) {
       if (!g.scheduledAt || g.courtNum == null) continue;
       for (const gp of g.gamePlayers) {
         const list = playerGames.get(gp.playerId) || [];
@@ -6397,7 +6419,17 @@ export default function EventDetailPage() {
             <span>Recalculating schedule…</span>
           </div>
         )}
-        {hasConflicts && (
+        {hasConflicts && scheduleLocked && (
+          // Compact conflict alert when the schedule is locked. The
+          // detailed list isn't actionable in a locked state — the
+          // operator can't move things — so we collapse to a small
+          // pill that just signals "there are problems if you unlock".
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900">
+            <span aria-hidden>⚠</span>
+            <span>{conflictSummary.length} {conflictSummary.length === 1 ? "conflict" : "conflicts"} — unlock to review</span>
+          </div>
+        )}
+        {hasConflicts && !scheduleLocked && (
           <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <span aria-hidden>⚠</span>
