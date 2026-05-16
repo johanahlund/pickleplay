@@ -6160,23 +6160,27 @@ export default function EventDetailPage() {
             // Render each player on their own line so per-player
             // overlap / rushed warnings can sit directly underneath.
             // Self stays violet; players with a conflict get an
-            // amber/red warning chip beneath their name.
+            // amber/red warning chip beneath their name. Avatar
+            // sits to the left of the name for at-a-glance recall.
             const renderPlayerList = (players: { id: string; name: string }[]) => (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {players.map((p, i) => {
                   const w = playerWarning.get(p.id);
                   const warnText = w ? (w.kind === "overlap" ? "overlap" : `${w.gapMin}m gap`) : null;
                   const warnColor = w?.kind === "overlap" ? "text-red-700" : "text-amber-700";
                   return (
-                    <div key={`${p.id}-${i}`}>
-                      <div className={`text-sm leading-snug truncate font-medium ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground/85"}`}>
-                        {p.name}
-                      </div>
-                      {warnText && (
-                        <div className={`text-[10px] font-semibold leading-tight truncate ${warnColor}`}>
-                          ⚠ {warnText}
+                    <div key={`${p.id}-${i}`} className="flex items-center gap-2">
+                      <PlayerAvatar name={p.name} size="xs" />
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-base leading-tight truncate font-semibold ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground"}`}>
+                          {p.name}
                         </div>
-                      )}
+                        {warnText && (
+                          <div className={`text-[10px] font-semibold leading-tight truncate ${warnColor}`}>
+                            ⚠ {warnText}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -6239,20 +6243,28 @@ export default function EventDetailPage() {
                 />
               );
             };
+            // Winner highlight: when the match is completed and we
+            // have scores, the winning team's row gets an emerald
+            // background tint so the result reads at a glance.
+            const matchCompleted = matchStatus === "completed";
+            const topWon = matchCompleted && topScore != null && botScore != null && topScore > botScore;
+            const botWon = matchCompleted && topScore != null && botScore != null && botScore > topScore;
+            const teamRowCls = (won: boolean) =>
+              `flex items-start gap-2 rounded-md px-2 py-1.5 -mx-1 ${won ? "bg-emerald-50 ring-1 ring-emerald-200" : ""}`;
             return (
               <div className="space-y-1.5">
-                <div className="flex items-baseline gap-2">
+                <div className={teamRowCls(topWon)}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-foreground truncate">{teamShort(topId)}</div>
+                    <div className="text-xs font-semibold text-muted uppercase tracking-wide truncate">{teamShort(topId)}</div>
                     {topPlayers.length > 0 && renderPlayerList(topPlayers)}
                   </div>
                   <div className="text-right text-xl font-bold tabular-nums shrink-0">
                     {renderScoreCell(topScore, topEntryKey)}
                   </div>
                 </div>
-                <div className="flex items-baseline gap-2">
+                <div className={teamRowCls(botWon)}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-foreground truncate">{teamShort(botId)}</div>
+                    <div className="text-xs font-semibold text-muted uppercase tracking-wide truncate">{teamShort(botId)}</div>
                     {botPlayers.length > 0 && renderPlayerList(botPlayers)}
                   </div>
                   <div className="text-right text-xl font-bold tabular-nums shrink-0">
@@ -6288,29 +6300,9 @@ export default function EventDetailPage() {
             scannable. */}
         {(canActOnMatch || canEditSchedule) && matchStatus !== "completed" && (
           <div className="flex items-center justify-end gap-1 mt-1.5 pt-1.5 border-t border-border/60">
-            {/* No match yet: ▶ Start (creates Match via start-match API).
-                Disabled if either team has no assigned player. */}
-            {!linkedMatch && (
-              <button
-                type="button"
-                onClick={startMatch}
-                disabled={!lineupsReady}
-                title={lineupsReady ? "Start match" : "Assign players on both teams first"}
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1"
-              >
-                <span aria-hidden>▶</span><span>Start</span>
-              </button>
-            )}
-            {linkedMatch && matchStatus === "pending" && (
-              <button
-                type="button"
-                onClick={startMatch}
-                title="Start match"
-                className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 inline-flex items-center gap-1"
-              >
-                <span aria-hidden>▶</span><span>Start</span>
-              </button>
-            )}
+            {/* Start lives in the action sheet now (per "do it all
+                from the edit popup"). Card cluster keeps the
+                contextual buttons for matches already in play. */}
             {linkedMatch && matchStatus === "active" && (
               <button
                 type="button"
@@ -7342,6 +7334,37 @@ export default function EventDetailPage() {
               name in the scorer picker is the start-scoring action.
               Delete sits as a small icon top-right. */}
           <div className="flex flex-col p-3 gap-1.5">
+            {/* ▶ Start match — only when the match is pending or
+                no Match exists yet. Lives at the top of the action
+                sheet (now that the per-card Start button is gone)
+                so it's the first thing the operator sees on a
+                ready-to-go card. Schedule editors + assigned
+                scorer. */}
+            {!isMatchCompleted && match.status !== "active" && match.status !== "paused" && (canSetScorer || match.scorerId === userId) && (() => {
+              const isLeague = !!match.leagueGame;
+              const onStart = async () => {
+                close();
+                if (isLeague && event.round) {
+                  const leagueId = event.round.league.id;
+                  await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${match.leagueGame?.id}/start-match`, {
+                    method: "POST",
+                  });
+                } else {
+                  await fetch(`/api/matches/${match.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: "active" }),
+                  });
+                }
+                await fetchEvent();
+              };
+              return (
+                <button
+                  onClick={onStart}
+                  className="py-3 rounded-xl text-base font-bold bg-emerald-500 text-white hover:bg-emerald-600 active:bg-emerald-700 shadow-sm flex items-center justify-center gap-2"
+                >▶ Start match</button>
+              );
+            })()}
             {/* Score-edit / clear scores for completed matches stays
                 as a compact row at the top so it's discoverable but
                 doesn't crowd the regular menu. */}
@@ -7503,6 +7526,7 @@ export default function EventDetailPage() {
             {actionPanel === "format" && match.leagueGame && canSetScorer && event.round && (() => {
               const leagueId = event.round.league.id;
               const lg = match.leagueGame as { id: string; scoringFormatOverride?: string | null; winByOverride?: string | null };
+              const locked = !!event.scheduleLocked;
               const SCORING_OPTIONS: Array<{ value: string; label: string }> = [
                 { value: "1x11", label: "1 to 11" },
                 { value: "1x15", label: "1 to 15" },
@@ -7545,12 +7569,18 @@ export default function EventDetailPage() {
               };
               return (
                 <div className="rounded-xl border border-border bg-white p-3 space-y-3">
+                  {locked && (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                      🔒 Schedule is locked — format / win-by are read-only. Ranking is still editable.
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs text-muted mb-1">Scoring</label>
                     <select
                       value={lg.scoringFormatOverride ?? ""}
                       onChange={(e) => patchOverride("scoringFormatOverride", e.target.value || null)}
-                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white"
+                      disabled={locked}
+                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white disabled:bg-gray-100 disabled:text-muted"
                     >
                       <option value="">— Event/category default —</option>
                       {SCORING_OPTIONS.map((o) => (
@@ -7563,7 +7593,8 @@ export default function EventDetailPage() {
                     <select
                       value={lg.winByOverride ?? ""}
                       onChange={(e) => patchOverride("winByOverride", e.target.value || null)}
-                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white"
+                      disabled={locked}
+                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white disabled:bg-gray-100 disabled:text-muted"
                     >
                       <option value="">— Event/category default —</option>
                       {WINBY_OPTIONS.map((o) => (
@@ -7591,7 +7622,9 @@ export default function EventDetailPage() {
             {actionPanel === "court" && canSetScorer && event.round && match.leagueGame && (() => {
               const leagueId = event.round.league.id;
               const lgId = (match.leagueGame as { id: string }).id;
+              const locked = !!event.scheduleLocked;
               const onPickCourt = async (n: number | null) => {
+                if (locked) return;
                 await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lgId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
@@ -7601,21 +7634,30 @@ export default function EventDetailPage() {
                 setActionPanel(null);
               };
               return (
-                <div className="rounded-xl border border-border bg-white shadow-sm p-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onPickCourt(null)}
-                    className={`w-12 h-12 rounded-md border text-sm font-medium ${match.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
-                    title="No court"
-                  >—</button>
-                  {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
+                <div className="rounded-xl border border-border bg-white shadow-sm p-3 space-y-2">
+                  {locked && (
+                    <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+                      🔒 Schedule is locked — unlock to change court.
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      key={n}
                       type="button"
-                      onClick={() => onPickCourt(n)}
-                      className={`w-12 h-12 rounded-md border text-xl font-bold ${match.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
-                    >{n}</button>
-                  ))}
+                      onClick={() => onPickCourt(null)}
+                      disabled={locked}
+                      className={`w-12 h-12 rounded-md border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed ${match.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
+                      title="No court"
+                    >—</button>
+                    {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => onPickCourt(n)}
+                        disabled={locked}
+                        className={`w-12 h-12 rounded-md border text-xl font-bold disabled:opacity-40 disabled:cursor-not-allowed ${match.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
+                      >{n}</button>
+                    ))}
+                  </div>
                 </div>
               );
             })()}

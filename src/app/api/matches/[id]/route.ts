@@ -17,7 +17,7 @@ export async function PATCH(
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
 
   const body = await req.json();
-  const { status, scorerId, swapWithMatchId } = body;
+  const { status, scorerId, swapWithMatchId, rankingMode } = body;
 
   // Check authorization: match player, event manager, or app admin.
   // For league events also allow the league admin (creator/deputy)
@@ -96,6 +96,13 @@ export async function PATCH(
         });
       }
     }
+  }
+
+  if (rankingMode !== undefined) {
+    if (typeof rankingMode !== "string" || !["ranked", "none", "approval"].includes(rankingMode)) {
+      return NextResponse.json({ error: "rankingMode must be 'ranked', 'none', or 'approval'" }, { status: 400 });
+    }
+    data.rankingMode = rankingMode;
   }
 
   // Queue reorder: swap court+round with another pending match in the
