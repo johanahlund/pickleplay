@@ -802,6 +802,9 @@ export default function EventDetailPage() {
   // anyone signed up to the event (a parent on the sidelines, a
   // teammate not playing this match, etc).
   const [scorerPickerOpen, setScorerPickerOpen] = useState(false);
+  // Action sheet's inline disclosure panels — only one open at a time
+  // visually feels right; we toggle via setOpenPanel.
+  const [actionPanel, setActionPanel] = useState<null | "scorer" | "format" | "court">(null);
   const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
   const [scorerVisible, setScorerVisible] = useState(false);
   const [scorerLiveScore, setScorerLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
@@ -5749,6 +5752,7 @@ export default function EventDetailPage() {
         if (linkedMatch) {
           setActionSheetMatchId(linkedMatch.id);
           setScorerPickerOpen(true);
+          setActionPanel("scorer");
           return;
         }
         // No Match yet — lazy-create one in pending state so the
@@ -7250,7 +7254,7 @@ export default function EventDetailPage() {
     const t2 = match.players.filter((p: MatchPlayer) => p.team === 2);
     const isMatchCompleted = match.status === "completed";
     const isMatchActive = match.status === "active";
-    const close = () => { setActionSheetMatchId(null); setScorerPickerOpen(false); };
+    const close = () => { setActionSheetMatchId(null); setScorerPickerOpen(false); setActionPanel(null); };
     // "Set scorer" delegation — league events only, gated to the same
     // schedule-editor set as the rest of the league-schedule controls
     // (app admin / event organizer / league admin / host team captain
@@ -7333,73 +7337,93 @@ export default function EventDetailPage() {
             <span className="text-sm font-semibold">Court {match.courtNum}</span>
             <span className="text-xs text-muted ml-2">{t1.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")} vs {t2.map((p: MatchPlayer) => p.player.name.split(" ")[0]).join(" & ")}</span>
           </div>
-          {/* Vertical stack — Edit / Delete are compact top-row icons,
-              Live scorer / Set scorer get the rest of the width so
-              the scorer picker (when expanded) has room. Announce is
-              a wide button just above Cancel. */}
+          {/* Button-driven menu: four wide actions (Set scorer, Edit
+              players, Edit format, Edit court), each opens an inline
+              panel below. No standalone "Live scorer" — tapping a
+              name in the scorer picker is the start-scoring action.
+              Delete sits as a small icon top-right. */}
           <div className="flex flex-col p-3 gap-1.5">
-            {/* Top action row: small Edit + Delete on the left, the
-                scorer actions filling the rest. */}
-            <div className="flex items-stretch gap-1.5">
-              {canManage && (
-                <>
-                  {isMatchCompleted && (isOwner || isAdmin) ? (
-                    <>
-                      <button
-                        onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
-                        title="Edit score"
-                        aria-label="Edit score"
-                        className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center"
-                      >✏️</button>
-                      <button
-                        onClick={async () => { close(); if (!await confirmDialog({ message: "Clear scores and revert match to active? Rankings will be reversed.", confirmText: "Clear", danger: true })) return; await fetch(`/api/matches/${match.id}/score`, { method: "DELETE" }); await fetchEvent(); }}
-                        title="Clear scores"
-                        aria-label="Clear scores"
-                        className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center"
-                      >🔄</button>
-                    </>
-                  ) : !isMatchCompleted ? (
-                    <button
-                      onClick={() => { close(); openEditMatch(match.id); }}
-                      title="Edit match"
-                      aria-label="Edit match"
-                      className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center"
-                    >✏️</button>
-                  ) : null}
-                  {/* Delete — schedule editors (admin / organizer /
-                      league admin / host team captain) on league
-                      events; (isOwner || isAdmin) on non-league. The
-                      action sheet's wider canManage gate is already
-                      around this column, so just OR in canSetScorer
-                      which carries the league-schedule-editor check. */}
-                  {(isOwner || isAdmin || canSetScorer) && (
-                    <button
-                      onClick={() => { close(); deleteMatch(match.id); }}
-                      title="Delete match"
-                      aria-label="Delete match"
-                      className="shrink-0 w-10 h-10 rounded-xl text-base font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center"
-                    >🗑️</button>
-                  )}
-                </>
-              )}
-              {/* Live scorer + Set scorer take the remaining width on
-                  the same row, so users land here looking at the four
-                  match-action buttons grouped together. */}
-              {!isMatchCompleted && match.players.length >= 2 && (canManage || match.scorerId === userId) && (
+            {/* Score-edit / clear scores for completed matches stays
+                as a compact row at the top so it's discoverable but
+                doesn't crowd the regular menu. */}
+            {isMatchCompleted && (isOwner || isAdmin) && (
+              <div className="flex gap-1.5">
                 <button
-                  onClick={async () => { close(); if (match.scorerId === userId || (scorerMatchId === match.id && scorerLiveScore)) { setScorerMatchId(match.id); setScorerVisible(true); return; } if (match.scorerId && match.scorerId !== userId && !await confirmDialog({ message: `${match.scorer?.name || "Someone"} is scorer. Take over?` })) return; if (!match.scorerId && !await confirmDialog({ message: "Will you be the scorer?" })) return; await fetch(`/api/matches/${match.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scorerId: userId }) }); await fetchEvent(); setScorerMatchId(match.id); setScorerVisible(true); }}
-                  className="flex-1 min-w-0 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
-                >📋 Live scorer</button>
-              )}
-              {canSetScorer && (
+                  onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+                >✏️ Edit score</button>
                 <button
-                  onClick={() => setScorerPickerOpen((v) => !v)}
-                  className="flex-1 min-w-0 py-2.5 rounded-xl text-xs font-medium border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center justify-center gap-2"
+                  onClick={async () => { close(); if (!await confirmDialog({ message: "Clear scores and revert match to active? Rankings will be reversed.", confirmText: "Clear", danger: true })) return; await fetch(`/api/matches/${match.id}/score`, { method: "DELETE" }); await fetchEvent(); }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2"
+                >🔄 Clear scores</button>
+              </div>
+            )}
+            {/* — Set scorer — */}
+            {canSetScorer && !isMatchCompleted && (
+              <button
+                onClick={() => setActionPanel((p) => p === "scorer" ? null : "scorer")}
+                className={`py-3 rounded-xl text-base font-semibold border shadow-sm flex items-center justify-between gap-2 px-4 ${actionPanel === "scorer" ? "bg-action/5 border-action text-action" : "bg-white border-border text-foreground hover:bg-gray-50"}`}
+                aria-expanded={actionPanel === "scorer"}
+              >
+                <span className="flex items-center gap-2">📋 Set scorer</span>
+                <span className="text-sm text-muted">{match.scorerId ? (match.scorer?.name?.split(" ")[0] ?? "set") : "—"}</span>
+              </button>
+            )}
+            {/* — Edit players — */}
+            {canSetScorer && !isMatchCompleted && (
+              <button
+                onClick={() => {
+                  close();
+                  if (event.round) {
+                    // Send admins to the host team's lineup builder by
+                    // default; the lineup page lets them switch teams
+                    // if they need the visitor's side.
+                    const teamId = event.hostTeamId || event.leagueTeams?.[0]?.teamId;
+                    if (teamId) router.push(`/leagues/${event.round.league.id}/events/${event.id}/lineup/${teamId}`);
+                  } else {
+                    openEditMatch(match.id);
+                  }
+                }}
+                className="py-3 rounded-xl text-base font-semibold border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center gap-2 px-4"
+              >🏓 Edit players</button>
+            )}
+            {/* — Edit format — */}
+            {canSetScorer && !isMatchCompleted && match.leagueGame && (() => {
+              const lg = match.leagueGame as { id: string; scoringFormatOverride?: string | null; winByOverride?: string | null };
+              const lgCat = (event.round?.league.categories || []).find((c) => c.id === match.leagueGame?.category.id);
+              const fmt = lg.scoringFormatOverride || lgCat?.scoringFormat || event.scoringFormat || "1x11";
+              const wb = lg.winByOverride || lgCat?.winBy || "2";
+              const fmtLabel = shortFormatLabel(fmt, wb) || fmt;
+              const isOverride = !!lg.scoringFormatOverride || !!lg.winByOverride;
+              return (
+                <button
+                  onClick={() => setActionPanel((p) => p === "format" ? null : "format")}
+                  className={`py-3 rounded-xl text-base font-semibold border shadow-sm flex items-center justify-between gap-2 px-4 ${actionPanel === "format" ? "bg-action/5 border-action text-action" : "bg-white border-border text-foreground hover:bg-gray-50"}`}
+                  aria-expanded={actionPanel === "format"}
                 >
-                  📋 <span className="truncate">{match.scorerId ? `Scorer: ${match.scorer?.name?.split(" ")[0] ?? "set"}` : "Set scorer"}</span>
+                  <span className="flex items-center gap-2">⚙️ Edit format</span>
+                  <span className={`text-sm ${isOverride ? "text-action font-semibold" : "text-muted"}`}>{fmtLabel}</span>
                 </button>
-              )}
-            </div>
+              );
+            })()}
+            {/* — Edit court — */}
+            {canSetScorer && !isMatchCompleted && (
+              <button
+                onClick={() => setActionPanel((p) => p === "court" ? null : "court")}
+                className={`py-3 rounded-xl text-base font-semibold border shadow-sm flex items-center justify-between gap-2 px-4 ${actionPanel === "court" ? "bg-action/5 border-action text-action" : "bg-white border-border text-foreground hover:bg-gray-50"}`}
+                aria-expanded={actionPanel === "court"}
+              >
+                <span className="flex items-center gap-2">🎾 Edit court</span>
+                <span className="text-sm text-muted">{match.courtNum != null ? `Court ${match.courtNum}` : "—"}</span>
+              </button>
+            )}
+            {/* — Delete — */}
+            {!isMatchCompleted && (isOwner || isAdmin || canSetScorer) && (
+              <button
+                onClick={() => { close(); deleteMatch(match.id); }}
+                className="py-2.5 rounded-xl text-sm font-medium border border-red-200 bg-white text-danger hover:bg-red-50 active:bg-red-100 shadow-sm flex items-center justify-center gap-2"
+              >🗑️ Delete match</button>
+            )}
             {/* Pause sits on its own row when match is active so it
                 doesn't crowd the top quartet. Same for Confirm score. */}
             {isMatchActive && (canManage || match.scorerId === userId) && (
@@ -7414,11 +7438,10 @@ export default function EventDetailPage() {
                 className="py-2.5 rounded-xl text-xs font-medium border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 shadow-sm flex items-center justify-center gap-2"
               >✓ Confirm score</button>
             )}
-            {/* Scorer picker — full-width row (more horizontal space
-                for the user list + team pills). */}
-            {canSetScorer && scorerPickerOpen && (
-              <div className="border border-border rounded-xl bg-white shadow-sm max-h-64 overflow-y-auto">
-                <div className="px-3 py-2 text-[11px] text-muted border-b border-border bg-gray-50">
+            {/* Scorer picker — bigger fonts for outdoor readability. */}
+            {canSetScorer && actionPanel === "scorer" && (
+              <div className="border border-border rounded-xl bg-white shadow-sm max-h-72 overflow-y-auto">
+                <div className="px-3 py-2 text-xs text-muted border-b border-border bg-gray-50">
                   Tap a name to assign them as scorer for this match.
                   {match.scorerId && (
                     <button
@@ -7429,7 +7452,7 @@ export default function EventDetailPage() {
                   )}
                 </div>
                 {eligibleScorers.length === 0 ? (
-                  <div className="px-3 py-3 text-[12px] text-muted italic">Nobody is signed up to this event yet.</div>
+                  <div className="px-3 py-3 text-sm text-muted italic">Nobody is signed up to this event yet.</div>
                 ) : (
                   <ul className="divide-y divide-border">
                     {eligibleScorers.map((ep) => {
@@ -7443,21 +7466,21 @@ export default function EventDetailPage() {
                           <button
                             type="button"
                             onClick={() => setScorer(ep.player.id)}
-                            className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
+                            className={`w-full text-left px-3 py-3 text-base flex items-center gap-3 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
                           >
-                            <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                            <span className={`flex-1 truncate font-medium ${isSelf ? "text-violet-700" : ""}`}>
-                              {ep.player.name}{isSelf && <span className="ml-1 text-[10px] font-semibold opacity-70">(you)</span>}
+                            <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="sm" />
+                            <span className={`flex-1 truncate font-semibold ${isSelf ? "text-violet-700" : ""}`}>
+                              {ep.player.name}{isSelf && <span className="ml-1 text-xs font-bold opacity-70">(you)</span>}
                             </span>
                             {adminRole && (
                               <span
-                                className="shrink-0 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200"
+                                className="shrink-0 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200"
                                 title={adminRole}
                               >{adminRole === "Organizer" ? "ORG" : adminRole === "Home admin" ? "HOME" : "AWAY"}</span>
                             )}
                             {team && (
                               <span
-                                className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                className={`shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
                                   isHostSide
                                     ? "bg-emerald-100 text-emerald-800"
                                     : "bg-sky-100 text-sky-800"
@@ -7465,7 +7488,7 @@ export default function EventDetailPage() {
                                 title={`Team: ${team.name}`}
                               >{team.name}</span>
                             )}
-                            {isCurrent && <span className="text-[10px] text-emerald-700 font-semibold">current</span>}
+                            {isCurrent && <span className="text-[11px] text-emerald-700 font-semibold">current</span>}
                           </button>
                         </li>
                       );
@@ -7474,12 +7497,11 @@ export default function EventDetailPage() {
                 )}
               </div>
             )}
-            {/* Per-match scoring-format override (league matches only).
-                Two selects: format (1 to 11 / Bo3 to 15 / Rally 21 …)
-                and Win-by. Both default to the category's setting;
-                "—" clears the override. PATCHes the leagueGame so
-                ScorerTracker picks it up on next open. */}
-            {match.leagueGame && canSetScorer && event.round && (() => {
+            {/* Format panel — scoring, win-by, ranking. League matches
+                read/write via leagueGame.scoringFormatOverride /
+                winByOverride; non-league reads the event/class default
+                read-only (TBD). Ranking mode is on Match. */}
+            {actionPanel === "format" && match.leagueGame && canSetScorer && event.round && (() => {
               const leagueId = event.round.league.id;
               const lg = match.leagueGame as { id: string; scoringFormatOverride?: string | null; winByOverride?: string | null };
               const SCORING_OPTIONS: Array<{ value: string; label: string }> = [
@@ -7501,6 +7523,11 @@ export default function EventDetailPage() {
                 { value: "cap18", label: "Win by 2, cap 18" },
                 { value: "cap21", label: "Win by 2, cap 21" },
               ];
+              const RANKING_OPTIONS: Array<{ value: string; label: string }> = [
+                { value: "ranked", label: "Ranked (ELO)" },
+                { value: "none",   label: "No ranking" },
+                { value: "approval", label: "Needs approval" },
+              ];
               const patchOverride = async (key: "scoringFormatOverride" | "winByOverride", value: string | null) => {
                 await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lg.id}`, {
                   method: "PATCH",
@@ -7509,37 +7536,87 @@ export default function EventDetailPage() {
                 });
                 await fetchEvent();
               };
+              const patchRanking = async (mode: string) => {
+                await fetch(`/api/matches/${match.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rankingMode: mode }),
+                });
+                await fetchEvent();
+              };
               return (
-                <div className="rounded-xl border border-border bg-white p-3 space-y-2">
-                  <div className="text-[11px] uppercase tracking-wider font-bold text-muted">Format override</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="block text-[10px] text-muted">
-                      Scoring
-                      <select
-                        value={lg.scoringFormatOverride ?? ""}
-                        onChange={(e) => patchOverride("scoringFormatOverride", e.target.value || null)}
-                        className="mt-0.5 w-full border border-border rounded-md px-2 py-1.5 text-sm bg-white"
-                      >
-                        <option value="">— Match default —</option>
-                        {SCORING_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block text-[10px] text-muted">
-                      Win-by
-                      <select
-                        value={lg.winByOverride ?? ""}
-                        onChange={(e) => patchOverride("winByOverride", e.target.value || null)}
-                        className="mt-0.5 w-full border border-border rounded-md px-2 py-1.5 text-sm bg-white"
-                      >
-                        <option value="">— Match default —</option>
-                        {WINBY_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    </label>
+                <div className="rounded-xl border border-border bg-white p-3 space-y-3">
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Scoring</label>
+                    <select
+                      value={lg.scoringFormatOverride ?? ""}
+                      onChange={(e) => patchOverride("scoringFormatOverride", e.target.value || null)}
+                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white"
+                    >
+                      <option value="">— Event/category default —</option>
+                      {SCORING_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                   </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Win-by</label>
+                    <select
+                      value={lg.winByOverride ?? ""}
+                      onChange={(e) => patchOverride("winByOverride", e.target.value || null)}
+                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white"
+                    >
+                      <option value="">— Event/category default —</option>
+                      {WINBY_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Ranking</label>
+                    <select
+                      value={match.rankingMode || "ranked"}
+                      onChange={(e) => patchRanking(e.target.value)}
+                      className="w-full border border-border rounded-md px-2 py-2 text-base bg-white"
+                    >
+                      {RANKING_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Court panel — same grid the schedule card uses, just
+                surfaced inside the action sheet too. */}
+            {actionPanel === "court" && canSetScorer && event.round && match.leagueGame && (() => {
+              const leagueId = event.round.league.id;
+              const lgId = (match.leagueGame as { id: string }).id;
+              const onPickCourt = async (n: number | null) => {
+                await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lgId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ courtNum: n }),
+                });
+                await fetchEvent();
+                setActionPanel(null);
+              };
+              return (
+                <div className="rounded-xl border border-border bg-white shadow-sm p-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPickCourt(null)}
+                    className={`w-12 h-12 rounded-md border text-sm font-medium ${match.courtNum == null ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-muted"}`}
+                    title="No court"
+                  >—</button>
+                  {Array.from({ length: event.numCourts }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => onPickCourt(n)}
+                      className={`w-12 h-12 rounded-md border text-xl font-bold ${match.courtNum === n ? "border-action bg-action text-white" : "border-border hover:bg-gray-50 text-foreground"}`}
+                    >{n}</button>
+                  ))}
                 </div>
               );
             })()}
