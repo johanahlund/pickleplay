@@ -4531,10 +4531,14 @@ export default function EventDetailPage() {
   };
   // League Matches own their own UI inside the league schedule grid
   // (renderLineup → renderGameRow with the per-card Start / Pause /
-  // Score cluster). Filtering them out of the legacy IN PLAY /
-  // UPCOMING / COMPLETED lists prevents the same match showing up
-  // twice on the page — once in the grid, once in the old list view.
-  const passesLegacyMatchView = (m: Match) => !m.leagueGame && passesMatchFilters(m);
+  // Score cluster). For league events we hide the legacy IN PLAY /
+  // UPCOMING / PAUSED / COMPLETED sections entirely — the grid is
+  // the single source of truth. Also belt-and-suspenders: even for
+  // non-league events, drop any match that has a leagueGame link
+  // (orphan match rows created on different code paths can otherwise
+  // double-show).
+  const isLeagueEvent = !!event.round;
+  const passesLegacyMatchView = (m: Match) => !isLeagueEvent && !m.leagueGame && passesMatchFilters(m);
   const completedMatches = event.matches.filter((m) => m.status === "completed").filter(passesLegacyMatchView);
   const pausedMatches = event.matches.filter((m) => m.status === "paused").filter(passesLegacyMatchView);
   const activeMatches = event.matches.filter((m) => m.status === "active").filter(passesLegacyMatchView);
@@ -5650,10 +5654,42 @@ export default function EventDetailPage() {
       // Open the action sheet with the scorer picker already expanded.
       // One-tap from the schedule grid to the Set Scorer flow instead
       // of "tap card body → action sheet → 📋 Set scorer".
-      const openScorerPicker = () => {
-        if (!linkedMatch) return;
-        setActionSheetMatchId(linkedMatch.id);
-        setScorerPickerOpen(true);
+      const openScorerPicker = async () => {
+        if (linkedMatch) {
+          setActionSheetMatchId(linkedMatch.id);
+          setScorerPickerOpen(true);
+          return;
+        }
+        // No Match yet — lazy-create one in pending state so the
+        // action sheet can open (its UI keys off a Match.id). The
+        // start-match endpoint accepts { startNow: false } for this
+        // pre-play case. After the create, fetchEvent reconciles
+        // and the next render will have linkedMatch.
+        if (!event.round) return;
+        if (!lineupsReady) {
+          await alertDialog("Both teams need at least one assigned player before this match can be edited.", "Lineup incomplete");
+          return;
+        }
+        const leagueId = event.round.league.id;
+        try {
+          const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ startNow: false }),
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            await alertDialog(d.error || "Couldn't open editor.", "Edit failed");
+            return;
+          }
+          const data = await r.json() as { match?: { id: string } };
+          if (data.match?.id) {
+            setActionSheetMatchId(data.match.id);
+            setScorerPickerOpen(true);
+          }
+        } finally {
+          void fetchEvent();
+        }
       };
       const sides = revealed ? playersBySide(g) : { team1: [], team2: [] };
       const isMoving = movingScheduleId === g.id;
@@ -6034,8 +6070,8 @@ export default function EventDetailPage() {
             schedule editors, players in the match, and the assigned
             scorer. Compact icon buttons so the schedule grid stays
             scannable. */}
-        {canActOnMatch && matchStatus !== "completed" && (
-          <div className="flex items-center justify-end gap-1 -mt-0.5">
+        {(canActOnMatch || canEditSchedule) && matchStatus !== "completed" && (
+          <div className="flex items-center justify-end gap-1 mt-1.5 pt-1.5 border-t border-border/60">
             {/* No match yet: ▶ Start (creates Match via start-match API).
                 Disabled if either team has no assigned player. */}
             {!linkedMatch && (
@@ -6091,16 +6127,17 @@ export default function EventDetailPage() {
                 <span aria-hidden>⏹</span><span>Stop</span>
               </button>
             )}
-            {/* Edit — schedule editors only. Opens the full action
-                sheet (edit / delete / set scorer / announce / etc).
-                Doubles as the entry point to the scorer picker; we
-                pre-expand the picker on open so the most common
-                action is one tap away. */}
-            {canEditSchedule && linkedMatch && (
+            {/* Edit — schedule editors only. Always visible (even
+                pre-Start). When no Match exists yet, the handler
+                lazy-creates one in pending state so the action sheet
+                can open. Doubles as the entry point to the scorer
+                picker; we pre-expand the picker on open so the most
+                common action is one tap away. */}
+            {canEditSchedule && (
               <button
                 type="button"
                 onClick={openScorerPicker}
-                title={linkedMatch.scorerId
+                title={linkedMatch?.scorerId
                   ? `Scorer: ${linkedMatch.scorer?.name?.split(" ")[0] ?? "set"} — tap to edit`
                   : "Edit this match"}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-border text-foreground hover:bg-gray-50 active:bg-gray-100 inline-flex items-center gap-1"

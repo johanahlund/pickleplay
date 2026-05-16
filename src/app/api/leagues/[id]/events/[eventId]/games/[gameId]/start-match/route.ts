@@ -20,12 +20,19 @@ import { NextResponse } from "next/server";
  * Requires: both teams have at least one LeagueGamePlayer entry.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string; eventId: string; gameId: string }> }
 ) {
   const { id: leagueId, eventId, gameId } = await params;
   let user;
   try { user = await requireAuth(); } catch (e) { return authErrorResponse(e); }
+  // Optional body: { startNow?: boolean }. When false (or omitted &
+  // body absent), the Match is created in `pending` state without
+  // startedAt. Used by the Edit button to lazy-create a Match so the
+  // action sheet can open before the operator hits ▶ Start. Default
+  // true so the existing ▶ Start callers keep their semantics.
+  const body = await req.json().catch(() => null) as { startNow?: boolean } | null;
+  const startNow = body?.startNow !== false;
 
   const game = await prisma.leagueGame.findUnique({
     where: { id: gameId },
@@ -79,10 +86,15 @@ export async function POST(
   const now = new Date();
   const defaultCourt = game.courtNum ?? 1;
 
-  // Already have a Match — just flip status to active (idempotent).
+  // Already have a Match — when startNow is true, flip status to
+  // active (idempotent). When startNow is false (Edit-lazy-create
+  // path), just return the existing Match unchanged.
   if (game.matchId && game.match) {
     if (game.match.status === "completed") {
       return NextResponse.json({ error: "Match already completed." }, { status: 400 });
+    }
+    if (!startNow) {
+      return NextResponse.json({ match: game.match, created: false });
     }
     const updated = await prisma.match.update({
       where: { id: game.matchId },
@@ -96,14 +108,17 @@ export async function POST(
   }
 
   // No Match yet — create one, link it back to the LeagueGame, and
-  // seed MatchPlayer rows from the LeagueGamePlayer assignments.
+  // seed MatchPlayer rows from the LeagueGamePlayer assignments. When
+  // startNow is false, the Match is created in `pending` state with
+  // no startedAt so the Edit affordance can open the action sheet
+  // before any play begins.
   const created = await prisma.match.create({
     data: {
       eventId,
       courtNum: defaultCourt,
       round: 1,
-      status: "active",
-      startedAt: now,
+      status: startNow ? "active" : "pending",
+      startedAt: startNow ? now : null,
       createdById: user.id,
       players: {
         create: game.gamePlayers.map((gp) => ({
