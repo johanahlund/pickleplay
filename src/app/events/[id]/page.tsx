@@ -534,6 +534,12 @@ export default function EventDetailPage() {
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
   const [focusedMatchId, setFocusedMatchId] = useState<string | null>(null);
+  // Whether any match in the event is currently live. Updated after
+  // each successful event fetch (see useEffect below) so the SWR
+  // refreshInterval can drop to 5s while play is in progress —
+  // spectators see live score moves quickly without a per-second
+  // poll storm when the page is idle.
+  const [hasActiveMatch, setHasActiveMatch] = useState(false);
   const swrEvent = useSWR(
     id ? `/api/events/${id}` : null,
     async (url: string) => {
@@ -550,7 +556,7 @@ export default function EventDetailPage() {
       }
       return r.json();
     },
-    { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: focusedMatchId ? 5000 : 30000 },
+    { revalidateOnFocus: true, dedupingInterval: 2000, refreshInterval: (focusedMatchId || hasActiveMatch) ? 5000 : 30000 },
   );
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
@@ -848,6 +854,10 @@ export default function EventDetailPage() {
       durationLastServerRef.current = effective;
       setScheduleDurationMin(effective);
     }
+    // Bump SWR polling to 5s whenever any match is active so the
+    // score visible on cards stays close to live.
+    const anyActive = !!evt.matches?.some((m) => m.status === "active");
+    setHasActiveMatch((cur) => cur !== anyActive ? anyActive : cur);
   }, [swrEvent.data]);
   // Debounced save: when the explicit override diverges from server
   // truth, PATCH the event after 600ms of stillness. Override = null
@@ -5547,6 +5557,18 @@ export default function EventDetailPage() {
       const gpRows = (g as { gamePlayers?: { playerId: string; team?: number | null }[] }).gamePlayers ?? [];
       const isMatchScorer = !!userId && linkedMatch?.scorerId === userId;
       const canActOnMatch = canEditSchedule || isMatchScorer;
+      // Direct score entry permission: an active/paused Match exists
+      // AND viewer is either a schedule editor, a player in the
+      // match, or the assigned scorer. After the match completes
+      // (score "fixed") this drops back to canEditSchedule only —
+      // players can't rewrite a finalised score, admins still can.
+      const isMatchPlayer = !!userId && !!linkedMatch && linkedMatch.players.some((p) => p.playerId === userId);
+      const matchInPlay = matchStatus === "active" || matchStatus === "paused";
+      const canEnterScore = !!linkedMatch && (
+        matchInPlay
+          ? (canEditSchedule || isMatchPlayer || isMatchScorer)
+          : (matchStatus === "completed" && canEditSchedule)
+      );
       // Both teams need at least one assigned player before a Match
       // can be created. Disabled (with tooltip) otherwise.
       const team1Assigned = gpRows.filter((gp) => gp.team === 1).length > 0;
@@ -5680,6 +5702,43 @@ export default function EventDetailPage() {
       // Open the action sheet with the scorer picker already expanded.
       // One-tap from the schedule grid to the Set Scorer flow instead
       // of "tap card body → action sheet → 📋 Set scorer".
+      // Direct score commit ("Fix score"). Reads the pending values
+      // from the shared `scores` map, validates both teams have a
+      // numeric value, and POSTs to /api/matches/[id]/score. The
+      // /score endpoint flips the Match to "completed" and applies
+      // ratings — same flow as ScorerTracker's final submit.
+      const fixScore = async () => {
+        if (!linkedMatch) return;
+        const entry = scores[linkedMatch.id];
+        const t1 = entry?.team1 != null && entry.team1 !== "" ? parseInt(entry.team1, 10) : NaN;
+        const t2 = entry?.team2 != null && entry.team2 !== "" ? parseInt(entry.team2, 10) : NaN;
+        if (!Number.isFinite(t1) || !Number.isFinite(t2)) {
+          await alertDialog("Enter a score for both teams before fixing.", "Score incomplete");
+          return;
+        }
+        if (t1 === t2) {
+          await alertDialog("Scores can't be tied — one team must win.", "Invalid score");
+          return;
+        }
+        // Optimistic local: mark completed with these scores so the
+        // card flips immediately to ✓ PLAYED.
+        setEvent((prev) => prev ? {
+          ...prev,
+          matches: prev.matches.map((m) => m.id === linkedMatch.id ? {
+            ...m,
+            status: "completed",
+            players: m.players.map((p) => ({
+              ...p,
+              score: p.team === 1 ? t1 : t2,
+            })),
+          } : m),
+        } : prev);
+        fetch(`/api/matches/${linkedMatch.id}/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
+        }).finally(() => { void fetchEvent(); });
+      };
       const openScorerPicker = async () => {
         if (linkedMatch) {
           setActionSheetMatchId(linkedMatch.id);
@@ -6087,6 +6146,46 @@ export default function EventDetailPage() {
                 ))}
               </div>
             );
+            // When the operator has score-entry rights AND the match
+            // is in play (or recently completed for admins), render
+            // a tiny inline number input instead of the static score
+            // text. The shared `scores` map carries the pending value
+            // until they hit ✓ Fix.
+            const matchIdForEntry = linkedMatch?.id ?? null;
+            const entry = matchIdForEntry ? scores[matchIdForEntry] : undefined;
+            const homeIsTopAndTeam1 = !homeIsTeam2; // top row = home; if homeIsTeam2 false, top is team1
+            const topEntryKey: "team1" | "team2" = homeIsTopAndTeam1 ? "team1" : "team2";
+            const botEntryKey: "team1" | "team2" = homeIsTopAndTeam1 ? "team2" : "team1";
+            const setEntry = (key: "team1" | "team2", value: string) => {
+              if (!matchIdForEntry) return;
+              setScores((prev) => ({
+                ...prev,
+                [matchIdForEntry]: {
+                  team1: key === "team1" ? value : (prev[matchIdForEntry]?.team1 ?? ""),
+                  team2: key === "team2" ? value : (prev[matchIdForEntry]?.team2 ?? ""),
+                },
+              }));
+            };
+            const renderScoreCell = (currentScore: number | null, key: "team1" | "team2") => {
+              if (!canEnterScore) {
+                return (
+                  <span>{currentScore != null ? currentScore : <span className="text-muted/40 font-normal">—</span>}</span>
+                );
+              }
+              const pending = entry?.[key] ?? (currentScore != null ? String(currentScore) : "");
+              return (
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={pending}
+                  onChange={(e) => setEntry(key, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-10 text-right text-sm font-bold tabular-nums border border-border rounded px-1 py-0.5 bg-white focus:outline-none focus:border-action"
+                  placeholder="—"
+                />
+              );
+            };
             return (
               <div className="space-y-1">
                 <div className="flex items-baseline gap-1.5">
@@ -6094,8 +6193,8 @@ export default function EventDetailPage() {
                     <div className="text-xs font-semibold text-foreground truncate">{teamShort(topId)}</div>
                     {topPlayers.length > 0 && renderPlayerList(topPlayers)}
                   </div>
-                  <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
-                    {topScore != null ? topScore : <span className="text-muted/40 font-normal">—</span>}
+                  <div className="text-right text-sm font-bold tabular-nums shrink-0">
+                    {renderScoreCell(topScore, topEntryKey)}
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
@@ -6103,10 +6202,26 @@ export default function EventDetailPage() {
                     <div className="text-xs font-semibold text-foreground truncate">{teamShort(botId)}</div>
                     {botPlayers.length > 0 && renderPlayerList(botPlayers)}
                   </div>
-                  <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
-                    {botScore != null ? botScore : <span className="text-muted/40 font-normal">—</span>}
+                  <div className="text-right text-sm font-bold tabular-nums shrink-0">
+                    {renderScoreCell(botScore, botEntryKey)}
                   </div>
                 </div>
+                {/* ✓ Fix score button — visible when operator is in
+                    score-entry mode. Validates both inputs server-side
+                    via the existing /score endpoint (also applies
+                    ratings + flips status to "completed"). */}
+                {canEnterScore && matchInPlay && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={fixScore}
+                      title="Save scores and finalise the match"
+                      className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 inline-flex items-center gap-1"
+                    >
+                      <span aria-hidden>✓</span><span>Fix score</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })()}
