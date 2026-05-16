@@ -5452,16 +5452,20 @@ export default function EventDetailPage() {
       const t1Id = g.team1Id;
       const team1RostId = (event.round!.league.teams || []).find((t) => t.id === t1Id)?.players.map((p) => p.playerId);
       const t1Roster = new Set(team1RostId || []);
-      const a: string[] = [], b: string[] = [];
+      // Returns {id, name} pairs so the renderer can highlight the
+      // signed-in user's row in violet without re-resolving the name.
+      const a: { id: string; name: string }[] = [];
+      const b: { id: string; name: string }[] = [];
       for (const gp of g.gamePlayers) {
         const name = playerNameById.get(gp.playerId) || "?";
+        const entry = { id: gp.playerId, name };
         // Prefer the explicit team tag (1/2) set server-side; fall back
         // to roster heuristics for legacy rows where team is null.
         const t = gp.team;
-        if (t === 1) a.push(name);
-        else if (t === 2) b.push(name);
-        else if (t1Roster.has(gp.playerId)) a.push(name);
-        else b.push(name);
+        if (t === 1) a.push(entry);
+        else if (t === 2) b.push(entry);
+        else if (t1Roster.has(gp.playerId)) a.push(entry);
+        else b.push(entry);
       }
       return { team1: a, team2: b };
     };
@@ -6014,14 +6018,25 @@ export default function EventDetailPage() {
             const botPlayers = homeIsTeam2 ? sides.team1 : sides.team2;
             const topScore = homeIsTeam2 ? t2Score : t1Score;
             const botScore = homeIsTeam2 ? t1Score : t2Score;
+            // Render each player with bold violet highlighting when
+            // the row belongs to the signed-in user — quick scan for
+            // "where am I playing?" across a packed schedule.
+            const renderPlayerList = (players: { id: string; name: string }[]) => (
+              <div className="text-[10px] text-muted leading-tight truncate">
+                {players.map((p, i) => (
+                  <span key={`${p.id}-${i}`}>
+                    {i > 0 ? ", " : ""}
+                    <span className={p.id === userId ? "text-violet-700 font-bold" : ""}>{p.name}</span>
+                  </span>
+                ))}
+              </div>
+            );
             return (
               <div className="space-y-1">
                 <div className="flex items-baseline gap-1.5">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-foreground truncate">{teamShort(topId)}</div>
-                    {topPlayers.length > 0 && (
-                      <div className="text-[10px] text-muted leading-tight truncate">{topPlayers.join(", ")}</div>
-                    )}
+                    {topPlayers.length > 0 && renderPlayerList(topPlayers)}
                   </div>
                   <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
                     {topScore != null ? topScore : <span className="text-muted/40 font-normal">—</span>}
@@ -6030,9 +6045,7 @@ export default function EventDetailPage() {
                 <div className="flex items-baseline gap-1.5">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-foreground truncate">{teamShort(botId)}</div>
-                    {botPlayers.length > 0 && (
-                      <div className="text-[10px] text-muted leading-tight truncate">{botPlayers.join(", ")}</div>
-                    )}
+                    {botPlayers.length > 0 && renderPlayerList(botPlayers)}
                   </div>
                   <div className="w-8 text-right text-sm font-bold tabular-nums shrink-0">
                     {botScore != null ? botScore : <span className="text-muted/40 font-normal">—</span>}
@@ -7020,8 +7033,6 @@ export default function EventDetailPage() {
       });
       await fetchEvent();
     };
-    const eligibleScorers = [...event.players]
-      .sort((a, b) => a.player.name.localeCompare(b.player.name));
     // Map playerId → team short-name pill text. Lets the scorer
     // picker render a per-candidate team chip so the operator can
     // see at a glance which side each option belongs to (handy for
@@ -7035,6 +7046,44 @@ export default function EventDetailPage() {
     }
     // Home / away identification for tinting the team pill.
     const hostTeamId = event.hostTeamId ?? null;
+    // Admin-role lookup: maps playerId → label for the "ADMIN" pill
+    // shown next to relevant names in the scorer picker.
+    //   "Organizer" — event.createdById OR league creator/deputy
+    //   "Home admin" — captain/vice of the host team
+    //   "Away admin" — captain/vice of the visitor team
+    const adminRoleOf = (playerId: string): "Organizer" | "Home admin" | "Away admin" | null => {
+      if (event.createdById === playerId) return "Organizer";
+      const league = event.round?.league as { createdById?: string; deputyId?: string } | undefined;
+      if (league && (league.createdById === playerId || league.deputyId === playerId)) return "Organizer";
+      const teams = event.round?.league.teams || [];
+      const visitorTeamId = (event.leagueTeams || []).find((lt) => lt.teamId !== hostTeamId)?.teamId ?? null;
+      for (const t of teams) {
+        const cap = (t as { captainId?: string | null; viceCaptainId?: string | null });
+        const isCap = cap.captainId === playerId || cap.viceCaptainId === playerId;
+        if (!isCap) continue;
+        if (t.id === hostTeamId) return "Home admin";
+        if (t.id === visitorTeamId) return "Away admin";
+      }
+      return null;
+    };
+    // Sort order: self → event/league organizers → home captain/vice
+    // → away captain/vice → everyone else (alphabetical). Gets the
+    // most likely scorer picks (you, the people running the day) to
+    // the top so the operator doesn't have to scroll for them.
+    const sortBucket = (p: { id: string }): number => {
+      if (p.id === userId) return 0;
+      const role = adminRoleOf(p.id);
+      if (role === "Organizer") return 1;
+      if (role === "Home admin") return 2;
+      if (role === "Away admin") return 3;
+      return 4;
+    };
+    const eligibleScorers = [...event.players].sort((a, b) => {
+      const ba = sortBucket(a.player);
+      const bb = sortBucket(b.player);
+      if (ba !== bb) return ba - bb;
+      return a.player.name.localeCompare(b.player.name);
+    });
     return (
       <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
         <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-16 mx-auto" onClick={(e) => e.stopPropagation()}>
@@ -7146,6 +7195,8 @@ export default function EventDetailPage() {
                       const isCurrent = match.scorerId === ep.player.id;
                       const team = playerIdToTeam.get(ep.player.id);
                       const isHostSide = team?.id === hostTeamId;
+                      const adminRole = adminRoleOf(ep.player.id);
+                      const isSelf = ep.player.id === userId;
                       return (
                         <li key={ep.player.id}>
                           <button
@@ -7154,7 +7205,15 @@ export default function EventDetailPage() {
                             className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 hover:bg-gray-50 active:bg-gray-100 ${isCurrent ? "bg-emerald-50" : ""}`}
                           >
                             <PlayerAvatar name={ep.player.name} photoUrl={ep.player.photoUrl} size="xs" />
-                            <span className="flex-1 truncate font-medium">{ep.player.name}</span>
+                            <span className={`flex-1 truncate font-medium ${isSelf ? "text-violet-700" : ""}`}>
+                              {ep.player.name}{isSelf && <span className="ml-1 text-[10px] font-semibold opacity-70">(you)</span>}
+                            </span>
+                            {adminRole && (
+                              <span
+                                className="shrink-0 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200"
+                                title={adminRole}
+                              >{adminRole === "Organizer" ? "ORG" : adminRole === "Home admin" ? "HOME" : "AWAY"}</span>
+                            )}
                             {team && (
                               <span
                                 className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
