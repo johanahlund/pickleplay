@@ -364,19 +364,35 @@ export function ScorerTracker({
       if (winningTeam === 1) newState.score = [newState.score[0] + 1, newState.score[1]];
       else newState.score = [newState.score[0], newState.score[1] + 1];
 
-      if (winningTeam !== servingTeam) {
-        // Side-out: other team serves
+      const sideOut = winningTeam !== servingTeam;
+      if (sideOut) {
+        // Side-out: other team serves.
         newState.servingTeam = winningTeam;
       }
 
-      // Rally: players stay on their sides. Server determined by score parity.
+      // Rally: players stay on their sides.
+      //   • On a side-out, the new serving team ALWAYS starts serving
+      //     from THEIR right (pickleball rule — score parity doesn't
+      //     apply on the very first serve of a new turn).
+      //   • On a retained serve, fall back to score-parity (even score
+      //     → right, odd → left) so the server alternates correctly
+      //     as the team's score climbs.
+      //
+      // Note on labels: the data convention is OBSERVER-perspective —
+      // `team1Right` and `team2Right` are both the east-absolute side.
+      // Pickleball "your right" is POV-based: team 2 faces south, so
+      // THEIR right is west = `team2Left` in our model. The diagonal
+      // logic in getReceiverId already encodes this (team1Right →
+      // team2Left is the cross-court diagonal). Server selection has
+      // to follow the same mapping.
       const teamPlayers = newState.servingTeam === 1 ? team1Players : team2Players;
       const teamScore = newState.score[newState.servingTeam - 1];
-      // Even score → right player serves, odd → left player serves
       if (isDoubles) {
-        const rightPlayer = newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Right;
-        const leftPlayer = newState.servingTeam === 1 ? newState.court.team1Left : newState.court.team2Left;
-        newState.serverId = (teamScore % 2 === 0) ? rightPlayer.id : leftPlayer.id;
+        const rightFromPOV = newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Left;
+        const leftFromPOV  = newState.servingTeam === 1 ? newState.court.team1Left  : newState.court.team2Right;
+        newState.serverId = sideOut
+          ? rightFromPOV.id
+          : ((teamScore % 2 === 0) ? rightFromPOV.id : leftFromPOV.id);
       } else {
         newState.serverId = teamPlayers[0].id;
       }
@@ -414,9 +430,11 @@ export function ScorerTracker({
           newState.servingTeam = winningTeam;
           newState.serverNumber = 1;
           newState.isFirstServe = false;
-          // After side-out: serve from RIGHT
+          // After side-out: serve from THEIR right. See note in the
+          // rally-scoring branch — for team 2 that's `team2Left` in
+          // our observer-perspective data labels.
           if (isDoubles) {
-            newState.serverId = (newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Right).id;
+            newState.serverId = (newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Left).id;
           } else {
             newState.serverId = (newState.servingTeam === 1 ? team1Players[0] : team2Players[0]).id;
           }
@@ -437,9 +455,11 @@ export function ScorerTracker({
           newState.servingTeam = winningTeam;
           newState.serverNumber = 1;
           newState.isFirstServe = false;
-          // After side-out: serve from RIGHT
+          // After side-out: serve from THEIR right. See note in the
+          // rally-scoring branch — for team 2 that's `team2Left` in
+          // our observer-perspective data labels.
           if (isDoubles) {
-            newState.serverId = (newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Right).id;
+            newState.serverId = (newState.servingTeam === 1 ? newState.court.team1Right : newState.court.team2Left).id;
           } else {
             newState.serverId = (newState.servingTeam === 1 ? team1Players[0] : team2Players[0]).id;
           }
