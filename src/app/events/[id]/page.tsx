@@ -22,7 +22,7 @@ import { leagueShortName } from "@/lib/leagueDisplay";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { UnclaimedIcon } from "@/components/UnclaimedIcon";
-import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShareFromEvent, personalClaimUrl, withInstallTip, type EventInviteContext } from "@/lib/inviteShare";
+import { buildEventInviteGroup, buildEventInvitePersonal, buildMatchDayShareFromEvent, personalClaimUrl, withInstallTip, shortFormatLabel, type EventInviteContext } from "@/lib/inviteShare";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -5919,12 +5919,26 @@ export default function EventDetailPage() {
                   </span>
                 );
               })()
-            ) : (
-              <span className={`text-[11px] font-semibold tabular-nums w-[60px] ${g.scheduleAnchored ? "text-blue-700" : ""}`}>
-                {g.scheduleAnchored && hhmm && <span aria-hidden className="mr-0.5">📌</span>}
-                {hhmm || <span className="text-muted font-normal">—</span>}
-              </span>
-            )}
+            ) : (() => {
+              // Read-only time display (schedule is locked or viewer
+              // isn't an editor). Show an estimated end time alongside
+              // the start, approximated as the next match's start
+              // time on the same court. The grid renders matches in
+              // displayOrder; same-court next gives the natural end.
+              const sameCourt = colOf(g);
+              const myIdx = sameCourt.findIndex((x) => x.id === g.id);
+              const nextOnCourt = myIdx >= 0 ? sameCourt[myIdx + 1] : undefined;
+              const endHhmm = nextOnCourt?.scheduledAt ? timeHHMM(nextOnCourt.scheduledAt) : null;
+              return (
+                <span className={`text-[11px] font-semibold tabular-nums whitespace-nowrap ${g.scheduleAnchored ? "text-blue-700" : ""}`}>
+                  {g.scheduleAnchored && hhmm && <span aria-hidden className="mr-0.5">📌</span>}
+                  {hhmm || <span className="text-muted font-normal">—</span>}
+                  {hhmm && endHhmm && (
+                    <span className="text-muted font-normal"> – {endHhmm}</span>
+                  )}
+                </span>
+              );
+            })()}
             {scheduleEditable && hhmm && (
               <>
                 {g.scheduleAnchored && (
@@ -6028,6 +6042,26 @@ export default function EventDetailPage() {
               </span>
             )}
           </div>
+          {/* Per-match scoring format under the category line. Pulls
+              from per-match override → category default → omitted.
+              shortFormatLabel returns terse strings like "Bo3 to 15"
+              or "Rally 21" that fit the row even at the tightest
+              column width. */}
+          {(() => {
+            const cat = catById.get(g.categoryId) as unknown as { scoringFormat?: string | null; winBy?: string | null } | undefined;
+            // Overrides aren't in G's TS type but the API returns them
+            // (see /api/events/[id] select). Cast through the wide
+            // shape to read without dragging schema-wide type changes.
+            const overrides = g as unknown as { scoringFormatOverride?: string | null; winByOverride?: string | null };
+            const scoring = overrides.scoringFormatOverride || cat?.scoringFormat || null;
+            const winBy = overrides.winByOverride || cat?.winBy || "2";
+            if (!scoring) return null;
+            const label = shortFormatLabel(scoring, winBy);
+            if (!label) return null;
+            return (
+              <div className="text-[10px] text-muted truncate">{label}</div>
+            );
+          })()}
           {/* Two team rows. Home team is always on top — the canonical
               team1Id stored on each leagueGame is alphabetical, so we
               swap when the away team happens to be team1. Score +
@@ -6572,32 +6606,37 @@ export default function EventDetailPage() {
       />
 
       <div className="px-4 space-y-3 pt-3">
-        {/* Matches-tab filters — empty selection = all. Pills toggle on/off
-            so users can stack filters. Search field goes on its own row. */}
-        <div className="space-y-2">
-          <ClearInput value={matchPlayerSearch} onChange={setMatchPlayerSearch} placeholder="Search player..." className="text-base" />
-          <div className="flex gap-1 flex-wrap items-center">
-            {event.round && ([
-              { v: "principal" as const, label: "🏆 Principal" },
-              { v: "friendly" as const,  label: "⚪ Friendly" },
-              { v: "non-league" as const, label: "Non-league" },
-            ]).map((f) => {
-              const active = matchKindFilter.has(f.v);
-              return (
-                <button
-                  key={f.v}
-                  onClick={() => {
-                    const next = new Set(matchKindFilter);
-                    if (next.has(f.v)) next.delete(f.v); else next.add(f.v);
-                    setMatchKindFilter(next);
-                  }}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${active ? "bg-selected text-white" : "bg-gray-100 text-muted"}`}
-                >{f.label}</button>
-              );
-            })}
-          </div>
-          <div className="flex gap-1 flex-wrap items-center">
-            {/* Gender pills */}
+        {/* Matches-tab filters — each filter group sits in its own
+            thin-bordered frame so they read as units. Empty
+            selection in any group means "all". The compact name
+            search lives between the gender and format groups for
+            quick keyboard access. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Type frame (league events only) */}
+          {event.round && (
+            <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
+              {([
+                { v: "principal" as const, label: "🏆 Principal" },
+                { v: "friendly" as const,  label: "⚪ Friendly" },
+                { v: "non-league" as const, label: "Non-league" },
+              ]).map((f) => {
+                const active = matchKindFilter.has(f.v);
+                return (
+                  <button
+                    key={f.v}
+                    onClick={() => {
+                      const next = new Set(matchKindFilter);
+                      if (next.has(f.v)) next.delete(f.v); else next.add(f.v);
+                      setMatchKindFilter(next);
+                    }}
+                    className={`px-1.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${active ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"}`}
+                  >{f.label}</button>
+                );
+              })}
+            </div>
+          )}
+          {/* Gender frame */}
+          <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
             {([
               { v: "M" as const, label: "♂" },
               { v: "F" as const, label: "♀" },
@@ -6606,10 +6645,19 @@ export default function EventDetailPage() {
                 key={g.v}
                 onClick={() => setMatchGenderFilter((cur) => cur === g.v ? null : g.v)}
                 title={g.v === "M" ? "Men" : "Women"}
-                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${matchGenderFilter === g.v ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}
+                className={`px-1.5 py-1 rounded-md text-sm font-medium transition-all ${matchGenderFilter === g.v ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"}`}
               >{g.label}</button>
             ))}
-            {/* Format pills */}
+          </div>
+          {/* Inline name search — narrow, sits between gender + format */}
+          <ClearInput
+            value={matchPlayerSearch}
+            onChange={setMatchPlayerSearch}
+            placeholder="Player…"
+            className="text-sm flex-1 min-w-0 max-w-[160px]"
+          />
+          {/* Format frame */}
+          <div className="flex gap-0.5 shrink-0 border border-gray-300 rounded-lg p-0.5">
             {([
               { v: "doubles" as const, label: "👥", title: "Doubles" },
               { v: "singles" as const, label: "👤", title: "Singles" },
@@ -6618,7 +6666,7 @@ export default function EventDetailPage() {
                 key={f.v}
                 onClick={() => setMatchFormatFilter((cur) => cur === f.v ? null : f.v)}
                 title={f.title}
-                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${matchFormatFilter === f.v ? "bg-selected text-white" : "bg-gray-100 text-foreground"}`}
+                className={`px-1.5 py-1 rounded-md text-sm font-medium transition-all ${matchFormatFilter === f.v ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"}`}
               >{f.label}</button>
             ))}
           </div>
