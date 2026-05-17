@@ -7591,7 +7591,7 @@ export default function EventDetailPage() {
             {/* Score-edit / clear scores for completed matches stays
                 as a compact row at the top so it's discoverable but
                 doesn't crowd the regular menu. */}
-            {isMatchCompleted && (isOwner || isAdmin) && (
+            {isMatchCompleted && (isOwner || isAdmin || canSetScorer) && (
               <div className="flex gap-1.5">
                 <button
                   onClick={async () => { close(); if (!await confirmDialog({ message: "Modify score? This affects rankings.", confirmText: "Edit" })) return; startEditMatch(match.id, match.players.filter((p: MatchPlayer) => p.team === 1)[0]?.score ?? 0, match.players.filter((p: MatchPlayer) => p.team === 2)[0]?.score ?? 0); }}
