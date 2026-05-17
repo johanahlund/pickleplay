@@ -14,6 +14,7 @@ import { leagueShortName } from "@/lib/leagueDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { useHideBottomNav, usePollingRefresh, useUrlState } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
+import { LoadingState } from "@/components/LoadingState";
 import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
@@ -1420,9 +1421,7 @@ export default function LeagueDetailPage() {
             </div>
           </>
         ) : (
-          <div className="flex justify-center py-8">
-            <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-          </div>
+          <LoadingState label="Loading league…" />
         )}
       </div>
     );
@@ -2771,8 +2770,8 @@ export default function LeagueDetailPage() {
       <div className="space-y-2">
         {editBackLink("")}
         {requestsLoading && (
-          <div className={`${frameClass} p-4`}>
-            <p className="text-xs text-muted">Loading…</p>
+          <div className={`${frameClass} p-2`}>
+            <LoadingState label="Loading requests…" compact />
           </div>
         )}
         {!requestsLoading && groups.length === 0 && (
@@ -3640,7 +3639,7 @@ export default function LeagueDetailPage() {
           </div>
 
           {!matchesLoaded ? (
-            <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+            <LoadingState label="Loading matches…" />
           ) : (() => {
             const filtered = leagueMatches.filter((m) => {
               if (matchRoundFilter && String(m.roundNumber) !== matchRoundFilter) return false;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 interface QueryRow {
   id: string;
@@ -127,7 +128,7 @@ export default function AssistantLogsPage() {
         className="w-full border border-border rounded-xl px-3 py-2 text-sm"
       />
 
-      {loading && <p className="text-sm text-muted">Loading…</p>}
+      {loading && <LoadingState label="Loading logs…" compact />}
       {error && (
         <div className={`${frameClass} p-3 text-sm text-danger`}>
           {error}

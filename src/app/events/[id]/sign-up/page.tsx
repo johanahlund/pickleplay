@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -406,9 +407,8 @@ export default function EventSignUpPage() {
           fetch resolves, so the user has context (whose prefs they're
           editing) immediately and sees the spinner here as it loads. */}
       {loading && (
-        <div className={`${frameClass} p-4 flex items-center gap-2 text-sm text-muted`}>
-          <div className="w-4 h-4 border-2 border-action border-t-transparent rounded-full animate-spin" />
-          <span>Loading preferences…</span>
+        <div className={`${frameClass} p-2`}>
+          <LoadingState label="Loading preferences…" compact />
         </div>
       )}
 
@@ -461,7 +461,7 @@ export default function EventSignUpPage() {
           <div className={`${frameClass} p-4 space-y-3`}>
             <h3 className="text-sm font-semibold">Category preferences</h3>
             {loading ? (
-              <div className="text-xs text-muted py-2">Loading categories…</div>
+              <LoadingState label="Loading categories…" compact />
             ) : visibleCategories.map((cat) => {
               const pref = preferences[cat.id]?.level || "ok";
               const note = preferences[cat.id]?.note || "";

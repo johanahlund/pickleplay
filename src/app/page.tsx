@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { LoadingState } from "@/components/LoadingState";
 
 export default function Home() {
   const router = useRouter();
@@ -10,5 +11,5 @@ export default function Home() {
     router.replace("/events");
   }, [router]);
 
-  return <div className="text-center py-12 text-muted">Loading...</div>;
+  return <LoadingState />;
 }

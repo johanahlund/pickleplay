@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { leagueShortName } from "@/lib/leagueDisplay";
 
 type Preference = "prefer" | "ok" | "no";
@@ -218,7 +219,7 @@ export default function LeagueSignUpPage() {
           <div className={`${frameClass} p-4 space-y-3`}>
             <h3 className="text-sm font-semibold">Category preferences</h3>
             {loading ? (
-              <div className="text-xs text-muted py-2">Loading categories…</div>
+              <LoadingState label="Loading categories…" compact />
             ) : visibleCategories.map((cat) => {
               const pref = preferences[cat.id]?.level || "ok";
               const note = preferences[cat.id]?.note || "";

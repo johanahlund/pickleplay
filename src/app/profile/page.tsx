@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 interface RatingData {
@@ -69,9 +70,7 @@ export default function ProfilePage() {
   if (loading) return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-center">My Profile</h2>
-      <div className="flex justify-center py-8">
-        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-      </div>
+      <LoadingState label="Loading your profile…" />
     </div>
   );
 

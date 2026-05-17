@@ -41,6 +41,7 @@ import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { DurationStepper } from "@/components/DurationStepper";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { nameMatchesSearch } from "@/lib/searchUtil";
@@ -2886,7 +2887,7 @@ export default function EventDetailPage() {
                   </button>
                 </div>
                 {allPlayers.length === 0 ? (
-                  <p className="text-sm text-muted py-2">Loading players...</p>
+                  <LoadingState label="Loading players…" compact />
                 ) : (
                   <>
                     <ClearInput value={adminSearch} onChange={setAdminSearch} placeholder="Search by name..." className="text-base mb-2" />

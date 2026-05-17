@@ -11,6 +11,7 @@ import { ScorePicker } from "@/components/ScorePicker";
 import { useSession } from "next-auth/react";
 import { AppHeader } from "@/components/AppHeader";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 // ── Types mirroring src/lib/solver/types.ts ──────────────────────────────
 
@@ -747,9 +748,7 @@ export default function PairingConfigPage() {
           </div>
         </div>
         <div className="h-4 bg-gray-100 rounded w-20" />
-        <div className="flex justify-center py-4">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Loading event…" compact />
       </div>
     </div>
   );

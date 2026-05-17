@@ -19,6 +19,7 @@ import { getPreview, setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
@@ -1078,11 +1079,7 @@ export default function ClubDetailPage() {
         </div>
       );
     }
-    return (
-      <div className="flex justify-center py-8">
-        <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoadingState label="Loading club…" />;
   }
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;

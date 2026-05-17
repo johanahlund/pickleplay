@@ -9,6 +9,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { resolveRoundCategories, resolveRoundConfig, type LeagueCategoryShape } from "@/lib/leagueRound";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { buildMatchDayShareFromEvent } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
@@ -797,7 +798,7 @@ export default function LineupBuilderPage() {
     return (
       <>
         {headerEl}
-        <div className="text-sm text-muted py-8 text-center">Loading lineup…</div>
+        <LoadingState label="Loading lineup…" />
       </>
     );
   }

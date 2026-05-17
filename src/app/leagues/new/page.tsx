@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 const DEFAULT_CATEGORIES = [
   { name: "Men's Doubles", format: "doubles", gender: "male", scoringFormat: "3x15", winBy: "2" },
@@ -84,9 +85,7 @@ export default function NewLeaguePage() {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-bold">Create League</h2>
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Loading clubs…" />
       </div>
     );
   }

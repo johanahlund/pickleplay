@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 interface ClubInfo {
   club: { id: string; name: string; emoji: string; _count: { members: number } };
@@ -49,9 +50,7 @@ export default function JoinClubPage() {
         <div className="text-center space-y-3">
           <h1 className="text-2xl font-bold">Join Club</h1>
         </div>
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Checking your invite…" />
       </div>
     );
   }
