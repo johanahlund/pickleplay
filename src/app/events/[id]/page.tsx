@@ -5993,14 +5993,30 @@ export default function EventDetailPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ setScores: sets }),
-          }).finally(() => { void fetchEvent(); });
-          setEditingScoreMatchId(null);
-          setReopenedForEditIds((prev) => {
-            if (!prev.has(linkedMatch.id)) return prev;
-            const next = new Set(prev);
-            next.delete(linkedMatch.id);
-            return next;
-          });
+          })
+            .then(async (r) => {
+              if (r.ok) {
+                // Success — clear edit mode + reopen marker so the
+                // card flips into the finalized presentation.
+                setEditingScoreMatchId(null);
+                setReopenedForEditIds((prev) => {
+                  if (!prev.has(linkedMatch.id)) return prev;
+                  const next = new Set(prev);
+                  next.delete(linkedMatch.id);
+                  return next;
+                });
+              } else {
+                // Server rejected (409 already-completed, 400
+                // lineup-incomplete, etc.). Keep edit mode open so
+                // the operator can read the error and retry.
+                // fetchEvent in .finally rolls back the optimistic
+                // status flip; the typed setEntries buffer is
+                // preserved so a retry doesn't need re-typing.
+                const d = await r.json().catch(() => ({} as { error?: string; code?: string }));
+                await alertDialog(d.error || `Couldn't save score (HTTP ${r.status}).`, "Save failed");
+              }
+            })
+            .finally(() => { void fetchEvent(); });
           return;
         }
         // Single-set fix score path. Same fallback story as Bo3:
@@ -6039,14 +6055,22 @@ export default function EventDetailPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
-        }).finally(() => { void fetchEvent(); });
-        setEditingScoreMatchId(null);
-        setReopenedForEditIds((prev) => {
-          if (!prev.has(linkedMatch.id)) return prev;
-          const next = new Set(prev);
-          next.delete(linkedMatch.id);
-          return next;
-        });
+        })
+          .then(async (r) => {
+            if (r.ok) {
+              setEditingScoreMatchId(null);
+              setReopenedForEditIds((prev) => {
+                if (!prev.has(linkedMatch.id)) return prev;
+                const next = new Set(prev);
+                next.delete(linkedMatch.id);
+                return next;
+              });
+            } else {
+              const d = await r.json().catch(() => ({} as { error?: string; code?: string }));
+              await alertDialog(d.error || `Couldn't save score (HTTP ${r.status}).`, "Save failed");
+            }
+          })
+          .finally(() => { void fetchEvent(); });
       };
       const openScorerPicker = async () => {
         if (linkedMatch) {
@@ -6785,8 +6809,12 @@ export default function EventDetailPage() {
                 {(() => {
                   const isLeaguePlayer = !!userId && gpRows.some((gp) => gp.playerId === userId);
                   const couldStartEntry = canEditSchedule || isLeaguePlayer || isMatchScorer;
+                  // Even when a Match record exists we require both
+                  // lineups so an empty-side leftover doesn't expose
+                  // Save (server rejects with LINEUP_INCOMPLETE, but
+                  // the click never gets that far).
                   const linkVisible = (linkedMatch
-                    ? (canTouchScore && matchStatus !== "completed")
+                    ? (canTouchScore && matchStatus !== "completed" && lineupsReady)
                     : (couldStartEntry && lineupsReady && event.round));
                   if (!linkVisible) return null;
                   const beginEditing = () => {

@@ -154,6 +154,43 @@ export async function POST(
     return NextResponse.json({ error: "Only match participants or admins can submit scores" }, { status: 403 });
   }
 
+  // Conflict guard (H1 + H4): if the match is already completed,
+  // refuse the save. The legitimate "edit a completed result" path
+  // goes through DELETE /score first (reopen), which flips status
+  // back to "active" — so a non-active status here means someone
+  // else just finalised this match while our session was holding a
+  // stale snapshot. Last-write-wins on a Json column with ELO side
+  // effects is the kind of silent corruption we want to surface
+  // loudly. The client's B-3 effect closes the popup on the next
+  // SWR refetch, but that's after the destructive write fires.
+  if (match.status === "completed") {
+    return NextResponse.json(
+      {
+        error: "This match was already finalized — refresh to see the saved result. If you want to change it, reopen the match first.",
+        code: "ALREADY_COMPLETED",
+      },
+      { status: 409 },
+    );
+  }
+
+  // Sanity guard (H3): refuse score submission when one side has no
+  // assigned players. Without it, applyElo() divides by zero
+  // (team2AvgRating = sum / 0 → NaN), persisting NaN ratings on
+  // every winner. The client gates the Edit-score link on
+  // lineupsReady but defence in depth catches synth-Match leftovers
+  // or schema drift.
+  const team1Count = match.players.filter((mp) => mp.team === 1).length;
+  const team2Count = match.players.filter((mp) => mp.team === 2).length;
+  if (team1Count === 0 || team2Count === 0) {
+    return NextResponse.json(
+      {
+        error: "Both teams need at least one assigned player before a score can be saved.",
+        code: "LINEUP_INCOMPLETE",
+      },
+      { status: 400 },
+    );
+  }
+
   // Update match player scores
   const team1Players = match.players.filter((mp) => mp.team === 1);
   const team2Players = match.players.filter((mp) => mp.team === 2);
