@@ -476,23 +476,67 @@ export async function PUT(
   });
 }
 
-// DELETE: Clear scores — revert match to active, reverse ELO
+// DELETE: Clear scores — revert match to active, reverse ELO.
+//
+// Permission tiers:
+//   - app admin                       → always
+//   - league admin (creator/deputy)   → always
+//   - event organizer (createdById)   → within 7 days of event.date
+//   - host team captain / vice        → within 7 days of event.date
+//   - everyone else                   → 403
+//
+// The 7-day window keeps casual "I'll fix it next week" edits in
+// scope while preventing months-old rankings being silently rewritten
+// by someone who used to host an event.
+const REOPEN_WINDOW_DAYS = 7;
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireAdmin();
-  } catch {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  let user;
+  try { user = await requireAuth(); } catch {
+    return NextResponse.json({ error: "Login required" }, { status: 401 });
   }
-
   const { id } = await params;
   const match = await prisma.match.findUnique({
     where: { id },
-    include: { players: true },
+    include: {
+      players: true,
+      event: { select: { date: true, createdById: true, hostTeamId: true, round: { select: { league: { select: { createdById: true, deputyId: true } } } } } },
+    },
   });
   if (!match) return NextResponse.json({ error: "Match not found" }, { status: 404 });
+
+  // Permission resolution.
+  const isAppAdmin = user.role === "admin";
+  const league = match.event.round?.league;
+  const isLeagueAdmin = !!league && (league.createdById === user.id || league.deputyId === user.id);
+  const isEventOwner = match.event.createdById === user.id;
+  let isHostCaptain = false;
+  if (match.event.hostTeamId) {
+    const host = await prisma.leagueTeam.findUnique({
+      where: { id: match.event.hostTeamId },
+      select: { captainId: true, viceCaptainId: true },
+    });
+    isHostCaptain = !!host && (host.captainId === user.id || host.viceCaptainId === user.id);
+  }
+  const withinWindow = (() => {
+    if (!match.event.date) return false;
+    const ageMs = Date.now() - new Date(match.event.date).getTime();
+    return ageMs <= REOPEN_WINDOW_DAYS * 86_400_000;
+  })();
+  const allowed = isAppAdmin
+    || isLeagueAdmin
+    || ((isEventOwner || isHostCaptain) && withinWindow);
+  if (!allowed) {
+    if ((isEventOwner || isHostCaptain) && !withinWindow) {
+      return NextResponse.json(
+        { error: `Event is older than ${REOPEN_WINDOW_DAYS} days — only league or app admins can reopen this match.` },
+        { status: 403 },
+      );
+    }
+    return NextResponse.json({ error: "Not authorized to reopen this match." }, { status: 403 });
+  }
 
   // Reverse ELO if applied
   if (match.eloChange > 0) {
@@ -504,10 +548,11 @@ export async function DELETE(
     await prisma.matchPlayer.update({ where: { id: mp.id }, data: { score: 0 } });
   }
 
-  // Set match back to active
+  // Set match back to active, clear setScores so Bo3 cards reset
+  // to a fresh editable state.
   await prisma.match.update({
     where: { id },
-    data: { status: "active", eloChange: 0, scoreConfirmed: false, completedAt: null },
+    data: { status: "active", eloChange: 0, scoreConfirmed: false, completedAt: null, setScores: { set: null } as unknown as object },
   });
 
   return NextResponse.json({ ok: true, cleared: true });

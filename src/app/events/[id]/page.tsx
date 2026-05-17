@@ -6044,17 +6044,48 @@ export default function EventDetailPage() {
             </svg>
           </button>
         )}
-        {/* Completed-match marker — green ✓ in the left strip
-            (replaces the "✓ PLAYED" badge previously on the title
-            row). The left strip is otherwise the move-handle area;
-            for completed matches the move handle is hidden anyway. */}
-        {matchStatus === "completed" && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-emerald-600 text-lg font-bold pointer-events-none"
-            title="Match completed"
-            aria-label="Match completed"
-          >✓</div>
-        )}
+        {/* Completed-match marker — green ✓ at the TOP of the left
+            strip, aligned with the time row. Schedule editors can
+            tap it to REOPEN the match (clears scores + reverses
+            ELO). Server enforces a 7-day window for non-admins
+            (returns 403 with explanation otherwise). */}
+        {matchStatus === "completed" && (() => {
+          const reopenMatch = async () => {
+            if (!linkedMatch) return;
+            const ok = await confirmDialog({
+              title: "Reopen this match?",
+              message: "The current score will be cleared and any ratings reversed. You'll then be able to enter a new score.",
+              confirmText: "Reopen",
+              danger: true,
+            });
+            if (!ok) return;
+            const r = await fetch(`/api/matches/${linkedMatch.id}/score`, { method: "DELETE" });
+            if (!r.ok) {
+              const d = await r.json().catch(() => ({}));
+              await alertDialog(d.error || `Couldn't reopen (HTTP ${r.status}).`, "Reopen failed");
+              return;
+            }
+            await fetchEvent();
+          };
+          if (canEditSchedule) {
+            return (
+              <button
+                type="button"
+                onClick={reopenMatch}
+                title="Tap to reopen and edit scores"
+                aria-label="Reopen match"
+                className="absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-emerald-600 hover:text-emerald-700 active:text-emerald-800 text-xl font-bold leading-none cursor-pointer"
+              >✓</button>
+            );
+          }
+          return (
+            <div
+              className="absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-emerald-600 text-xl font-bold pointer-events-none leading-none"
+              title="Match completed"
+              aria-label="Match completed"
+            >✓</div>
+          );
+        })()}
         <div className="contents">
           <div className="flex items-center gap-1.5">
             {scheduleEditable ? (
