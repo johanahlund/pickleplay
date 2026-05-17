@@ -40,7 +40,7 @@ interface GameState {
   isFirstServe: boolean; // game-start exception: only Server 2
 }
 
-type Phase = "pick-sides" | "setup-court" | "playing" | "game-over";
+type Phase = "pick-sides" | "setup-court" | "playing" | "set-over" | "game-over";
 
 function parseFormat(fmt: string): { isRally: boolean; targetScore: number; sets: number } {
   const sets = fmt.startsWith("3") ? 3 : 1;
@@ -191,6 +191,12 @@ export function ScorerTracker({
   // For single-set formats this stays empty and the existing flow
   // is unchanged.
   const [completedSets, setCompletedSets] = useState<number[][]>([]);
+  // Multi-set pause: when a set is won (but the match isn't yet),
+  // we stash the "seeded for next set" state here and flip phase to
+  // "set-over" instead of auto-advancing. Operator taps a button to
+  // start the next set so they (and players) can see the just-won
+  // set's final score for a beat.
+  const [nextSetSeed, setNextSetSeed] = useState<GameState | null>(null);
   const [lastWonSide, setLastWonSide] = useState<"left" | "right" | null>(null);
   const lastWonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -208,6 +214,8 @@ export function ScorerTracker({
     setWinner(null);
     setStartTime(null);
     setSwapped(false);
+    setCompletedSets([]);
+    setNextSetSeed(null);
   }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Timer
@@ -492,19 +500,22 @@ export function ScorerTracker({
           setWinner(matchWinner);
           setPhase("game-over");
         } else {
-          // Start the next set fresh. Winner of this set serves
-          // first in the next; reset to side-out first-serve state
-          // for doubles.
-          newState.score = [0, 0];
-          newState.servingTeam = w;
-          newState.isFirstServe = isDoubles;
-          newState.serverNumber = isDoubles ? 1 : 1;
-          // Server starts from THEIR right (see side-out logic).
-          if (isDoubles) {
-            newState.serverId = (w === 1 ? newState.court.team1Right : newState.court.team2Left).id;
-          } else {
-            newState.serverId = (w === 1 ? team1Players[0] : team2Players[0]).id;
-          }
+          // Set won but match isn't over yet. Pause on the
+          // current set's final score and ask the operator to
+          // tap "Start Set N+1" before advancing — gives the
+          // players a moment to see the result.
+          const seed: GameState = {
+            score: [0, 0],
+            servingTeam: w,
+            isFirstServe: isDoubles,
+            serverNumber: 1,
+            court: newState.court,
+            serverId: isDoubles
+              ? (w === 1 ? newState.court.team1Right : newState.court.team2Left).id
+              : (w === 1 ? team1Players[0] : team2Players[0]).id,
+          };
+          setNextSetSeed(seed);
+          setPhase("set-over");
         }
       } else {
         setWinner(w);
@@ -532,6 +543,13 @@ export function ScorerTracker({
     setHistory((h) => h.slice(0, -1));
     if (winner) {
       setWinner(null);
+      setPhase("playing");
+    }
+    // If we were paused between sets, undo also drops back into
+    // the just-won set and pops the latest completedSets entry.
+    if (nextSetSeed) {
+      setNextSetSeed(null);
+      setCompletedSets((s) => s.slice(0, -1));
       setPhase("playing");
     }
   };
@@ -813,32 +831,48 @@ export function ScorerTracker({
 
     // No score change = serving team lost the rally
     if (after.servingTeam !== before.servingTeam) return "Side out";
-    if (isDoubles && !isRally && after.serverNumber !== before.serverNumber) return "2nd Server";
+    // 2nd-server transitions are visible via the big server-number
+    // pill below the score, no need to repeat them here.
+    if (isDoubles && !isRally && after.serverNumber !== before.serverNumber) return "";
     return "Side out";
   })();
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col text-white select-none" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 2rem)" }}>
-      {/* Compact header */}
+      {/* Compact top bar — back button, rallies / elapsed, reset.
+          Format + Set N moved into the larger header below. */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
         <button onClick={onClose} className="text-sm text-white/50 hover:text-white">← Matches</button>
-        <span className="text-[10px] text-white/30">
-          {formatLabel} · to {targetScore}
-          {isMultiSet && <> · Bo{totalSets}</>}
-          {isMultiSet && completedSets.length > 0 && (
-            <span className="text-white/60">
-              {" · "}
-              Sets {completedSets.filter(([a, b]) => a > b).length}-{completedSets.filter(([a, b]) => b > a).length}
-              {" ("}{completedSets.map(([a, b]) => `${a}-${b}`).join(", ")}{")"}
-            </span>
-          )}
-          {" · "}{history.length} rallies · {elapsedDisplay}
-        </span>
+        <span className="text-[10px] text-white/30">{history.length} rallies · {elapsedDisplay}</span>
         <button onClick={() => {
           if (confirm("Reset the entire match score?") && confirm("Are you absolutely sure? All points will be lost!")) {
-            setPhase("pick-sides"); setGameState(null); setInitialGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players);
+            setPhase("pick-sides"); setGameState(null); setInitialGameState(null); setHistory([]); setRedoStack([]); setWinner(null); setSetupServer(null); setSetupReceiver(null); setStartTime(null); setTeam1Order(team1Players); setTeam2Order(team2Players); setCompletedSets([]); setNextSetSeed(null);
           }
         }} className="text-[10px] text-red-400 hover:text-red-300 font-bold" title="Reset">Reset</button>
+      </div>
+
+      {/* Large header — format on top, Set N below (multi-set only),
+          finished-set summary line if any. */}
+      <div className="text-center px-3 pt-2 pb-1">
+        <div className="text-sm text-white/70 font-semibold tracking-wide">
+          {isMultiSet ? `Bo${totalSets} · ` : ""}{formatLabel} to {targetScore}
+          {goldenPoint ? ` · golden ${goldenPoint}` : cap ? ` · cap ${cap}` : winByN > 1 ? ` · win by ${winByN}` : ""}
+        </div>
+        {isMultiSet && (
+          <div className="text-3xl font-black text-white mt-0.5 tracking-tight">
+            Set {Math.min(completedSets.length + 1, totalSets)}
+            <span className="text-base font-bold text-white/50 ml-2">of {totalSets}</span>
+          </div>
+        )}
+        {isMultiSet && completedSets.length > 0 && (
+          <div className="text-[11px] text-white/60 mt-0.5">
+            {completedSets.map(([a, b], i) => (
+              <span key={i} className="inline-block mr-2">
+                Set {i + 1}: <span className="text-white font-semibold">{a}-{b}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Court view — compact, at top */}
@@ -1005,13 +1039,28 @@ export function ScorerTracker({
         );
       })()}
 
-      {/* Rally counter — between court and score */}
+      {/* Rally counter — between court and score. Multi-set:
+          "Set Point" / "Match Point" instead of "Game Point". */}
       <div className="text-center">
         {isGoldenPoint && !winner ? (
           <span className="text-base font-bold text-amber-300 animate-pulse">⚡ Golden Point!</span>
-        ) : gamePointActive && !winner ? (
-          <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>
-        ) : (
+        ) : gamePointActive && !winner ? (() => {
+          if (!isMultiSet) return <span className="text-base font-bold text-yellow-400 animate-pulse">🏆 Game Point!</span>;
+          // For multi-set: does winning this point also win the
+          // match? If yes, "Match Point". Otherwise just "Set Point".
+          const t1Now = completedSets.filter(([a, b]) => a > b).length;
+          const t2Now = completedSets.filter(([a, b]) => b > a).length;
+          const winsIfTeam1 = isGameWon([score[0] + 1, score[1]], targetScore, winByN, cap, goldenPoint) === 1;
+          const winsIfTeam2 = isGameWon([score[0], score[1] + 1], targetScore, winByN, cap, goldenPoint) === 2;
+          const matchPointTeam1 = winsIfTeam1 && t1Now + 1 >= setsNeededToWin;
+          const matchPointTeam2 = winsIfTeam2 && t2Now + 1 >= setsNeededToWin;
+          const isMatchPoint = matchPointTeam1 || matchPointTeam2;
+          return (
+            <span className={`text-base font-bold animate-pulse ${isMatchPoint ? "text-amber-300" : "text-yellow-400"}`}>
+              {isMatchPoint ? "🏆 Match Point!" : "🎯 Set Point!"}
+            </span>
+          );
+        })() : (
           <span className="text-xs text-white/40 font-medium">
             {redoStack.length === 0 ? `Rally ${history.length + 1}` : `Rally ${history.length}`}
           </span>
@@ -1031,29 +1080,46 @@ export function ScorerTracker({
           const rightColor = swapped ? "text-blue-500" : "text-red-500";
           const servingLeft = servingTeam === leftTeamNum;
           return (
-            <div className="flex items-center mx-3">
-              <button onClick={handleUndo} disabled={history.length === 0}
-                className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
-                aria-label="Undo rally"
-              >←</button>
-              <div className="flex-1 text-center">
-                <span className={`text-5xl font-black tabular-nums ${leftWon ? "text-green-400" : leftColor}`}>{leftScore}</span>
-                {!isRally && isDoubles && servingLeft && (
-                  <div className="text-green-400 font-bold mt-0.5"><span className="text-xs">Server</span> <span className="text-2xl">{gameState.serverNumber}</span></div>
-                )}
+            <>
+              <div className="flex items-center mx-3">
+                <button onClick={handleUndo} disabled={history.length === 0}
+                  className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
+                  aria-label="Undo rally"
+                >←</button>
+                <div className="flex-1 text-center">
+                  <span className={`text-5xl font-black tabular-nums ${leftWon ? "text-green-400" : leftColor}`}>{leftScore}</span>
+                </div>
+                <span className="text-3xl text-white/20 pt-1 px-1">—</span>
+                <div className="flex-1 text-center">
+                  <span className={`text-5xl font-black tabular-nums ${rightWon ? "text-green-400" : rightColor}`}>{rightScore}</span>
+                </div>
+                <button onClick={handleRedo} disabled={redoStack.length === 0}
+                  className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
+                  aria-label="Redo rally"
+                >→</button>
               </div>
-              <span className="text-3xl text-white/20 pt-1 px-1">—</span>
-              <div className="flex-1 text-center">
-                <span className={`text-5xl font-black tabular-nums ${rightWon ? "text-green-400" : rightColor}`}>{rightScore}</span>
-                {!isRally && isDoubles && !servingLeft && (
-                  <div className="text-green-400 font-bold mt-0.5"><span className="text-xs">Server</span> <span className="text-2xl">{gameState.serverNumber}</span></div>
-                )}
-              </div>
-              <button onClick={handleRedo} disabled={redoStack.length === 0}
-                className="text-white hover:text-white disabled:opacity-15 disabled:cursor-not-allowed text-5xl font-bold px-3 py-2 transition-opacity shrink-0"
-                aria-label="Redo rally"
-              >→</button>
-            </div>
+              {/* Server-number row — side-out doubles only. Big
+                  white "1/2" or "2/2" centred under whichever side
+                  is currently serving. */}
+              {!isRally && isDoubles && (
+                <div className="flex items-center mx-3 mt-1">
+                  {/* match the score row's left/right gutter widths */}
+                  <div className="w-[3.75rem] shrink-0" />
+                  <div className="flex-1 text-center">
+                    {servingLeft && (
+                      <span className="text-3xl font-black text-white tabular-nums">{gameState.serverNumber}/2</span>
+                    )}
+                  </div>
+                  <div className="px-1 w-6" />
+                  <div className="flex-1 text-center">
+                    {!servingLeft && (
+                      <span className="text-3xl font-black text-white tabular-nums">{gameState.serverNumber}/2</span>
+                    )}
+                  </div>
+                  <div className="w-[3.75rem] shrink-0" />
+                </div>
+              )}
+            </>
           );
         })()}
 
@@ -1062,10 +1128,48 @@ export function ScorerTracker({
       {/* Status: what happened + what's next — pushed down */}
       {phase === "playing" && (
         <div className="text-center space-y-1 px-4 mt-4">
-          <div className="text-base font-bold text-white">{lastActionText}</div>
+          {lastActionText && <div className="text-base font-bold text-white">{lastActionText}</div>}
           <div className="text-base text-white/80">
             {shortName(serverPlayer)} serves from the {serverSide} to {shortName(receiverPlayer)}
           </div>
+        </div>
+      )}
+
+      {/* Between-sets confirmation. Pauses on the just-won set's
+          final score until the operator taps "Start set N" so the
+          players have a beat to see the result. Undo backs out. */}
+      {phase === "set-over" && nextSetSeed && (
+        <div className="text-center space-y-3 px-4 mt-4">
+          <div className="text-2xl font-black text-green-400">
+            Set {completedSets.length} complete · {completedSets[completedSets.length - 1]?.[0]}-{completedSets[completedSets.length - 1]?.[1]}
+          </div>
+          <button
+            onClick={() => {
+              if (!gameState || !nextSetSeed) return;
+              // Start the next set fresh. Clear undo history — once
+              // the operator confirms the transition, the previous
+              // set is committed (use the Reset button if you really
+              // need to redo a finalised set). This keeps undo
+              // semantics simple: it only walks back through the
+              // current set's rallies.
+              setHistory([]);
+              setRedoStack([]);
+              setGameState(nextSetSeed);
+              const newReceiverId = getReceiverId(nextSetSeed.court, nextSetSeed.serverId);
+              onScoreChange?.(nextSetSeed.score[0], nextSetSeed.score[1], nextSetSeed.serverId, newReceiverId);
+              setNextSetSeed(null);
+              setPhase("playing");
+            }}
+            className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-xl text-lg font-bold transition-colors"
+          >
+            Start Set {Math.min(completedSets.length + 1, totalSets)} →
+          </button>
+          <button
+            onClick={handleUndo}
+            className="w-full bg-white/10 hover:bg-white/20 text-white py-3 rounded-xl text-sm font-medium transition-colors"
+          >
+            ↩ Undo last rally
+          </button>
         </div>
       )}
 
