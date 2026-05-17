@@ -7,6 +7,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 import { ClubBadge } from "@/components/ClubBadge";
 import { frameClass } from "@/components/Card";
+import { useUrlState } from "@/lib/hooks";
 
 interface PlayerInfo { id: string; name: string; emoji: string; photoUrl?: string | null }
 interface MatchPlayer { id: string; playerId: string; team: number; score: number; player: PlayerInfo }
@@ -28,11 +29,14 @@ function MatchesPage() {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+  // Filters live in the URL so back-nav from an event detail restores
+  // them. `showFilters` (panel expanded?) stays in local state — it's
+  // a UI affordance, not a meaningful piece of filter state.
   const [showFilters, setShowFilters] = useState(false);
-  const [playedWithFilter, setPlayedWithFilter] = useState("");
-  const [playedAgainstFilter, setPlayedAgainstFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [playedWithFilter, setPlayedWithFilter] = useUrlState("with", "");
+  const [playedAgainstFilter, setPlayedAgainstFilter] = useUrlState("vs", "");
+  const [dateFrom, setDateFrom] = useUrlState("from", "");
+  const [dateTo, setDateTo] = useUrlState("to", "");
 
   useEffect(() => {
     fetch("/api/matches/my")

@@ -12,7 +12,7 @@ import { getPreview, setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
-import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
+import { useHideBottomNav, usePollingRefresh, useUrlState } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
@@ -1084,18 +1084,18 @@ export default function LeagueDetailPage() {
   }, []);
   const [standings, setStandings] = useState<{ general: Standing[]; categoryStandings: Record<string, { teamId: string; teamName: string; wins: number; losses: number }[]>; categories: LeagueCategory[] } | null>(null);
   const [loading, setLoading] = useState(true);
-  // Tab can be set via ?tab=rounds in the URL — used when navigating back
-  // to a specific league tab (e.g. from a league-attached event). Listen for
-  // search-param changes too: client-side navigation doesn't re-mount this
-  // page, so the initial useState wouldn't fire on a later ?tab=rounds.
+  // Tab lives in the URL (?tab=rounds) so back-nav from a detail page
+  // restores the tab you left, and you can deep-link to a specific tab.
+  // useUrlState pushes URL updates via router.replace (no history
+  // entry), so each tab tap doesn't pollute the back stack.
   const searchParams = useSearchParams();
-  const tabFromUrl = (() => {
-    const t = searchParams.get("tab");
-    if (t === "overview" || t === "standings" || t === "rounds" || t === "matches" || t === "teams") return t as Tab;
-    return null;
-  })();
-  const [tab, setTab] = useState<Tab>(tabFromUrl ?? "overview");
-  useEffect(() => { if (tabFromUrl) setTab(tabFromUrl); }, [tabFromUrl]);
+  const [tab, setTab] = useUrlState<Tab>("tab", "overview", {
+    deserialize: (raw) => (
+      raw === "overview" || raw === "standings" || raw === "rounds" || raw === "matches" || raw === "teams"
+        ? (raw as Tab)
+        : "overview"
+    ),
+  });
   const [chatOpen, setChatOpen] = useState(false);
   // ?expandTeam=<id> + ?focus=<id> + ?focusPlayer=<id> — used by the
   // league sign-up "back" link when returning from editing a teammate's

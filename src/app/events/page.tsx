@@ -10,7 +10,7 @@ import { ClearInput } from "@/components/ClearInput";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { setPreview } from "@/lib/entityPreview";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { usePollingRefresh } from "@/lib/hooks";
+import { usePollingRefresh, useUrlState } from "@/lib/hooks";
 import { eventDisplayLabel } from "@/lib/statusDisplay";
 import { eventStatusBadgeClass } from "@/lib/statusBadge";
 import { frameClass } from "@/components/Card";
@@ -92,12 +92,36 @@ function EventsPage() {
   });
   const [userClubs, setUserClubs] = useState<UserClub[]>([]);
   const [loading, setLoading] = useState(true); // always true on first render to avoid hydration mismatch
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | "events" | "competitions" | "liga">("all");
-  const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
-  const [myEventsOnly, setMyEventsOnly] = useState(false);
-  const [activeOnly, setActiveOnly] = useState(false);
+  // Filters live in the URL so back-nav from an event detail page
+  // restores the same filter state. router.replace is used under the
+  // hood (see useUrlState) so each filter change doesn't pollute the
+  // back stack. `showFilters` (panel expanded?) and `hoveredEventId`
+  // stay in local state — neither is worth surviving navigation.
+  const [searchQuery, setSearchQuery] = useUrlState("q", "");
+  const [dateFilter, setDateFilter] = useUrlState<string>("date", "all");
+  const [typeFilter, setTypeFilter] = useUrlState<"all" | "events" | "competitions" | "liga">(
+    "type",
+    "all",
+    {
+      deserialize: (raw) => (
+        raw === "all" || raw === "events" || raw === "competitions" || raw === "liga"
+          ? (raw as "all" | "events" | "competitions" | "liga")
+          : "all"
+      ),
+    },
+  );
+  const [selectedClubIds, setSelectedClubIds] = useUrlState<Set<string>>("clubs", new Set(), {
+    serialize: (s) => Array.from(s).sort().join(","),
+    deserialize: (raw) => new Set(raw ? raw.split(",").filter(Boolean) : []),
+  });
+  const [myEventsOnly, setMyEventsOnly] = useUrlState<boolean>("mine", false, {
+    serialize: (v) => (v ? "1" : ""),
+    deserialize: (raw) => raw === "1",
+  });
+  const [activeOnly, setActiveOnly] = useUrlState<boolean>("active", false, {
+    serialize: (v) => (v ? "1" : ""),
+    deserialize: (raw) => raw === "1",
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [clubsLoaded, setClubsLoaded] = useState(false);
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
@@ -210,12 +234,10 @@ function EventsPage() {
   };
 
   const toggleClub = (clubId: string) => {
-    setSelectedClubIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(clubId)) next.delete(clubId);
-      else next.add(clubId);
-      return next;
-    });
+    const next = new Set(selectedClubIds);
+    if (next.has(clubId)) next.delete(clubId);
+    else next.add(clubId);
+    setSelectedClubIds(next);
   };
 
   const filteredEvents = events

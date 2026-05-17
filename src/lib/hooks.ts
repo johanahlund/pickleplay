@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 /**
  * Hide the bottom navigation bar while a fullscreen / focused-flow page
@@ -61,4 +62,62 @@ export function usePollingRefresh(
       window.removeEventListener("focus", onFocus);
     };
   }, [intervalMs, enabled]);
+}
+
+/**
+ * Filter / tab state that survives back navigation.
+ *
+ * Behaves like useState, but reads its initial value from a URL search
+ * param and writes every update back to the URL via router.replace
+ * (no history entry — replacing means the back button moves to the
+ * page you came from, not through every filter tweak).
+ *
+ *   const [search, setSearch] = useUrlState("q", "");
+ *   const [tab, setTab] = useUrlState<Tab>("tab", "overview");
+ *
+ * The page re-renders whenever the URL changes (e.g. browser back),
+ * so a chain of "list → detail → back" lands you on the same filter
+ * state you left, for free, courtesy of Next.js Router Cache + SWR.
+ *
+ * For complex types pass `serialize` / `deserialize`:
+ *   const [clubs, setClubs] = useUrlState<Set<string>>(
+ *     "clubs",
+ *     new Set(),
+ *     {
+ *       serialize: (s) => Array.from(s).join(","),
+ *       deserialize: (v) => new Set(v ? v.split(",") : []),
+ *     }
+ *   );
+ *
+ * When a value equals the default it is removed from the URL — keeps
+ * URLs short and the "all defaults" state matches a bare path.
+ */
+export function useUrlState<T>(
+  key: string,
+  defaultValue: T,
+  options?: {
+    serialize?: (v: T) => string;
+    deserialize?: (raw: string) => T;
+  },
+): [T, (next: T) => void] {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const serialize = options?.serialize ?? ((v: T) => String(v));
+  const deserialize = options?.deserialize ?? ((raw: string) => raw as unknown as T);
+
+  const raw = searchParams.get(key);
+  const value: T = raw == null ? defaultValue : deserialize(raw);
+
+  const set = useCallback((next: T) => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    const serialized = serialize(next);
+    const isDefault = serialized === serialize(defaultValue);
+    if (!serialized || isDefault) params.delete(key);
+    else params.set(key, serialized);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [router, pathname, searchParams, key, serialize, defaultValue]);
+
+  return [value, set];
 }
