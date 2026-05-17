@@ -13,6 +13,7 @@ interface MatchPlayer { id: string; playerId: string; team: number; score: numbe
 interface Match {
   id: string; courtNum: number; round: number; status: string; eloChange: number; createdAt: string;
   players: MatchPlayer[];
+  setScores?: number[][] | null;
   event: { id: string; name: string; date: string; format: string; clubId?: string | null; club?: { name: string; shortName?: string | null; emoji: string; logoUrl?: string | null } | null };
 }
 
@@ -147,6 +148,31 @@ function MatchesPage() {
           {renderTeamRow(team1, isCompleted && score1 > score2, isCompleted && score1 < score2, score1, myTeam === 1)}
           <div className="h-px bg-border mx-2" />
           {renderTeamRow(team2, isCompleted && score2 > score1, isCompleted && score2 < score1, score2, myTeam === 2)}
+          {/* Per-set scores for Bo3 finals so the big number on the
+              right (set wins, e.g. 2-1) is contextualised by the
+              actual per-set points (e.g. 11-4 · 9-11 · 11-7). */}
+          {isCompleted && Array.isArray(m.setScores) && m.setScores.length > 0 && (() => {
+            const sets = m.setScores.filter((s) => Array.isArray(s) && s.length >= 2) as number[][];
+            if (sets.length === 0) return null;
+            return (
+              <div className="flex items-center gap-1 px-1.5 pt-1 text-[11px] tabular-nums">
+                <span className="text-[10px] text-muted uppercase tracking-wide font-semibold mr-1">Sets</span>
+                {sets.map(([a, b], i) => {
+                  const myA = myTeam === 1 ? a : b;
+                  const myB = myTeam === 1 ? b : a;
+                  const wonSet = myA > myB;
+                  return (
+                    <span
+                      key={i}
+                      className={`px-1.5 py-0.5 rounded font-semibold ${wonSet ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}
+                    >
+                      {myA}-{myB}
+                    </span>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       </Link>
     );
