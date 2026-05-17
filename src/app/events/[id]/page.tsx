@@ -1028,6 +1028,34 @@ export default function EventDetailPage() {
     const t = setTimeout(() => setAddedToast(null), 4000);
     return () => clearTimeout(t);
   }, [addedToast]);
+  // B-3 guard: if the match we're editing got finalized somewhere
+  // else (concurrent ScorerTracker submit, another admin via
+  // /score), bail out of edit mode so the next tap on Save doesn't
+  // overwrite the just-finalized result. Skip while we're in a
+  // reopened-for-edit flow — those matches go "completed → active
+  // (reopened) → completed (resaved)" by design.
+  useEffect(() => {
+    if (!editingScoreMatchId || !event) return;
+    const m = event.matches?.find((mm) => mm.id === editingScoreMatchId);
+    if (!m) return;
+    if (m.status === "completed" && !reopenedForEditIds.has(editingScoreMatchId)) {
+      setEditingScoreMatchId(null);
+      setScores((prev) => {
+        if (!prev[editingScoreMatchId]) return prev;
+        const next = { ...prev };
+        delete next[editingScoreMatchId];
+        return next;
+      });
+      setSetEntries((prev) => {
+        if (!prev[editingScoreMatchId]) return prev;
+        const next = { ...prev };
+        delete next[editingScoreMatchId];
+        return next;
+      });
+      void alertDialog("This match was finalized elsewhere — your unsaved edits were discarded.", "Match finalized");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.matches, editingScoreMatchId, reopenedForEditIds]);
   // Once we've landed on the Players section and the event is loaded,
   // actually open the picker with sensible defaults.
   useEffect(() => {
@@ -6837,13 +6865,103 @@ export default function EventDetailPage() {
                       })
                       .finally(() => { void fetchEvent(); });
                   };
+                  // Cancel handler. Two flavours:
+                  //   (a) plain Edit-score cancel → drop the entry
+                  //       buffer and exit (B-4).
+                  //   (b) cancel from a reopened-for-edit match →
+                  //       re-POST the previously-saved scores so the
+                  //       server re-finalises and re-applies ELO,
+                  //       restoring the state from before reopen.
+                  //       Otherwise the match would linger at status
+                  //       "active" with no ELO (B-1).
+                  const cancelEditing = async () => {
+                    if (!linkedMatch) {
+                      setEditingScoreMatchId(null);
+                      return;
+                    }
+                    const matchId = linkedMatch.id;
+                    const isReopened = reopenedForEditIds.has(matchId);
+                    if (!isReopened) {
+                      setEditingScoreMatchId(null);
+                      setScores((prev) => {
+                        if (!prev[matchId]) return prev;
+                        const next = { ...prev };
+                        delete next[matchId];
+                        return next;
+                      });
+                      setSetEntries((prev) => {
+                        if (!prev[matchId]) return prev;
+                        const next = { ...prev };
+                        delete next[matchId];
+                        return next;
+                      });
+                      return;
+                    }
+                    const ok = await confirmDialog({
+                      title: "Discard changes?",
+                      message: "The match goes back to its previous score and ratings.",
+                      confirmText: "Discard",
+                    });
+                    if (!ok) return;
+                    const cancelOverrides = g as unknown as { scoringFormatOverride?: string | null };
+                    const cancelScoring = cancelOverrides.scoringFormatOverride
+                      || (catById.get(g.categoryId) as unknown as { scoringFormat?: string | null } | undefined)?.scoringFormat
+                      || event.scoringFormat
+                      || "1x11";
+                    const cancelIsBo3 = cancelScoring.startsWith("3");
+                    const savedRaw = linkedMatch.setScores;
+                    const savedSets: number[][] | null = Array.isArray(savedRaw)
+                      ? (savedRaw as unknown[]).every((row) => Array.isArray(row))
+                        ? (savedRaw as number[][])
+                        : null
+                      : null;
+                    const savedTeam1 = linkedMatch.players.find((p) => p.team === 1)?.score ?? 0;
+                    const savedTeam2 = linkedMatch.players.find((p) => p.team === 2)?.score ?? 0;
+                    // Optimistic: flip the card back to its
+                    // pre-reopen finalized state immediately.
+                    setEvent((prev) => prev ? {
+                      ...prev,
+                      matches: prev.matches.map((m) => m.id === matchId ? {
+                        ...m,
+                        status: "completed",
+                      } : m),
+                    } : prev);
+                    setEditingScoreMatchId(null);
+                    setReopenedForEditIds((prev) => {
+                      if (!prev.has(matchId)) return prev;
+                      const next = new Set(prev);
+                      next.delete(matchId);
+                      return next;
+                    });
+                    setScores((prev) => {
+                      if (!prev[matchId]) return prev;
+                      const next = { ...prev };
+                      delete next[matchId];
+                      return next;
+                    });
+                    setSetEntries((prev) => {
+                      if (!prev[matchId]) return prev;
+                      const next = { ...prev };
+                      delete next[matchId];
+                      return next;
+                    });
+                    fetch(`/api/matches/${matchId}/score`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(
+                        cancelIsBo3 && savedSets && savedSets.length > 0
+                          ? { setScores: savedSets }
+                          : { team1Score: savedTeam1, team2Score: savedTeam2 },
+                      ),
+                    }).finally(() => { void fetchEvent(); });
+                  };
                   return (
                     <div className="flex items-center justify-end -my-1">
                       {isEditingScore ? (
                         <>
                           <button
                             type="button"
-                            onClick={() => setEditingScoreMatchId(null)}
+                            onClick={cancelEditing}
                             className="text-[11px] text-muted font-medium hover:text-foreground px-2 py-0.5"
                           >Cancel</button>
                           <button
