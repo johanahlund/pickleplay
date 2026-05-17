@@ -208,6 +208,17 @@ export default function LeagueSignUpPage() {
               <option value="">{loading ? "Loading teams…" : "No preference (any team)"}</option>
               {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
+            {!loading && teams.length === 0 && (
+              // M4: avoid the silent "submit with empty preferredTeamId"
+              // path when no team has been created yet. Tell the user
+              // their request lands without team affiliation and a
+              // captain still needs to assign / claim them.
+              <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                No teams have been created yet. You can still submit your
+                preferences — a league admin will assign you to a team
+                once teams are open.
+              </p>
+            )}
           </div>
         )}
       </div>

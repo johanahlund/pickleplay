@@ -1068,10 +1068,23 @@ export default function EventDetailPage() {
     const m = event.matches?.find((mm) => mm.id === scorerMatchId);
     if (!m) return;
     if (m.status === "completed") {
+      // Capture the tracker's in-progress score BEFORE we null the
+      // state, so the alert can tell the scorer exactly what was
+      // about to be submitted but didn't make it (M3). The server-
+      // saved result wins; the tracker's points are gone.
+      const stale = scorerLiveScore;
+      const t1 = m.players.filter((p) => p.team === 1)[0]?.score ?? 0;
+      const t2 = m.players.filter((p) => p.team === 2)[0]?.score ?? 0;
       setScorerVisible(false);
       setScorerMatchId(null);
       setScorerLiveScore(null);
-      void alertDialog("This match was finalized — the live scorer view was closed.", "Match finalized");
+      const liveLine = stale && (stale.team1 > 0 || stale.team2 > 0)
+        ? `\n\nYour in-progress score was ${stale.team1}-${stale.team2} and was not saved.`
+        : "";
+      void alertDialog(
+        `This match was finalized elsewhere as ${t1}-${t2} — the live scorer view was closed.${liveLine}`,
+        "Match finalized",
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.matches, scorerMatchId, scorerVisible]);

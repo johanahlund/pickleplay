@@ -51,6 +51,7 @@ export async function PATCH(
     select: {
       eventId: true, categoryId: true, winnerId: true,
       courtNum: true, // captured pre-update so we can recalc the old court on a move
+      matchId: true, // used by the M6 format-lock guard further down
       event: {
         select: {
           hostTeamId: true,
@@ -177,6 +178,27 @@ export async function PATCH(
         data.winByOverride = v;
       } else {
         return NextResponse.json({ error: "Invalid winByOverride" }, { status: 400 });
+      }
+    }
+    // M6: refuse format / win-by changes once a Match exists and
+    // isn't pending. Live scorers, mid-game stats, and the saved
+    // Match.setScores were all computed under the old config, so
+    // swapping it mid-flight desyncs the validator (e.g. 1x11 →
+    // 3x11 would leave a saved setScores=null match unable to
+    // re-finalize) and breaks live scoring.
+    if (("scoringFormatOverride" in data || "winByOverride" in data) && game.matchId) {
+      const linkedMatch = await prisma.match.findUnique({
+        where: { id: game.matchId },
+        select: { status: true },
+      });
+      if (linkedMatch && linkedMatch.status !== "pending") {
+        return NextResponse.json(
+          {
+            error: `Can't change scoring format on a match that's already ${linkedMatch.status}. Reopen or reset the match first.`,
+            code: "FORMAT_LOCKED",
+          },
+          { status: 409 },
+        );
       }
     }
   }
