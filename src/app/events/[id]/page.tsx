@@ -6562,38 +6562,76 @@ export default function EventDetailPage() {
                   </div>
                 </div>
                 {/* Edit-score / Save link between the two team rows.
-                    Visible to anyone with score-touch permission on a
-                    not-yet-completed match — covers pending (score
-                    directly without Start), active, and paused
-                    states. Completed matches edit via the action
-                    sheet's "Edit score" row instead. */}
-                {canTouchScore && matchStatus !== "completed" && (
-                  <div className="flex items-center justify-end -my-1">
-                    {isEditingScore ? (
-                      <>
+                    Visible whenever score-entry is a possibility:
+                      • Match already exists & not completed
+                          OR
+                      • No Match yet but viewer could create one
+                        (schedule editor / player in this game / scorer)
+                    On tap with no Match, lazy-create it in pending
+                    state via start-match{startNow:false} so the
+                    inputs can render.
+                  */}
+                {(() => {
+                  const isLeaguePlayer = !!userId && gpRows.some((gp) => gp.playerId === userId);
+                  const couldStartEntry = canEditSchedule || isLeaguePlayer || isMatchScorer;
+                  const linkVisible = (linkedMatch
+                    ? (canTouchScore && matchStatus !== "completed")
+                    : (couldStartEntry && lineupsReady && event.round));
+                  if (!linkVisible) return null;
+                  const beginEditing = async () => {
+                    if (linkedMatch) {
+                      setEditingScoreMatchId(linkedMatch.id);
+                      return;
+                    }
+                    // Lazy-create the Match in pending state so we
+                    // have an id to bind the inputs against.
+                    if (!event.round) return;
+                    const leagueId = event.round.league.id;
+                    try {
+                      const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ startNow: false }),
+                      });
+                      if (!r.ok) {
+                        const d = await r.json().catch(() => ({}));
+                        await alertDialog(d.error || "Couldn't open score entry.", "Failed");
+                        return;
+                      }
+                      const data = await r.json() as { match?: { id: string } };
+                      if (data.match?.id) setEditingScoreMatchId(data.match.id);
+                    } finally {
+                      void fetchEvent();
+                    }
+                  };
+                  return (
+                    <div className="flex items-center justify-end -my-1">
+                      {isEditingScore ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEditingScoreMatchId(null)}
+                            className="text-[11px] text-muted font-medium hover:text-foreground px-2 py-0.5"
+                          >Cancel</button>
+                          <button
+                            type="button"
+                            onClick={fixScore}
+                            title="Save scores and finalise the match"
+                            className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 inline-flex items-center gap-1"
+                          >
+                            <span aria-hidden>✓</span><span>Save</span>
+                          </button>
+                        </>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => setEditingScoreMatchId(null)}
-                          className="text-[11px] text-muted font-medium hover:text-foreground px-2 py-0.5"
-                        >Cancel</button>
-                        <button
-                          type="button"
-                          onClick={fixScore}
-                          title="Save scores and finalise the match"
-                          className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 inline-flex items-center gap-1"
-                        >
-                          <span aria-hidden>✓</span><span>Save</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEditingScoreMatchId(linkedMatch ? linkedMatch.id : null)}
-                        className="text-[11px] font-semibold text-action hover:underline px-2 py-0.5"
-                      >✏️ Edit score</button>
-                    )}
-                  </div>
-                )}
+                          onClick={beginEditing}
+                          className="text-[11px] font-semibold text-action hover:underline px-2 py-0.5"
+                        >✏️ Edit score</button>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className={teamRowCls(botWon)}>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-muted uppercase tracking-wide truncate">{teamShort(botId)}</div>
