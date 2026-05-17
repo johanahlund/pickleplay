@@ -611,7 +611,12 @@ function EventsPage() {
                     className="flex items-center gap-2 mb-2 sticky z-20 bg-white -mx-4 px-4 py-2 border-b border-border"
                     style={{ top: "var(--header-height, 0px)" }}
                   >
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span>
+                    <button
+                      type="button"
+                      onClick={() => upcomingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      title="Jump to start of Upcoming"
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider"
+                    >Upcoming</button>
                     {pastEvents.length > 0 && (
                       <button
                         type="button"
@@ -633,7 +638,12 @@ function EventsPage() {
                     className="flex items-center gap-2 mb-2 sticky z-20 bg-gray-100 -mx-4 px-4 py-2 border-b border-gray-200"
                     style={{ top: "var(--header-height, 0px)" }}
                   >
-                    <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
+                    <button
+                      type="button"
+                      onClick={() => pastRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      title="Jump to start of Past"
+                      className="text-xs font-bold text-muted hover:text-foreground uppercase tracking-wider"
+                    >Past</button>
                     {upcomingEvents.length > 0 && (
                       <button
                         type="button"
