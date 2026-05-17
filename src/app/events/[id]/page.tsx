@@ -1895,6 +1895,16 @@ export default function EventDetailPage() {
           `${preview.numCourts} court${preview.numCourts !== 1 ? "s" : ""}`,
         ].filter(Boolean).join(" · ")
       : undefined;
+    // Pull a few card-renderable bits from preview so the body
+    // isn't just two skeleton bars — we already carried this data
+    // from the events list via setPreview(). Phase 1 of the
+    // progressive-loading plan: render what we have, skeleton the
+    // rest until /api/events/[id] arrives.
+    const pCreatedBy = showPreview ? (preview as { createdBy?: { name?: string | null; emoji?: string | null; photoUrl?: string | null } | null }).createdBy : null;
+    const pTeamArr = showPreview && Array.isArray(preview.leagueTeams) ? preview.leagueTeams : [];
+    const pHostId = showPreview ? (preview as { hostTeamId?: string | null }).hostTeamId ?? null : null;
+    const pHostName = pHostId ? pTeamArr.find((lt) => lt?.team?.id === pHostId)?.team?.name : null;
+    const pVisitorName = pHostId ? pTeamArr.find((lt) => lt?.team?.id !== pHostId)?.team?.name : null;
     return (
       <div className="-mx-4 -mt-2">
         <AppHeader
@@ -1904,8 +1914,46 @@ export default function EventDetailPage() {
           meta={previewMeta}
           user={{ initial: session?.user?.name?.[0]?.toUpperCase() ?? "?", href: "/profile" }}
         />
-        {/* Content skeleton */}
         <div className="px-4 pt-4 space-y-3">
+          {/* League shortcut chip — visible when opened from /events
+              AND we know it's a league event from preview. Mirrors
+              the loaded view so the user doesn't see a layout shift. */}
+          {cameFromEventsList && showPreview && preview.round?.league && (
+            <div className="flex justify-end">
+              <Link
+                href={`/leagues/${preview.round.league.id}?tab=rounds`}
+                className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold"
+              >
+                <span aria-hidden>🏆</span>
+                <span className="truncate">
+                  {leagueShortName(preview.round.league)}
+                  <span className="text-emerald-600 font-normal"> · {preview.round.name || `Round ${preview.round.roundNumber}`}</span>
+                </span>
+                <span aria-hidden className="text-emerald-600">›</span>
+              </Link>
+            </div>
+          )}
+          {/* Host / visitor mini-card (league events only) — quick
+              visual confirmation of which teams are playing while
+              the full lineup data loads. */}
+          {showPreview && pHostName && pVisitorName && (
+            <div className={`${frameClass} p-3 flex items-center justify-between gap-3`}>
+              <div className="text-sm font-bold text-foreground text-center flex-1 min-w-0 truncate">{pHostName}</div>
+              <span className="text-xs text-muted font-semibold uppercase tracking-wider shrink-0">hosting</span>
+              <div className="text-sm font-bold text-foreground text-center flex-1 min-w-0 truncate">{pVisitorName}</div>
+            </div>
+          )}
+          {/* Event Organizer card (rendered from preview's createdBy
+              — the events list already gives us this). */}
+          {pCreatedBy && (
+            <div className={`${frameClass} p-3 flex items-center gap-2`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-bold text-foreground">Event Organizer</p>
+                <p className="text-sm font-medium truncate">{pCreatedBy.name || "—"}</p>
+              </div>
+            </div>
+          )}
+          {/* Rest of the page is loading — placeholder skeletons. */}
           <div className={`${frameClass} p-4 animate-pulse`}>
             <div className="h-3 bg-gray-200 rounded w-1/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
@@ -6377,7 +6425,15 @@ export default function EventDetailPage() {
               || event.scoringFormat
               || "1x11";
             const totalSets = effectiveScoring.startsWith("3") ? 3 : 1;
-            const matchSetScores = (linkedMatch?.setScores ?? null) as number[][] | null;
+            // setScores is `Json?` in Prisma — could deserialise to
+            // null, an array, or an unexpected shape. Defensively
+            // narrow to a 2D number array before any .map / index.
+            const rawSetScores = linkedMatch?.setScores;
+            const matchSetScores: number[][] | null = Array.isArray(rawSetScores)
+              ? (rawSetScores as unknown[]).every((row) => Array.isArray(row))
+                ? (rawSetScores as number[][])
+                : null
+              : null;
             // Per-set entry buffer for this match. Falls back to
             // setScores from the server when no local edits.
             const matchSetEntry = matchIdForEntry ? setEntries[matchIdForEntry] : undefined;
