@@ -5816,8 +5816,11 @@ export default function EventDetailPage() {
       const openScorerPicker = async () => {
         if (linkedMatch) {
           setActionSheetMatchId(linkedMatch.id);
-          setScorerPickerOpen(true);
-          setActionPanel("scorer");
+          // Open the action sheet with NO panel pre-expanded — the
+          // user reaches the picker by tapping "Set scorer" in the
+          // menu. Avoids surprising side-effects from one button.
+          setScorerPickerOpen(false);
+          setActionPanel(null);
           return;
         }
         // No Match yet — lazy-create one in pending state so the
@@ -5845,7 +5848,10 @@ export default function EventDetailPage() {
           const data = await r.json() as { match?: { id: string } };
           if (data.match?.id) {
             setActionSheetMatchId(data.match.id);
-            setScorerPickerOpen(true);
+            // No panel pre-expanded — user picks the action they
+            // actually want from the menu.
+            setScorerPickerOpen(false);
+            setActionPanel(null);
           }
         } finally {
           void fetchEvent();
@@ -7494,8 +7500,8 @@ export default function EventDetailPage() {
       return a.player.name.localeCompare(b.player.name);
     });
     return (
-      <div className="fixed inset-0 z-[90] bg-black/50 flex items-end justify-center" onClick={close}>
-        <div className="bg-white rounded-t-2xl w-full max-w-[600px] shadow-2xl mb-16 mx-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[90] bg-black/50 flex items-start justify-center overflow-y-auto" onClick={close}>
+        <div className="bg-white rounded-2xl w-full max-w-[600px] shadow-2xl my-4 mx-auto" onClick={(e) => e.stopPropagation()}>
           <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-2" />
           <div className="text-center px-4 pb-3 border-b border-border">
             <span className="text-sm font-semibold">Court {match.courtNum}</span>
@@ -7564,23 +7570,17 @@ export default function EventDetailPage() {
                 <span className="text-sm text-muted">{match.scorerId ? (match.scorer?.name?.split(" ")[0] ?? "set") : "—"}</span>
               </button>
             )}
-            {/* — Edit players — */}
+            {/* — Edit court — (moved up: paired with Set scorer as
+                  the two quickest match-prep actions) */}
             {canSetScorer && !isMatchCompleted && (
               <button
-                onClick={() => {
-                  close();
-                  if (event.round) {
-                    // Send admins to the host team's lineup builder by
-                    // default; the lineup page lets them switch teams
-                    // if they need the visitor's side.
-                    const teamId = event.hostTeamId || event.leagueTeams?.[0]?.teamId;
-                    if (teamId) router.push(`/leagues/${event.round.league.id}/events/${event.id}/lineup/${teamId}`);
-                  } else {
-                    openEditMatch(match.id);
-                  }
-                }}
-                className="py-3 rounded-xl text-base font-semibold border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center gap-2 px-4"
-              >🏓 Edit players</button>
+                onClick={() => setActionPanel((p) => p === "court" ? null : "court")}
+                className={`py-3 rounded-xl text-base font-semibold border shadow-sm flex items-center justify-between gap-2 px-4 ${actionPanel === "court" ? "bg-action/5 border-action text-action" : "bg-white border-border text-foreground hover:bg-gray-50"}`}
+                aria-expanded={actionPanel === "court"}
+              >
+                <span className="flex items-center gap-2">🎾 Edit court</span>
+                <span className="text-sm text-muted">{match.courtNum != null ? `Court ${match.courtNum}` : "—"}</span>
+              </button>
             )}
             {/* — Edit format — */}
             {canSetScorer && !isMatchCompleted && match.leagueGame && (() => {
@@ -7601,16 +7601,21 @@ export default function EventDetailPage() {
                 </button>
               );
             })()}
-            {/* — Edit court — */}
+            {/* — Edit players — (moved below format; less frequent
+                  than scorer/court/format adjustments) */}
             {canSetScorer && !isMatchCompleted && (
               <button
-                onClick={() => setActionPanel((p) => p === "court" ? null : "court")}
-                className={`py-3 rounded-xl text-base font-semibold border shadow-sm flex items-center justify-between gap-2 px-4 ${actionPanel === "court" ? "bg-action/5 border-action text-action" : "bg-white border-border text-foreground hover:bg-gray-50"}`}
-                aria-expanded={actionPanel === "court"}
-              >
-                <span className="flex items-center gap-2">🎾 Edit court</span>
-                <span className="text-sm text-muted">{match.courtNum != null ? `Court ${match.courtNum}` : "—"}</span>
-              </button>
+                onClick={() => {
+                  close();
+                  if (event.round) {
+                    const teamId = event.hostTeamId || event.leagueTeams?.[0]?.teamId;
+                    if (teamId) router.push(`/leagues/${event.round.league.id}/events/${event.id}/lineup/${teamId}`);
+                  } else {
+                    openEditMatch(match.id);
+                  }
+                }}
+                className="py-3 rounded-xl text-base font-semibold border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center gap-2 px-4"
+              >🏓 Edit players</button>
             )}
             {/* — Delete — */}
             {!isMatchCompleted && (isOwner || isAdmin || canSetScorer) && (
