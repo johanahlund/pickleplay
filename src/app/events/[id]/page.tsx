@@ -1056,6 +1056,24 @@ export default function EventDetailPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.matches, editingScoreMatchId, reopenedForEditIds]);
+  // Same guard, ScorerTracker side: if the match a scorer is
+  // tracking gets finalized via the popup (or by another admin
+  // posting /score), close the live overlay so the scorer doesn't
+  // keep rallying on a match that's already in the books. The
+  // popup is the source of truth; the scorer feature is a help
+  // tool, not a gatekeeper.
+  useEffect(() => {
+    if (!scorerMatchId || !scorerVisible || !event) return;
+    const m = event.matches?.find((mm) => mm.id === scorerMatchId);
+    if (!m) return;
+    if (m.status === "completed") {
+      setScorerVisible(false);
+      setScorerMatchId(null);
+      setScorerLiveScore(null);
+      void alertDialog("This match was finalized — the live scorer view was closed.", "Match finalized");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event?.matches, scorerMatchId, scorerVisible]);
   // Once we've landed on the Players section and the event is loaded,
   // actually open the picker with sensible defaults.
   useEffect(() => {
