@@ -566,6 +566,11 @@ export default function EventDetailPage() {
   );
   const [generating, setGenerating] = useState(false);
   const [scores, setScores] = useState<Record<string, { team1: string; team2: string }>>({});
+  // Per-set entry buffer for multi-set (Bo3) matches on the league
+  // schedule cards. Outer key is matchId; inner arrays are indexed
+  // by set number (0-based). Co-exists with `scores` above which
+  // is used by the non-league/single-set entry flows.
+  const [setEntries, setSetEntries] = useState<Record<string, { team1: string[]; team2: string[] }>>({});
   const [editingEvent, setEditingEvent] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -5724,6 +5729,62 @@ export default function EventDetailPage() {
       // ratings — same flow as ScorerTracker's final submit.
       const fixScore = async () => {
         if (!linkedMatch) return;
+        // Detect Bo3 from the effective format for this match.
+        const overrides = g as unknown as { scoringFormatOverride?: string | null };
+        const effScoring = overrides.scoringFormatOverride
+          || (catById.get(g.categoryId) as unknown as { scoringFormat?: string | null } | undefined)?.scoringFormat
+          || event.scoringFormat
+          || "1x11";
+        const isBo3 = effScoring.startsWith("3");
+        if (isBo3) {
+          // Collect per-set values from setEntries; finished pairs
+          // (both numeric) become the setScores array. Reject if
+          // the data doesn't actually form a valid match result.
+          const buf = setEntries[linkedMatch.id];
+          const t1Arr = buf?.team1 ?? [];
+          const t2Arr = buf?.team2 ?? [];
+          const sets: [number, number][] = [];
+          for (let i = 0; i < Math.max(t1Arr.length, t2Arr.length); i++) {
+            const a = parseInt(t1Arr[i] ?? "", 10);
+            const b = parseInt(t2Arr[i] ?? "", 10);
+            if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+            if (a === b) {
+              await alertDialog(`Set ${i + 1} can't be tied — one team must win each set.`, "Invalid score");
+              return;
+            }
+            sets.push([a, b]);
+          }
+          if (sets.length < 2) {
+            await alertDialog("Enter scores for at least 2 sets before fixing a Bo3 match.", "Score incomplete");
+            return;
+          }
+          const t1Wins = sets.filter(([a, b]) => a > b).length;
+          const t2Wins = sets.filter(([a, b]) => b > a).length;
+          if (t1Wins === t2Wins) {
+            await alertDialog("Need a deciding set — enter the 3rd set's score.", "Match still tied");
+            return;
+          }
+          // Optimistic: mark completed and stash setScores locally.
+          setEvent((prev) => prev ? {
+            ...prev,
+            matches: prev.matches.map((m) => m.id === linkedMatch.id ? {
+              ...m,
+              status: "completed",
+              setScores: sets,
+              players: m.players.map((p) => ({
+                ...p,
+                score: p.team === 1 ? t1Wins : t2Wins,
+              })),
+            } : m),
+          } : prev);
+          fetch(`/api/matches/${linkedMatch.id}/score`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ setScores: sets }),
+          }).finally(() => { void fetchEvent(); });
+          return;
+        }
+        // Single-set fix score path.
         const entry = scores[linkedMatch.id];
         const t1 = entry?.team1 != null && entry.team1 !== "" ? parseInt(entry.team1, 10) : NaN;
         const t2 = entry?.team2 != null && entry.team2 !== "" ? parseInt(entry.team2, 10) : NaN;
@@ -5735,8 +5796,6 @@ export default function EventDetailPage() {
           await alertDialog("Scores can't be tied — one team must win.", "Invalid score");
           return;
         }
-        // Optimistic local: mark completed with these scores so the
-        // card flips immediately to ✓ PLAYED.
         setEvent((prev) => prev ? {
           ...prev,
           matches: prev.matches.map((m) => m.id === linkedMatch.id ? {
@@ -5934,7 +5993,7 @@ export default function EventDetailPage() {
             </div>
           );
         })}
-        {scheduleEditable && (
+        {scheduleEditable && matchStatus !== "completed" && (
           <button
             type="button"
             onClick={() => {
@@ -5957,6 +6016,17 @@ export default function EventDetailPage() {
               <polyline points="12,6 14,8 12,10" />
             </svg>
           </button>
+        )}
+        {/* Completed-match marker — green ✓ in the left strip
+            (replaces the "✓ PLAYED" badge previously on the title
+            row). The left strip is otherwise the move-handle area;
+            for completed matches the move handle is hidden anyway. */}
+        {matchStatus === "completed" && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-6 z-10 flex items-center justify-center text-emerald-600 text-lg font-bold pointer-events-none"
+            title="Match completed"
+            aria-label="Match completed"
+          >✓</div>
         )}
         <div className="contents">
           <div className="flex items-center gap-1.5">
@@ -6122,11 +6192,10 @@ export default function EventDetailPage() {
                 LIVE
               </span>
             )}
-            {matchStatus === "completed" && (
-              <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600" title="Match completed">
-                <span aria-hidden>✓</span>PLAYED
-              </span>
-            )}
+            {/* "PLAYED" badge is intentionally gone — the winning
+                team's emerald row background already conveys it,
+                and a small green ✓ now sits next to the start time
+                (see the time row below). */}
           </div>
           {/* Per-match scoring format under the category line. Pulls
               from per-match override → category default → omitted.
@@ -6192,12 +6261,8 @@ export default function EventDetailPage() {
                 })}
               </div>
             );
-            // When the operator has score-entry rights AND the match
-            // is in play (or recently completed for admins), render
-            // a tiny inline number input instead of the static score
-            // text. The shared `scores` map carries the pending value
-            // until they hit ✓ Fix.
             const matchIdForEntry = linkedMatch?.id ?? null;
+            // Single-set entry buffer (legacy / single-set formats)
             const entry = matchIdForEntry ? scores[matchIdForEntry] : undefined;
             const homeIsTopAndTeam1 = !homeIsTeam2; // top row = home; if homeIsTeam2 false, top is team1
             const topEntryKey: "team1" | "team2" = homeIsTopAndTeam1 ? "team1" : "team2";
@@ -6212,41 +6277,125 @@ export default function EventDetailPage() {
                 },
               }));
             };
-            // Multi-set matches: render the per-set breakdown
-            // ("11/9 · 9/11 · 11/7") in addition to the set-wins
-            // total. Single-set matches render the plain score
-            // as before.
-            const matchSetScores = linkedMatch?.setScores;
-            const hasMultiSet = Array.isArray(matchSetScores) && matchSetScores.length > 0;
+            // ── Multi-set support ──
+            // Resolve effective format → totalSets. Bo3 formats start
+            // with "3"; everything else is single-set. Visible-set
+            // count grows as needed: 2 minimum for Bo3 in entry mode,
+            // 3 when each team has won one set. Display mode shows
+            // however many sets have been completed (min 2 for Bo3).
+            const overrides = g as unknown as { scoringFormatOverride?: string | null };
+            const effectiveScoring = overrides.scoringFormatOverride
+              || (catById.get(g.categoryId) as unknown as { scoringFormat?: string | null } | undefined)?.scoringFormat
+              || event.scoringFormat
+              || "1x11";
+            const totalSets = effectiveScoring.startsWith("3") ? 3 : 1;
+            const matchSetScores = (linkedMatch?.setScores ?? null) as number[][] | null;
+            // Per-set entry buffer for this match. Falls back to
+            // setScores from the server when no local edits.
+            const matchSetEntry = matchIdForEntry ? setEntries[matchIdForEntry] : undefined;
+            const setEntriesForKey = (key: "team1" | "team2"): string[] => {
+              if (matchSetEntry) return key === "team1" ? matchSetEntry.team1 : matchSetEntry.team2;
+              if (matchSetScores) {
+                const idx = key === "team1" ? 0 : 1;
+                return matchSetScores.map((s) => String(s[idx] ?? ""));
+              }
+              return [];
+            };
+            const writeSetEntry = (key: "team1" | "team2", setIdx: number, value: string) => {
+              if (!matchIdForEntry) return;
+              setSetEntries((prev) => {
+                const existing = prev[matchIdForEntry] || { team1: [], team2: [] };
+                // Seed from server setScores if no local edit yet.
+                const seed = (which: "team1" | "team2"): string[] => {
+                  if (existing[which].length > 0) return [...existing[which]];
+                  if (matchSetScores) {
+                    const idx = which === "team1" ? 0 : 1;
+                    return matchSetScores.map((s) => String(s[idx] ?? ""));
+                  }
+                  return [];
+                };
+                const next = { team1: seed("team1"), team2: seed("team2") };
+                while (next[key].length <= setIdx) next[key].push("");
+                next[key][setIdx] = value;
+                return { ...prev, [matchIdForEntry]: next };
+              });
+            };
+            // Decide how many set columns to show.
+            const computeVisibleSets = (): number => {
+              if (totalSets === 1) return 1;
+              // Multi-set. Look at completed sets (from server or
+              // local edits) and decide whether to expand to 3.
+              const sets = matchSetEntry
+                ? Math.max(matchSetEntry.team1.length, matchSetEntry.team2.length)
+                : (matchSetScores?.length ?? 0);
+              // Count finished sets (both teams have a numeric value
+              // and one is strictly greater). Used to decide if a 3rd
+              // is needed (when it's 1-1).
+              let t1Wins = 0, t2Wins = 0;
+              const t1Arr = setEntriesForKey("team1");
+              const t2Arr = setEntriesForKey("team2");
+              for (let i = 0; i < sets; i++) {
+                const a = parseInt(t1Arr[i] ?? "", 10);
+                const b = parseInt(t2Arr[i] ?? "", 10);
+                if (Number.isFinite(a) && Number.isFinite(b)) {
+                  if (a > b) t1Wins++;
+                  else if (b > a) t2Wins++;
+                }
+              }
+              if (t1Wins === 1 && t2Wins === 1) return Math.min(3, totalSets);
+              return Math.min(totalSets, Math.max(2, sets));
+            };
+            const visibleSets = computeVisibleSets();
             const renderScoreCell = (currentScore: number | null, key: "team1" | "team2") => {
-              if (!canEnterScore) {
-                if (hasMultiSet) {
-                  const sets = matchSetScores as number[][];
-                  const idx: 0 | 1 = key === "team1" ? 0 : 1;
+              if (totalSets === 1) {
+                // Single-set rendering — unchanged.
+                if (!canEnterScore) {
                   return (
-                    <div className="flex flex-col items-end leading-tight">
-                      {sets.map((s, i) => (
-                        <span key={i} className="text-sm font-semibold tabular-nums">{s[idx] ?? "—"}</span>
-                      ))}
-                    </div>
+                    <span>{currentScore != null ? currentScore : <span className="text-muted/40 font-normal">—</span>}</span>
                   );
                 }
+                const pending = entry?.[key] ?? (currentScore != null ? String(currentScore) : "");
                 return (
-                  <span>{currentScore != null ? currentScore : <span className="text-muted/40 font-normal">—</span>}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={pending}
+                    onChange={(e) => setEntry(key, e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-14 text-center text-xl font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
+                    placeholder="—"
+                  />
                 );
               }
-              const pending = entry?.[key] ?? (currentScore != null ? String(currentScore) : "");
+              // Multi-set: render N side-by-side cells.
+              const liveSetScores = setEntriesForKey(key);
               return (
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  value={pending}
-                  onChange={(e) => setEntry(key, e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-14 text-center text-xl font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
-                  placeholder="—"
-                />
+                <div className="flex items-center justify-end gap-1">
+                  {Array.from({ length: visibleSets }, (_, i) => {
+                    if (!canEnterScore) {
+                      const v = liveSetScores[i];
+                      return (
+                        <span key={i} className="w-7 text-center text-base font-bold tabular-nums">
+                          {v != null && v !== "" ? v : <span className="text-muted/40 font-normal">—</span>}
+                        </span>
+                      );
+                    }
+                    return (
+                      <input
+                        key={i}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={liveSetScores[i] ?? ""}
+                        onChange={(e) => writeSetEntry(key, i, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-10 text-center text-lg font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
+                        placeholder="—"
+                      />
+                    );
+                  })}
+                </div>
               );
             };
             // Winner highlight: when the match is completed and we
