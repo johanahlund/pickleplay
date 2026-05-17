@@ -8174,7 +8174,22 @@ export default function EventDetailPage() {
     const host = allLeagueTeams.find((t) => t.id === event.hostTeamId);
     const isHostCaptain = !!userId && !!host && (host.captainId === userId || host.viceCaptainId === userId);
     const canSetScorer = !!event.round && (isAdmin || isOwner || isLeagueOrganizerOfEvent || isHostCaptain) && !isMatchCompleted;
+    // L5: warn if the operator is about to assign someone who's
+    // actually PLAYING this match. The neutral-observer convention
+    // makes scorer-is-also-a-player a footgun (they can't track
+    // their own rallies). Build a quick lookup once.
+    const playingIds = new Set(match.players.map((p) => p.playerId));
     const setScorer = async (newScorerId: string | null) => {
+      // Confirm assignment if the picked player is on this match.
+      if (newScorerId && playingIds.has(newScorerId)) {
+        const playerName = match.players.find((p) => p.playerId === newScorerId)?.player?.name ?? "this player";
+        const ok = await confirmDialog({
+          title: "Scorer is playing this match",
+          message: `${playerName} is on the court for this match. They usually can't reliably track rallies for a match they're playing. Assign anyway?`,
+          confirmText: "Assign",
+        });
+        if (!ok) return;
+      }
       // Optimistic local update so the action sheet reflects the new
       // assignment instantly even before the network round-trip.
       setEvent((prev) => prev ? {
@@ -8410,6 +8425,7 @@ export default function EventDetailPage() {
                       const isHostSide = team?.id === hostTeamId;
                       const adminRole = adminRoleOf(ep.player.id);
                       const isSelf = ep.player.id === userId;
+                      const isPlayingThisMatch = playingIds.has(ep.player.id);
                       return (
                         <li key={ep.player.id}>
                           <button
@@ -8421,6 +8437,12 @@ export default function EventDetailPage() {
                             <span className={`flex-1 truncate font-semibold ${isSelf ? "text-violet-700" : ""}`}>
                               {ep.player.name}{isSelf && <span className="ml-1 text-xs font-bold opacity-70">(you)</span>}
                             </span>
+                            {isPlayingThisMatch && (
+                              <span
+                                className="shrink-0 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300"
+                                title="This player is on the court for this match"
+                              >PLAYING</span>
+                            )}
                             {adminRole && (
                               <span
                                 className="shrink-0 text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200"
