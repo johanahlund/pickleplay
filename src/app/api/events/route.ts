@@ -33,8 +33,10 @@ export async function GET() {
       // events are still in "setup"/"draft" status.
       round: {
         select: {
+          id: true, name: true, roundNumber: true,
           league: {
             select: {
+              id: true, name: true, shortName: true, season: true,
               createdById: true, deputyId: true,
               helpers: { select: { playerId: true } },
               teams: { select: { captainId: true, viceCaptainId: true, players: { select: { playerId: true } } } },
@@ -42,6 +44,13 @@ export async function GET() {
           },
         },
       },
+      // Safe subset of league-event meta so /events/[id]'s loading
+      // hero can synthesise the same short title the loaded view
+      // shows (e.g. "Setúbal vs Oeiras — Round 1") instead of the
+      // stored long event.name. Carried through setPreview().
+      // hostTeamId is a scalar — Prisma `include` returns it
+      // automatically alongside the named relations.
+      leagueTeams: { select: { teamId: true, team: { select: { id: true, name: true } } } },
     },
   });
 
@@ -74,12 +83,21 @@ export async function GET() {
     if (event.players.some((p) => p.playerId === userId)) return true;
     return false;
   });
-  // Drop the round.league inner detail from the response — it was only used
-  // for the visibility filter above. Keeping it would leak roster ids.
+  // Strip the visibility-gating fields off the league response
+  // (createdById / deputyId / helpers / teams' captain+roster ids
+  // would leak otherwise). Keep the public round / league meta so
+  // the event-detail loading hero can produce the same short title
+  // as the loaded view.
   const stripped = filtered.map((e) => {
-    const { round: _round, ...rest } = e;
-    void _round;
-    return rest;
+    if (!e.round) return e;
+    const { league } = e.round;
+    const cleanLeague = {
+      id: league.id,
+      name: league.name,
+      shortName: league.shortName,
+      season: league.season,
+    };
+    return { ...e, round: { id: e.round.id, name: e.round.name, roundNumber: e.round.roundNumber, league: cleanLeague } };
   });
 
   const allowEmail = await canSeeEmails(userId, userRole);

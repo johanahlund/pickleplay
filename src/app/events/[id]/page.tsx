@@ -503,6 +503,12 @@ export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Entry-point hint. `?from=events` means the user came from the
+  // events list and should land back there on Back (even for league
+  // events). Default falls through to the league-rounds back link
+  // for league events, /events otherwise.
+  const fromEntry = searchParams.get("from");
+  const cameFromEventsList = fromEntry === "events";
   const { confirm: confirmDialog, alert: alertDialog } = useConfirm();
   const { data: session } = useSession();
   const { viewRole } = useViewRole();
@@ -1866,9 +1872,11 @@ export default function EventDetailPage() {
     // position:fixed + runs useHeaderHeightSync). Previously we
     // hand-rolled a static green block, which made the hero "jump"
     // from normal flow to fixed when data arrived.
-    const previewBack = showPreview && preview.round?.league
-      ? { label: leagueShortName(preview.round.league), href: `/leagues/${preview.round.league.id}?tab=rounds` }
-      : { label: "Events", href: "/events" };
+    const previewBack = cameFromEventsList
+      ? { label: "Events", href: "/events" }
+      : (showPreview && preview.round?.league
+        ? { label: leagueShortName(preview.round.league), href: `/leagues/${preview.round.league.id}?tab=rounds` }
+        : { label: "Events", href: "/events" });
     const previewTitle = showPreview
       ? (preview.round
           ? (() => {
@@ -1877,7 +1885,7 @@ export default function EventDetailPage() {
               return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
             })()
           : preview.name)
-      : "Loading…";
+      : " "; // pre-mount / cold load — keep title slot's vertical space but show nothing (no jarring "Loading…" text flash)
     const previewMeta = showPreview
       ? [
           preview.club && (preview.club.shortName?.trim() || preview.club.name),
@@ -1981,9 +1989,11 @@ export default function EventDetailPage() {
   // For league-attached events, the user almost certainly arrived from the
   // league's Rounds tab. Send them back there instead of the global events
   // list so navigation matches the entry point.
-  const backLink = event.round
-    ? { label: leagueShortName(event.round.league), href: `/leagues/${event.round.league.id}?tab=rounds` }
-    : { label: "Events", href: "/events" };
+  const backLink = cameFromEventsList
+    ? { label: "Events", href: "/events" }
+    : (event.round
+      ? { label: leagueShortName(event.round.league), href: `/leagues/${event.round.league.id}?tab=rounds` }
+      : { label: "Events", href: "/events" });
   // For league events the stored event.name is the long
   // "{league.name}: {teams} — {round}" string — too long for a hero title.
   // The league is already in the back chevron, so the title only needs
@@ -8313,28 +8323,28 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-3">
       {eventHeroHeader}
-      {/* League banner — visible when event is attached to a league round */}
-      {event.round && (() => {
+      {/* League shortcut chip — visible only when the user came
+          FROM the events list (otherwise the back link already goes
+          to the league rounds, so a duplicate "go to league" card
+          would be redundant). Compact link, right-justified, with
+          the league short name + round / teams subtitle. */}
+      {event.round && cameFromEventsList && (() => {
         const r = event.round!;
         const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
         return (
-          <Link
-            href={`/leagues/${r.league.id}?tab=rounds`}
-            className="block bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm hover:bg-emerald-100"
-          >
-            <div className="flex items-center gap-2">
-              <span>🏆</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-emerald-900 truncate">
-                  {leagueShortName(r.league)}{r.league.season ? ` · ${r.league.season}` : ""}
-                </div>
-                <div className="text-[11px] text-emerald-700 truncate">
-                  {r.name || `Round ${r.roundNumber}`}{teamNames ? ` · ${teamNames}` : ""}
-                </div>
-              </div>
-              <span className="text-emerald-700 text-xs">›</span>
-            </div>
-          </Link>
+          <div className="flex justify-end">
+            <Link
+              href={`/leagues/${r.league.id}?tab=rounds`}
+              className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 font-semibold"
+            >
+              <span aria-hidden>🏆</span>
+              <span className="truncate">
+                {leagueShortName(r.league)}
+                <span className="text-emerald-600 font-normal"> · {r.name || `Round ${r.roundNumber}`}{teamNames ? ` · ${teamNames}` : ""}</span>
+              </span>
+              <span aria-hidden className="text-emerald-600">›</span>
+            </Link>
+          </div>
         );
       })()}
       {/* Organizer comments — free-text prepended to the match-day

@@ -33,6 +33,13 @@ interface Event {
   createdBy?: { id: string; name: string; emoji?: string | null; photoUrl?: string | null } | null;
   clubId: string | null;
   roundId?: string | null; // present when this event is attached to a league round
+  // Round / leagueTeams / hostTeamId carried so setPreview() can
+  // feed the event-detail loading hero a usable short title (e.g.
+  // "Setúbal vs Oeiras — Round 1") instead of falling back to the
+  // long event.name while data loads.
+  round?: { id: string; name?: string | null; roundNumber: number; league: { id: string; name: string; shortName?: string | null; season?: string | null } } | null;
+  leagueTeams?: { teamId: string; team: { id: string; name: string } }[];
+  hostTeamId?: string | null;
   club?: { id: string; name: string; shortName?: string | null; emoji: string; locations?: { id: string; name: string; googleMapsUrl?: string | null }[] } | null;
   classes?: { isDefault: boolean; format: string; scoringFormat: string; pairingMode: string; competitionMode?: string | null; maxPlayers?: number | null; skillMin?: number | null; skillMax?: number | null }[];
   players: { player: { name: string; emoji: string; photoUrl?: string | null; gender?: string | null }; playerId: string; status?: string }[];
@@ -484,7 +491,7 @@ function EventsPage() {
             return (
             <div key={event.id} className="relative">
             <Link
-              href={`/events/${event.id}`}
+              href={`/events/${event.id}?from=events`}
               onClick={() => setPreview("event", event.id, event)}
               className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}
             >
