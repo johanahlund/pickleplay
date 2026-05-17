@@ -6331,23 +6331,35 @@ export default function EventDetailPage() {
             setEditingScoreMatchId(targetId);
             await fetchEvent();
           };
+          // Approval-mode + not-yet-confirmed: show an amber ⏳
+          // instead of the green ✓ so the operator can see at a
+          // glance that the match is still awaiting both teams'
+          // sign-off. Click still triggers reopen for editors.
+          const approvalPending = linkedMatch?.rankingMode === "approval" && linkedMatch?.scoreConfirmed === false;
+          const glyph = approvalPending ? "⏳" : "✓";
+          const glyphColor = approvalPending
+            ? "text-amber-500 hover:text-amber-600"
+            : "text-emerald-600 hover:text-emerald-700 active:text-emerald-800";
+          const glyphTitle = approvalPending
+            ? "Score awaiting confirmation — tap to reopen"
+            : "Tap to reopen and edit scores";
           if (canEditSchedule) {
             return (
               <button
                 type="button"
                 onClick={reopenMatch}
-                title="Tap to reopen and edit scores"
-                aria-label="Reopen match"
-                className="absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-emerald-600 hover:text-emerald-700 active:text-emerald-800 text-xl font-bold leading-none cursor-pointer"
-              >✓</button>
+                title={glyphTitle}
+                aria-label={approvalPending ? "Awaiting confirmation — reopen" : "Reopen match"}
+                className={`absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-xl font-bold leading-none cursor-pointer ${glyphColor}`}
+              >{glyph}</button>
             );
           }
           return (
             <div
-              className="absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-emerald-600 text-xl font-bold pointer-events-none leading-none"
-              title="Match completed"
-              aria-label="Match completed"
-            >✓</div>
+              className={`absolute left-0 top-1.5 w-6 z-10 flex items-start justify-center text-xl font-bold pointer-events-none leading-none ${approvalPending ? "text-amber-500" : "text-emerald-600"}`}
+              title={approvalPending ? "Awaiting confirmation" : "Match completed"}
+              aria-label={approvalPending ? "Awaiting confirmation" : "Match completed"}
+            >{glyph}</div>
           );
         })()}
         <div className="contents">
@@ -6785,6 +6797,60 @@ export default function EventDetailPage() {
             const botWon = matchCompleted && topScore != null && botScore != null && botScore > topScore;
             const teamRowCls = (won: boolean) =>
               `flex items-start gap-2 rounded-md px-1 py-1.5 -mx-1 ${won ? "bg-emerald-50 ring-1 ring-emerald-200" : ""}`;
+            // Per-team approval confirmation — visible only when
+            // the match is completed in approval mode and the
+            // overall score isn't confirmed yet. Each team gets a
+            // ☐/☑ next to its score; a tap PATCHes /score with
+            // the team number. When both confirm, the server
+            // applies ELO and flips scoreConfirmed → true.
+            const lm = linkedMatch;
+            const showConfirm = !!lm
+              && lm.rankingMode === "approval"
+              && matchStatus === "completed"
+              && lm.scoreConfirmed === false;
+            const renderConfirmFor = (entryKey: "team1" | "team2") => {
+              if (!showConfirm || !lm) return null;
+                  const teamNum: 1 | 2 = entryKey === "team1" ? 1 : 2;
+                  const teamConfirmed = teamNum === 1 ? lm.team1Confirmed : lm.team2Confirmed;
+                  const teamPlayerIds = lm.players.filter((p) => p.team === teamNum).map((p) => p.playerId);
+                  const isMyTeam = !!userId && teamPlayerIds.includes(userId);
+                  const canConfirmThis = isMyTeam || canManage || lm.scorerId === userId;
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!canConfirmThis || teamConfirmed) return;
+                        // Optimistic flip; server PATCH reconciles.
+                        setEvent((prev) => prev ? {
+                          ...prev,
+                          matches: prev.matches.map((m) => m.id === lm.id ? {
+                            ...m,
+                            ...(teamNum === 1 ? { team1Confirmed: true } : { team2Confirmed: true }),
+                          } : m),
+                        } : prev);
+                        fetch(`/api/matches/${lm.id}/score`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ team: teamNum }),
+                        }).finally(() => { void fetchEvent(); });
+                      }}
+                      disabled={!!teamConfirmed || !canConfirmThis}
+                      className={`shrink-0 w-6 h-6 rounded flex items-center justify-center text-sm transition-all ${
+                        teamConfirmed
+                          ? "bg-green-100 text-green-600"
+                          : canConfirmThis
+                            ? "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
+                            : "bg-gray-50 text-gray-300 border border-gray-200"
+                      }`}
+                      title={teamConfirmed
+                        ? "Confirmed"
+                        : canConfirmThis
+                          ? "Tap to confirm your team's score"
+                          : "Waiting for this team to confirm"}
+                    >{teamConfirmed ? "☑" : "☐"}</button>
+                  );
+                };
             return (
               <div className="space-y-1.5">
                 <div className={teamRowCls(topWon)}>
@@ -6795,6 +6861,7 @@ export default function EventDetailPage() {
                   <div className="text-right text-xl font-bold tabular-nums shrink-0">
                     {renderScoreCell(topScore, topEntryKey)}
                   </div>
+                  {renderConfirmFor(topEntryKey)}
                 </div>
                 {/* Edit-score / Save link between the two team rows.
                     Visible whenever score-entry is a possibility:
@@ -7038,7 +7105,13 @@ export default function EventDetailPage() {
                   <div className="text-right text-xl font-bold tabular-nums shrink-0">
                     {renderScoreCell(botScore, botEntryKey)}
                   </div>
+                  {renderConfirmFor(botEntryKey)}
                 </div>
+                {showConfirm && (
+                  <div className="text-[10px] text-amber-700 font-medium px-1 -mt-0.5">
+                    Awaiting confirmation from both teams
+                  </div>
+                )}
               </div>
             );
           })()}
