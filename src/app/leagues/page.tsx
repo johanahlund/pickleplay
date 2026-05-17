@@ -8,6 +8,7 @@ import { leagueDisplayLabel } from "@/lib/statusDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { ClubBadge } from "@/components/ClubBadge";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 interface League {
   id: string;
@@ -44,9 +45,7 @@ export default function LeaguesPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Loading leagues…" />
       ) : leagues.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-muted text-sm">No leagues yet</p>

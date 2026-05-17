@@ -11,6 +11,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { setPreview } from "@/lib/entityPreview";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { usePollingRefresh, useUrlState } from "@/lib/hooks";
+import { LoadingState } from "@/components/LoadingState";
 import { eventDisplayLabel } from "@/lib/statusDisplay";
 import { eventStatusBadgeClass } from "@/lib/statusBadge";
 import { frameClass } from "@/components/Card";
@@ -484,9 +485,10 @@ function EventsPage() {
         </div>
       )}
 
-      {/* Events list — hidden when filter panel is open */}
+      {/* Events list — header / filter cluster / clubs stay visible
+          while loading so navigation chrome is interactive instantly. */}
       {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+        <LoadingState label="Loading events…" />
       ) : !showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
         <div className="text-center py-8"><p className="text-muted text-sm">No events match your filters.</p></div>
       ) : filteredEvents.length === 0 ? (

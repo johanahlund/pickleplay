@@ -10,6 +10,7 @@ import { frameClass } from "@/components/Card";
 import { clubRoleLabel } from "@/lib/clubLabel";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { usePollingRefresh } from "@/lib/hooks";
+import { LoadingState } from "@/components/LoadingState";
 
 interface ClubLocation {
   id: string;
@@ -420,7 +421,7 @@ export default function ClubsPage() {
 
       {/* My clubs */}
       {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+        <LoadingState label="Loading clubs…" />
       ) : clubs.length === 0 && isLoggedIn ? (
         <div className="text-center py-8">
           <p className="text-muted text-sm">You haven&apos;t joined any clubs yet</p>

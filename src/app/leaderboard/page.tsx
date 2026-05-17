@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 
 interface Player {
   id: string;
@@ -46,9 +47,7 @@ export default function LeaderboardPage() {
       <h2 className="text-xl font-bold">🏆 Leaderboard</h2>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Loading leaderboard…" />
       ) : ranked.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">🏆</div>

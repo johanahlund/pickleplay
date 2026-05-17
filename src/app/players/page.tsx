@@ -9,6 +9,7 @@ import { ClearInput } from "@/components/ClearInput";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
+import { LoadingState } from "@/components/LoadingState";
 import { COUNTRIES } from "@/lib/countries";
 import { withInstallTip, personalClaimUrl } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
@@ -479,9 +480,7 @@ export default function PlayersPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <div className="w-5 h-5 border-2 border-action border-t-transparent rounded-full animate-spin" />
-        </div>
+        <LoadingState label="Loading players…" />
       ) : players.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-3">👥</div>

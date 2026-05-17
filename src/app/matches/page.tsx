@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ClubBadge } from "@/components/ClubBadge";
 import { frameClass } from "@/components/Card";
 import { useUrlState } from "@/lib/hooks";
+import { LoadingState } from "@/components/LoadingState";
 
 interface PlayerInfo { id: string; name: string; emoji: string; photoUrl?: string | null }
 interface MatchPlayer { id: string; playerId: string; team: number; score: number; player: PlayerInfo }
@@ -289,9 +290,10 @@ function MatchesPage() {
         </div>
       )}
 
-      {/* Match list — grouped */}
+      {/* Match list — grouped. The sticky header + stats render
+          even while loading; only the data area shows the spinner. */}
       {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-action border-t-transparent rounded-full animate-spin" /></div>
+        <LoadingState label="Loading your matches…" />
       ) : !showFilters && (
         <>
           {/* Active */}
