@@ -6059,10 +6059,25 @@ export default function EventDetailPage() {
               danger: true,
             });
             if (!ok) return;
-            const r = await fetch(`/api/matches/${linkedMatch.id}/score`, { method: "DELETE" });
+            const targetId = linkedMatch.id;
+            // Optimistic: flip the local match to active immediately
+            // so the Edit-score link + Edit button reappear without
+            // waiting for the server round-trip + refetch.
+            setEvent((prev) => prev ? {
+              ...prev,
+              matches: prev.matches.map((m) => m.id === targetId ? {
+                ...m,
+                status: "active",
+                completedAt: null,
+                setScores: null,
+                players: m.players.map((p) => ({ ...p, score: 0 })),
+              } : m),
+            } : prev);
+            const r = await fetch(`/api/matches/${targetId}/score`, { method: "DELETE" });
             if (!r.ok) {
               const d = await r.json().catch(() => ({}));
               await alertDialog(d.error || `Couldn't reopen (HTTP ${r.status}).`, "Reopen failed");
+              await fetchEvent(); // resync from server — revert our optimistic flip
               return;
             }
             await fetchEvent();
