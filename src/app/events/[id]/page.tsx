@@ -1880,7 +1880,8 @@ export default function EventDetailPage() {
     const previewTitle = showPreview
       ? (preview.round
           ? (() => {
-              const teamNames = (preview.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+              const teamArr = Array.isArray(preview.leagueTeams) ? preview.leagueTeams : [];
+              const teamNames = teamArr.map((t) => t?.team?.name).filter(Boolean).join(" vs ");
               const roundLabel = preview.round.name || `Round ${preview.round.roundNumber}`;
               return teamNames ? `${teamNames} — ${roundLabel}` : roundLabel;
             })()
@@ -8330,7 +8331,8 @@ export default function EventDetailPage() {
           the league short name + round / teams subtitle. */}
       {event.round && cameFromEventsList && (() => {
         const r = event.round!;
-        const teamNames = (event.leagueTeams || []).map((t) => t.team.name).join(" vs ");
+        const teamArr = Array.isArray(event.leagueTeams) ? event.leagueTeams : [];
+        const teamNames = teamArr.map((t) => t?.team?.name).filter(Boolean).join(" vs ");
         return (
           <div className="flex justify-end">
             <Link
