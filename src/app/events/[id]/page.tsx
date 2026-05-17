@@ -591,6 +591,21 @@ export default function EventDetailPage() {
     conflictsByGame: Map<string, PerGameConflict[]>;
     summary: SummaryConflictBase[];
   } | null>(null);
+  // Collapses the detailed amber conflict panel. Header + count
+  // stay visible; the per-player list and explanation hide. Default
+  // expanded so a fresh check still surfaces the detail.
+  const [conflictsCollapsed, setConflictsCollapsed] = useState(false);
+  // Match IDs that have been reopened FOR EDIT in this session
+  // (not for resumed play). After reopen the server flips status
+  // to "active" so the Edit-score link can render — but we don't
+  // want the Pause / Score live-play buttons to also reappear,
+  // because the operator is fixing a recorded result, not playing
+  // a fresh match. Cleared when the new score is saved or the
+  // page is refreshed.
+  const [reopenedForEditIds, setReopenedForEditIds] = useState<Set<string>>(new Set());
+  // Toggles the "Realistic timeline…" explanation footer. Hidden by
+  // default; revealed by the small "?" affordance in the header.
+  const [conflictHelpOpen, setConflictHelpOpen] = useState(false);
   // Which match is currently in score-edit mode on the schedule
   // card. Inputs only appear for this match; everyone else sees the
   // static display. The Edit-score link between the two team rows
@@ -836,7 +851,7 @@ export default function EventDetailPage() {
   // visually feels right; we toggle via setOpenPanel.
   const [actionPanel, setActionPanel] = useState<null | "scorer" | "format" | "court">(null);
   const [scorerSearch, setScorerSearch] = useState("");
-  const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
+  const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2"; setIdx?: number } | null>(null);
   const [scorerVisible, setScorerVisible] = useState(false);
   const [scorerLiveScore, setScorerLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
   const [showAddHelper, setShowAddHelper] = useState(false);
@@ -2093,6 +2108,7 @@ export default function EventDetailPage() {
       message={scheduleShare?.message ?? ""}
       title={scheduleShare?.title || "Share match-day"}
       emailSubject={scheduleShare?.title || "Match-day schedule"}
+      pdfUrl={`/events/${event.id}/print`}
       onClose={() => setScheduleShare(null)}
     />
   );
@@ -5293,7 +5309,10 @@ export default function EventDetailPage() {
     // the schedule each render and compare with the cached one; a
     // mismatch means "results are stale" and we highlight the button
     // to nudge a re-check.
-    const BUFFER_MIN = 10;
+    // Anything below BUFFER_MIN flags a "rushed" conflict. Severity
+    // colour is then split at 10 min in severityOf(): <10 = orange
+    // (tight), 10–14 = yellow (soft), overlap = red.
+    const BUFFER_MIN = 15;
     const DELAY_PCT = 0.7;
     const fingerprintParts: string[] = [];
     for (const g of baseGames as unknown as G[]) {
@@ -5392,29 +5411,28 @@ export default function EventDetailPage() {
       setConflictData({ fingerprint: currentFingerprint, conflictsByGame: cbg, summary });
     };
 
-    // Color-code each (a, b) conflict pair so the operator can match
-    // a summary line to its two cards at a glance. Key is order-
-    // independent so the same pair gets the same color regardless of
-    // which match is "a" vs "b".
+    // Each conflicting pair gets:
+    //   - a severity tier (red/orange/yellow) derived from kind+gap
+    //   - a sequence number, so the operator can match a summary
+    //     line to its two cards (same number = same pair).
+    // Key is order-independent so the same pair gets the same data
+    // regardless of which match is "a" vs "b".
     const pairKeyOf = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-    const PAIR_PALETTE: { dot: string; ring: string }[] = [
-      { dot: "bg-rose-500", ring: "ring-rose-300" },
-      { dot: "bg-amber-500", ring: "ring-amber-300" },
-      { dot: "bg-emerald-500", ring: "ring-emerald-300" },
-      { dot: "bg-sky-500", ring: "ring-sky-300" },
-      { dot: "bg-violet-500", ring: "ring-violet-300" },
-      { dot: "bg-fuchsia-500", ring: "ring-fuchsia-300" },
-      { dot: "bg-cyan-500", ring: "ring-cyan-300" },
-      { dot: "bg-lime-500", ring: "ring-lime-300" },
-    ];
-    const pairColorByKey = new Map<string, typeof PAIR_PALETTE[number]>();
+    type Severity = { tier: "overlap" | "tight" | "soft"; bg: string; ring: string; text: string };
+    const severityOf = (kind: "overlap" | "rushed", gapMin: number): Severity => {
+      if (kind === "overlap") return { tier: "overlap", bg: "bg-red-600",    ring: "ring-red-300",    text: "text-white" };
+      if (gapMin < 10)        return { tier: "tight",   bg: "bg-orange-500", ring: "ring-orange-200", text: "text-white" };
+      return                          { tier: "soft",   bg: "bg-yellow-400", ring: "ring-yellow-200", text: "text-yellow-900" };
+    };
+    const pairSeverityByKey = new Map<string, Severity>();
+    const pairNumByKey = new Map<string, number>();
     {
-      let i = 0;
+      let n = 1;
       for (const c of conflictSummary) {
         const key = pairKeyOf(c.a.id, c.b.id);
-        if (!pairColorByKey.has(key)) {
-          pairColorByKey.set(key, PAIR_PALETTE[i % PAIR_PALETTE.length]!);
-          i++;
+        if (!pairNumByKey.has(key)) {
+          pairNumByKey.set(key, n++);
+          pairSeverityByKey.set(key, severityOf(c.kind, c.gapMin));
         }
       }
     }
@@ -5812,27 +5830,91 @@ export default function EventDetailPage() {
       // ratings — same flow as ScorerTracker's final submit.
       const fixScore = async () => {
         if (!linkedMatch) return;
-        // Detect Bo3 from the effective format for this match.
-        const overrides = g as unknown as { scoringFormatOverride?: string | null };
+        // Effective format + win-by for this match — used both for
+        // Bo3 detection and for per-set legality checks.
+        const overrides = g as unknown as { scoringFormatOverride?: string | null; winByOverride?: string | null };
         const effScoring = overrides.scoringFormatOverride
           || (catById.get(g.categoryId) as unknown as { scoringFormat?: string | null } | undefined)?.scoringFormat
           || event.scoringFormat
           || "1x11";
+        const winByStr = overrides.winByOverride
+          || (catById.get(g.categoryId) as unknown as { winBy?: string | null } | undefined)?.winBy
+          || "2";
         const isBo3 = effScoring.startsWith("3");
+        // Parse "1x11", "3x15", "1x11R", "1x21R" → target + sets.
+        const targetScore = parseInt(effScoring.replace(/^[13]x/, "").replace("R", ""), 10) || 11;
+        // Parse "2", "2_gp18", "cap15" → win-by + optional cap / golden-point.
+        const parseWinBy = (wb: string): { winByN: number; cap: number | null; goldenPoint: number | null } => {
+          const gp = wb.match(/^(\d+)_gp(\d+)$/);
+          if (gp) return { winByN: parseInt(gp[1]!, 10), cap: null, goldenPoint: parseInt(gp[2]!, 10) };
+          if (wb.startsWith("cap")) return { winByN: 2, cap: parseInt(wb.replace("cap", ""), 10) || null, goldenPoint: null };
+          return { winByN: parseInt(wb, 10) || 2, cap: null, goldenPoint: null };
+        };
+        const { winByN, cap, goldenPoint } = parseWinBy(winByStr);
+        // Returns null if the score is a valid finished-set result,
+        // else a short reason string. The rules in plain English:
+        //  - both ≥ 0, not tied
+        //  - the winner has ≥ target
+        //  - golden-point: at (gp−1, gp−1) next point wins → winner = gp, loser = gp−1
+        //  - cap: at (cap−1, cap−1) +1 wins → winner = cap, loser = cap−1
+        //  - otherwise: if winner = target, loser ≤ target − winByN;
+        //               if winner > target, margin must be exactly winByN
+        //                 (deuce can only end at exact win-by margin).
+        const validateSet = (a: number, b: number): string | null => {
+          if (!Number.isFinite(a) || !Number.isFinite(b)) return "Both teams need a numeric score.";
+          if (a < 0 || b < 0) return "Scores can't be negative.";
+          if (a === b) return "One team must win — scores can't be tied.";
+          const winner = Math.max(a, b);
+          const loser = Math.min(a, b);
+          if (goldenPoint != null) {
+            if (winner === goldenPoint && loser === goldenPoint - 1) return null;
+            if (winner > goldenPoint) return `Max score is ${goldenPoint} (golden point).`;
+          }
+          if (cap != null) {
+            if (winner === cap && loser === cap - 1) return null;
+            if (winner > cap) return `Max score is ${cap}.`;
+          }
+          if (winner < targetScore) return `Winner needs at least ${targetScore} points.`;
+          if (winner === targetScore) {
+            if (winner - loser < winByN) return `Need to win by ${winByN} — loser score too high for a ${targetScore}-point set.`;
+            return null;
+          }
+          // winner > targetScore: deuce can only end at exact win-by margin
+          if (winner - loser !== winByN) return `Past ${targetScore}, the set must end with exactly ${winByN} points between the teams.`;
+          return null;
+        };
         if (isBo3) {
           // Collect per-set values from setEntries; finished pairs
           // (both numeric) become the setScores array. Reject if
           // the data doesn't actually form a valid match result.
+          //
+          // Fall back to the match's previously-saved setScores when
+          // the local buffer is empty. This is the reopen-with-edit
+          // path: the inputs render from the saved scores via
+          // setEntriesForKey, so a user who taps Save without
+          // changing anything would otherwise hit "incomplete".
           const buf = setEntries[linkedMatch.id];
-          const t1Arr = buf?.team1 ?? [];
-          const t2Arr = buf?.team2 ?? [];
+          const savedRaw = linkedMatch.setScores;
+          const savedSets: number[][] | null = Array.isArray(savedRaw)
+            ? (savedRaw as unknown[]).every((row) => Array.isArray(row))
+              ? (savedRaw as number[][])
+              : null
+            : null;
+          const hasLocal = !!buf && (buf.team1.length > 0 || buf.team2.length > 0);
+          const t1Arr: string[] = hasLocal
+            ? buf!.team1
+            : (savedSets ? savedSets.map((s) => String(s[0] ?? "")) : []);
+          const t2Arr: string[] = hasLocal
+            ? buf!.team2
+            : (savedSets ? savedSets.map((s) => String(s[1] ?? "")) : []);
           const sets: [number, number][] = [];
           for (let i = 0; i < Math.max(t1Arr.length, t2Arr.length); i++) {
             const a = parseInt(t1Arr[i] ?? "", 10);
             const b = parseInt(t2Arr[i] ?? "", 10);
             if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-            if (a === b) {
-              await alertDialog(`Set ${i + 1} can't be tied — one team must win each set.`, "Invalid score");
+            const err = validateSet(a, b);
+            if (err) {
+              await alertDialog(`Set ${i + 1}: ${err}`, "Invalid score");
               return;
             }
             sets.push([a, b]);
@@ -5866,12 +5948,27 @@ export default function EventDetailPage() {
             body: JSON.stringify({ setScores: sets }),
           }).finally(() => { void fetchEvent(); });
           setEditingScoreMatchId(null);
+          setReopenedForEditIds((prev) => {
+            if (!prev.has(linkedMatch.id)) return prev;
+            const next = new Set(prev);
+            next.delete(linkedMatch.id);
+            return next;
+          });
           return;
         }
-        // Single-set fix score path.
+        // Single-set fix score path. Same fallback story as Bo3:
+        // when the user reopens without re-typing, the inputs read
+        // from the saved player.score values, so the local `scores`
+        // buffer is empty even though the cells visually have values.
         const entry = scores[linkedMatch.id];
-        const t1 = entry?.team1 != null && entry.team1 !== "" ? parseInt(entry.team1, 10) : NaN;
-        const t2 = entry?.team2 != null && entry.team2 !== "" ? parseInt(entry.team2, 10) : NaN;
+        const savedTeam1 = linkedMatch.players.find((p) => p.team === 1)?.score;
+        const savedTeam2 = linkedMatch.players.find((p) => p.team === 2)?.score;
+        const t1 = entry?.team1 != null && entry.team1 !== ""
+          ? parseInt(entry.team1, 10)
+          : (typeof savedTeam1 === "number" ? savedTeam1 : NaN);
+        const t2 = entry?.team2 != null && entry.team2 !== ""
+          ? parseInt(entry.team2, 10)
+          : (typeof savedTeam2 === "number" ? savedTeam2 : NaN);
         if (!Number.isFinite(t1) || !Number.isFinite(t2)) {
           await alertDialog("Enter a score for both teams before fixing.", "Score incomplete");
           return;
@@ -5897,6 +5994,12 @@ export default function EventDetailPage() {
           body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
         }).finally(() => { void fetchEvent(); });
         setEditingScoreMatchId(null);
+        setReopenedForEditIds((prev) => {
+          if (!prev.has(linkedMatch.id)) return prev;
+          const next = new Set(prev);
+          next.delete(linkedMatch.id);
+          return next;
+        });
       };
       const openScorerPicker = async () => {
         if (linkedMatch) {
@@ -6071,14 +6174,16 @@ export default function EventDetailPage() {
           return (
             <div key={edge} className={`${edgeClass[edge]} flex ${flexDir[edge]} z-10`}>
               {keys.map((k) => {
-                const color = pairColorByKey.get(k);
+                const sev = pairSeverityByKey.get(k);
+                const num = pairNumByKey.get(k);
                 return (
                   <span
                     key={k}
-                    title="Conflict pair — same colored dot on the other match"
-                    className={`block w-2.5 h-2.5 rounded-full ring-2 ${color?.dot ?? "bg-amber-400"} ${color?.ring ?? "ring-amber-200"}`}
-                    aria-hidden
-                  />
+                    title={`Conflict #${num} — same number on the other match`}
+                    className={`flex items-center justify-center w-5 h-5 rounded-full ring-2 text-[10px] font-bold ${sev?.bg ?? "bg-amber-400"} ${sev?.ring ?? "ring-amber-200"} ${sev?.text ?? "text-white"}`}
+                  >
+                    {num ?? ""}
+                  </span>
                 );
               })}
             </div>
@@ -6118,23 +6223,21 @@ export default function EventDetailPage() {
             if (!linkedMatch) return;
             const ok = await confirmDialog({
               title: "Reopen this match?",
-              message: "The current score will be cleared and any ratings reversed. You'll then be able to enter a new score.",
+              message: "Ratings will be reversed. The current score stays so you can adjust it.",
               confirmText: "Reopen",
               danger: true,
             });
             if (!ok) return;
             const targetId = linkedMatch.id;
-            // Optimistic: flip the local match to active immediately
-            // so the Edit-score link + Edit button reappear without
-            // waiting for the server round-trip + refetch.
+            // Optimistic: flip status only — keep the existing
+            // scores so the operator edits from where it stood,
+            // not from a blank card.
             setEvent((prev) => prev ? {
               ...prev,
               matches: prev.matches.map((m) => m.id === targetId ? {
                 ...m,
                 status: "active",
                 completedAt: null,
-                setScores: null,
-                players: m.players.map((p) => ({ ...p, score: 0 })),
               } : m),
             } : prev);
             const r = await fetch(`/api/matches/${targetId}/score`, { method: "DELETE" });
@@ -6144,6 +6247,17 @@ export default function EventDetailPage() {
               await fetchEvent(); // resync from server — revert our optimistic flip
               return;
             }
+            // Mark this match as "reopened for edit" so the card
+            // shows only Edit / Edit-score, not Pause / Score.
+            setReopenedForEditIds((prev) => {
+              const next = new Set(prev);
+              next.add(targetId);
+              return next;
+            });
+            // Open score-entry mode immediately so the operator
+            // doesn't need a second tap on "Edit score" after
+            // confirming the reopen.
+            setEditingScoreMatchId(targetId);
             await fetchEvent();
           };
           if (canEditSchedule) {
@@ -6424,12 +6538,30 @@ export default function EventDetailPage() {
             // count grows as needed: 2 minimum for Bo3 in entry mode,
             // 3 when each team has won one set. Display mode shows
             // however many sets have been completed (min 2 for Bo3).
-            const overrides = g as unknown as { scoringFormatOverride?: string | null };
+            const overrides = g as unknown as { scoringFormatOverride?: string | null; winByOverride?: string | null };
             const effectiveScoring = overrides.scoringFormatOverride
               || (catById.get(g.categoryId) as unknown as { scoringFormat?: string | null } | undefined)?.scoringFormat
               || event.scoringFormat
               || "1x11";
             const totalSets = effectiveScoring.startsWith("3") ? 3 : 1;
+            // Target + win-by for ScorePicker — same parsing as
+            // the non-league flow (see renderTeamRow above) so the
+            // popup only offers logical scores.
+            const targetScore = parseInt(effectiveScoring.replace(/^[13]x/, "").replace("R", ""), 10) || 11;
+            const winByStr = overrides.winByOverride
+              || (catById.get(g.categoryId) as unknown as { winBy?: string | null } | undefined)?.winBy
+              || "2";
+            // Parse "2", "2_gp18", "cap15" so ScorePicker can clip
+            // the offered numbers to the actual legal set of pairs.
+            const gpMatch = winByStr.match(/^(\d+)_gp(\d+)$/);
+            const isCap = winByStr.startsWith("cap");
+            const winByN = gpMatch
+              ? parseInt(gpMatch[1]!, 10)
+              : isCap
+                ? 2
+                : (parseInt(winByStr, 10) || 2);
+            const capVal: number | null = isCap ? (parseInt(winByStr.replace("cap", ""), 10) || null) : null;
+            const goldenPointVal: number | null = gpMatch ? parseInt(gpMatch[2]!, 10) : null;
             // setScores is `Json?` in Prisma — could deserialise to
             // null, an array, or an unexpected shape. Defensively
             // narrow to a 2D number array before any .map / index.
@@ -6496,29 +6628,45 @@ export default function EventDetailPage() {
             };
             const visibleSets = computeVisibleSets();
             const renderScoreCell = (currentScore: number | null, key: "team1" | "team2") => {
+              const otherKey: "team1" | "team2" = key === "team1" ? "team2" : "team1";
+              // Team label for the score popup. Uses the same short
+              // names rendered in the team row above the cell so the
+              // operator never has to wonder which team they're
+              // entering a score for.
+              const teamLabel = key === topEntryKey ? teamShort(topId) : teamShort(botId);
               if (totalSets === 1) {
-                // Single-set rendering — unchanged.
                 if (!canEnterScore) {
                   return (
                     <span>{currentScore != null ? currentScore : <span className="text-muted/40 font-normal">—</span>}</span>
                   );
                 }
                 const pending = entry?.[key] ?? (currentScore != null ? String(currentScore) : "");
+                const otherPending = entry?.[otherKey] ?? "";
                 return (
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={pending}
-                    onChange={(e) => setEntry(key, e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-14 text-center text-xl font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
-                    placeholder="—"
-                  />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <ScorePicker
+                      value={pending}
+                      targetScore={targetScore}
+                      winBy={winByN}
+                      cap={capVal}
+                      goldenPoint={goldenPointVal}
+                      otherTeamScore={otherPending}
+                      teamLabel={teamLabel}
+                      autoOpen={!!matchIdForEntry && autoOpenScoreTeam?.matchId === matchIdForEntry && autoOpenScoreTeam?.team === key && autoOpenScoreTeam?.setIdx === undefined}
+                      onAutoOpened={() => setAutoOpenScoreTeam(null)}
+                      onChange={(v) => {
+                        setEntry(key, v);
+                        if (matchIdForEntry && !(entry?.[otherKey] && entry[otherKey] !== "")) {
+                          setTimeout(() => setAutoOpenScoreTeam({ matchId: matchIdForEntry, team: otherKey }), 250);
+                        }
+                      }}
+                      onClear={() => setEntry(key, "")}
+                    />
+                  </div>
                 );
               }
-              // Multi-set: render N side-by-side cells.
               const liveSetScores = setEntriesForKey(key);
+              const otherSetScores = setEntriesForKey(otherKey);
               return (
                 <div className="flex items-center justify-end gap-1">
                   {Array.from({ length: visibleSets }, (_, i) => {
@@ -6531,17 +6679,28 @@ export default function EventDetailPage() {
                       );
                     }
                     return (
-                      <input
-                        key={i}
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        value={liveSetScores[i] ?? ""}
-                        onChange={(e) => writeSetEntry(key, i, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-10 text-center text-lg font-bold tabular-nums border-2 border-border rounded-md py-1 bg-white focus:outline-none focus:border-action"
-                        placeholder="—"
-                      />
+                      <div key={i} onClick={(e) => e.stopPropagation()}>
+                        <ScorePicker
+                          value={liveSetScores[i] ?? ""}
+                          targetScore={targetScore}
+                          winBy={winByN}
+                          cap={capVal}
+                          goldenPoint={goldenPointVal}
+                          otherTeamScore={otherSetScores[i] ?? ""}
+                          teamLabel={teamLabel}
+                          setNumber={i + 1}
+                          autoOpen={!!matchIdForEntry && autoOpenScoreTeam?.matchId === matchIdForEntry && autoOpenScoreTeam?.team === key && autoOpenScoreTeam?.setIdx === i}
+                          onAutoOpened={() => setAutoOpenScoreTeam(null)}
+                          onChange={(v) => {
+                            writeSetEntry(key, i, v);
+                            const otherVal = otherSetScores[i] ?? "";
+                            if (matchIdForEntry && !otherVal) {
+                              setTimeout(() => setAutoOpenScoreTeam({ matchId: matchIdForEntry, team: otherKey, setIdx: i }), 250);
+                            }
+                          }}
+                          onClear={() => writeSetEntry(key, i, "")}
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -6583,31 +6742,100 @@ export default function EventDetailPage() {
                     ? (canTouchScore && matchStatus !== "completed")
                     : (couldStartEntry && lineupsReady && event.round));
                   if (!linkVisible) return null;
-                  const beginEditing = async () => {
+                  const beginEditing = () => {
                     if (linkedMatch) {
                       setEditingScoreMatchId(linkedMatch.id);
                       return;
                     }
                     // Lazy-create the Match in pending state so we
                     // have an id to bind the inputs against.
+                    // Optimistic [[feedback_optimistic_pattern]]: synth
+                    // a placeholder Match locally + flip into edit
+                    // mode IMMEDIATELY, then POST start-match in the
+                    // background. Awaiting the server made the link
+                    // feel broken (up to ~10s on cold DB). When the
+                    // real id comes back we swap editingScoreMatchId
+                    // before fetchEvent reconciles the synth away.
                     if (!event.round) return;
                     const leagueId = event.round.league.id;
-                    try {
-                      const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ startNow: false }),
-                      });
-                      if (!r.ok) {
-                        const d = await r.json().catch(() => ({}));
-                        await alertDialog(d.error || "Couldn't open score entry.", "Failed");
-                        return;
-                      }
-                      const data = await r.json() as { match?: { id: string } };
-                      if (data.match?.id) setEditingScoreMatchId(data.match.id);
-                    } finally {
-                      void fetchEvent();
-                    }
+                    const tempId = `temp-${g.id}-${Date.now()}`;
+                    const nowIso = new Date().toISOString();
+                    const synth: Match = {
+                      id: tempId,
+                      courtNum: g.courtNum ?? 1,
+                      round: 1,
+                      status: "pending",
+                      startedAt: null,
+                      scorerId: null,
+                      leagueGame: {
+                        id: g.id,
+                        kind: (g.kind ?? "league") as "principal" | "league" | "extra",
+                        slotNumber: g.slotNumber ?? 1,
+                        scheduledAt: g.scheduledAt ?? null,
+                        courtNum: g.courtNum ?? null,
+                        category: { id: g.categoryId, name: catName(g.categoryId) },
+                      },
+                      players: gpRows.map((gp) => ({
+                        id: `temp-${tempId}-${gp.playerId}`,
+                        playerId: gp.playerId,
+                        team: gp.team ?? 1,
+                        score: 0,
+                        player: {
+                          id: gp.playerId,
+                          name: playerNameById.get(gp.playerId) || "Player",
+                          emoji: "🏓",
+                          rating: 1000,
+                        },
+                      })),
+                    };
+                    void nowIso; // (kept for symmetry with startMatch above)
+                    setEvent((prev) => prev ? { ...prev, matches: [...prev.matches, synth] } : prev);
+                    setEditingScoreMatchId(tempId);
+                    fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${g.id}/start-match`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ startNow: false }),
+                    })
+                      .then(async (r) => {
+                        if (!r.ok) {
+                          const d = await r.json().catch(() => ({}));
+                          await alertDialog(d.error || "Couldn't open score entry.", "Failed");
+                          setEditingScoreMatchId((cur) => (cur === tempId ? null : cur));
+                          // Drop the synth Match so the schedule
+                          // doesn't show a phantom "live" card that
+                          // doesn't exist on the server.
+                          setEvent((prev) => prev ? {
+                            ...prev,
+                            matches: prev.matches.filter((m) => m.id !== tempId),
+                          } : prev);
+                          return;
+                        }
+                        const data = await r.json() as { match?: { id: string } };
+                        if (data.match?.id) {
+                          const realId = data.match.id;
+                          // Swap before fetchEvent reconciles, else
+                          // the synth disappears and the user is
+                          // bumped out of edit mode.
+                          setEditingScoreMatchId((cur) => (cur === tempId ? realId : cur));
+                          // Migrate any score buffer writes that the
+                          // user made under tempId while the server
+                          // round-trip was in flight — otherwise
+                          // those values are orphaned and Save would
+                          // report "Score incomplete" on a card the
+                          // user already filled out.
+                          setScores((prev) => {
+                            if (!prev[tempId]) return prev;
+                            const { [tempId]: tempEntry, ...rest } = prev;
+                            return { ...rest, [realId]: { ...tempEntry, ...(prev[realId] ?? {}) } };
+                          });
+                          setSetEntries((prev) => {
+                            if (!prev[tempId]) return prev;
+                            const { [tempId]: tempEntry, ...rest } = prev;
+                            return { ...rest, [realId]: prev[realId] ?? tempEntry };
+                          });
+                        }
+                      })
+                      .finally(() => { void fetchEvent(); });
                   };
                   return (
                     <div className="flex items-center justify-end -my-1">
@@ -6657,12 +6885,16 @@ export default function EventDetailPage() {
             schedule editors, players in the match, and the assigned
             scorer. Compact icon buttons so the schedule grid stays
             scannable. */}
-        {(canActOnMatch || canEditSchedule) && matchStatus !== "completed" && (
+        {(canActOnMatch || canEditSchedule) && matchStatus !== "completed" && (() => {
+          // "Reopened for edit" → only show Edit + Edit-score; the
+          // operator is fixing a recorded result, not actively playing.
+          const isReopenedEdit = !!linkedMatch && reopenedForEditIds.has(linkedMatch.id);
+          return (
           <div className="flex items-center justify-end gap-1 mt-1.5 pt-1.5 border-t border-border/60">
             {/* Start lives in the action sheet now (per "do it all
                 from the edit popup"). Card cluster keeps the
                 contextual buttons for matches already in play. */}
-            {linkedMatch && matchStatus === "active" && (
+            {linkedMatch && matchStatus === "active" && !isReopenedEdit && (
               <button
                 type="button"
                 onClick={pauseMatch}
@@ -6672,7 +6904,7 @@ export default function EventDetailPage() {
                 <span aria-hidden>⏸</span><span>Pause</span>
               </button>
             )}
-            {linkedMatch && matchStatus === "paused" && (
+            {linkedMatch && matchStatus === "paused" && !isReopenedEdit && (
               <button
                 type="button"
                 onClick={resumeMatch}
@@ -6684,7 +6916,7 @@ export default function EventDetailPage() {
             )}
             {/* Stop — only when paused with zero points. Reverts the
                 match to pending so the card shows just ▶ Start again. */}
-            {canStopMatch && (
+            {canStopMatch && !isReopenedEdit && (
               <button
                 type="button"
                 onClick={stopMatch}
@@ -6719,7 +6951,7 @@ export default function EventDetailPage() {
                 scorer for this match (match.scorerId === userId).
                 Admins who want to score must first delegate it to
                 themselves via the picker, then this button appears. */}
-            {linkedMatch && isMatchScorer && (matchStatus === "active" || matchStatus === "paused" || matchStatus === "pending") && (
+            {linkedMatch && isMatchScorer && !isReopenedEdit && (matchStatus === "active" || matchStatus === "paused" || matchStatus === "pending") && (
               <button
                 type="button"
                 onClick={openScorer}
@@ -6731,7 +6963,8 @@ export default function EventDetailPage() {
               </button>
             )}
           </div>
-        )}
+          );
+        })()}
         </div>
       );
     };
@@ -6772,18 +7005,6 @@ export default function EventDetailPage() {
             <span className="text-base font-bold">Schedule</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Print / Save as PDF — opens the dedicated /print route
-                in a new tab, which auto-fires window.print(). */}
-            <button
-              type="button"
-              onClick={() => window.open(`/events/${event.id}/print`, "_blank", "noopener")}
-              title="Open print-friendly schedule (use browser's Save as PDF)"
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1 bg-white border border-border text-foreground hover:bg-gray-50 active:bg-gray-100 transition-colors"
-              aria-label="Print or save as PDF"
-            >
-              <span aria-hidden>🖨️</span>
-              <span>PDF</span>
-            </button>
             {/* Single lock indicator + toggle. Editors tap to flip
                 between open (grey/unlocked) and locked (emerald,
                 clearly "ON"). Non-editors still see the state but
@@ -6911,9 +7132,6 @@ export default function EventDetailPage() {
           </div>
         )}
         {scheduleEditable && (
-          <p className="text-[10px] text-muted">– = inherit from round / league. Per-category overrides live in the Category overrides panel above.</p>
-        )}
-        {scheduleEditable && (
           arrangePreview ? (
             <div className="mb-2 rounded-xl border border-action/40 bg-action/5 p-2.5 flex items-center justify-between gap-2 text-[12px]">
               <span className="font-semibold text-action">
@@ -7025,45 +7243,86 @@ export default function EventDetailPage() {
         )}
         {hasConflicts && !scheduleLocked && (
           <div className="mb-2 rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-1.5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
-              <span aria-hidden>⚠</span>
-              <span>
-                {conflictSummary.length} player {conflictSummary.length === 1 ? "conflict" : "conflicts"}
-                {overlapCount > 0 && rushedCount > 0
-                  ? ` (${overlapCount} overlapping, ${rushedCount} rushed)`
-                  : overlapCount > 0
-                    ? " (overlapping)"
-                    : " (rushed)"}
-              </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConflictsCollapsed((v) => !v)}
+                className="flex-1 flex items-center gap-2 text-sm font-semibold text-amber-900 text-left"
+                aria-expanded={!conflictsCollapsed}
+              >
+                <span aria-hidden>⚠</span>
+                <span className="flex-1">
+                  {conflictSummary.length} player {conflictSummary.length === 1 ? "conflict" : "conflicts"}
+                  {overlapCount > 0 && rushedCount > 0
+                    ? ` (${overlapCount} overlapping, ${rushedCount} rushed)`
+                    : overlapCount > 0
+                      ? " (overlapping)"
+                      : " (rushed)"}
+                </span>
+                <span
+                  aria-hidden
+                  className={`text-amber-700 transition-transform ${conflictsCollapsed ? "" : "rotate-180"}`}
+                >
+                  ▾
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConflictHelpOpen((v) => !v)}
+                title="How conflicts are detected"
+                aria-label="How conflicts are detected"
+                aria-expanded={conflictHelpOpen}
+                className={`shrink-0 w-5 h-5 rounded-full border text-[11px] font-bold flex items-center justify-center transition-colors ${
+                  conflictHelpOpen
+                    ? "bg-amber-200 border-amber-400 text-amber-900"
+                    : "bg-white border-amber-300 text-amber-700 hover:bg-amber-100"
+                }`}
+              >
+                ?
+              </button>
             </div>
-            <ul className="space-y-0.5 text-[11px] text-amber-900">
-              {conflictSummary.map((c, i) => {
-                const aT = c.a.scheduledAt ? timeHHMM(c.a.scheduledAt) : "?";
-                const bT = c.b.scheduledAt ? timeHHMM(c.b.scheduledAt) : "?";
-                const aCourt = c.a.courtNum != null ? `C${c.a.courtNum}` : "—";
-                const bCourt = c.b.courtNum != null ? `C${c.b.courtNum}` : "—";
-                const verb = c.kind === "overlap" ? "overlap" : `rushed ${c.gapMin}m gap`;
-                const pairColor = pairColorByKey.get(pairKeyOf(c.a.id, c.b.id));
-                return (
-                  <li key={`${c.playerId}-${i}`} className="flex items-center gap-1.5">
-                    <span
-                      className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${pairColor?.dot ?? "bg-amber-400"}`}
-                      aria-hidden
-                    />
-                    <span>
-                      <span className="font-semibold">{c.playerName}</span>
-                      {" — "}
-                      <span className={c.kind === "overlap" ? "text-red-700 font-medium" : ""}>{verb}</span>
-                      {" — "}
-                      {catName(c.a.categoryId)} {aT}/{aCourt} ↔ {catName(c.b.categoryId)} {bT}/{bCourt}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="text-[10px] text-amber-800 mt-1">
-              Realistic timeline: each match is assumed to run {Math.round(DELAY_PCT * 100)}% longer than scheduled (base duration = gap to next match on the same court; {scheduleDurationMin}-min default for the last match). Delays cascade — a late start on a court pushes every following match on that court. Rushed warns when the projected gap between matches on different courts drops under {BUFFER_MIN} min.
-            </p>
+            {!conflictsCollapsed && (
+              <ul className="space-y-0.5 text-[11px] text-amber-900">
+                {conflictSummary.map((c, i) => {
+                  const aT = c.a.scheduledAt ? timeHHMM(c.a.scheduledAt) : "?";
+                  const bT = c.b.scheduledAt ? timeHHMM(c.b.scheduledAt) : "?";
+                  const aCourt = c.a.courtNum != null ? `C${c.a.courtNum}` : "—";
+                  const bCourt = c.b.courtNum != null ? `C${c.b.courtNum}` : "—";
+                  const verb = c.kind === "overlap" ? "overlap" : `rushed ${c.gapMin}m gap`;
+                  const key = pairKeyOf(c.a.id, c.b.id);
+                  const sev = pairSeverityByKey.get(key);
+                  const num = pairNumByKey.get(key);
+                  return (
+                    <li key={`${c.playerId}-${i}`} className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shrink-0 ${sev?.bg ?? "bg-amber-400"} ${sev?.text ?? "text-white"}`}
+                      >
+                        {num}
+                      </span>
+                      <span>
+                        <span className="font-semibold">{c.playerName}</span>
+                        {" — "}
+                        <span className={c.kind === "overlap" ? "text-red-700 font-medium" : ""}>{verb}</span>
+                        {" — "}
+                        {catName(c.a.categoryId)} {aT}/{aCourt} ↔ {catName(c.b.categoryId)} {bT}/{bCourt}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {conflictHelpOpen && (
+              <div className="text-[10px] text-amber-800 mt-1 space-y-1 border-t border-amber-200 pt-1.5">
+                <p>
+                  Realistic timeline: each match is assumed to run {Math.round(DELAY_PCT * 100)}% longer than scheduled (base duration = gap to next match on the same court; {scheduleDurationMin}-min default for the last match). Delays cascade — a late start on a court pushes every following match on that court.
+                </p>
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-red-600" /> overlap</span>
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-orange-500" /> &lt;10 min gap</span>
+                  <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-full bg-yellow-400" /> 10–{BUFFER_MIN - 1} min gap</span>
+                </p>
+              </div>
+            )}
           </div>
         )}
         <div className="flex gap-3 overflow-x-auto -mx-3 px-3 pb-2 snap-x snap-mandatory">
