@@ -7634,22 +7634,12 @@ export default function EventDetailPage() {
                 </button>
               );
             })()}
-            {/* — Edit players — (moved below format; less frequent
-                  than scorer/court/format adjustments) */}
-            {canSetScorer && !isMatchCompleted && (
-              <button
-                onClick={() => {
-                  close();
-                  if (event.round) {
-                    const teamId = event.hostTeamId || event.leagueTeams?.[0]?.teamId;
-                    if (teamId) router.push(`/leagues/${event.round.league.id}/events/${event.id}/lineup/${teamId}`);
-                  } else {
-                    openEditMatch(match.id);
-                  }
-                }}
-                className="py-3 rounded-xl text-base font-semibold border border-border bg-white hover:bg-gray-50 active:bg-gray-100 shadow-sm flex items-center gap-2 px-4"
-              >🏓 Edit players</button>
-            )}
+            {/* Edit players intentionally NOT here. Per-match
+                player edits would let either side rewrite the
+                opponent's lineup, which breaks the "both captains
+                must unlock to edit" rule. League lineups belong on
+                the lineup page; non-league matches use the regular
+                match-edit flow. */}
             {/* — Delete — */}
             {!isMatchCompleted && (isOwner || isAdmin || canSetScorer) && (
               <button
