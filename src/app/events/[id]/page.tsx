@@ -7049,8 +7049,10 @@ export default function EventDetailPage() {
                 lazy-creates one in pending state so the action sheet
                 can open. Doubles as the entry point to the scorer
                 picker; we pre-expand the picker on open so the most
-                common action is one tap away. */}
-            {canEditSchedule && (
+                common action is one tap away. Hidden during score
+                entry so the operator isn't tempted to flip format /
+                court / scorer mid-typing (B-5). */}
+            {canEditSchedule && !isEditingScore && (
               <button
                 type="button"
                 onClick={openScorerPicker}
