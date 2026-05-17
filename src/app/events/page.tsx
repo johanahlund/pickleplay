@@ -95,6 +95,10 @@ function EventsPage() {
   const [clubsLoaded, setClubsLoaded] = useState(false);
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
   const todayRef = useRef<HTMLDivElement>(null);
+  // Jump-link targets for the new "↓ PAST" / "↑ UPCOMING" links on
+  // the section header rows.
+  const upcomingRef = useRef<HTMLDivElement>(null);
+  const pastRef = useRef<HTMLDivElement>(null);
   const [scrolledToToday, setScrolledToToday] = useState(false);
 
   const fetchEvents = useCallback(async () => {
@@ -291,62 +295,28 @@ function EventsPage() {
         ) : null}
       </div>
 
-      {/* Filter rows. None selected = no constraint. Multi-select on
-          club pills (OR-filter). Type pills are single-select.
-          Labels ("My clubs:" / "Type:") sit on the left so the first
-          chip in each row aligns vertically. */}
+      {/* Filter rows — wrapped in an outer frame so it reads as a
+          single cluster. Three rows:
+            1) search + date selector
+            2) framed: My clubs pills
+            3) framed: type icons + My Events (right)
+          None selected = no constraint. Club pills are multi-select
+          (OR); type icons are single-select. */}
       {!showFilters && (
-        <div className="space-y-1.5">
-          {/* Row 0: search input (full width, matches date select height) */}
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search events..."
-            className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-white"
-          />
-          {/* Row 1: "My clubs:" label + pills + My Events button (right) */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted shrink-0 w-16">My clubs:</span>
-            {userClubs.map((c) => {
-              const selected = selectedClubIds.has(c.id);
-              return (
-                <button key={c.id}
-                  onClick={() => toggleClub(c.id)}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
-                    selected ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                  }`}
-                >
-                  <ClubBadge logoUrl={c.logoUrl} size={14} />
-                  {(c.shortName?.trim() || c.name.slice(0, 10))}
-                </button>
-              );
-            })}
-            <button onClick={() => setMyEventsOnly(!myEventsOnly)}
-              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ml-auto ${
-                myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-              }`}
-            >👤 My Events</button>
-          </div>
-          {/* Row 2: "Type:" label + type pills + Date select (right) */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted shrink-0 w-16">Type:</span>
-            {([
-              { value: "events", label: "🎾 Social" },
-              { value: "competitions", label: "🏆 Competition" },
-              { value: "liga", label: "🥇 Liga" },
-            ] as const).map((t) => (
-              <button key={t.value}
-                onClick={() => setTypeFilter(typeFilter === t.value ? "all" : t.value)}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
-                  typeFilter === t.value ? "bg-selected text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
-                }`}
-              >{t.label}</button>
-            ))}
+        <div className="border border-gray-200 rounded-xl p-2 space-y-1.5 bg-white">
+          {/* Row 1: search (flex-1) + date selector (right) */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search events..."
+              className="flex-1 min-w-0 text-xs border border-border rounded-lg px-3 py-1.5 bg-white"
+            />
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="ml-auto text-xs border border-border rounded-lg px-2 py-1.5 bg-white"
+              className="text-xs border border-border rounded-lg px-2 py-1.5 bg-white shrink-0"
             >
               <option value="all">All dates</option>
               <option value="past7">Past 7 days</option>
@@ -355,6 +325,49 @@ function EventsPage() {
               <option value="next7">Next 7 days</option>
               <option value="next30">Next 30 days</option>
             </select>
+          </div>
+          {/* Row 2: clubs (framed) */}
+          {userClubs.length > 0 && (
+            <div className="border border-gray-300 rounded-lg p-1 flex flex-wrap items-center gap-1">
+              {userClubs.map((c) => {
+                const selected = selectedClubIds.has(c.id);
+                return (
+                  <button key={c.id}
+                    onClick={() => toggleClub(c.id)}
+                    className={`text-xs px-2 py-0.5 rounded-md font-medium transition-colors inline-flex items-center gap-1 ${
+                      selected ? "bg-action text-white" : "text-foreground hover:bg-gray-100"
+                    }`}
+                  >
+                    <ClubBadge logoUrl={c.logoUrl} size={14} />
+                    {(c.shortName?.trim() || c.name.slice(0, 10))}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {/* Row 3: type icons (framed) + My Events (right) */}
+          <div className="flex items-center gap-1.5">
+            <div className="border border-gray-300 rounded-lg p-0.5 flex gap-0.5">
+              {([
+                { value: "events", label: "🎾", title: "Social" },
+                { value: "competitions", label: "🏆", title: "Competition" },
+                { value: "liga", label: "🥇", title: "Liga" },
+              ] as const).map((t) => (
+                <button key={t.value}
+                  onClick={() => setTypeFilter(typeFilter === t.value ? "all" : t.value)}
+                  title={t.title}
+                  aria-label={t.title}
+                  className={`w-9 h-7 rounded-md text-base font-medium transition-colors inline-flex items-center justify-center ${
+                    typeFilter === t.value ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
+                  }`}
+                >{t.label}</button>
+              ))}
+            </div>
+            <button onClick={() => setMyEventsOnly(!myEventsOnly)}
+              className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ml-auto ${
+                myEventsOnly ? "bg-action text-white" : "bg-gray-100 text-muted hover:bg-gray-200"
+              }`}
+            >👤 My Events</button>
           </div>
           {activeFilters.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
@@ -591,11 +604,21 @@ function EventsPage() {
                 </div>
               )}
 
-              {/* Upcoming events — normal background */}
+              {/* Upcoming events — sticky header with jump-to-Past */}
               {upcomingEvents.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
+                <div ref={upcomingRef}>
+                  <div
+                    className="flex items-center gap-2 mb-2 sticky z-20 bg-white -mx-4 px-4 py-2 border-b border-border"
+                    style={{ top: "var(--header-height, 0px)" }}
+                  >
                     <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Upcoming</span>
+                    {pastEvents.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => pastRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                        className="ml-auto text-xs font-bold text-muted hover:text-foreground uppercase tracking-wider"
+                      >Past ↓</button>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {upcomingEvents.map(renderEventCard)}
@@ -603,11 +626,21 @@ function EventsPage() {
                 </div>
               )}
 
-              {/* Past events — grey background */}
+              {/* Past events — sticky header with jump-to-Upcoming */}
               {pastEvents.length > 0 && (
-                <div className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
-                  <div className="flex items-center gap-2 mb-2">
+                <div ref={pastRef} className="bg-gray-100 -mx-4 px-4 py-3 border-y border-gray-200">
+                  <div
+                    className="flex items-center gap-2 mb-2 sticky z-20 bg-gray-100 -mx-4 px-4 py-2 border-b border-gray-200"
+                    style={{ top: "var(--header-height, 0px)" }}
+                  >
                     <span className="text-xs font-bold text-muted uppercase tracking-wider">Past</span>
+                    {upcomingEvents.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => upcomingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                        className="ml-auto text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider"
+                      >↑ Upcoming</button>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {pastEvents.map(renderEventCard)}
