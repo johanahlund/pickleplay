@@ -815,6 +815,7 @@ export default function EventDetailPage() {
   // Action sheet's inline disclosure panels — only one open at a time
   // visually feels right; we toggle via setOpenPanel.
   const [actionPanel, setActionPanel] = useState<null | "scorer" | "format" | "court">(null);
+  const [scorerSearch, setScorerSearch] = useState("");
   const [autoOpenScoreTeam, setAutoOpenScoreTeam] = useState<{ matchId: string; team: "team1" | "team2" } | null>(null);
   const [scorerVisible, setScorerVisible] = useState(false);
   const [scorerLiveScore, setScorerLiveScore] = useState<{ team1: number; team2: number; serverId?: string; receiverId?: string } | null>(null);
@@ -5593,10 +5594,17 @@ export default function EventDetailPage() {
       // if they tapped the Edit-score link? Inputs only actually
       // render when the link is active for THIS match (see
       // editingScoreMatchId), so static display is the default.
+      //
+      // Pending / active / paused: schedule editors, match players,
+      // or the assigned scorer can edit. (Pending too — lets the
+      // operator post a final score directly without going through
+      // ▶ Start first; a common short-circuit on busy match-days.)
+      // Completed: schedule editors only (corrections after the
+      // fact reverse ratings via the existing Edit-score path).
       const canTouchScore = !!linkedMatch && (
-        matchInPlay
-          ? (canEditSchedule || isMatchPlayer || isMatchScorer)
-          : (matchStatus === "completed" && canEditSchedule)
+        matchStatus === "completed"
+          ? canEditSchedule
+          : (canEditSchedule || isMatchPlayer || isMatchScorer)
       );
       const isEditingScore = !!linkedMatch && editingScoreMatchId === linkedMatch.id;
       const canEnterScore = canTouchScore && isEditingScore;
@@ -6442,10 +6450,11 @@ export default function EventDetailPage() {
                 </div>
                 {/* Edit-score / Save link between the two team rows.
                     Visible to anyone with score-touch permission on a
-                    match in play (or admins on a completed match for
-                    corrections). Tap opens the input fields above &
-                    below; tap again saves + exits edit mode. */}
-                {canTouchScore && matchInPlay && (
+                    not-yet-completed match — covers pending (score
+                    directly without Start), active, and paused
+                    states. Completed matches edit via the action
+                    sheet's "Edit score" row instead. */}
+                {canTouchScore && matchStatus !== "completed" && (
                   <div className="flex items-center justify-end -my-1">
                     {isEditingScore ? (
                       <>
@@ -7457,7 +7466,7 @@ export default function EventDetailPage() {
     const t2 = match.players.filter((p: MatchPlayer) => p.team === 2);
     const isMatchCompleted = match.status === "completed";
     const isMatchActive = match.status === "active";
-    const close = () => { setActionSheetMatchId(null); setScorerPickerOpen(false); setActionPanel(null); };
+    const close = () => { setActionSheetMatchId(null); setScorerPickerOpen(false); setActionPanel(null); setScorerSearch(""); };
     // "Set scorer" delegation — league events only, gated to the same
     // schedule-editor set as the rest of the league-schedule controls
     // (app admin / event organizer / league admin / host team captain
@@ -7662,23 +7671,41 @@ export default function EventDetailPage() {
               >✓ Confirm score</button>
             )}
             {/* Scorer picker — bigger fonts for outdoor readability. */}
-            {canSetScorer && actionPanel === "scorer" && (
-              <div className="border border-border rounded-xl bg-white shadow-sm max-h-72 overflow-y-auto">
-                <div className="px-3 py-2 text-xs text-muted border-b border-border bg-gray-50">
-                  Tap a name to assign them as scorer for this match.
-                  {match.scorerId && (
-                    <button
-                      type="button"
-                      onClick={() => setScorer(null)}
-                      className="ml-2 text-action font-semibold hover:underline"
-                    >Clear</button>
-                  )}
+            {canSetScorer && actionPanel === "scorer" && (() => {
+              const q = scorerSearch.trim().toLowerCase();
+              const filteredScorers = q
+                ? eligibleScorers.filter((ep) => ep.player.name.toLowerCase().includes(q))
+                : eligibleScorers;
+              return (
+              <div className="border border-border rounded-xl bg-white shadow-sm max-h-80 overflow-y-auto">
+                <div className="px-3 py-2 text-xs text-muted border-b border-border bg-gray-50 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Tap a name to assign them as scorer.</span>
+                    {match.scorerId && (
+                      <button
+                        type="button"
+                        onClick={() => setScorer(null)}
+                        className="text-action font-semibold hover:underline shrink-0"
+                      >Clear</button>
+                    )}
+                  </div>
+                  {/* Search field — narrows the list by name. Auto-
+                      focused so the keyboard pops up on mobile when
+                      the operator already has a name in mind. */}
+                  <input
+                    type="text"
+                    value={scorerSearch}
+                    onChange={(e) => setScorerSearch(e.target.value)}
+                    placeholder="Search name…"
+                    className="w-full border border-border rounded-md px-2 py-1.5 text-sm bg-white"
+                    autoFocus
+                  />
                 </div>
-                {eligibleScorers.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-muted italic">Nobody is signed up to this event yet.</div>
+                {filteredScorers.length === 0 ? (
+                  <div className="px-3 py-3 text-sm text-muted italic">{q ? `No match for "${q}".` : "Nobody is signed up to this event yet."}</div>
                 ) : (
                   <ul className="divide-y divide-border">
-                    {eligibleScorers.map((ep) => {
+                    {filteredScorers.map((ep) => {
                       const isCurrent = match.scorerId === ep.player.id;
                       const team = playerIdToTeam.get(ep.player.id);
                       const isHostSide = team?.id === hostTeamId;
@@ -7719,7 +7746,8 @@ export default function EventDetailPage() {
                   </ul>
                 )}
               </div>
-            )}
+              );
+            })()}
             {/* Format panel — scoring, win-by, ranking. League matches
                 read/write via leagueGame.scoringFormatOverride /
                 winByOverride; non-league reads the event/class default
@@ -7753,19 +7781,27 @@ export default function EventDetailPage() {
                 { value: "approval", label: "Needs approval" },
               ];
               const patchOverride = async (key: "scoringFormatOverride" | "winByOverride", value: string | null) => {
-                await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lg.id}`, {
+                const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lg.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ [key]: value }),
                 });
+                if (!r.ok) {
+                  const d = await r.json().catch(() => ({}));
+                  await alertDialog(d.error || `Couldn't save (HTTP ${r.status}).`, "Save failed");
+                }
                 await fetchEvent();
               };
               const patchRanking = async (mode: string) => {
-                await fetch(`/api/matches/${match.id}`, {
+                const r = await fetch(`/api/matches/${match.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ rankingMode: mode }),
                 });
+                if (!r.ok) {
+                  const d = await r.json().catch(() => ({}));
+                  await alertDialog(d.error || `Couldn't save (HTTP ${r.status}).`, "Save failed");
+                }
                 await fetchEvent();
               };
               return (
@@ -7826,11 +7862,16 @@ export default function EventDetailPage() {
               const locked = !!event.scheduleLocked;
               const onPickCourt = async (n: number | null) => {
                 if (locked) return;
-                await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lgId}`, {
+                const r = await fetch(`/api/leagues/${leagueId}/events/${event.id}/games/${lgId}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ courtNum: n }),
                 });
+                if (!r.ok) {
+                  const d = await r.json().catch(() => ({}));
+                  await alertDialog(d.error || `Couldn't save (HTTP ${r.status}).`, "Save failed");
+                  return;
+                }
                 await fetchEvent();
                 setActionPanel(null);
               };
