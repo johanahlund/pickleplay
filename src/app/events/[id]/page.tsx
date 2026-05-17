@@ -571,6 +571,11 @@ export default function EventDetailPage() {
   // by set number (0-based). Co-exists with `scores` above which
   // is used by the non-league/single-set entry flows.
   const [setEntries, setSetEntries] = useState<Record<string, { team1: string[]; team2: string[] }>>({});
+  // Which match is currently in score-edit mode on the schedule
+  // card. Inputs only appear for this match; everyone else sees the
+  // static display. The Edit-score link between the two team rows
+  // toggles it: tap → become "Save" → fixScore() exits edit mode.
+  const [editingScoreMatchId, setEditingScoreMatchId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState(false);
   const [hasEdits, setHasEdits] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -5584,11 +5589,17 @@ export default function EventDetailPage() {
       // players can't rewrite a finalised score, admins still can.
       const isMatchPlayer = !!userId && !!linkedMatch && linkedMatch.players.some((p) => p.playerId === userId);
       const matchInPlay = matchStatus === "active" || matchStatus === "paused";
-      const canEnterScore = !!linkedMatch && (
+      // canTouchScore: would this viewer be allowed to enter scores
+      // if they tapped the Edit-score link? Inputs only actually
+      // render when the link is active for THIS match (see
+      // editingScoreMatchId), so static display is the default.
+      const canTouchScore = !!linkedMatch && (
         matchInPlay
           ? (canEditSchedule || isMatchPlayer || isMatchScorer)
           : (matchStatus === "completed" && canEditSchedule)
       );
+      const isEditingScore = !!linkedMatch && editingScoreMatchId === linkedMatch.id;
+      const canEnterScore = canTouchScore && isEditingScore;
       // Both teams need at least one assigned player before a Match
       // can be created. Disabled (with tooltip) otherwise.
       const team1Assigned = gpRows.filter((gp) => gp.team === 1).length > 0;
@@ -5782,6 +5793,7 @@ export default function EventDetailPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ setScores: sets }),
           }).finally(() => { void fetchEvent(); });
+          setEditingScoreMatchId(null);
           return;
         }
         // Single-set fix score path.
@@ -5812,6 +5824,7 @@ export default function EventDetailPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ team1Score: t1, team2Score: t2 }),
         }).finally(() => { void fetchEvent(); });
+        setEditingScoreMatchId(null);
       };
       const openScorerPicker = async () => {
         if (linkedMatch) {
@@ -5979,7 +5992,7 @@ export default function EventDetailPage() {
         right: "flex-col gap-0.5",
       };
       return (
-        <div key={g.id} className={`relative ${conflictBorder} ${statusBg} ${cardOpacity} border rounded-lg p-2 pl-7 space-y-1.5`}>
+        <div key={g.id} className={`relative ${conflictBorder} ${statusBg} ${cardOpacity} border rounded-lg p-1.5 pl-6 space-y-1.5`}>
         {(Object.keys(dotsByEdge) as Array<keyof typeof dotsByEdge>).map((edge) => {
           const keys = dotsByEdge[edge];
           if (keys.length === 0) return null;
@@ -6248,12 +6261,16 @@ export default function EventDetailPage() {
                 {players.map((p, i) => {
                   const w = playerWarning.get(p.id);
                   const warnText = w ? (w.kind === "overlap" ? "overlap" : `${w.gapMin}m gap`) : null;
-                  const warnColor = w?.kind === "overlap" ? "text-red-700" : "text-amber-700";
+                  // Overlap = bright red (the scheduling problem is
+                  // real and impossible — a player on two courts at
+                  // once). Rushed = softer amber (just a tight gap
+                  // between matches).
+                  const warnColor = w?.kind === "overlap" ? "text-red-600 font-bold" : "text-amber-700";
                   return (
                     <div key={`${p.id}-${i}`} className="flex items-center gap-2">
-                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="xs" />
+                      <PlayerAvatar name={p.name} photoUrl={p.photoUrl} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <div className={`text-base leading-tight truncate font-semibold ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground"}`}>
+                        <div className={`text-lg leading-tight truncate font-semibold ${p.id === userId ? "text-violet-700 font-bold" : "text-foreground"}`}>
                           {p.name}
                         </div>
                         {warnText && (
@@ -6411,7 +6428,7 @@ export default function EventDetailPage() {
             const topWon = matchCompleted && topScore != null && botScore != null && topScore > botScore;
             const botWon = matchCompleted && topScore != null && botScore != null && botScore > topScore;
             const teamRowCls = (won: boolean) =>
-              `flex items-start gap-2 rounded-md px-2 py-1.5 -mx-1 ${won ? "bg-emerald-50 ring-1 ring-emerald-200" : ""}`;
+              `flex items-start gap-2 rounded-md px-1 py-1.5 -mx-1 ${won ? "bg-emerald-50 ring-1 ring-emerald-200" : ""}`;
             return (
               <div className="space-y-1.5">
                 <div className={teamRowCls(topWon)}>
@@ -6423,6 +6440,38 @@ export default function EventDetailPage() {
                     {renderScoreCell(topScore, topEntryKey)}
                   </div>
                 </div>
+                {/* Edit-score / Save link between the two team rows.
+                    Visible to anyone with score-touch permission on a
+                    match in play (or admins on a completed match for
+                    corrections). Tap opens the input fields above &
+                    below; tap again saves + exits edit mode. */}
+                {canTouchScore && matchInPlay && (
+                  <div className="flex items-center justify-end -my-1">
+                    {isEditingScore ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingScoreMatchId(null)}
+                          className="text-[11px] text-muted font-medium hover:text-foreground px-2 py-0.5"
+                        >Cancel</button>
+                        <button
+                          type="button"
+                          onClick={fixScore}
+                          title="Save scores and finalise the match"
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 inline-flex items-center gap-1"
+                        >
+                          <span aria-hidden>✓</span><span>Save</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingScoreMatchId(linkedMatch ? linkedMatch.id : null)}
+                        className="text-[11px] font-semibold text-action hover:underline px-2 py-0.5"
+                      >✏️ Edit score</button>
+                    )}
+                  </div>
+                )}
                 <div className={teamRowCls(botWon)}>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-muted uppercase tracking-wide truncate">{teamShort(botId)}</div>
@@ -6432,22 +6481,6 @@ export default function EventDetailPage() {
                     {renderScoreCell(botScore, botEntryKey)}
                   </div>
                 </div>
-                {/* ✓ Fix score button — visible when operator is in
-                    score-entry mode. Validates both inputs server-side
-                    via the existing /score endpoint (also applies
-                    ratings + flips status to "completed"). */}
-                {canEnterScore && matchInPlay && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={fixScore}
-                      title="Save scores and finalise the match"
-                      className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 inline-flex items-center gap-1"
-                    >
-                      <span aria-hidden>✓</span><span>Fix score</span>
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })()}
