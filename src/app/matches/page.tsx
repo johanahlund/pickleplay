@@ -106,14 +106,44 @@ function MatchesPage() {
     const myTeam = m.players.find((mp) => mp.playerId === userId)?.team;
     const team1 = m.players.filter((mp) => mp.team === 1);
     const team2 = m.players.filter((mp) => mp.team === 2);
-    const score1 = team1[0]?.score ?? 0;
-    const score2 = team2[0]?.score ?? 0;
     const isCompleted = m.status === "completed";
-    const won = isCompleted ? (myTeam === 1 ? score1 > score2 : score2 > score1) : false;
-    const renderTeamRow = (players: MatchPlayer[], teamWon: boolean, teamLost: boolean, score: number, isMyTeam: boolean) => {
-      const nameColor = isMyTeam && isCompleted ? (teamWon ? "text-green-700" : "text-red-600") : "";
-      const scoreColor = isMyTeam && isCompleted ? (teamWon ? "text-green-600" : "text-red-500") : "text-gray-400";
-      const bgColor = isMyTeam && isCompleted ? (teamWon ? "bg-green-50" : "bg-red-50") : "";
+    // Defensively narrow Json? → number[][]. Same shape the league
+    // schedule card and ScorerTracker write; falling back to the
+    // MatchPlayer.score totals lets single-set matches still
+    // render a single column for parity.
+    const setScores: number[][] = Array.isArray(m.setScores)
+      ? (m.setScores as unknown[])
+          .filter((s): s is number[] => Array.isArray(s) && s.length >= 2 && typeof s[0] === "number" && typeof s[1] === "number")
+          .map((s) => s as number[])
+      : [];
+    const isBo3 = setScores.length > 0;
+    const team1Scores: number[] = isBo3 ? setScores.map((s) => s[0]!) : [team1[0]?.score ?? 0];
+    const team2Scores: number[] = isBo3 ? setScores.map((s) => s[1]!) : [team2[0]?.score ?? 0];
+    const t1Sets = isBo3
+      ? setScores.filter(([a, b]) => a > b).length
+      : (team1Scores[0]! > team2Scores[0]! ? 1 : 0);
+    const t2Sets = isBo3
+      ? setScores.filter(([a, b]) => b > a).length
+      : (team2Scores[0]! > team1Scores[0]! ? 1 : 0);
+    const team1WonMatch = isCompleted && t1Sets > t2Sets;
+    const team2WonMatch = isCompleted && t2Sets > t1Sets;
+    const won = isCompleted && myTeam ? (myTeam === 1 ? team1WonMatch : team2WonMatch) : false;
+    const mySets = myTeam === 1 ? t1Sets : t2Sets;
+    const otherSets = myTeam === 1 ? t2Sets : t1Sets;
+
+    const renderTeamRow = (
+      players: MatchPlayer[],
+      teamWonMatch: boolean,
+      teamScoresArr: number[],
+      otherScoresArr: number[],
+      isMyTeam: boolean,
+    ) => {
+      // Background reflects MATCH result for my team — the per-set
+      // text colours handle set-by-set independently. So if I won
+      // a set but lost the match the row is red and that set's
+      // number is green inside the red row.
+      const nameColor = isMyTeam && isCompleted ? (teamWonMatch ? "text-green-700" : "text-red-600") : "";
+      const bgColor = isMyTeam && isCompleted ? (teamWonMatch ? "bg-green-50" : "bg-red-50") : "";
       return (
         <div className={`flex items-center gap-1 p-1.5 rounded-lg ${bgColor}`}>
           <div className="flex-1 min-w-0 space-y-0.5">
@@ -124,16 +154,36 @@ function MatchesPage() {
               </div>
             ))}
           </div>
-          <span className={`text-2xl font-bold tabular-nums min-w-[2.5rem] text-center ${scoreColor}`}>{isCompleted ? score : "-"}</span>
+          {isCompleted ? (
+            <div className="flex items-center gap-1 shrink-0">
+              {teamScoresArr.map((s, i) => {
+                const otherS = otherScoresArr[i] ?? 0;
+                const wonSet = s > otherS;
+                const lostSet = s < otherS;
+                const setColor = wonSet ? "text-green-600" : lostSet ? "text-red-500" : "text-gray-400";
+                return (
+                  <span key={i} className={`text-xl font-bold tabular-nums w-7 text-center ${setColor}`}>{s}</span>
+                );
+              })}
+            </div>
+          ) : (
+            <span className="text-2xl font-bold tabular-nums min-w-[2.5rem] text-center text-gray-400">-</span>
+          )}
         </div>
       );
     };
 
     return (
-      <Link key={m.id} href={`/events/${m.event.id}`} className={`block bg-white rounded-xl border border-l-4 overflow-hidden active:bg-gray-50 ${
+      <div key={m.id} className={`bg-white rounded-xl border border-l-4 overflow-hidden ${
         isCompleted ? (won ? "border-green-500" : "border-red-400") : "border-action"
       }`}>
-        <div className="px-2.5 py-1.5 bg-gray-50 border-b border-border flex items-center gap-1.5">
+        {/* Header strip is the only clickable surface — opens the
+            event detail. The team rows below stay non-interactive
+            so a tap on a name doesn't accidentally navigate. */}
+        <Link
+          href={`/events/${m.event.id}`}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-50 border-b border-border active:bg-gray-100"
+        >
           {m.event.club && (
             <span className="text-[10px] text-muted inline-flex items-center gap-1">
               <ClubBadge logoUrl={m.event.club.logoUrl} size={12} />
@@ -141,40 +191,22 @@ function MatchesPage() {
             </span>
           )}
           <span className="text-[10px] text-muted flex-1">{m.event.name} · {new Date(m.event.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-          {isCompleted && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${won ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{won ? "W" : "L"}</span>}
+          {/* Replace the old W/L circle with an N-N pill (my sets
+              first, opponent sets second), tinted green if I won
+              the match and red if I lost. */}
+          {isCompleted && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums ${won ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+              {mySets}-{otherSets}
+            </span>
+          )}
           {!isCompleted && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 capitalize">{m.status}</span>}
-        </div>
+        </Link>
         <div className="px-2 py-1.5 space-y-0.5">
-          {renderTeamRow(team1, isCompleted && score1 > score2, isCompleted && score1 < score2, score1, myTeam === 1)}
+          {renderTeamRow(team1, team1WonMatch, team1Scores, team2Scores, myTeam === 1)}
           <div className="h-px bg-border mx-2" />
-          {renderTeamRow(team2, isCompleted && score2 > score1, isCompleted && score2 < score1, score2, myTeam === 2)}
-          {/* Per-set scores for Bo3 finals so the big number on the
-              right (set wins, e.g. 2-1) is contextualised by the
-              actual per-set points (e.g. 11-4 · 9-11 · 11-7). */}
-          {isCompleted && Array.isArray(m.setScores) && m.setScores.length > 0 && (() => {
-            const sets = m.setScores.filter((s) => Array.isArray(s) && s.length >= 2) as number[][];
-            if (sets.length === 0) return null;
-            return (
-              <div className="flex items-center gap-1 px-1.5 pt-1 text-[11px] tabular-nums">
-                <span className="text-[10px] text-muted uppercase tracking-wide font-semibold mr-1">Sets</span>
-                {sets.map(([a, b], i) => {
-                  const myA = myTeam === 1 ? a : b;
-                  const myB = myTeam === 1 ? b : a;
-                  const wonSet = myA > myB;
-                  return (
-                    <span
-                      key={i}
-                      className={`px-1.5 py-0.5 rounded font-semibold ${wonSet ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}
-                    >
-                      {myA}-{myB}
-                    </span>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          {renderTeamRow(team2, team2WonMatch, team2Scores, team1Scores, myTeam === 2)}
         </div>
-      </Link>
+      </div>
     );
   };
 
