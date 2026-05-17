@@ -577,6 +577,20 @@ export default function EventDetailPage() {
   // by set number (0-based). Co-exists with `scores` above which
   // is used by the non-league/single-set entry flows.
   const [setEntries, setSetEntries] = useState<Record<string, { team1: string[]; team2: string[] }>>({});
+  // Cached conflict-detection result. Conflict scan is now MANUAL
+  // (run via the "Check conflicts" button) — keeps editing snappy
+  // since the old per-render scan caused jank on every typing /
+  // dragging interaction. `fingerprint` snapshots the relevant
+  // schedule state at calc time; if it differs from the current
+  // render's fingerprint the button is highlighted to nudge a
+  // re-check.
+  type PerGameConflict = { playerId: string; playerName: string; otherGameId: string; kind: "overlap" | "rushed"; gapMin: number };
+  type SummaryConflictBase = { playerId: string; playerName: string; kind: "overlap" | "rushed"; gapMin: number; aId: string; bId: string };
+  const [conflictData, setConflictData] = useState<{
+    fingerprint: string;
+    conflictsByGame: Map<string, PerGameConflict[]>;
+    summary: SummaryConflictBase[];
+  } | null>(null);
   // Which match is currently in score-edit mode on the schedule
   // card. Inputs only appear for this match; everyone else sees the
   // static display. The Edit-score link between the two team rows
@@ -5271,121 +5285,112 @@ export default function EventDetailPage() {
     }
     for (const k of Object.keys(allBuckets)) allBuckets[k] = sortGames(allBuckets[k]);
 
-    // ── Scheduling conflict detection ───────────────────────────────
-    // Models a realistic timeline that accounts for two things real
-    // play-days always have:
-    //   1. Matches run long. We pad each match's scheduled duration
-    //      by DELAY_PCT (default 70%) — generous on purpose, matches
-    //      go to long deuces, players talk, etc.
-    //   2. Delays stack. If the 14:00 match on Court 1 runs to 15:00,
-    //      the 14:30 match on the same court can't start until 15:00.
-    //      We propagate forward: each match's realistic start is
-    //      max(scheduled, previous-on-this-court realistic end).
-    //
-    // Per-match base duration is derived from the gap to the next
-    // match on the SAME court (implicitly includes warmup time, since
-    // the captain picked the next start accordingly). The last match
-    // on each court falls back to the operator-set scheduleDurationMin
-    // default.
-    //
-    // Conflicts are then evaluated per-player against the realistic
-    // windows:
-    //   • overlap — projected windows on different courts overlap.
-    //   • rushed  — different courts, positive gap < BUFFER_MIN.
-    // Same-court same-player consecutive matches can't overlap by
-    // construction (b.realStart ≥ a.realEnd), so they're skipped.
+    // ── Scheduling conflict detection (MANUAL) ──────────────────────
+    // Conflict scan no longer runs per render — it caused jank on
+    // every typing / dragging interaction. The operator now triggers
+    // it explicitly via the "Check conflicts" button, and the result
+    // is cached in `conflictData`. We compute a cheap fingerprint of
+    // the schedule each render and compare with the cached one; a
+    // mismatch means "results are stale" and we highlight the button
+    // to nudge a re-check.
     const BUFFER_MIN = 10;
     const DELAY_PCT = 0.7;
-    const fallbackDurationMs = scheduleDurationMin * 60_000;
-    const bufferMs = BUFFER_MIN * 60_000;
-    const windowByGame = new Map<string, { realStart: number; realEnd: number; scheduledStart: number }>();
-    for (let courtNum = 1; courtNum <= numCourts; courtNum++) {
-      // Use allBuckets (unfiltered) so the projected-delay chain
-      // reflects every match that will actually run on the court,
-      // not just the ones the operator's filter currently shows.
-      const col = (allBuckets[String(courtNum)] || [])
-        .filter((g) => g.scheduledAt)
-        .slice()
-        .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
-      let prevRealEnd: number | null = null;
-      for (let i = 0; i < col.length; i++) {
-        const cur = col[i]!;
-        const next = col[i + 1];
-        const scheduledStart = new Date(cur.scheduledAt!).getTime();
-        const baseDurMs = next
-          ? Math.max(0, new Date(next.scheduledAt!).getTime() - scheduledStart) || fallbackDurationMs
-          : fallbackDurationMs;
-        const realDurMs: number = baseDurMs * (1 + DELAY_PCT);
-        const realStart: number = prevRealEnd != null ? Math.max(scheduledStart, prevRealEnd) : scheduledStart;
-        const realEnd: number = realStart + realDurMs;
-        windowByGame.set(cur.id, { realStart, realEnd, scheduledStart });
-        prevRealEnd = realEnd;
-      }
-    }
-    type ConflictKind = "overlap" | "rushed";
-    interface PerGameConflict {
-      playerId: string;
-      playerName: string;
-      otherGameId: string;
-      kind: ConflictKind;
-      gapMin: number; // negative ⇒ overlapping
-    }
-    interface SummaryConflict {
-      playerId: string;
-      playerName: string;
-      kind: ConflictKind;
-      gapMin: number;
-      a: G;
-      b: G;
-    }
-    const conflictsByGame = new Map<string, PerGameConflict[]>();
-    const conflictSummary: SummaryConflict[] = [];
-    const playerGames = new Map<string, G[]>();
-    // Iterate baseGames (unfiltered) so a player's conflict shows
-    // even when one of the conflicting matches is hidden by the
-    // current filter — the user wants to know the conflict exists
-    // either way and to "unfilter" to find the offender.
+    const fingerprintParts: string[] = [];
     for (const g of baseGames as unknown as G[]) {
-      if (!g.scheduledAt || g.courtNum == null) continue;
-      for (const gp of g.gamePlayers) {
-        const list = playerGames.get(gp.playerId) || [];
-        list.push(g);
-        playerGames.set(gp.playerId, list);
-      }
+      fingerprintParts.push(`${g.id}:${g.scheduledAt ?? ""}:${g.courtNum ?? ""}:${g.displayOrder ?? ""}`);
     }
-    for (const [playerId, plist] of playerGames.entries()) {
-      if (plist.length < 2) continue;
-      const sorted = plist.slice().sort((x, y) =>
-        new Date(x.scheduledAt!).getTime() - new Date(y.scheduledAt!).getTime(),
-      );
-      for (let i = 0; i < sorted.length - 1; i++) {
-        const a = sorted[i]!;
-        const b = sorted[i + 1]!;
-        // Same-court consecutive matches for the same player can't
-        // overlap once we propagate delays — b.realStart is already
-        // ≥ a.realEnd by construction. Skip to avoid noise.
-        if (a.courtNum === b.courtNum) continue;
-        const aWin = windowByGame.get(a.id);
-        const bWin = windowByGame.get(b.id);
-        if (!aWin || !bWin) continue;
-        const gapMs = bWin.realStart - aWin.realEnd;
-        let kind: ConflictKind | null = null;
-        if (gapMs < 0) kind = "overlap";
-        else if (gapMs < bufferMs) kind = "rushed";
-        if (!kind) continue;
-        const playerName = playerNameById.get(playerId) || "Player";
-        const gapMin = Math.round(gapMs / 60_000);
-        for (const pair of [{ self: a, other: b }, { self: b, other: a }]) {
-          const arr = conflictsByGame.get(pair.self.id) || [];
-          arr.push({ playerId, playerName, otherGameId: pair.other.id, kind, gapMin });
-          conflictsByGame.set(pair.self.id, arr);
-        }
-        conflictSummary.push({ playerId, playerName, kind, gapMin, a, b });
-      }
-    }
+    fingerprintParts.sort();
+    const currentFingerprint = `${fingerprintParts.join("|")}|${scheduleDurationMin}`;
+    const cacheFresh = conflictData?.fingerprint === currentFingerprint;
+    // When fresh: read conflicts from cache. When stale or never
+    // computed: render with NO conflicts (button highlight nudges
+    // the operator to re-run).
+    const conflictsByGame = cacheFresh ? conflictData.conflictsByGame : new Map<string, PerGameConflict[]>();
+    const conflictSummaryBase = cacheFresh ? conflictData.summary : [];
+    // Resolve {aId, bId} → full {a, b} game refs from the current
+    // baseGames at render time. baseGames hasn't changed since the
+    // cache was generated (fingerprint match guarantees it), so the
+    // ids still point to the same games.
+    const gameById = new Map<string, G>();
+    for (const g of baseGames as unknown as G[]) gameById.set(g.id, g);
+    const conflictSummary = conflictSummaryBase
+      .map((c) => {
+        const a = gameById.get(c.aId);
+        const b = gameById.get(c.bId);
+        return a && b ? { playerId: c.playerId, playerName: c.playerName, kind: c.kind, gapMin: c.gapMin, a, b } : null;
+      })
+      .filter((x): x is { playerId: string; playerName: string; kind: "overlap" | "rushed"; gapMin: number; a: G; b: G } => x !== null);
     const hasConflicts = conflictSummary.length > 0;
     const overlapCount = conflictSummary.filter((c) => c.kind === "overlap").length;
     const rushedCount = conflictSummary.length - overlapCount;
+
+    // Run the full scan now and stash the result. Inputs are the
+    // current baseGames + scheduleDurationMin (those define the
+    // fingerprint we'll save with the result).
+    const runConflictCheck = () => {
+      const fallbackDurationMs = scheduleDurationMin * 60_000;
+      const bufferMs = BUFFER_MIN * 60_000;
+      const windowByGame = new Map<string, { realStart: number; realEnd: number; scheduledStart: number }>();
+      for (let courtNum = 1; courtNum <= numCourts; courtNum++) {
+        const col = (allBuckets[String(courtNum)] || [])
+          .filter((g) => g.scheduledAt)
+          .slice()
+          .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime());
+        let prevRealEnd: number | null = null;
+        for (let i = 0; i < col.length; i++) {
+          const cur = col[i]!;
+          const next = col[i + 1];
+          const scheduledStart = new Date(cur.scheduledAt!).getTime();
+          const baseDurMs = next
+            ? Math.max(0, new Date(next.scheduledAt!).getTime() - scheduledStart) || fallbackDurationMs
+            : fallbackDurationMs;
+          const realDurMs: number = baseDurMs * (1 + DELAY_PCT);
+          const realStart: number = prevRealEnd != null ? Math.max(scheduledStart, prevRealEnd) : scheduledStart;
+          const realEnd: number = realStart + realDurMs;
+          windowByGame.set(cur.id, { realStart, realEnd, scheduledStart });
+          prevRealEnd = realEnd;
+        }
+      }
+      const cbg = new Map<string, PerGameConflict[]>();
+      const summary: SummaryConflictBase[] = [];
+      const playerGames = new Map<string, G[]>();
+      for (const g of baseGames as unknown as G[]) {
+        if (!g.scheduledAt || g.courtNum == null) continue;
+        for (const gp of g.gamePlayers) {
+          const list = playerGames.get(gp.playerId) || [];
+          list.push(g);
+          playerGames.set(gp.playerId, list);
+        }
+      }
+      for (const [playerId, plist] of playerGames.entries()) {
+        if (plist.length < 2) continue;
+        const sorted = plist.slice().sort((x, y) =>
+          new Date(x.scheduledAt!).getTime() - new Date(y.scheduledAt!).getTime(),
+        );
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const a = sorted[i]!;
+          const b = sorted[i + 1]!;
+          if (a.courtNum === b.courtNum) continue;
+          const aWin = windowByGame.get(a.id);
+          const bWin = windowByGame.get(b.id);
+          if (!aWin || !bWin) continue;
+          const gapMs = bWin.realStart - aWin.realEnd;
+          let kind: "overlap" | "rushed" | null = null;
+          if (gapMs < 0) kind = "overlap";
+          else if (gapMs < bufferMs) kind = "rushed";
+          if (!kind) continue;
+          const playerName = playerNameById.get(playerId) || "Player";
+          const gapMin = Math.round(gapMs / 60_000);
+          for (const pair of [{ self: a, other: b }, { self: b, other: a }]) {
+            const arr = cbg.get(pair.self.id) || [];
+            arr.push({ playerId, playerName, otherGameId: pair.other.id, kind, gapMin });
+            cbg.set(pair.self.id, arr);
+          }
+          summary.push({ playerId, playerName, kind, gapMin, aId: a.id, bId: b.id });
+        }
+      }
+      setConflictData({ fingerprint: currentFingerprint, conflictsByGame: cbg, summary });
+    };
 
     // Color-code each (a, b) conflict pair so the operator can match
     // a summary line to its two cards at a glance. Key is order-
@@ -6979,6 +6984,35 @@ export default function EventDetailPage() {
             <span>Recalculating schedule…</span>
           </div>
         )}
+        {/* Check-conflicts button. Stale (or never run) → indigo
+            highlight + "Check conflicts" label. Fresh + clean →
+            soft green "No conflicts ✓". Fresh + dirty → the
+            conflict summary below renders as well. */}
+        {scheduleEditable && (() => {
+          const neverRun = !conflictData;
+          const stale = !cacheFresh;
+          const fresh = cacheFresh;
+          const cleanFresh = fresh && !hasConflicts;
+          return (
+            <div className="mb-2 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={runConflictCheck}
+                title={neverRun ? "Run conflict check" : stale ? "Schedule has changed since the last check" : "Re-run conflict check"}
+                className={`text-[11px] font-semibold px-3 py-1.5 rounded-md inline-flex items-center gap-1.5 transition-colors ${
+                  cleanFresh
+                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                    : stale || neverRun
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 ring-2 ring-indigo-200"
+                      : "bg-white text-foreground border border-border hover:bg-gray-50"
+                }`}
+              >
+                <span aria-hidden>{cleanFresh ? "✓" : "🔍"}</span>
+                <span>{cleanFresh ? "No conflicts" : stale && !neverRun ? "Re-check conflicts" : "Check conflicts"}</span>
+              </button>
+            </div>
+          );
+        })()}
         {hasConflicts && scheduleLocked && (
           // Compact conflict alert when the schedule is locked. The
           // detailed list isn't actionable in a locked state — the
