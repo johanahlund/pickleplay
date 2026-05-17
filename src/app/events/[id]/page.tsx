@@ -6912,51 +6912,53 @@ export default function EventDetailPage() {
             const colGames = buckets[String(n)] || [];
             return (
               <div key={n} className="shrink-0 w-[88vw] max-w-[420px] snap-start space-y-1.5 rounded-lg p-1.5 -m-1.5">
-                <div className="flex items-center justify-between gap-1 px-1">
-                  <span className="text-sm uppercase tracking-wider text-foreground font-bold">Court {n}</span>
+                {/* Header row: "Court N" + start-time controls all
+                    on one line. Saves a row of vertical space per
+                    court column. */}
+                <div className="flex items-center gap-2 px-1 flex-wrap">
+                  <span className="text-sm uppercase tracking-wider text-foreground font-bold shrink-0">Court {n}</span>
+                  {scheduleEditable && (
+                    <div className="flex items-center gap-0.5 text-[11px] tabular-nums">
+                      <span className="text-muted text-[10px] mr-1">starts</span>
+                      <select
+                        value={startHh == null ? "" : String(startHh)}
+                        onChange={(e) => setStart(parseInt(e.target.value, 10), startMm ?? 0)}
+                        className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px]"
+                      >
+                        <option value="">--</option>
+                        {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
+                      </select>
+                      <span>:</span>
+                      <select
+                        value={startMm == null ? "" : String(startMm)}
+                        onChange={(e) => setStart(startHh ?? 0, parseInt(e.target.value, 10))}
+                        disabled={startHh == null}
+                        className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px] disabled:bg-gray-100"
+                      >
+                        <option value="">--</option>
+                        {FIVE_MINS.map((m) => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+                      </select>
+                      {startIso && (
+                        <button type="button" onClick={() => writeCourtStart(n, null)} className="ml-1 text-muted hover:text-foreground text-[11px]" title="Clear start time">✕</button>
+                      )}
+                      {/* → all sits right after the clear-X, on Court 1
+                          only and only when there are other courts to
+                          copy to. */}
+                      {n === 1 && numCourts > 1 && startIso && (
+                        <button
+                          type="button"
+                          onClick={copyCourt1StartToAll}
+                          title="Apply Court 1 start time to all other courts"
+                          aria-label="Copy Court 1 start to all courts"
+                          className="ml-1 text-[10px] text-action font-semibold hover:underline"
+                        >→ all</button>
+                      )}
+                    </div>
+                  )}
+                  {!scheduleEditable && startIso && (
+                    <span className="text-[11px] text-muted">starts {String(startHh).padStart(2, "0")}:{String(startMm).padStart(2, "0")}</span>
+                  )}
                 </div>
-                {scheduleEditable && (
-                  <div className="flex items-center gap-0.5 px-1 text-[11px] tabular-nums">
-                    <span className="text-muted text-[10px] mr-1">starts</span>
-                    <select
-                      value={startHh == null ? "" : String(startHh)}
-                      onChange={(e) => setStart(parseInt(e.target.value, 10), startMm ?? 0)}
-                      className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px]"
-                    >
-                      <option value="">--</option>
-                      {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
-                    </select>
-                    <span>:</span>
-                    <select
-                      value={startMm == null ? "" : String(startMm)}
-                      onChange={(e) => setStart(startHh ?? 0, parseInt(e.target.value, 10))}
-                      disabled={startHh == null}
-                      className="border border-border rounded px-0.5 py-0.5 bg-white cursor-pointer text-[11px] disabled:bg-gray-100"
-                    >
-                      <option value="">--</option>
-                      {FIVE_MINS.map((m) => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
-                    </select>
-                    {startIso && (
-                      <button type="button" onClick={() => writeCourtStart(n, null)} className="ml-1 text-muted hover:text-foreground text-[11px]" title="Clear start time">✕</button>
-                    )}
-                    {/* → all sits right after the clear-X, on Court 1
-                        only and only when there are other courts to
-                        copy to. Lives next to the time it operates on
-                        so it reads as "do this to all courts". */}
-                    {n === 1 && numCourts > 1 && startIso && (
-                      <button
-                        type="button"
-                        onClick={copyCourt1StartToAll}
-                        title="Apply Court 1 start time to all other courts"
-                        aria-label="Copy Court 1 start to all courts"
-                        className="ml-1 text-[10px] text-action font-semibold hover:underline"
-                      >→ all</button>
-                    )}
-                  </div>
-                )}
-                {!scheduleEditable && startIso && (
-                  <div className="px-1 text-[11px] text-muted">starts {String(startHh).padStart(2, "0")}:{String(startMm).padStart(2, "0")}</div>
-                )}
                 {colGames.length > 0 ? colGames.map(renderGameRow) : (
                   <div className="text-[10px] text-muted/60 italic px-1">no matches yet</div>
                 )}
