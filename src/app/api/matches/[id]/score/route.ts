@@ -538,24 +538,22 @@ export async function DELETE(
     return NextResponse.json({ error: "Not authorized to reopen this match." }, { status: 403 });
   }
 
-  // Reverse ELO if applied
+  // Reverse ELO if applied — ratings have to go back to where
+  // they were before the now-being-edited result was applied.
   if (match.eloChange > 0) {
     await reverseElo(id);
   }
 
-  // Reset all player scores to 0
-  for (const mp of match.players) {
-    await prisma.matchPlayer.update({ where: { id: mp.id }, data: { score: 0 } });
-  }
-
-  // Set match back to active, clear setScores so Bo3 cards reset
-  // to a fresh editable state.
+  // Keep MatchPlayer.score and Match.setScores intact so the
+  // operator edits the existing numbers instead of typing from
+  // scratch. The new score will be posted to /api/matches/[id]/score
+  // POST when they save, which re-applies ELO.
   await prisma.match.update({
     where: { id },
-    data: { status: "active", eloChange: 0, scoreConfirmed: false, completedAt: null, setScores: { set: null } as unknown as object },
+    data: { status: "active", eloChange: 0, scoreConfirmed: false, completedAt: null },
   });
 
-  return NextResponse.json({ ok: true, cleared: true });
+  return NextResponse.json({ ok: true, cleared: false });
 }
 
 // PATCH: Confirm score (for approval mode) — applies ELO

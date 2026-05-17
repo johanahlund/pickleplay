@@ -26,6 +26,11 @@ interface Props {
    *  invite-to-claim flow so the icon colour reflects real sends, not
    *  WhatsApp / Email taps that the user may have abandoned. */
   onMarkSent?: () => void;
+  /** When provided, render a "PDF" button that opens the URL in a
+   *  new tab (typically a /print route that auto-fires window.print).
+   *  Used by the match-day share so PDF lives alongside the other
+   *  share intents instead of in a separate toolbar button. */
+  pdfUrl?: string;
   onClose: () => void;
 }
 
@@ -42,7 +47,7 @@ function sanitizePhone(p?: string | null): string {
  * macOS), so we present an explicit three-way choice that works
  * uniformly on every platform.
  */
-export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", loading = false, onMarkSent, onClose }: Props) {
+export function ShareInviteModal({ open, message, phone, title = "Share invite", emailSubject = "FriendlyBall invite", loading = false, onMarkSent, pdfUrl, onClose }: Props) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -140,6 +145,26 @@ export function ShareInviteModal({ open, message, phone, title = "Share invite",
             </svg>
             <span>Send by email</span>
           </a>
+          {pdfUrl && (
+            <a
+              href={loading ? undefined : pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => { if (loading) e.preventDefault(); }}
+              aria-disabled={loading}
+              className={`flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl text-sm font-semibold border border-border bg-white text-foreground transition-colors ${
+                loading ? "opacity-50 pointer-events-none" : "hover:bg-gray-50 active:bg-gray-100"
+              }`}
+              aria-label="Open print-friendly schedule (use browser's Save as PDF)"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9V2h12v7" />
+                <rect x="6" y="14" width="12" height="8" rx="1" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              </svg>
+              <span>Print / save as PDF</span>
+            </a>
+          )}
           {/* Tap to record an invite without opening any share intent.
               Used when the caller already sent the invite some other
               way, or tapped WhatsApp/Email but couldn't find the

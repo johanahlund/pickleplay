@@ -18,23 +18,62 @@ interface ScorePickerProps {
    * so we accept whatever the players entered.
    */
   allowAnyScore?: boolean;
+  /**
+   * Hard cap on the score. At (cap-1, cap-1) the next point wins outright
+   * (1-point margin instead of `winBy`). Used by cap-format leagues that
+   * don't want endless deuces.
+   */
+  cap?: number | null;
+  /**
+   * Golden-point score. At (goldenPoint-1, goldenPoint-1) the next point
+   * wins outright (winner = goldenPoint, loser = goldenPoint-1). Caps the
+   * top score at `goldenPoint`. Common in padel-style league rules.
+   */
+  goldenPoint?: number | null;
+  /**
+   * 1-based set number (e.g. 1, 2, 3 for Bo3). When set, the title
+   * reads "Select Score for Set N" instead of just "Select Score".
+   */
+  setNumber?: number;
+  /**
+   * If provided, render a "Clear score for set" button that wipes
+   * just this team's value for the current set (and any associated
+   * downstream state the caller wants to reset).
+   */
+  onClear?: () => void;
 }
 
-export function isValidPair(score1: number, score2: number, target: number, winBy: number): boolean {
+export function isValidPair(
+  score1: number,
+  score2: number,
+  target: number,
+  winBy: number,
+  cap: number | null = null,
+  goldenPoint: number | null = null,
+): boolean {
   if (score1 === score2) return false;
   const winner = Math.max(score1, score2);
   const loser = Math.min(score1, score2);
 
-  if (winner < target) return false;
-
-  if (winner - loser < winBy) return false;
-
-  if (winBy === 1) {
-    return winner === target;
+  // Golden point: top score is capped at `goldenPoint`. The decisive
+  // (goldenPoint-1, goldenPoint-1) tiebreak is won by 1 point.
+  if (goldenPoint != null) {
+    if (winner > goldenPoint) return false;
+    if (winner === goldenPoint && loser === goldenPoint - 1) return true;
+    // Below the golden point, normal win-by rules still apply.
   }
 
-  if (winner === target) return loser <= target - winBy;
+  // Cap rule: at (cap-1, cap-1) one point ends the set. Top score
+  // can never exceed `cap`.
+  if (cap != null) {
+    if (winner > cap) return false;
+    if (winner === cap && loser === cap - 1) return true;
+  }
 
+  if (winner < target) return false;
+  if (winner - loser < winBy) return false;
+  if (winBy === 1) return winner === target;
+  if (winner === target) return loser <= target - winBy;
   return loser >= target - 1 && winner - loser === winBy;
 }
 
@@ -54,7 +93,7 @@ function getErrorMessage(score: number, otherScore: number, target: number, winB
 // on the named function being available for client-side validation hints.
 void getErrorMessage;
 
-export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, autoOpen, onAutoOpened, onChange, onClearBoth, allowAnyScore }: ScorePickerProps) {
+export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLabel, autoOpen, onAutoOpened, onChange, onClearBoth, allowAnyScore, cap, goldenPoint, setNumber, onClear }: ScorePickerProps) {
   const [open, setOpen] = useState(false);
   const [extraRows, setExtraRows] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -80,16 +119,20 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
   const hasOtherScore = !isNaN(otherScore);
 
   // When other score is set, generate enough numbers to include winning scores
-  const maxNum = hasOtherScore
+  let maxNum = hasOtherScore
     ? Math.max(visibleCount, otherScore + winBy + 4)
     : visibleCount;
+  // Golden point / hard cap clip the top score — there's no point
+  // offering numbers above the cap.
+  const hardCap = goldenPoint != null ? goldenPoint : cap != null ? cap : null;
+  if (hardCap != null) maxNum = Math.min(maxNum, hardCap + 1);
   const allNumbers = Array.from({ length: maxNum }, (_, i) => i);
 
   // Only show valid numbers when the other team's score is already set.
   // When `allowAnyScore` is on (timed matches), skip filtering entirely —
   // the timer can cut the match at any score.
   const numbers = hasOtherScore && !allowAnyScore
-    ? allNumbers.filter((n) => isValidPair(n, otherScore, targetScore, winBy))
+    ? allNumbers.filter((n) => isValidPair(n, otherScore, targetScore, winBy, cap ?? null, goldenPoint ?? null))
     : allNumbers;
 
   const handleSelect = (n: number) => {
@@ -112,7 +155,10 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
         <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center" onClick={() => { setOpen(false); setError(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
             <div className={`text-center mb-4 py-2 rounded-xl transition-all ${flash ? "bg-action/10 scale-105" : ""}`}>
-              <span className={`font-bold ${flash ? "text-xl text-action animate-pulse" : "text-lg"}`}>{teamLabel || "Select Score"}</span>
+              <span className={`font-bold ${flash ? "text-xl text-action animate-pulse" : "text-lg"}`}>
+                {setNumber != null ? `Select Score for Set ${setNumber}` : "Select Score"}
+              </span>
+              {teamLabel && <span className="text-sm font-semibold text-foreground block mt-1">{teamLabel}</span>}
               {hasOtherScore && <span className="text-xs text-muted block mt-0.5">Other team: {otherScore}</span>}
             </div>
             {error && (
@@ -145,6 +191,14 @@ export function ScorePicker({ value, targetScore, winBy, otherTeamScore, teamLab
               {!hasOtherScore && (
                 <button onClick={() => setExtraRows(extraRows + 1)} className="text-sm text-action font-medium hover:underline">
                   More numbers...
+                </button>
+              )}
+              {value && onClear && (
+                <button
+                  onClick={() => { onClear(); setOpen(false); setError(null); }}
+                  className="text-sm text-red-500 font-medium hover:underline block w-full"
+                >
+                  {setNumber != null ? `Clear score for set ${setNumber}` : "Clear score"}
                 </button>
               )}
               {hasOtherScore && onClearBoth && (
