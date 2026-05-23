@@ -351,6 +351,24 @@ export function StepPlayers({ eventId, cls, canManage, onRefresh }: StepPlayersP
             players={allPlayers.filter((p) => !classPlayerIds.has(p.id)) as { id: string; name: string; gender?: string | null }[]}
             selectedIds={new Set()}
             onToggle={addPlayer}
+            onCreatePlayer={async ({ name, gender }) => {
+              const r = await fetch("/api/players", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name,
+                  ...(gender ? { gender } : {}),
+                }),
+              });
+              if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                throw new Error(d.error || "Failed to create player");
+              }
+              const created = await r.json();
+              const refreshed = await fetch("/api/players?limit=5000");
+              if (refreshed.ok) setAllPlayers(await refreshed.json());
+              return created.id as string;
+            }}
           />
         </div>
       )}

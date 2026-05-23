@@ -38,6 +38,7 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
   const [loading, setLoading] = useState(true);
   const [clubMemberIds, setClubMemberIds] = useState<Set<string>>(new Set());
   const [pairedPlayerIds, setPairedPlayerIds] = useState<Set<string>>(new Set());
+  const [eventClub, setEventClub] = useState<{ id: string; name: string } | null>(null);
 
   const fetchClassPlayers = useCallback(async () => {
     // Get event data which includes players with classId
@@ -56,6 +57,7 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
     if (data.clubId) {
       fetch(`/api/clubs/${data.clubId}`).then((r) => r.ok ? r.json() : null).then((club) => {
         if (club?.members) setClubMemberIds(new Set(club.members.map((m: { playerId: string }) => m.playerId)));
+        if (club) setEventClub({ id: club.id, name: club.shortName?.trim() || club.name });
       });
     }
     setLoading(false);
@@ -190,6 +192,25 @@ export function ClassPlayers({ eventId, classId, format, canManage, onRefresh }:
             players={allPlayers.filter((p) => !classPlayerIds.has(p.id)) as { id: string; name: string; gender?: string | null }[]}
             selectedIds={new Set()}
             onToggle={addPlayer}
+            clubName={eventClub?.name}
+            onCreatePlayer={async ({ name, gender, joinClub }) => {
+              const r = await fetch("/api/players", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name,
+                  ...(gender ? { gender } : {}),
+                  ...(joinClub && eventClub ? { clubId: eventClub.id } : {}),
+                }),
+              });
+              if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                throw new Error(d.error || "Failed to create player");
+              }
+              const created = await r.json();
+              await fetchAllPlayers();
+              return created.id as string;
+            }}
           />
         </div>
       )}

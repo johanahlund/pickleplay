@@ -5,6 +5,7 @@ import { ClearInput } from "./ClearInput";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { useConfirm } from "./ConfirmDialog";
 import { nameMatchesSearch } from "@/lib/searchUtil";
+import { PastePlayersPanel, type PastePlayersCreateInput } from "./PastePlayersPanel";
 
 interface Player {
   id: string;
@@ -25,6 +26,14 @@ interface PlayerSelectorProps {
   clubMemberIds?: Set<string>;
   /** Short label for the club filter button, e.g. "🏓 Setubal" or just "Club". */
   clubLabel?: string;
+  /**
+   * When provided, a "📋 Paste" button appears that opens a bulk-import
+   * panel. The callback creates a new Player row and resolves with its
+   * id, which the panel then feeds to `onToggle` to add it to the roster.
+   */
+  onCreatePlayer?: (input: PastePlayersCreateInput) => Promise<string>;
+  /** Optional club name for the per-row "Also add to {clubName}" checkbox. */
+  clubName?: string;
 }
 
 function SwipeRow({ player, direction, onAction, needsConfirm, pending }: {
@@ -185,8 +194,11 @@ export function PlayerSelector({
   recentIds,
   clubMemberIds,
   clubLabel = "Club",
+  onCreatePlayer,
+  clubName,
 }: PlayerSelectorProps) {
   const [search, setSearch] = useState("");
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   // Three-state filter: Recent / Club / All. Default priority:
   // Club (if provided) > Recent (if provided) > All.
@@ -210,7 +222,7 @@ export function PlayerSelector({
 
   const inFlight = useRef(new Set<string>());
 
-  const handleToggle = (id: string) => {
+  const handleToggle = (id: string): void | Promise<void> => {
     if (inFlight.current.has(id)) return; // block until DB confirms
     inFlight.current.add(id);
     if (selectedIds.has(id) && !recentlyRemoved.has(id)) {
@@ -222,11 +234,11 @@ export function PlayerSelector({
     }
     const result = onToggle(id);
     if (result && typeof (result as Promise<void>).then === "function") {
-      (result as Promise<void>).finally(() => inFlight.current.delete(id));
-    } else {
-      // If not async, clear after a short delay to allow state to settle
-      setTimeout(() => inFlight.current.delete(id), 500);
+      const p = result as Promise<void>;
+      p.finally(() => inFlight.current.delete(id));
+      return p;
     }
+    setTimeout(() => inFlight.current.delete(id), 500);
   };
 
   const isInFlight = (id: string) => recentlyAdded.has(id) || recentlyRemoved.has(id);
@@ -264,6 +276,13 @@ export function PlayerSelector({
     <div className="space-y-2">
       <div className="flex gap-1.5">
         <ClearInput value={search} onChange={setSearch} placeholder="Search..." className="text-xs flex-1" />
+        {onCreatePlayer && (
+          <button type="button" onClick={() => setPasteOpen(true)}
+            className="shrink-0 px-2 py-1 rounded bg-gray-100 text-foreground text-[10px] font-medium flex items-center gap-1"
+            title="Paste a list of names">
+            <span>📋</span><span>Paste</span>
+          </button>
+        )}
         <div className="flex flex-col gap-1 shrink-0 items-end">
           {/* Gender row */}
           <div className="flex gap-1">
@@ -339,6 +358,17 @@ export function PlayerSelector({
           </div>
         </div>
       </div>
+
+      {pasteOpen && onCreatePlayer && (
+        <PastePlayersPanel
+          players={players}
+          selectedIds={effectiveSelected}
+          onClose={() => setPasteOpen(false)}
+          onAddExisting={(id) => handleToggle(id)}
+          onCreatePlayer={onCreatePlayer}
+          clubName={clubName}
+        />
+      )}
     </div>
   );
 }

@@ -3688,6 +3688,27 @@ export default function EventDetailPage() {
           recentIds={eventPlayerIds}
           clubMemberIds={clubMemberIds}
           clubLabel={clubLabel}
+          clubName={event.club?.shortName?.trim() || event.club?.name}
+          onCreatePlayer={async ({ name, gender, joinClub }) => {
+            // Don't pass eventId here — the panel calls onAddExisting next
+            // with the returned id, which goes through the normal add flow.
+            const r = await fetch("/api/players", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name,
+                ...(gender ? { gender } : {}),
+                ...(joinClub && eventClubId ? { clubId: eventClubId } : {}),
+              }),
+            });
+            if (!r.ok) {
+              const d = await r.json().catch(() => ({}));
+              throw new Error(d.error || "Failed to create player");
+            }
+            const created = await r.json();
+            await fetchAllPlayers();
+            return created.id as string;
+          }}
           onToggle={async (pid) => {
             if (eventPlayerIds.has(pid)) {
               const p = allPlayers.find((pl) => pl.id === pid);
