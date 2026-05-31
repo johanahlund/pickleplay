@@ -125,7 +125,11 @@ export default function PlayersPage() {
       const params = new URLSearchParams();
       params.set("limit", String(limit));
       if (q.trim()) params.set("q", q.trim());
-      if (country) params.set("country", country);
+      // A name search looks across all countries. The country filter defaults
+      // to the signed-in user's country (a browse convenience); applying it
+      // during search would silently hide players with no country set — e.g.
+      // just-added / paste-imported players — making search look broken.
+      if (country && !q.trim()) params.set("country", country);
       if (activatedSince) params.set("activatedSince", activatedSince);
       const r = await fetch(`/api/players?${params.toString()}`);
       if (!r.ok) {
