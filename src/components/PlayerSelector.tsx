@@ -367,6 +367,7 @@ export function PlayerSelector({
           onAddExisting={(id) => handleToggle(id)}
           onCreatePlayer={onCreatePlayer}
           clubName={clubName}
+          clubMemberIds={clubMemberIds}
         />
       )}
     </div>

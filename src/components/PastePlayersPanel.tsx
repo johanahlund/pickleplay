@@ -23,6 +23,13 @@ export interface PastePlayersPanelProps {
   onCreatePlayer: (input: PastePlayersCreateInput) => Promise<string>;
   /** If provided, the per-row "join {clubName}" checkbox appears for new players. */
   clubName?: string;
+  /**
+   * Members of the event's club. On an ambiguous name we assume the club
+   * member — pre-selecting that candidate — but the row still needs the
+   * organizer to confirm via Apply. Club members are also badged so the
+   * default is visible.
+   */
+  clubMemberIds?: Set<string>;
 }
 
 type RowDecision =
@@ -41,16 +48,34 @@ interface RowState {
   chosenCandidate: string;
 }
 
-function defaultRow(result: MatchResult, selectedIds: Set<string>, defaultJoinClub: boolean): RowState {
+function defaultRow(
+  result: MatchResult,
+  selectedIds: Set<string>,
+  defaultJoinClub: boolean,
+  clubMemberIds?: Set<string>,
+): RowState {
   const guessed = inferGender(result.line.name);
   // Default decision per status
   let decision: RowDecision;
+  let chosenCandidate = result.candidates[0]?.id || "";
   if (result.status === "exact") {
     const c = result.candidates[0];
     if (selectedIds.has(c.id)) decision = { kind: "skip" };
     else decision = { kind: "addExisting", playerId: c.id };
   } else if (result.status === "ambiguous") {
-    decision = { kind: "skip" };
+    // Assume the club member when exactly one candidate belongs to the
+    // club (and isn't already in the roster) — pre-select it, but leave
+    // the row for the organizer to confirm via Apply.
+    const clubCands = clubMemberIds
+      ? result.candidates.filter((c) => clubMemberIds.has(c.id) && !selectedIds.has(c.id))
+      : [];
+    if (clubCands.length === 1) {
+      decision = { kind: "addExisting", playerId: clubCands[0].id };
+      chosenCandidate = clubCands[0].id;
+    } else {
+      decision = { kind: "skip" };
+      chosenCandidate = "";
+    }
   } else {
     decision = { kind: "create", name: result.line.name, gender: guessed, joinClub: defaultJoinClub };
   }
@@ -60,7 +85,7 @@ function defaultRow(result: MatchResult, selectedIds: Set<string>, defaultJoinCl
     createName: result.line.name,
     createGender: guessed,
     createJoinClub: defaultJoinClub,
-    chosenCandidate: result.status === "ambiguous" ? "" : (result.candidates[0]?.id || ""),
+    chosenCandidate,
   };
 }
 
@@ -71,6 +96,7 @@ export function PastePlayersPanel({
   onAddExisting,
   onCreatePlayer,
   clubName,
+  clubMemberIds,
 }: PastePlayersPanelProps) {
   const [step, setStep] = useState<"input" | "review">("input");
   const [text, setText] = useState("");
@@ -82,7 +108,7 @@ export function PastePlayersPanel({
   const handleParse = () => {
     const parsed = parsePlayerList(text);
     const matched = matchPlayers(parsed, players);
-    setRows(matched.map((m) => defaultRow(m, selectedIds, false)));
+    setRows(matched.map((m) => defaultRow(m, selectedIds, false, clubMemberIds)));
     setStep("review");
   };
 
@@ -178,6 +204,7 @@ export function PastePlayersPanel({
                 <RowEditor key={i}
                   row={row}
                   clubName={clubName}
+                  clubMemberIds={clubMemberIds}
                   selectedIds={selectedIds}
                   onChange={(next) => setRows((rs) => rs.map((r, j) => (j === i ? next : r)))}
                 />
@@ -215,11 +242,12 @@ export function PastePlayersPanel({
 interface RowEditorProps {
   row: RowState;
   clubName?: string;
+  clubMemberIds?: Set<string>;
   selectedIds: Set<string>;
   onChange: (next: RowState) => void;
 }
 
-function RowEditor({ row, clubName, selectedIds, onChange }: RowEditorProps) {
+function RowEditor({ row, clubName, clubMemberIds, selectedIds, onChange }: RowEditorProps) {
   const { result } = row;
   const isCreate = row.decision.kind === "create";
   const isSkip = row.decision.kind === "skip";
@@ -259,6 +287,9 @@ function RowEditor({ row, clubName, selectedIds, onChange }: RowEditorProps) {
               />
               <PlayerAvatar name={c.name} photoUrl={c.photoUrl} size="xs" />
               <span>{c.name}</span>
+              {clubMemberIds?.has(c.id) && (
+                <span className="text-[9px] uppercase tracking-wider bg-gray-900 text-white px-1 py-0.5 rounded">club</span>
+              )}
               {selectedIds.has(c.id) && <span className="text-[10px] text-muted">(already in roster)</span>}
             </label>
           ))}

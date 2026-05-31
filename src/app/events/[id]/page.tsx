@@ -29,6 +29,7 @@ import { useViewRole, hasRole } from "@/components/RoleToggle";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { ClearInput } from "@/components/ClearInput";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { PastePlayersPanel } from "@/components/PastePlayersPanel";
 import { ClubBadge } from "@/components/ClubBadge";
 import { CompetitionView } from "@/components/CompetitionView";
 import { SpeakerMode, sendAnnouncement, formatMatchAnnouncement, stopAnnouncement } from "@/components/SpeakerMode";
@@ -646,6 +647,7 @@ export default function EventDetailPage() {
     emailSubject?: string;
   } | null>(null);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [addPlayerPasteOpen, setAddPlayerPasteOpen] = useState(false);
   const [bulkSelectMode, setBulkSelectMode] = useState(false);
   // Multi-select state for the captain's "+ Add player" picker on the
   // league participants list. Player ids only — keyed by team is unnecessary
@@ -3082,6 +3084,15 @@ export default function EventDetailPage() {
   const renderAddPlayers = () => {
     const eventClubId = event.club?.id || (event as unknown as { clubId?: string }).clubId || null;
     const eventPlayerIds = new Set(event.players.map((ep) => ep.player.id));
+    // Club members — used by the paste flow to assume the club member on an
+    // ambiguous name (pre-selected, still confirmed via Apply).
+    const pasteClubMemberIds = eventClubId
+      ? new Set(
+          (allPlayers as unknown as { id: string; clubs?: { id: string }[] }[])
+            .filter((p) => p.clubs?.some((c) => c.id === eventClubId))
+            .map((p) => p.id),
+        )
+      : undefined;
 
     // Shared filter chain — applied to both the eligible list and the
     // "already in event" tail so the tail respects gender/country/club
@@ -3175,21 +3186,33 @@ export default function EventDetailPage() {
           </div>
         )}
         <div className={`${frameClass} p-4 space-y-3`}>
-          {/* Title + Add button on one row */}
+          {/* Title + Paste + Add buttons on one row. Paste opens the
+              shared list-importer so organizers can drop a WhatsApp roster
+              instead of hunting names one by one. */}
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold truncate">Add Players to {heroTitle}</h3>
-            <button
-              type="button"
-              onClick={savePending}
-              disabled={pendingPlayers.length === 0 || savingPlayers}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-action text-white disabled:opacity-40 active:bg-action-dark transition-colors shrink-0"
-            >
-              {savingPlayers
-                ? "Adding..."
-                : pendingPlayers.length === 0
-                  ? "Add"
-                  : `Add ${pendingPlayers.length}`}
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAddPlayerPasteOpen(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-foreground hover:bg-gray-200 active:bg-gray-300 transition-colors"
+                title="Paste a list of names"
+              >
+                📋 Paste
+              </button>
+              <button
+                type="button"
+                onClick={savePending}
+                disabled={pendingPlayers.length === 0 || savingPlayers}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-action text-white disabled:opacity-40 active:bg-action-dark transition-colors"
+              >
+                {savingPlayers
+                  ? "Adding..."
+                  : pendingPlayers.length === 0
+                    ? "Add"
+                    : `Add ${pendingPlayers.length}`}
+              </button>
+            </div>
           </div>
 
           {/* Staging tray */}
@@ -3376,6 +3399,35 @@ export default function EventDetailPage() {
             >Done</button>
           </div>
         </div>
+
+        {addPlayerPasteOpen && (
+          <PastePlayersPanel
+            players={allPlayers as { id: string; name: string; gender?: string | null }[]}
+            selectedIds={eventPlayerIds}
+            clubMemberIds={pasteClubMemberIds}
+            clubName={event.club?.shortName?.trim() || event.club?.name}
+            onClose={() => { setAddPlayerPasteOpen(false); fetchEvent(); }}
+            onAddExisting={(pid) => addPlayerToEvent(pid)}
+            onCreatePlayer={async ({ name, gender, joinClub }) => {
+              const r = await fetch("/api/players", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name,
+                  ...(gender ? { gender } : {}),
+                  ...(joinClub && eventClubId ? { clubId: eventClubId } : {}),
+                }),
+              });
+              if (!r.ok) {
+                const d = await r.json().catch(() => ({}));
+                throw new Error(d.error || "Failed to create player");
+              }
+              const created = await r.json();
+              await fetchAllPlayers();
+              return created.id as string;
+            }}
+          />
+        )}
       </div>
     );
   };
