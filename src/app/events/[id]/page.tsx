@@ -677,7 +677,7 @@ export default function EventDetailPage() {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [addPlayerSearch, setAddPlayerSearch] = useState("");
   const [addPlayerGender, setAddPlayerGender] = useState<"M" | "F" | null>(null);
-  const [addPlayerClubFilter, setAddPlayerClubFilter] = useState<"all" | "club">("club");
+  const [addPlayerClubFilter, setAddPlayerClubFilter] = useState<"all" | "club">("all");
   // Country filter — defaults to the signed-in user's country on open.
   const [addPlayerCountry, setAddPlayerCountry] = useState<string>("");
   // Staging tray for the new picker pattern. Tap a row → adds the
@@ -1098,10 +1098,10 @@ export default function EventDetailPage() {
     fetchAllPlayers();
     setAddPlayerSearch("");
     setAddPlayerGender(null);
-    setAddPlayerCountry(
-      (session?.user as { country?: string | null } | undefined)?.country || "",
-    );
-    setAddPlayerClubFilter(event.club ? "club" : "all");
+    // Location filters default OFF — show every candidate; the
+    // "This Country" / "This Club" pills narrow on demand.
+    setAddPlayerCountry("");
+    setAddPlayerClubFilter("all");
     setPendingPlayerIds(new Set());
     setAddedPlayerIds(new Set());
     setShowAddPlayer(true);
@@ -3093,6 +3093,9 @@ export default function EventDetailPage() {
             .map((p) => p.id),
         )
       : undefined;
+    // The viewer's own country backs the "This Country" pill (on/off),
+    // mirroring the "This Club" pill rather than a free-form dropdown.
+    const myCountry = (session?.user as { country?: string | null } | undefined)?.country || "";
 
     // Shared filter chain — applied to both the eligible list and the
     // "already in event" tail so the tail respects gender/country/club
@@ -3256,21 +3259,23 @@ export default function EventDetailPage() {
             )}
           </div>
 
-          {/* Filter row, left → right: country, club, gender icons.
-              Country goes first because it's the broadest filter and is
-              defaulted from the session; gender icons go last so the
-              line still reads naturally if scanned right-to-left. */}
-          <div className="flex items-center gap-2">
-            <select
-              value={addPlayerCountry}
-              onChange={(e) => setAddPlayerCountry(e.target.value)}
-              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-white"
-            >
-              <option value="">All countries</option>
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+          {/* Filter row: This Country / This Club / gender. The two location
+              filters are opt-in on/off pills (off by default) so the picker
+              never hides candidates behind a silent default — a default-on
+              club filter previously made the list look empty. */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {myCountry && (
+              <button
+                type="button"
+                onClick={() => setAddPlayerCountry((cur) => (cur ? "" : myCountry))}
+                title={`Only players from ${myCountry}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
+                  addPlayerCountry ? "bg-black text-white" : "bg-gray-100 text-foreground"
+                }`}
+              >
+                This Country
+              </button>
+            )}
             {eventClubId && (
               <button
                 type="button"
@@ -3282,7 +3287,7 @@ export default function EventDetailPage() {
                     : "bg-gray-100 text-foreground"
                 }`}
               >
-                Club
+                This Club
               </button>
             )}
             {(["M", "F"] as const).map((g) => (
@@ -3882,10 +3887,10 @@ export default function EventDetailPage() {
                 fetchAllPlayers();
                 setAddPlayerSearch("");
                 setAddPlayerGender(null);
-                setAddPlayerCountry(
-                  (session?.user as { country?: string | null } | undefined)?.country || "",
-                );
-                setAddPlayerClubFilter(event.club ? "club" : "all");
+                // Location filters default OFF — show every candidate; the
+                // "This Country" / "This Club" pills narrow on demand.
+                setAddPlayerCountry("");
+                setAddPlayerClubFilter("all");
                 setPendingPlayerIds(new Set());
                 setAddedPlayerIds(new Set());
                 setShowAddPlayer(true);

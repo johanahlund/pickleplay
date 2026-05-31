@@ -200,13 +200,11 @@ export function PlayerSelector({
   const [search, setSearch] = useState("");
   const [pasteOpen, setPasteOpen] = useState(false);
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
-  // Three-state filter: Recent / Club / All. Default priority:
-  // Club (if provided) > Recent (if provided) > All.
-  const [filterMode, setFilterMode] = useState<FilterMode>(() => {
-    if (clubMemberIds) return "club";
-    if (recentIds && recentIds.size > 0) return "recent";
-    return "all";
-  });
+  // Three-state filter: Recent / Club / All. Default to "all" so the picker
+  // never hides candidates behind a silent default — defaulting to "club"
+  // made the list look empty when the people being added weren't members
+  // yet (e.g. just paste-imported). Club/Recent stay one tap away.
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
   // Optimistic: track IDs that were just toggled (added/removed) to prevent flicker
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
   const [recentlyRemoved, setRecentlyRemoved] = useState<Set<string>>(new Set());
