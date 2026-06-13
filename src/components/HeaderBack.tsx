@@ -3,39 +3,47 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 /**
- * Header-back context — lets any non-hero page register its hierarchical "up"
- * target so the GLOBAL header renders the back link in the exact same top-left
- * slot as the green hero pages. One back-link position across the whole app.
+ * Header context — lets a page drive the GLOBAL header's top-left slot:
+ *   - a hierarchical back link (sub-pages), OR
+ *   - a page title (main list pages, which have no back button).
  *
- * Hero / hero-sub pages don't use this — they render their own AppHeader with
- * `back` and are hidden from the global Header. Everyone else (edit pages,
- * alerts, club detail, …) calls `useHeaderBack(...)` and the global LightHeader
- * shows it.
+ * The back link is rendered in the exact same top-left position as the green
+ * hero pages, so it's consistent app-wide. Main lists (Events, Leagues, …)
+ * have no back, so they put their TITLE there instead of in the page body.
+ *
+ * Hero / hero-sub pages don't use this — they render their own AppHeader.
  */
 export type HeaderBack = { label: string; href?: string; onClick?: () => void; subtitle?: string };
 
-const Ctx = createContext<{ back: HeaderBack | null; setBack: (b: HeaderBack | null) => void }>({
+const Ctx = createContext<{
+  back: HeaderBack | null;
+  title: string | null;
+  setBack: (b: HeaderBack | null) => void;
+  setTitle: (t: string | null) => void;
+}>({
   back: null,
+  title: null,
   setBack: () => {},
+  setTitle: () => {},
 });
 
 export function HeaderBackProvider({ children }: { children: ReactNode }) {
   const [back, setBack] = useState<HeaderBack | null>(null);
-  return <Ctx.Provider value={{ back, setBack }}>{children}</Ctx.Provider>;
+  const [title, setTitle] = useState<string | null>(null);
+  return <Ctx.Provider value={{ back, title, setBack, setTitle }}>{children}</Ctx.Provider>;
 }
 
-/** Read the currently-registered back link (used by Header.tsx). */
+/** Read the currently-registered back link / title (used by Header.tsx). */
 export function useHeaderBackValue() {
   return useContext(Ctx).back;
+}
+export function useHeaderTitleValue() {
+  return useContext(Ctx).title;
 }
 
 /**
  * Register this page's back link in the global header's top-left slot. Pass
  * `null` to explicitly show no back. Clears automatically on unmount / nav.
- *
- * Keyed on the back's label/href/subtitle so re-renders with a fresh object
- * literal don't thrash the context (onClick is captured from the latest render
- * that changed the key — fine for the stable handlers pages use).
  */
 export function useHeaderBack(back: HeaderBack | null) {
   const { setBack } = useContext(Ctx);
@@ -45,4 +53,16 @@ export function useHeaderBack(back: HeaderBack | null) {
     return () => setBack(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, setBack]);
+}
+
+/**
+ * Register this page's title in the global header's top-left slot — for main
+ * list pages that have no back button. Clears on unmount / nav.
+ */
+export function useHeaderTitle(title: string | null) {
+  const { setTitle } = useContext(Ctx);
+  useEffect(() => {
+    setTitle(title);
+    return () => setTitle(null);
+  }, [title, setTitle]);
 }

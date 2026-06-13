@@ -16,6 +16,8 @@ import { eventDisplayLabel } from "@/lib/statusDisplay";
 import { eventStatusBadgeClass } from "@/lib/statusBadge";
 import { frameClass } from "@/components/Card";
 import { nameMatchesSearch } from "@/lib/searchUtil";
+import { FitText } from "@/components/FitText";
+import { useHeaderTitle } from "@/components/HeaderBack";
 
 interface Event {
   id: string;
@@ -122,6 +124,13 @@ function EventsPage() {
   const [activeOnly, setActiveOnly] = useUrlState<boolean>("active", false, {
     serialize: (v) => (v ? "1" : ""),
     deserialize: (raw) => raw === "1",
+  });
+  // Time-bucket filter (today / future / past). Default = today + future, so
+  // past events are hidden until the user opts in. Multi-select, like the type
+  // group. Absent param → default; explicit empty → show nothing.
+  const [timeBuckets, setTimeBuckets] = useUrlState<Set<string>>("when", new Set(["today", "future"]), {
+    serialize: (s) => Array.from(s).sort().join(","),
+    deserialize: (raw) => new Set(raw ? raw.split(",").filter(Boolean) : []),
   });
   const [showFilters, setShowFilters] = useState(false);
   const [clubsLoaded, setClubsLoaded] = useState(false);
@@ -241,10 +250,36 @@ function EventsPage() {
     setSelectedClubIds(next);
   };
 
+  // Never allow an empty selection (which would show nothing): deselecting the
+  // last bucket falls back to a sensible sibling — future→today, today→future,
+  // past→today.
+  const BUCKET_FALLBACK: Record<string, string> = { future: "today", today: "future", past: "today" };
+  const toggleBucket = (b: string) => {
+    const next = new Set(timeBuckets);
+    if (next.has(b)) {
+      next.delete(b);
+      if (next.size === 0) next.add(BUCKET_FALLBACK[b]);
+    } else {
+      next.add(b);
+    }
+    setTimeBuckets(next);
+  };
+
+  // Which time bucket an event falls in — drives the today/future/past filter.
+  const bucketNow = new Date();
+  const bucketTodayStart = new Date(bucketNow.getFullYear(), bucketNow.getMonth(), bucketNow.getDate());
+  const bucketTomorrowStart = new Date(bucketTodayStart.getTime() + 86400000);
+  const eventBucket = (dateStr: string): "today" | "future" | "past" => {
+    const d = new Date(dateStr);
+    return d < bucketTodayStart ? "past" : d < bucketTomorrowStart ? "today" : "future";
+  };
+
   const filteredEvents = events
     .filter((e) => {
       if (!e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (!matchesDateFilter(e.date, dateFilter)) return false;
+      // Time-bucket filter (today / future / past)
+      if (!timeBuckets.has(eventBucket(e.date))) return false;
       // Club filter: show events from selected clubs, or events without a club
       if (selectedClubIds.size > 0 && e.clubId && !selectedClubIds.has(e.clubId)) return false;
       // Type filter
@@ -295,6 +330,9 @@ function EventsPage() {
   if (myEventsOnly) activeFilters.push("My events");
   if (activeOnly) activeFilters.push("Live");
 
+  // Main-list title lives in the global header's top-left slot (no back button).
+  useHeaderTitle(showFilters ? "Filter Events" : legacyClubFilter ? "Club Events" : "Events");
+
   return (
     <div className="space-y-4">
       {/* Back link when filtered by club */}
@@ -302,11 +340,9 @@ function EventsPage() {
         <button onClick={() => window.history.back()} className="text-sm text-action font-medium">← Club <span className="text-xs text-muted font-normal">({userClubs.find((c) => c.id === legacyClubFilter)?.name || ""})</span></button>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">
-          {showFilters ? "Filter Events" : legacyClubFilter ? "Club Events" : "Events"}
-        </h2>
+      {/* Title is shown in the global header (top-left) — see useHeaderTitle
+          below. Here we keep just the right-side action button. */}
+      <div className="flex items-center justify-end">
         {/* Right-side action: Apply (when filtering) or Add (when browsing) */}
         {showFilters ? (
           <button
@@ -375,8 +411,8 @@ function EventsPage() {
               })}
             </div>
           )}
-          {/* Row 3: type icons (framed) + My Events (right) */}
-          <div className="flex items-center gap-1.5">
+          {/* Row 3: type icons + time buckets (framed groups) + My Events (right) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <div className="border border-gray-300 rounded-lg p-0.5 flex gap-0.5">
               {([
                 { value: "events", label: "🎾", title: "Social" },
@@ -389,6 +425,21 @@ function EventsPage() {
                   aria-label={t.title}
                   className={`w-9 h-7 rounded-md text-base font-medium transition-colors inline-flex items-center justify-center ${
                     typeFilter === t.value ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
+                  }`}
+                >{t.label}</button>
+              ))}
+            </div>
+            {/* Time buckets — multi-select, default today + future */}
+            <div className="border border-gray-300 rounded-lg p-0.5 flex gap-0.5">
+              {([
+                { value: "today", label: "Today" },
+                { value: "future", label: "Future" },
+                { value: "past", label: "Past" },
+              ] as const).map((t) => (
+                <button key={t.value}
+                  onClick={() => toggleBucket(t.value)}
+                  className={`px-2 h-7 rounded-md text-xs font-medium transition-colors inline-flex items-center justify-center ${
+                    timeBuckets.has(t.value) ? "bg-selected text-white" : "text-foreground hover:bg-gray-100"
                   }`}
                 >{t.label}</button>
               ))}
@@ -545,20 +596,11 @@ function EventsPage() {
                         )}
                       </div>
                     )}
-                    {/* Event name + type + status */}
+                    {/* Event name — auto-shrinks to fit one line (type + status
+                        pills moved to the players row below). */}
                     <div className="flex items-center gap-1.5">
-                      <h3 className="font-semibold text-sm truncate flex-1">{event.name}</h3>
+                      <FitText text={event.name} max={14} min={11} className="font-semibold flex-1 min-w-0" />
                       {timeStatus === "active" && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />}
-                      {event.roundId ? (
-                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 League</span>
-                      ) : event.classes?.some((c) => c.competitionMode) ? (
-                        <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🏆 Comp</span>
-                      ) : (
-                        <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">🎾 Social</span>
-                      )}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${eventStatusBadgeClass(event)}`}>
-                        {eventDisplayLabel(event)}
-                      </span>
                     </div>
                     {/* Time + Organizer + DUPR (all same small font) */}
                     <div className="flex items-center gap-1 mt-0.5 min-w-0">
@@ -611,6 +653,19 @@ function EventsPage() {
                           </>;
                         })()}
                       </span>
+                      {/* Type + status pills — right-justified on the players row */}
+                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        {event.roundId ? (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full font-medium">🏆 League</span>
+                        ) : event.classes?.some((c) => c.competitionMode) ? (
+                          <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🏆 Comp</span>
+                        ) : (
+                          <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium">🎾 Social</span>
+                        )}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${eventStatusBadgeClass(event)}`}>
+                          {eventDisplayLabel(event)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <span className="text-xl text-muted shrink-0">›</span>

@@ -9,6 +9,7 @@ import { ClubBadge } from "@/components/ClubBadge";
 import { frameClass } from "@/components/Card";
 import { useUrlState } from "@/lib/hooks";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderTitle } from "@/components/HeaderBack";
 
 interface PlayerInfo { id: string; name: string; emoji: string; photoUrl?: string | null }
 interface MatchPlayer { id: string; playerId: string; team: number; score: number; player: PlayerInfo }
@@ -215,12 +216,12 @@ function MatchesPage() {
     );
   };
 
+  useHeaderTitle("My Matches");
+
   return (
     <div className="space-y-3">
-      {/* Sticky header */}
+      {/* Sticky header (title is in the global header now) */}
       <div className="sticky top-0 z-30 bg-background -mx-4 px-4 pt-2 pb-2 space-y-2 shadow-sm">
-        <h2 className="text-xl font-bold">My Matches</h2>
-
         {/* Filter bar */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <button onClick={() => setShowFilters(!showFilters)}

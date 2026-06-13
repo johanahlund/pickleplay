@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderTitle } from "@/components/HeaderBack";
 
 /**
  * LIST archetype primitives.
@@ -56,13 +57,21 @@ export function ListPage({
   emptyLabel?: string;
   children?: ReactNode;
 }) {
+  // Main lists have no back button — their title goes in the global header's
+  // top-left slot. String titles only; non-string titles stay in the body.
+  const headerTitle = typeof title === "string" ? (count != null ? `${title} ${count}` : title) : null;
+  useHeaderTitle(headerTitle);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">
-          {title}
-          {count != null && <span className="ml-2 text-sm font-medium text-muted">{count}</span>}
-        </h2>
+        {headerTitle ? (
+          <div />
+        ) : (
+          <h2 className="text-xl font-bold">
+            {title}
+            {count != null && <span className="ml-2 text-sm font-medium text-muted">{count}</span>}
+          </h2>
+        )}
         {isAction(action) ? <ActionButton {...action} /> : action}
       </div>
       {filters}

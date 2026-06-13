@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
-import { useHeaderBackValue } from "./HeaderBack";
+import { useHeaderBackValue, useHeaderTitleValue } from "./HeaderBack";
 import { usePollingRefresh } from "@/lib/hooks";
 import { ShareInviteModal } from "./ShareInviteModal";
 import { buildAppInviteMessage } from "@/lib/inviteShare";
@@ -141,6 +141,7 @@ export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const headerBack = useHeaderBackValue();
+  const headerTitle = useHeaderTitleValue();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [appInviteOpen, setAppInviteOpen] = useState(false);
   const [appInviteMessage, setAppInviteMessage] = useState("");
@@ -292,6 +293,7 @@ export function Header() {
       <div>
         <AppHeader
           back={headerBack ?? undefined}
+          title={headerTitle ?? undefined}
           isAdmin={isAdmin}
           notifications={unreadCount}
           user={{

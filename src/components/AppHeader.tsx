@@ -438,11 +438,14 @@ function LightHeader({
           boxSizing: "border-box",
         }}
       >
-        {/* Back link on the top row, opposite the actions — same slot as the
-            green hero so the back link is always in the identical position.
+        {/* Top row, opposite the actions: the back link on sub-pages, or the
+            page title on main list pages (which have no back). Same slot as
+            the green hero so it's always in the identical position.
             (Logo lives in the footer strip under BottomNav.) */}
         {hasBack ? (
           <BackChevron {...back!} color="#16a34a" />
+        ) : title ? (
+          <span style={{ fontSize: 19, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.01em" }}>{title}</span>
         ) : (
           <div />
         )}
@@ -461,29 +464,6 @@ function LightHeader({
           />
         </div>
       </div>
-      {title && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "8px 16px 12px",
-          }}
-        >
-          <div
-            style={{
-              color: "#0f172a",
-              fontSize: 15,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {title}
-          </div>
-        </div>
-      )}
     </header>
   );
 }

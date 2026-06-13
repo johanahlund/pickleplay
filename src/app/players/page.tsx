@@ -10,6 +10,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderTitle } from "@/components/HeaderBack";
 import { COUNTRIES } from "@/lib/countries";
 import { withInstallTip, personalClaimUrl } from "@/lib/inviteShare";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
@@ -377,10 +378,11 @@ export default function PlayersPage() {
     .filter((p) => !clubFilter || (p.clubs || []).some((c) => c.id === clubFilter))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  useHeaderTitle(`Players${!loading ? ` ${searchQuery ? `(${filteredPlayers.length} of ${players.length})` : `(${players.length})`}` : ""}`);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Players {!loading && `(${searchQuery ? `${filteredPlayers.length} of ${players.length}` : players.length})`}</h2>
+      <div className="flex items-center justify-end">
         {isAdmin && (
           <Link
             href="/players/new"

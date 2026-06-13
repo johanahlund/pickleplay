@@ -11,6 +11,7 @@ import { clubRoleLabel } from "@/lib/clubLabel";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { usePollingRefresh } from "@/lib/hooks";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderTitle } from "@/components/HeaderBack";
 
 interface ClubLocation {
   id: string;
@@ -265,10 +266,11 @@ export default function ClubsPage() {
 
   // Loading handled inline
 
+  useHeaderTitle("My Clubs");
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">My Clubs</h2>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           {isLoggedIn && (() => {
             // Only app admins and users with the canCreateClubs flag
