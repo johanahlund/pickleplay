@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
+import Logo from "./Logo";
 
 const defaultTabs = [
   { href: "/players", label: "Players", iconName: "players", iconOnly: true },
@@ -135,6 +136,11 @@ export function BottomNav() {
             <span className="text-[9px] font-bold truncate max-w-[50px]">{(activeEvent.status === "setup" || activeEvent.status === "draft") ? "Setup" : "Live"}</span>
           </Link>
         )}
+      </div>
+      {/* Brand mark — moved out of the top headers to a footer strip under the
+          nav. Subtle by design; sits above the safe-area inset. */}
+      <div className="max-w-[600px] mx-auto flex items-center justify-center border-t border-border/60 py-1.5">
+        <Logo size={15} color="#15803d" ball="pickle" ballAlign="midline" />
       </div>
     </nav>
   );

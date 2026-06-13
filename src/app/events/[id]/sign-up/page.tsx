@@ -43,6 +43,16 @@ export default function EventSignUpPage() {
   // path beginning with "/" to avoid open redirects.
   const rawReturnTo = searchParams.get("returnTo");
   const returnTo = rawReturnTo && rawReturnTo.startsWith("/") ? rawReturnTo : null;
+  // Sub-flow back: when launched from a team lineup (returnTo set) return there
+  // labelled by destination; otherwise back to the event's Participants.
+  const backHref = returnTo || `/events/${id}?section=players`;
+  const backLabel = returnTo
+    ? returnTo.includes("/lineup/")
+      ? "Team"
+      : returnTo.startsWith("/leagues")
+        ? "League"
+        : "Event"
+    : "Participants";
   const [targetName, setTargetName] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -334,7 +344,7 @@ export default function EventSignUpPage() {
           : <>The captain knows you can&apos;t make it.</>;
     return (
       <>
-        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: "Back to event", onClick: () => router.push(`/events/${id}`) }} />
+        <AppHeader variant="hero-sub" title="Sign-up" back={{ label: backLabel, onClick: () => router.push(backHref) }} />
         <div className="space-y-2">
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm space-y-2">
             <p className="font-semibold text-emerald-900">
@@ -365,7 +375,7 @@ export default function EventSignUpPage() {
                 ? `Sign up · ${myTeamName}`
                 : "Sign up"
         }
-        back={{ label: "Participants", onClick: () => router.push(returnTo || `/events/${id}?section=players`) }}
+        back={{ label: backLabel, onClick: () => router.push(backHref) }}
       />
     <div className="space-y-2">
 

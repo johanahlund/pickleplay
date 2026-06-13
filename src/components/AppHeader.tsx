@@ -4,7 +4,7 @@
 
 import React, { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
-import Logo from "./Logo";
+import { BackButton } from "./BackButton";
 
 /** Measure the fixed header element and push its height to:
  *   - the CSS var `--header-height` (used by sticky tab bars below)
@@ -120,67 +120,68 @@ export default AppHeader;
    Shared fragments
    ──────────────────────────────────────────────────────────────── */
 
-function BackChevron({
-  href,
-  label,
-  subtitle,
-  color,
-  onClick,
-}: {
+// Thin wrapper over the canonical BackButton — keeps the hero/light call sites
+// unchanged while the markup lives in one place. `color` themes it for the
+// dark gradient (white) or light header (action colour).
+function BackChevron(props: {
   href?: string;
   label: string;
   subtitle?: string;
   color: string;
   onClick?: () => void;
 }) {
-  const inner = (
-    <>
-      <svg width={10} height={16} viewBox="0 0 10 16" style={{ marginTop: 1, flexShrink: 0 }}>
-        <path
-          d="M8 2 L2 8 L8 14"
-          fill="none"
-          stroke={color}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {subtitle ? (
-        <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, textAlign: "left" }}>
-          <span>{label}</span>
-          <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.85 }}>{subtitle}</span>
-        </span>
-      ) : (
-        <span>{label}</span>
-      )}
-    </>
-  );
-  const sharedStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: subtitle ? "flex-start" : "center",
-    gap: 4,
-    fontSize: 15,
-    fontWeight: 500,
-    color,
-    textDecoration: "none",
-    background: "none",
-    border: "none",
-    padding: 0,
-    cursor: "pointer",
-    textAlign: "left",
-  };
+  return <BackButton {...props} />;
+}
 
-  if (onClick || !href) {
-    return (
-      <button type="button" onClick={onClick} style={sharedStyle}>
-        {inner}
-      </button>
-    );
-  }
+/** Entity title that auto-shrinks to fit a single line, down to `min`px; only
+ *  if even the floor overflows does it wrap (rather than clip). Keeps long
+ *  names like "I Liga Interclubes … Zona Centro - Portugal" on one row when it
+ *  can. */
+function HeroTitle({
+  text,
+  max,
+  min,
+  color = "#fff",
+}: {
+  text: string;
+  max: number;
+  min: number;
+  color?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.whiteSpace = "nowrap";
+      let size = max;
+      el.style.fontSize = `${size}px`;
+      while (size > min && el.scrollWidth > el.clientWidth) {
+        size -= 1;
+        el.style.fontSize = `${size}px`;
+      }
+      // Even at the floor it won't fit — wrap instead of clipping.
+      el.style.whiteSpace = el.scrollWidth > el.clientWidth ? "normal" : "nowrap";
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, max, min]);
   return (
-    <Link href={href} style={sharedStyle}>
-      {inner}
-    </Link>
+    <div
+      ref={ref}
+      style={{
+        fontSize: max,
+        fontWeight: 800,
+        letterSpacing: "-0.02em",
+        lineHeight: 1.1,
+        color,
+        overflow: "hidden",
+      }}
+    >
+      {text}
+    </div>
   );
 }
 
@@ -437,7 +438,14 @@ function LightHeader({
           boxSizing: "border-box",
         }}
       >
-        <Logo size={20} color="#15803d" ball="pickle" ballAlign="midline" />
+        {/* Back link on the top row, opposite the actions — same slot as the
+            green hero so the back link is always in the identical position.
+            (Logo lives in the footer strip under BottomNav.) */}
+        {hasBack ? (
+          <BackChevron {...back!} color="#16a34a" />
+        ) : (
+          <div />
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {isAdmin && <AdminPill variant="light" />}
           <HeaderActions
@@ -453,33 +461,27 @@ function LightHeader({
           />
         </div>
       </div>
-      {(hasBack || title) && (
+      {title && (
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 10,
-            padding: "10px 14px 12px",
+            padding: "8px 16px 12px",
           }}
         >
-          {hasBack && <BackChevron {...back!} color="#16a34a" />}
-          {hasBack && title && (
-            <div style={{ width: 1, height: 14, background: "#cbd5e1" }} />
-          )}
-          {title && (
-            <div
-              style={{
-                color: "#0f172a",
-                fontSize: 15,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {title}
-            </div>
-          )}
+          <div
+            style={{
+              color: "#0f172a",
+              fontSize: 15,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {title}
+          </div>
         </div>
       )}
     </header>
@@ -538,7 +540,13 @@ function HeroHeader({
           boxSizing: "border-box",
         }}
       >
-        <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
+        {/* Back link sits on the top row, opposite the action icons
+            (logo lives in the footer strip under BottomNav). */}
+        {back ? (
+          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="#d9f99d" />
+        ) : (
+          <div />
+        )}
         <HeaderActions
           color="#fff"
           avatarBg="#14532d"
@@ -551,65 +559,62 @@ function HeroHeader({
           shareScheduleLabel={shareScheduleLabel}
         />
       </div>
-      {back && (
-        <div style={{ padding: "2px 16px 0" }}>
-          <BackChevron href={back.href} label={back.label} onClick={back.onClick} color="#d9f99d" />
-        </div>
-      )}
       {title && (
-        <div style={{ padding: "10px 16px 0", position: "relative" }}>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.1,
-              paddingRight: 72,
-            }}
-          >
-            {title}
-          </div>
-          {s && (
+        <div style={{ padding: "8px 16px 0" }}>
+          <HeroTitle text={title} max={24} min={15} />
+          {(meta || s) && (
             <div
               style={{
-                position: "absolute",
-                top: 12,
-                right: 16,
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
-                gap: 6,
-                padding: "4px 10px 4px 8px",
-                borderRadius: 9999,
-                background: s.bg,
-                color: s.fg,
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: 0.3,
-                textTransform: "uppercase",
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 9999,
-                  background: s.dot,
-                }}
-              />
-              {status}
-            </div>
-          )}
-          {meta && (
-            <div
-              style={{
-                fontSize: 13,
-                color: "rgba(255,255,255,0.82)",
-                fontWeight: 500,
+                justifyContent: "space-between",
+                gap: 10,
                 marginTop: 8,
-                lineHeight: 1.35,
               }}
             >
-              {meta}
+              {meta ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "rgba(255,255,255,0.82)",
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    minWidth: 0,
+                  }}
+                >
+                  {meta}
+                </div>
+              ) : (
+                <span />
+              )}
+              {s && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 10px 4px 8px",
+                    borderRadius: 9999,
+                    background: s.bg,
+                    color: s.fg,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 0.3,
+                    textTransform: "uppercase",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 9999,
+                      background: s.dot,
+                    }}
+                  />
+                  {status}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -684,6 +689,11 @@ function HeroSubHeader({
   const ref = useRef<HTMLElement | null>(null);
   useHeaderHeightSync(ref);
 
+  // The prominent line for a sub-page is its section label (meta, e.g.
+  // "Pairing" / "Matches" / "Participants"); fall back to title for sub-headers
+  // that pass only a title (e.g. "Sign-up", or the loading header).
+  const heading = meta ?? title;
+
   return (
     <header
       ref={ref}
@@ -709,7 +719,14 @@ function HeroSubHeader({
           boxSizing: "border-box",
         }}
       >
-        <Logo size={20} color="#fff" ball="pickle" ballAlign="midline" />
+        {/* Back link on the top row, opposite the icons — pixel-identical to
+            the full hero so it's always in the same spot (logo lives in the
+            footer strip under BottomNav). */}
+        {back ? (
+          <BackChevron href={back.href} label={back.label} subtitle={back.subtitle} onClick={back.onClick} color="#d9f99d" />
+        ) : (
+          <div />
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {actionEl}
           <HeaderActions
@@ -725,26 +742,9 @@ function HeroSubHeader({
           />
         </div>
       </div>
-      {back && (
-        <div style={{ padding: "2px 16px 4px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <BackChevron href={back.href} label={back.label} subtitle={back.subtitle} onClick={back.onClick} color="#d9f99d" />
-          {meta && (
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#fff", letterSpacing: "-0.01em" }}>{meta}</span>
-          )}
-        </div>
-      )}
-      {!back && title && (
-        <div style={{ padding: "6px 16px 0" }}>
-          <div
-            style={{
-              fontSize: 20,
-              fontWeight: 800,
-              letterSpacing: "-0.02em",
-              lineHeight: 1.1,
-            }}
-          >
-            {title}
-          </div>
+      {heading && (
+        <div style={{ padding: "8px 16px 0" }}>
+          <HeroTitle text={heading} max={20} min={14} />
         </div>
       )}
     </header>

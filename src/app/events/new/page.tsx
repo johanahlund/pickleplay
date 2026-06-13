@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { setPreview } from "@/lib/entityPreview";
 import { useHideBottomNav } from "@/lib/hooks";
+import { useHeaderBack } from "@/components/HeaderBack";
 import { frameClass } from "@/components/Card";
 
 /**
@@ -39,6 +39,26 @@ function todayDate() {
 }
 
 export default function NewEventPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewEventPageInner />
+    </Suspense>
+  );
+}
+
+function NewEventPageInner() {
+  const searchParams = useSearchParams();
+  // Create Event is a sub-flow: when launched from a club ("+ Add" on its
+  // events tab, `?clubId=`) return to that club; otherwise to the events list.
+  // An explicit `returnTo` always wins.
+  const fromClubId = searchParams.get("clubId");
+  const returnTo = searchParams.get("returnTo") || (fromClubId ? `/clubs/${fromClubId}` : "/events");
+  const backLabel = returnTo.startsWith("/clubs")
+    ? "Club"
+    : returnTo.startsWith("/leagues")
+      ? "League"
+      : "Events";
+  useHeaderBack({ label: backLabel, href: returnTo });
   const router = useRouter();
   const { alert } = useConfirm();
 
@@ -203,7 +223,6 @@ export default function NewEventPage() {
   if (loadingClubs && clubs.length === 0) {
     return (
       <div className="space-y-4">
-        <Link href="/events" className="text-sm text-action">&larr; Events</Link>
         <h2 className="text-xl font-bold">Create Event</h2>
         <div className={`${frameClass} p-4 animate-pulse space-y-3`}>
           <div className="h-4 bg-gray-200 rounded w-1/3" />
@@ -218,7 +237,6 @@ export default function NewEventPage() {
   if (clubs.length === 0) {
     return (
       <div className="space-y-4">
-        <Link href="/events" className="text-sm text-action">&larr; Events</Link>
         <h2 className="text-xl font-bold">Create Event</h2>
         <div className={`${frameClass} p-4`}>
           <p className="text-sm">You need to be a member of at least one club to create an event.</p>
@@ -232,7 +250,6 @@ export default function NewEventPage() {
 
   return (
     <div className="space-y-4">
-      <Link href="/events" className="text-sm text-action">&larr; Events</Link>
       <h2 className="text-xl font-bold">Create Event</h2>
 
       {/* Step 1: Club selection */}

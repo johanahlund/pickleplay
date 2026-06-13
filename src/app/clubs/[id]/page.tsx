@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useViewRole, hasRole } from "@/components/RoleToggle";
@@ -20,6 +19,7 @@ import { useHideBottomNav, usePollingRefresh } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
+import { DetailPage } from "@/components/page";
 import { clubLabel, clubRoleLabel } from "@/lib/clubLabel";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { copyText } from "@/lib/clipboard";
@@ -1005,36 +1005,17 @@ export default function ClubDetailPage() {
     .filter((p) => !addMemberSearch || nameMatchesSearch(p.name, addMemberSearch))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Portal the tab bar into the header and hide the fallback tabs
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    const find = () => {
-      const el = document.getElementById("club-tab-bar-portal");
-      if (el) {
-        setPortalTarget(el);
-        // Hide the fallback tabs
-        const fallback = document.getElementById("club-tab-bar-fallback");
-        if (fallback) fallback.style.display = "none";
-        return;
-      }
-      setTimeout(find, 100);
-    };
-    find();
-    return () => {
-      // Show fallback again when leaving club page
-      const fallback = document.getElementById("club-tab-bar-fallback");
-      if (fallback) fallback.style.display = "";
-    };
-  }, []);
-
   if (loading || !club) {
     // If we have a cached preview from the clubs list, render an instant
     // header card (cover, logo, name, city, role) while the full club
     // detail loads in the background.
     if (clubPreview) {
       return (
-        <div className="space-y-3 animate-in fade-in duration-200">
-          <Link href="/clubs" className="text-sm text-action">&larr; Clubs</Link>
+        <DetailPage
+          back={{ label: "Clubs", href: "/clubs" }}
+          title={clubPreview.name}
+          meta={[clubPreview.city, clubPreview.country].filter(Boolean).join(", ") || undefined}
+        >
           <div className={`${frameClass} overflow-hidden`}>
             {clubPreview.coverUrl && (
               <div className="h-32 w-full bg-gray-100">
@@ -1076,7 +1057,7 @@ export default function ClubDetailPage() {
             <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
             <div className="h-3 bg-gray-200 rounded w-1/2" />
           </div>
-        </div>
+        </DetailPage>
       );
     }
     return <LoadingState label="Loading club…" />;
@@ -1084,17 +1065,8 @@ export default function ClubDetailPage() {
 
   const getMedal = (i: number) => i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`;
 
-  // The "Requests" tab is admin-only and only shown when at least one
-  // pending join request exists. Keeps the tab bar tidy for the common
-  // case where there's nothing waiting.
+  // Pending join requests — drives the "Requests" badge/section.
   const pendingCount = joinRequests.filter((r) => r.status === "pending").length;
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "feed", label: "Feed" },
-    { key: "events", label: "Events" },
-    { key: "members", label: "Members" },
-    ...(canManage && pendingCount > 0 ? [{ key: "requests" as Tab, label: `Requests (${pendingCount})` }] : []),
-    { key: "rankings", label: "Rankings" },
-  ];
 
   const createPost = async () => {
     if (!newPostContent.trim()) return;
@@ -1159,36 +1131,6 @@ export default function ClubDetailPage() {
     if (days < 7) return `${days}d`;
     return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
-
-  // (portal state moved before early return — see below)
-
-  const tabBar = (
-    <div className="flex items-center gap-2">
-      <div className={`flex gap-1 ${portalTarget ? "bg-white/10" : "bg-gray-100"} rounded-xl p-1 flex-1`}>
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => { setTab(t.key); setShowInfo(false); window.history.replaceState(null, "", `?tab=${t.key}`); }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              !showInfo && tab === t.key
-                ? portalTarget ? "bg-white text-black shadow-sm" : "bg-white text-foreground shadow-sm"
-                : portalTarget ? "text-white/70 hover:text-white" : "text-muted hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <button
-        onClick={() => setShowInfo(!showInfo)}
-        className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
-          showInfo ? "bg-selected text-white" : portalTarget ? "bg-white/10 text-white/70 hover:text-white" : "bg-gray-100 text-muted hover:text-foreground"
-          }`}
-        >
-          ℹ
-        </button>
-      </div>
-  );
 
   if (showAddMember && club) {
     // Filter chain — search box + gender toggle + country dropdown +
@@ -1428,40 +1370,36 @@ export default function ClubDetailPage() {
   }
 
   return (
-    <div className="space-y-3">
-      {/* Back navigation + top-right share icon (consistent placement
-          across event/league/club pages). Always reads "← Clubs" to
-          match the quick-view card shown before data finishes loading. */}
-      <div className="flex items-center justify-between gap-2">
-        {tab === "feed" ? (
-          <button onClick={async () => {
-            if (editing && clubDirty) {
-              const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-              if (!ok) return;
-              setClubDirty(false); setEditing(false);
-            }
-            router.push("/clubs");
-          }} className="text-sm text-action font-medium">← Clubs</button>
-        ) : (
-          <button onClick={async () => {
-            if (editing && clubDirty) {
-              const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
-              if (!ok) return;
-              setClubDirty(false); setEditing(false);
-            }
-            setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
-          }} className="text-sm text-action font-medium">← {clubLabel(club)}</button>
-        )}
-        {canManage && (
-          <HeaderInviteIcon
-            onClick={() => setShareSheetOpen(true)}
-            kind="C"
-            label="Share club invite"
-            color="#334155"
-            badgeFg="#fff"
-          />
-        )}
-      </div>
+    <DetailPage
+      back={{
+        label: "Clubs",
+        onClick: async () => {
+          if (editing && clubDirty) {
+            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+            if (!ok) return;
+            setClubDirty(false); setEditing(false);
+          }
+          router.push("/clubs");
+        },
+      }}
+      title={club.name}
+      meta={`${club.members.length} members · ${club._count.events} events${club.city ? ` · ${club.city}` : ""}`}
+      onInvite={canManage ? () => setShareSheetOpen(true) : undefined}
+      inviteKind={canManage ? "C" : undefined}
+      inviteLabel={canManage ? "Share club invite" : undefined}
+    >
+      {/* On sub-tabs, keep a "back to Feed" affordance (the green hero back
+          leaves the club entirely). */}
+      {tab !== "feed" && (
+        <button onClick={async () => {
+          if (editing && clubDirty) {
+            const ok = await confirmDialog({ title: "Unsaved changes", message: "You have unsaved changes. Discard them?", confirmText: "Discard", danger: true });
+            if (!ok) return;
+            setClubDirty(false); setEditing(false);
+          }
+          setTab("feed"); setShowInfo(false); window.history.replaceState(null, "", `?tab=feed`);
+        }} className="text-sm text-action font-medium">← {clubLabel(club)}</button>
+      )}
 
       {/* ── Club Info Panel ── */}
       {showInfo && (
@@ -1734,7 +1672,7 @@ export default function ClubDetailPage() {
                     <div className="w-10 h-10 rounded-xl bg-gray-100 border border-border" aria-hidden />
                   )}
                   <div>
-                    <h3 className="font-bold">{club.name}</h3>
+                    {/* Name in the green hero; this panel keeps the stats line. */}
                     <p className="text-xs text-muted">
                       {club.members.length} members &middot; {club._count.events} events
                       {club.city && ` &middot; ${club.city}`}
@@ -1791,7 +1729,7 @@ export default function ClubDetailPage() {
                 ? <img src={club.logoUrl} alt="" className="w-10 h-10 rounded-xl object-cover shrink-0 self-center" />
                 : <div className="w-10 h-10 rounded-xl bg-gray-100 border border-border shrink-0 self-center" aria-hidden />}
               <div className="flex-1 min-w-0 self-center">
-                <h3 className="font-bold text-lg">{club.name}</h3>
+                {/* Club name lives in the green hero now — not repeated here. */}
                 {(() => {
                   const owner = club.members.find((m) => m.role === "owner");
                   return owner ? (
@@ -2476,6 +2414,6 @@ export default function ClubDetailPage() {
         onMarkSent={inviteShare?.playerId ? () => markPlayerInviteSent(inviteShare.playerId!) : undefined}
         onClose={() => setInviteShare(null)}
       />
-    </div>
+    </DetailPage>
   );
 }

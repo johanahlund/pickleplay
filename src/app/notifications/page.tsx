@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderBack } from "@/components/HeaderBack";
 
 interface Notification {
   id: string;
@@ -31,7 +31,7 @@ function timeAgo(iso: string) {
 }
 
 export default function NotificationsPage() {
-  const router = useRouter();
+  useHeaderBack({ label: "Events", href: "/events" });
   const { alert: alertDialog } = useConfirm();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +119,6 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-3">
-      <button onClick={() => router.back()} className="text-sm text-action font-medium">&larr; Back</button>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Alerts</h2>
         <div className="flex items-center gap-3">

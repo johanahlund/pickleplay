@@ -9,13 +9,11 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import Link from "next/link";
 import { autoCatName as buildCatName } from "@/lib/leagueCategories";
 import { getPreview, setPreview } from "@/lib/entityPreview";
-import { leagueDisplayLabel, normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
+import { normalizeLeagueStatus, eventDisplayLabel } from "@/lib/statusDisplay";
 import { leagueShortName } from "@/lib/leagueDisplay";
-import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { useHideBottomNav, usePollingRefresh, useUrlState } from "@/lib/hooks";
 import { PenIcon } from "@/components/PenIcon";
 import { LoadingState } from "@/components/LoadingState";
-import { HeaderInviteIcon } from "@/components/HeaderInviteIcon";
 import { ShareSheet, type ShareRecipient } from "@/components/ShareSheet";
 import { ShareInviteModal } from "@/components/ShareInviteModal";
 import { UnclaimedIcon } from "@/components/UnclaimedIcon";
@@ -24,6 +22,15 @@ import { frameClass } from "@/components/Card";
 import { DurationStepper } from "@/components/DurationStepper";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { RulesChatSheet } from "@/components/RulesChatSheet";
+import { DetailPage } from "@/components/page";
+import { type HeaderStatus } from "@/components/AppHeader";
+
+// League status → green-hero status pill (see AppHeader HeaderStatus).
+function leagueHeroStatus(raw: string | null | undefined): HeaderStatus {
+  return ({ setup: "draft", open: "open", closed: "open", active: "active", complete: "completed" } as const)[
+    normalizeLeagueStatus(raw)
+  ];
+}
 
 interface LeaguePreview {
   id: string;
@@ -1389,20 +1396,15 @@ export default function LeagueDetailPage() {
   if (loading || !league) {
     const showPreview = mounted && preview;
     return (
-      <div className="space-y-4">
-        <Link href="/leagues" className="text-sm text-action">&larr; Leagues</Link>
+      <DetailPage
+        back={{ label: "Leagues", href: "/leagues" }}
+        title={showPreview ? preview.name : "League"}
+        meta={showPreview ? `Season ${preview.season || "—"}` : undefined}
+        status={showPreview ? leagueHeroStatus(preview.status) : undefined}
+      >
         {showPreview ? (
           <>
-            <div>
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold">{preview.name}</h2>
-                  <span className="text-sm text-muted">Season {preview.season || "—"}</span>
-                </div>
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${leagueStatusBadgeClass(preview.status)}`}>{leagueDisplayLabel(preview.status)}</span>
-              </div>
-              {preview.description && <p className="text-sm text-muted mt-1">{preview.description}</p>}
-            </div>
+            {preview.description && <p className="text-sm text-muted">{preview.description}</p>}
             <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
               {(["overview", "teams", "standings", "rounds", "matches"] as const).map((t) => (
                 <button
@@ -1423,7 +1425,7 @@ export default function LeagueDetailPage() {
         ) : (
           <LoadingState label="Loading league…" />
         )}
-      </div>
+      </DetailPage>
     );
   }
 
@@ -2917,42 +2919,27 @@ export default function LeagueDetailPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <Link href="/leagues" className="text-sm text-action">&larr; Leagues</Link>
-      {/* Header */}
-      <div onClick={() => { if (canEdit) startEditInfo(); }}
-        className={canEdit ? "active:opacity-70 cursor-pointer" : ""}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold">{league.name}</h2>
-            <span className="text-sm text-muted">Season {league.season || "—"}</span>
-          </div>
-          {/* Right column: share + pen on top, status pill at the bottom. */}
-          <div className="flex flex-col items-end gap-2 shrink-0 self-stretch">
-            <div className="flex items-center gap-3">
-              {canEdit && (
-                <span
-                  onClick={(e) => { e.stopPropagation(); setShareSheetOpen(true); }}
-                  className="inline-flex"
-                >
-                  <HeaderInviteIcon
-                    onClick={() => setShareSheetOpen(true)}
-                    kind="L"
-                    label="Share league invite"
-                    color="#334155"
-                    badgeFg="#fff"
-                  />
-                </span>
-              )}
-              {canEdit ? (
-                <span className="text-muted"><PenIcon /></span>
-              ) : <span />}
-            </div>
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full mt-auto ${leagueStatusBadgeClass(league.status)}`}>{leagueDisplayLabel(league.status)}</span>
-          </div>
+    <DetailPage
+      back={{ label: "Leagues", href: "/leagues" }}
+      title={league.name}
+      meta={`Season ${league.season || "—"}`}
+      status={leagueHeroStatus(league.status)}
+      onInvite={canEdit ? () => setShareSheetOpen(true) : undefined}
+      inviteKind={canEdit ? "L" : undefined}
+      inviteLabel={canEdit ? "Share league invite" : undefined}
+    >
+      {/* Edit details + description (identity now lives in the green hero). */}
+      {(canEdit || league.description) && (
+        <div className="space-y-1">
+          {canEdit && (
+            <button type="button" onClick={startEditInfo}
+              className="text-sm text-action font-medium inline-flex items-center gap-1">
+              <PenIcon /> Edit details
+            </button>
+          )}
+          {league.description && <p className="text-sm text-muted">{league.description}</p>}
         </div>
-        {league.description && <p className="text-sm text-muted mt-1">{league.description}</p>}
-      </div>
+      )}
 
       {/* Tabs */}
       {(() => {
@@ -3985,6 +3972,6 @@ export default function LeagueDetailPage() {
         onClose={() => setInviteShare(null)}
       />
 
-    </div>
+    </DetailPage>
   );
 }

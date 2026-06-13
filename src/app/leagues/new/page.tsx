@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
+import { useHeaderBack } from "@/components/HeaderBack";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
 
@@ -18,6 +19,7 @@ const DEFAULT_CATEGORIES = [
 interface MyClub { id: string; name: string; emoji: string; myRole: string }
 
 export default function NewLeaguePage() {
+  useHeaderBack({ label: "Leagues", href: "/leagues" });
   const router = useRouter();
   const { alert: alertDialog } = useConfirm();
   const { data: session, status: sessionStatus } = useSession();

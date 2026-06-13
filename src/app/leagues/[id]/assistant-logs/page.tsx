@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
+import { useHeaderBack } from "@/components/HeaderBack";
 
 interface QueryRow {
   id: string;
@@ -39,6 +39,7 @@ interface LeagueLite {
 export default function AssistantLogsPage() {
   const params = useParams();
   const leagueId = String(params?.id || "");
+  useHeaderBack({ label: "League", href: `/leagues/${leagueId}` });
   const [data, setData] = useState<ApiResponse | null>(null);
   const [league, setLeague] = useState<LeagueLite | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +107,6 @@ export default function AssistantLogsPage() {
 
   return (
     <div className="space-y-4">
-      <Link href={`/leagues/${leagueId}`} className="text-sm text-action">&larr; League</Link>
-
       <div>
         <h1 className="text-xl font-bold">
           Assistant chat logs

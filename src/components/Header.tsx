@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppHeader } from "./AppHeader";
+import { useHeaderBackValue } from "./HeaderBack";
 import { usePollingRefresh } from "@/lib/hooks";
 import { ShareInviteModal } from "./ShareInviteModal";
 import { buildAppInviteMessage } from "@/lib/inviteShare";
@@ -14,10 +15,19 @@ const APP_VERSION = "5.3.0";
 const HIDDEN_PATHS = ["/signin", "/register", "/claim", "/reset", "/clubs/join"];
 // Any /events/<id>/anything path. The detail page mounts AppHeader hero;
 // nested sub-pages (sign-up, pairing) mount hero-sub themselves.
+// `/events/new` is the create wizard — it keeps the global header (with the
+// unified back link), so it's excluded below.
 const EVENT_DETAIL_RE = /^\/events\/[^/]+(\/.*)?$/;
 // /leagues/<id>/<sub>/* — sub-pages (sign-up, events, lineup) mount their
-// own hero-sub. /leagues/<id> itself still uses the global LightHeader.
+// own hero-sub.
 const LEAGUE_NESTED_RE = /^\/leagues\/[^/]+\/[^/].*$/;
+// /leagues/<id> detail now mounts its own green hero (DetailPage) — hide the
+// global header so it doesn't double up. `/leagues/new` is an edit page and
+// keeps the global header.
+const LEAGUE_DETAIL_RE = /^\/leagues\/[^/]+$/;
+// /clubs/<id> detail mounts its own green hero (DetailPage) — hide the global
+// header. `/clubs` (list) and `/clubs/join/<token>` (3 segments) don't match.
+const CLUB_DETAIL_RE = /^\/clubs\/[^/]+$/;
 // Exceptions: sub-pages that we want to keep the global LightHeader on.
 // Match by suffix so paths like /leagues/xyz/assistant-logs still get it.
 const LEAGUE_NESTED_KEEP_GLOBAL_HEADER = ["/assistant-logs"];
@@ -130,6 +140,7 @@ export function Header() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const headerBack = useHeaderBackValue();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [appInviteOpen, setAppInviteOpen] = useState(false);
   const [appInviteMessage, setAppInviteMessage] = useState("");
@@ -242,7 +253,10 @@ export function Header() {
   const userInitial = session?.user?.name?.[0]?.toUpperCase() ?? "?";
 
   const isLeagueNested = LEAGUE_NESTED_RE.test(pathname) && !LEAGUE_NESTED_KEEP_GLOBAL_HEADER.some((suffix) => pathname.endsWith(suffix));
-  const isHidden = isAuthPage || EVENT_DETAIL_RE.test(pathname) || isLeagueNested;
+  const isLeagueDetail = LEAGUE_DETAIL_RE.test(pathname) && pathname !== "/leagues/new";
+  const isEventDetail = EVENT_DETAIL_RE.test(pathname) && pathname !== "/events/new";
+  const isClubDetail = CLUB_DETAIL_RE.test(pathname);
+  const isHidden = isAuthPage || isEventDetail || isLeagueNested || isLeagueDetail || isClubDetail;
 
   // Reset main padding + header height var when header is hidden
   useEffect(() => {
@@ -277,6 +291,7 @@ export function Header() {
     <>
       <div>
         <AppHeader
+          back={headerBack ?? undefined}
           isAdmin={isAdmin}
           notifications={unreadCount}
           user={{

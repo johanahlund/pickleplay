@@ -7,6 +7,7 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ToastProvider } from "@/components/Toast";
 import { RoleProvider, RoleTogglePill } from "@/components/RoleToggle";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { HeaderBackProvider } from "@/components/HeaderBack";
 
 export const metadata: Metadata = {
   title: "FriendlyBall",
@@ -47,10 +48,12 @@ export default function RootLayout({
           <RoleProvider>
             <ToastProvider>
               <ConfirmProvider>
-                <Header />
-                <RoleTogglePill />
-                <main id="main-content" className="px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
-                <BottomNav />
+                <HeaderBackProvider>
+                  <Header />
+                  <RoleTogglePill />
+                  <main id="main-content" className="px-4 pb-[calc(6.75rem+env(safe-area-inset-bottom))] max-w-[600px] mx-auto">{children}</main>
+                  <BottomNav />
+                </HeaderBackProvider>
               </ConfirmProvider>
             </ToastProvider>
           </RoleProvider>

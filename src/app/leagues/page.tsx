@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { setPreview } from "@/lib/entityPreview";
 import { leagueDisplayLabel } from "@/lib/statusDisplay";
 import { leagueStatusBadgeClass } from "@/lib/statusBadge";
 import { ClubBadge } from "@/components/ClubBadge";
-import { frameClass } from "@/components/Card";
-import { LoadingState } from "@/components/LoadingState";
+import { ListPage, List, ListItem } from "@/components/page";
 
 interface League {
   id: string;
@@ -36,30 +34,21 @@ export default function LeaguesPage() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Leagues</h2>
-        {canCreate && (
-          <Link href="/leagues/new" className="text-action border border-action/30 px-4 py-2 rounded-lg font-medium text-sm hover:bg-action/5 active:bg-action/10 transition-colors">+ League</Link>
-        )}
-      </div>
-
-      {loading ? (
-        <LoadingState label="Loading leagues…" />
-      ) : leagues.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-muted text-sm">No leagues yet</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {leagues.map((league) => (
-            <Link key={league.id} href={`/leagues/${league.id}`}
+    <ListPage
+      title="Leagues"
+      action={canCreate ? { label: "+ League", href: "/leagues/new" } : undefined}
+      loading={loading}
+      isEmpty={leagues.length === 0}
+      emptyLabel="No leagues yet"
+    >
+      <List>
+        {leagues.map((league) => (
+            <ListItem key={league.id} href={`/leagues/${league.id}`}
               onClick={() => setPreview("league", league.id, {
                 id: league.id, name: league.name, shortName: league.shortName ?? null,
                 description: league.description,
                 season: league.season, status: league.status, club: league.club ?? null,
-              })}
-              className={`block ${frameClass} p-4 active:bg-gray-50 transition-colors`}>
+              })}>
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-lg">{league.name}</h3>
@@ -92,10 +81,9 @@ export default function LeaguesPage() {
                   ))}
                 </div>
               )}
-            </Link>
+            </ListItem>
           ))}
-        </div>
-      )}
-    </div>
+      </List>
+    </ListPage>
   );
 }

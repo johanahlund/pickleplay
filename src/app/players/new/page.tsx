@@ -2,11 +2,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useHideBottomNav } from "@/lib/hooks";
-import { frameClass } from "@/components/Card";
+import { EditPage, FormCard } from "@/components/page";
 
 interface MyClub {
   id: string;
@@ -45,6 +44,23 @@ function NewPlayerPageInner() {
   const eventId = searchParams.get("eventId");
   const returnTo = searchParams.get("returnTo") || "/players";
   const hasContext = !!(leagueId || teamId || eventId);
+
+  // Add Player is a sub-flow: back returns to wherever it was launched from
+  // (returnTo), so the label names that destination. Use a short entity noun
+  // so it never overflows the header (real names can be long).
+  const backLabel = teamId
+    ? "Team"
+    : leagueId
+      ? "League"
+      : eventId
+        ? "Event"
+        : returnTo.startsWith("/events")
+          ? "Event"
+          : returnTo.startsWith("/leagues")
+            ? "League"
+            : returnTo.startsWith("/clubs")
+              ? "Club"
+              : "Players";
 
   const [name, setName] = useState("");
   const [gender, setGender] = useState<string | null>(null);
@@ -145,18 +161,16 @@ function NewPlayerPageInner() {
   const canAdd = name.trim().length > 0 && (isAdmin || hasContext || !!clubId);
 
   return (
-    <div className="space-y-4">
-      <Link href={returnTo} className="text-sm text-action">&larr; Back</Link>
-
-      <h2 className="text-xl font-bold">Add Player</h2>
-
-      {hasContext && contextInfo && (
+    <EditPage
+      back={{ href: returnTo, label: backLabel }}
+      title="Add Player"
+      banner={hasContext && contextInfo ? (
         <div className="rounded-lg bg-action/10 border border-action/30 px-3 py-2 text-sm">
           Adding a new player to <strong>{contextInfo.label}</strong>.
         </div>
-      )}
-
-      <div className={`${frameClass} p-4 space-y-3`}>
+      ) : undefined}
+    >
+      <FormCard>
         <div>
           <label className="block text-sm font-medium text-muted mb-1">Name</label>
           <input
@@ -238,7 +252,7 @@ function NewPlayerPageInner() {
             className="flex-1 bg-gray-100 text-foreground py-2.5 rounded-lg font-medium disabled:opacity-50"
           >Cancel</button>
         </div>
-      </div>
-    </div>
+      </FormCard>
+    </EditPage>
   );
 }
