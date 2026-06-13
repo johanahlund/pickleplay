@@ -18,6 +18,7 @@ import { frameClass } from "@/components/Card";
 import { nameMatchesSearch } from "@/lib/searchUtil";
 import { FitText } from "@/components/FitText";
 import { useHeaderTitle } from "@/components/HeaderBack";
+import { preloadEvent } from "@/lib/swr";
 
 interface Event {
   id: string;
@@ -201,6 +202,20 @@ function EventsPage() {
 
   useEffect(() => { fetchEvents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   usePollingRefresh(fetchEvents, 30000);
+
+  // Once events are loaded, warm the detail cache for the few soonest events
+  // (most likely to be opened) so tapping in is instant. One-shot, not on poll.
+  const warmedRef = useRef(false);
+  useEffect(() => {
+    if (loading || warmedRef.current || events.length === 0) return;
+    warmedRef.current = true;
+    const cutoff = Date.now() - 12 * 3600000; // include events from ~earlier today
+    [...events]
+      .filter((e) => new Date(e.date).getTime() >= cutoff)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 6)
+      .forEach((e) => preloadEvent(e.id));
+  }, [loading, events]);
 
   // Save last page
   useEffect(() => {
@@ -567,7 +582,7 @@ function EventsPage() {
             <div key={event.id} className="relative">
             <Link
               href={`/events/${event.id}?from=events`}
-              onClick={() => setPreview("event", event.id, event)}
+              onClick={() => { setPreview("event", event.id, event); preloadEvent(event.id); }}
               className={`block ${cardBg} rounded-xl border border-border border-l-4 ${borderColor} overflow-hidden active:bg-gray-50 transition-colors`}
             >
               <div className="p-3">

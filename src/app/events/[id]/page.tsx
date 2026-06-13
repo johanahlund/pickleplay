@@ -41,6 +41,7 @@ import { ScorerTracker } from "@/components/ScorerTracker";
 import Logo from "@/components/Logo";
 import { ScorePicker, isValidPair } from "@/components/ScorePicker";
 import { AppHeader, type HeaderStatus } from "@/components/AppHeader";
+import { PinCurrentEventButton } from "@/components/PinCurrentEventButton";
 import { frameClass } from "@/components/Card";
 import { LoadingState } from "@/components/LoadingState";
 import { DurationStepper } from "@/components/DurationStepper";
@@ -2192,6 +2193,13 @@ export default function EventDetailPage() {
       />
     </div>
   );
+
+  // "Set as current" pin — makes the bottom-right FAB jump back to this event.
+  const pinRow = userId ? (
+    <div className="flex justify-end">
+      <PinCurrentEventButton eventId={String(id)} />
+    </div>
+  ) : null;
 
   const managerCard = (
     <div onClick={() => { if (canManage) { fetchAllPlayers(); setActiveSection("admins"); } }}
@@ -8989,6 +8997,7 @@ export default function EventDetailPage() {
     return (
       <div className="space-y-3">
         {eventHeroHeader}
+        {pinRow}
         {managerCard}
 
         {/* Total players */}
@@ -9064,6 +9073,7 @@ export default function EventDetailPage() {
   return (
     <div className="space-y-3">
       {eventHeroHeader}
+      {pinRow}
       {/* League shortcut chip — visible only when the user came
           FROM the events list (otherwise the back link already goes
           to the league rounds, so a duplicate "go to league" card

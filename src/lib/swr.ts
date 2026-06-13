@@ -1,9 +1,17 @@
-import useSWR, { mutate } from "swr";
+import useSWR, { mutate, preload } from "swr";
 
 const fetcher = (url: string) => fetch(url).then((r) => {
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
 });
+
+/**
+ * Warm the SWR cache for an event's full detail so opening it is instant.
+ * `useEvent` on the detail page picks up the cached/in-flight result. Safe to
+ * call repeatedly — SWR dedupes. */
+export function preloadEvent(eventId: string) {
+  preload(`/api/events/${eventId}`, fetcher);
+}
 
 /** Fetch event data with SWR */
 export function useEvent(eventId: string | null) {
