@@ -52,7 +52,16 @@ export function resolveRoundCategories(
   round: { categoriesOverride?: Prisma.JsonValue | null } | null | undefined,
   leagueCategories: LeagueCategoryShape[] | null | undefined,
 ): LeagueCategoryShape[] {
+  const base = leagueCategories ?? [];
   const override = round?.categoriesOverride;
-  if (Array.isArray(override)) return override as unknown as LeagueCategoryShape[];
-  return leagueCategories ?? [];
+  if (!Array.isArray(override)) return base;
+  // The override is a PARTIAL per-category patch keyed by id (e.g. a round-
+  // specific scoringFormat). Merge each patch onto the full league category so
+  // name / winBy / format / gender survive — otherwise consumers get
+  // categories missing those fields. Override fields win; the override defines
+  // the round's category set + order.
+  const baseById = new Map(base.map((c) => [c.id, c]));
+  return (override as Array<Record<string, unknown>>)
+    .filter((o) => o && typeof o === "object" && typeof o.id === "string")
+    .map((o) => ({ ...(baseById.get(o.id as string) ?? {}), ...o })) as unknown as LeagueCategoryShape[];
 }

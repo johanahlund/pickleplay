@@ -9295,20 +9295,27 @@ export default function EventDetailPage() {
                 </div>
               ))}
             </div>
-            {myCaptainTeam && (
-              <Link
-                href={`/leagues/${event.round!.league.id}/events/${event.id}/lineup/${myCaptainTeam.id}`}
-                className="block mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 hover:bg-blue-100"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm text-blue-900">
-                    <div><strong>Build lineup</strong> for {myCaptainTeam.name}</div>
-                    <div className="text-[11px] text-muted">Tick the matches your team wants to play, then assign players.</div>
+            {(() => {
+              // Captains build their own team. Admins / league organizers can
+              // build EITHER team (one button per playing team).
+              const playingTeams = allLeagueTeams.filter((t) => playingTeamIds.includes(t.id));
+              const buildable = canManage ? playingTeams : (myCaptainTeam ? [myCaptainTeam] : []);
+              return buildable.map((t) => (
+                <Link
+                  key={t.id}
+                  href={`/leagues/${event.round!.league.id}/events/${event.id}/lineup/${t.id}`}
+                  className="block mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 hover:bg-blue-100"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm text-blue-900">
+                      <div><strong>Build lineup</strong> for {t.name}</div>
+                      <div className="text-[11px] text-muted">Tick the matches the team wants to play, then assign players.</div>
+                    </div>
+                    <span className="text-blue-700 text-lg">→</span>
                   </div>
-                  <span className="text-blue-700 text-lg">→</span>
-                </div>
-              </Link>
-            )}
+                </Link>
+              ));
+            })()}
           </div>
         );
       })()}

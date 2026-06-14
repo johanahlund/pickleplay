@@ -47,6 +47,10 @@ type PickerTarget = { categoryId: string; slotNumber: number; which: 1 | 2 };
 //   formatLabel("3x15", "2") → "Best of 3 to 15 · win by 2"
 //   formatLabel("1xR21", "cap18") → "Rally to 21 · GP 18"
 function formatLabel(scoring: string, winBy: string): string {
+  // Guard categories/games with no winBy/scoring set — otherwise the
+  // winBy.match() calls below crash the entire lineup page.
+  if (!winBy) winBy = "2";
+  if (!scoring) scoring = "";
   const SCORING: Record<string, string> = {
     "1x7": "1 set to 7", "1x9": "1 set to 9", "1x11": "1 set to 11", "1x15": "1 set to 15",
     "3x11": "Best of 3 to 11", "3x15": "Best of 3 to 15",
@@ -386,7 +390,7 @@ export default function LineupBuilderPage() {
     const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, actingTeamId: teamId }),
     });
     setSaving(false);
     if (!r.ok) {
@@ -411,7 +415,7 @@ export default function LineupBuilderPage() {
       const r = await fetch(`/api/leagues/${id}/events/${eventId}/games`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, actingTeamId: teamId }),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));

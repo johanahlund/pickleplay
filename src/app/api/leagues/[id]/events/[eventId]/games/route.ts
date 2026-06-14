@@ -57,7 +57,7 @@ async function getMaxMatchesPerEvent(eventId: string): Promise<number | null> {
   return baseVal !== null && baseVal > 0 ? baseVal : null;
 }
 
-async function loadEventContext(leagueId: string, eventId: string, userId: string, isAppAdmin: boolean): Promise<GameContext | { error: string; status: number }> {
+async function loadEventContext(leagueId: string, eventId: string, userId: string, isAppAdmin: boolean, actingTeamId?: string | null): Promise<GameContext | { error: string; status: number }> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
@@ -76,6 +76,18 @@ async function loadEventContext(leagueId: string, eventId: string, userId: strin
   }
   const [team1, team2] = teams;
 
+  const isOrganizer = isAppAdmin
+    || event.round?.league.createdById === userId
+    || event.round?.league.deputyId === userId;
+
+  // Admin / league organizer building a SPECIFIC team's lineup: act as that
+  // team (the lineup page passes its URL team as actingTeamId). Takes
+  // precedence even over the caller's own captaincy, so e.g. a Setúbal captain
+  // who is also app admin can build Torres Vedras's side.
+  if (actingTeamId && isOrganizer && (actingTeamId === team1.id || actingTeamId === team2.id)) {
+    return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: actingTeamId };
+  }
+
   // Prefer captain/vice ownership over organizer status: a person who is
   // both league director AND a team captain (common in small leagues) needs
   // the captain path so they can toggle slots for their team. Organizer-only
@@ -84,9 +96,6 @@ async function loadEventContext(leagueId: string, eventId: string, userId: strin
   const ownsTeam2 = team2.captainId === userId || team2.viceCaptainId === userId;
   if (ownsTeam1) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team1.id };
   if (ownsTeam2) return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: team2.id };
-  const isOrganizer = isAppAdmin
-    || event.round?.league.createdById === userId
-    || event.round?.league.deputyId === userId;
   if (isOrganizer) {
     return { eventId, leagueId, team1Id: team1.id, team2Id: team2.id, captainTeamId: null };
   }
@@ -114,7 +123,7 @@ export async function POST(
     try { await requireLeagueManager(leagueId); } catch (e) { return authErrorResponse(e); }
   }
 
-  const ctx = await loadEventContext(leagueId, eventId, user.id, isAppAdmin);
+  const ctx = await loadEventContext(leagueId, eventId, user.id, isAppAdmin, body.actingTeamId);
   if ("error" in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status });
 
   // Captain-side edits (toggle_slot, assign_players, set_kind) are

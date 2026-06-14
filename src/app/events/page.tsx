@@ -200,6 +200,11 @@ function EventsPage() {
     });
   }, [userId, legacyClubFilter, clubsLoaded]);
 
+  // After hydration we can show the session-cached list immediately (the
+  // spinner only covers a genuine cold load with no cache).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   useEffect(() => { fetchEvents(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   usePollingRefresh(fetchEvents, 30000);
 
@@ -553,7 +558,7 @@ function EventsPage() {
 
       {/* Events list — header / filter cluster / clubs stay visible
           while loading so navigation chrome is interactive instantly. */}
-      {loading ? (
+      {(!mounted || (loading && events.length === 0)) ? (
         <LoadingState label="Loading events…" />
       ) : !showFilters && (filteredEvents.length === 0 && events.length > 0 ? (
         <div className="text-center py-8"><p className="text-muted text-sm">No events match your filters.</p></div>
